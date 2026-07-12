@@ -1,0 +1,108 @@
+{
+  "id": "windows11-pro-dev-debug",
+  "title": "Windows 11 Productivity, Development & Debugging",
+  "kind": "application",
+  "aliases": ["win11", "windows", "dev", "debug", "productivity", "hotkeys"],
+  "summary": "Extensive Windows 11 shortcuts and commands for productivity, development, and debugging workflows.",
+  "updated_at": "2026-07-11",
+  "sections": [
+    {
+      "title": "Productivity Essentials",
+      "items": [
+        { "label": "Search (apps, files, web)", "detail": "Win + S", "tags": ["productivity", "search"] },
+        { "label": "Quick Settings", "detail": "Win + A", "tags": ["productivity", "system"] },
+        { "label": "Notifications", "detail": "Win + N", "tags": ["productivity", "system"] },
+        { "label": "Clipboard history", "detail": "Win + V", "tags": ["productivity", "clipboard"] },
+        { "label": "Emoji / symbols", "detail": "Win + .", "tags": ["productivity", "typing"] },
+        { "label": "Snap layout menu", "detail": "Win + Z", "tags": ["productivity", "window"] },
+        { "label": "Cycle windows", "detail": "Alt + Tab", "tags": ["productivity", "window"] },
+        { "label": "Minimize all windows", "detail": "Win + M", "tags": ["productivity", "window"] },
+        { "label": "Restore minimized windows", "detail": "Win + Shift + M", "tags": ["productivity", "window"] },
+        { "label": "Open File Explorer", "detail": "Win + E", "tags": ["productivity", "files"] },
+        { "label": "Lock PC", "detail": "Win + L", "tags": ["productivity", "security"] },
+        { "label": "Open Run dialog", "detail": "Win + R", "tags": ["productivity", "system"] },
+        { "label": "Open Settings", "detail": "Win + I", "tags": ["productivity", "system"] },
+        { "label": "Open Taskbar search", "detail": "Ctrl + Win + Q", "tags": ["productivity", "search"] }
+      ]
+    },
+    {
+      "title": "Window Management & Multitasking",
+      "items": [
+        { "label": "Snap left", "detail": "Win + Left Arrow", "tags": ["window", "snap"] },
+        { "label": "Snap right", "detail": "Win + Right Arrow", "tags": ["window", "snap"] },
+        { "label": "Maximize", "detail": "Win + Up Arrow", "tags": ["window"] },
+        { "label": "Minimize", "detail": "Win + Down Arrow", "tags": ["window"] },
+        { "label": "Task View", "detail": "Win + Tab", "tags": ["window", "multitasking"] },
+        { "label": "Show desktop", "detail": "Win + D", "tags": ["window", "multitasking"] },
+        { "label": "Shake window to minimize others", "detail": "Grab title bar + shake", "tags": ["window", "multitasking"] },
+        { "label": "Switch apps", "detail": "Alt + Esc", "tags": ["window", "navigation"] }
+      ]
+    },
+    {
+      "title": "Virtual Desktops",
+      "items": [
+        { "label": "New desktop", "detail": "Win + Ctrl + D", "tags": ["desktop", "multitasking"] },
+        { "label": "Close desktop", "detail": "Win + Ctrl + F4", "tags": ["desktop"] },
+        { "label": "Switch desktops", "detail": "Win + Ctrl + Left/Right Arrow", "tags": ["desktop", "navigation"] },
+        { "label": "Move window to next desktop", "detail": "Win + Shift + Left/Right Arrow", "tags": ["desktop", "window"] }
+      ]
+    },
+    {
+      "title": "Developer Workflow",
+      "items": [
+        { "label": "Open Terminal", "detail": "Win + X → T", "tags": ["dev", "terminal"] },
+        { "label": "Open PowerShell (admin)", "detail": "Win + X → A", "tags": ["dev", "terminal", "admin"] },
+        { "label": "Open Command Prompt", "detail": "Win + R → cmd", "tags": ["dev", "terminal"] },
+        { "label": "Open Windows Terminal directly", "detail": "Win + R → wt", "tags": ["dev", "terminal"] },
+        { "label": "Open System Menu", "detail": "Win + X", "tags": ["dev", "system"] },
+        { "label": "Open Registry Editor", "detail": "Win + R → regedit", "tags": ["dev", "system"] },
+        { "label": "Open Local Group Policy Editor", "detail": "Win + R → gpedit.msc", "tags": ["dev", "system"] },
+        { "label": "Open Services", "detail": "Win + R → services.msc", "tags": ["dev", "system"] },
+        { "label": "Open Environment Variables", "detail": "Win + R → sysdm.cpl → Advanced → Env Vars", "tags": ["dev", "system"] },
+        { "label": "Open Device Manager", "detail": "Win + X → M", "tags": ["dev", "system"] },
+        { "label": "Open Disk Management", "detail": "Win + X → K", "tags": ["dev", "system"] },
+        { "label": "Open Network Connections", "detail": "Win + R → ncpa.cpl", "tags": ["dev", "network"] },
+        { "label": "Open Performance Monitor", "detail": "Win + R → perfmon", "tags": ["dev", "performance"] }
+      ]
+    },
+    {
+      "title": "WSL & Developer Tools",
+      "items": [
+        { "label": "Open WSL", "detail": "Win + R → wsl", "tags": ["dev", "wsl"] },
+        { "label": "Open WSL distro list", "detail": "wsl -l -v", "tags": ["dev", "wsl"] },
+        { "label": "Shutdown WSL", "detail": "wsl --shutdown", "tags": ["dev", "wsl"] },
+        { "label": "Open Hyper-V Manager", "detail": "Win + R → virtmgmt.msc", "tags": ["dev", "virtualization"] },
+        { "label": "Open Docker Desktop", "detail": "Win + S → Docker", "tags": ["dev", "docker"] }
+      ]
+    },
+    {
+      "title": "Debugging & Diagnostics",
+      "items": [
+        { "label": "Force quit app", "detail": "Alt + F4", "tags": ["debug", "system"] },
+        { "label": "Open Task Manager", "detail": "Ctrl + Shift + Esc", "tags": ["debug", "system"] },
+        { "label": "Kill process (PowerShell)", "detail": "Stop-Process -Name <name>", "tags": ["debug", "powershell"] },
+        { "label": "Open Resource Monitor", "detail": "Win + R → resmon", "tags": ["debug", "system"] },
+        { "label": "Open Event Viewer", "detail": "Win + R → eventvwr", "tags": ["debug", "system"] },
+        { "label": "Open Reliability Monitor", "detail": "Win + R → perfmon /rel", "tags": ["debug", "system"] },
+        { "label": "Open System Information", "detail": "Win + R → msinfo32", "tags": ["debug", "system"] },
+        { "label": "Open Memory Diagnostics", "detail": "Win + R → mdsched", "tags": ["debug", "system"] },
+        { "label": "Open DirectX Diagnostics", "detail": "Win + R → dxdiag", "tags": ["debug", "graphics"] },
+        { "label": "Open Network Diagnostics", "detail": "Win + R → msdt.exe /id NetworkDiagnosticsNetworkAdapter", "tags": ["debug", "network"] },
+        { "label": "Screenshot (snipping tool)", "detail": "Win + Shift + S", "tags": ["debug", "screenshots"] },
+        { "label": "Full screenshot", "detail": "Win + Print Screen", "tags": ["debug", "screenshots"] }
+      ]
+    },
+    {
+      "title": "PowerShell & CMD Quick Debug Commands",
+      "items": [
+        { "label": "List running processes", "detail": "Get-Process", "tags": ["debug", "powershell"] },
+        { "label": "Kill process by PID", "detail": "taskkill /PID <pid> /F", "tags": ["debug", "cmd"] },
+        { "label": "List network ports", "detail": "netstat -ano", "tags": ["debug", "network"] },
+        { "label": "Flush DNS", "detail": "ipconfig /flushdns", "tags": ["debug", "network"] },
+        { "label": "Renew IP", "detail": "ipconfig /renew", "tags": ["debug", "network"] },
+        { "label": "Check system files", "detail": "sfc /scannow", "tags": ["debug", "system"] },
+        { "label": "Check health (DISM)", "detail": "DISM /Online /Cleanup-Image /ScanHealth", "tags": ["debug", "system"] }
+      ]
+    }
+  ]
+}

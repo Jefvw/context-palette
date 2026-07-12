@@ -1,0 +1,18 @@
+{
+  "pinned_action_ids": [
+    "colruyt-open-product",
+    "general-open-project-folder",
+    "general-open-python-docs",
+    "email-greeting",
+    "developing-open-vscode"
+  ],
+  "focus_context": "General",
+  "context_slots": {
+    "Developing Context Palette": [
+      "developing-arrange-three-explorers",
+      "developing-open-vscode",
+      "developing-open-project-folder",
+      "general-open-python-docs"
+    ]
+  }
+}

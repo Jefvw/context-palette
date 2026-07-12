@@ -1,0 +1,80 @@
+Read AGENTS.md and every document in the docs folder.
+
+Before writing any code:
+
+1. Summarize your understanding of the project.
+2. Identify any contradictions, missing decisions, or risks.
+3. Explain how the requested work fits into the overall product vision.
+4. Propose the smallest useful implementation.
+5. List the files that will be modified.
+6. Wait for my confirmation if the proposed implementation is larger than one logical feature.
+
+During development:
+
+- Follow DEVELOPMENT_PROCESS.md.
+- Keep changes small.
+- Explain important technical decisions.
+- Avoid unnecessary dependencies.
+- Do not redesign the architecture unless we explicitly decide to.
+- Prefer simple, portable solutions that work without administrator rights.
+
+After implementation:
+
+1. Explain what changed.
+2. Explain how I can test it.
+3. Update all relevant documentation (README, DECISIONS, BACKLOG, MVP, PRODUCT_VISION, DEVELOPMENT_PROCESS if needed).
+4. Suggest the next smallest logical task.
+
+
+
+
+Goal:
+What should work when this task is complete?
+
+Current situation:
+What currently works, and what went wrong?
+
+Constraints:
+No admin rights, portable, simple implementation, no unrelated changes.
+
+Definition of done:
+What exact behaviour should I be able to test?
+
+
+Goal:
+Create the first launcher-window prototype.
+
+Current situation:
+The repository contains documentation only. No application code exists yet.
+
+Constraints:
+- Windows
+- no admin rights
+- portable
+- Python
+- avoid new dependencies unless necessary
+- no global hotkey yet
+- no action execution yet
+
+Definition of done:
+I can run one documented command and see a small window containing:
+- a search field;
+- three sample action names;
+- keyboard selection;
+- a Close command.
+
+Before changing files, explain your approach and list the files you will create.
+After implementing it, run appropriate checks and give me exact manual testing steps.
+Update the project documentation.
+
+
+Update the durable project documentation with:
+
+- decisions made;
+- current architecture;
+- what now works;
+- known limitations;
+- unresolved questions;
+- the next smallest task.
+
+Do not record temporary debugging details unless they will help future work.

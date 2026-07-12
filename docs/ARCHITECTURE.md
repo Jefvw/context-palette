@@ -1,0 +1,373 @@
+# Context Palette Architecture
+
+This document describes the current implemented architecture. It is the technical source of truth for how the application is structured today.
+
+Use related documents for other purposes:
+
+- `PRODUCT_VISION.md`: durable product direction.
+- `MVP.md`: agreed minimum product scope.
+- `DECISIONS.md`: chronological technical and product decisions with rationale.
+- `HELP.md`: user-facing operation and troubleshooting.
+- `BACKLOG.md`: planned work.
+
+## Architectural goals
+
+Context Palette is optimized for:
+
+1. Fast resident use through `Ctrl+Alt+P`.
+2. Portable operation from a user-writable Windows folder.
+3. No administrator requirement, installer, service, registry modification, or mandatory AutoHotkey.
+4. Inspectable local JSON and Markdown data.
+5. Constrained action types instead of arbitrary command execution.
+6. Incremental context authoring through Inbox, Draft, Trusted, and Archived states.
+7. Standard-library implementation where practical.
+
+## Runtime overview
+
+```text
+run-context-palette.bat
+        |
+        v
+pythonw.exe -> context_palette.main
+        |
+        +-- notify existing instance and exit
+        |
+        `-- create Tk root and LauncherApp
+                |
+                +-- load actions, palette state, Inbox, and cheat sheets
+                +-- start localhost single-instance listener
+                +-- register Ctrl+Alt+P on a background message thread
+                `-- run the Tk main loop
+```
+
+The first process remains resident. Later launches notify it through a project-specific localhost port and exit. This avoids repeated Python and Tk startup cost.
+
+## Source modules
+
+### `main.py`
+
+Application entry point.
+
+- Resolves the project root.
+- Derives a stable project-specific local port.
+- Notifies an existing instance when one is running.
+- Starts the Tk launcher with paths to local data.
+
+### `launcher.py`
+
+Presentation and application orchestration.
+
+- Builds the Tkinter interface.
+- Maintains the active focus context.
+- Renders numbered slots and search results.
+- Owns Input / Output, action explanation tooltips, button tooltips, Inbox, sheets, Help, and action editors.
+- Connects platform-independent action execution to Windows-specific callbacks.
+- Ensures Tk operations stay on the Tk main thread.
+
+The launcher does not implement action transformations or window matching directly. Those responsibilities live in specialized modules.
+
+### `actions.py`
+
+Action domain model, persistence, validation, search, transformation, and dispatch.
+
+Important principles:
+
+- Each action type is explicitly allow-listed.
+- JSON is validated when loaded.
+- Arbitrary shell commands are rejected.
+- Pure transformations are separated from UI callbacks.
+- Platform effects are injected through callbacks where practical, enabling tests without opening applications.
+
+### `palette_state.py`
+
+Stores and calculates launcher organization.
+
+- Slots 1–5: persistent global pins.
+- Slots 6–9: top four actions for the focus context.
+- Duplicate actions across both groups are intentional.
+- Missing context slots fall back to useful General/available actions.
+
+### `hotkeys.py`
+
+Native Windows hotkey and selection-copy support using `ctypes`.
+
+- Registers `Ctrl+Alt+P` with `RegisterHotKey`.
+- Runs the Windows message loop on a daemon thread.
+- Queues activation back to `LauncherApp`; it does not manipulate Tk widgets from the background thread.
+- Sends a constrained `Ctrl+C` sequence before the palette takes focus.
+
+### `single_instance.py`
+
+Resident-process coordination through a localhost socket.
+
+- Only the first process owns the port.
+- Later processes send a show request and terminate.
+- The port is derived from the project path to reduce collisions between workspaces.
+
+### `inbox.py`
+
+Capture Inbox domain model and persistence.
+
+- Creates clipboard captures.
+- Loads and validates Inbox JSON.
+- Updates maturity state.
+- Keeps captured material separate from actions until conversion.
+
+### `cheatsheets.py`
+
+Structured local reference material.
+
+- Loads and validates sheet JSON.
+- Searches sections, labels, details, and tags.
+- Promotes an individual sheet entry to a Draft action.
+
+### `window_layouts.py`
+
+Native Windows monitor, window-layout, and snapshot support using `ctypes`.
+
+- Detects monitor work areas with `EnumDisplayMonitors`.
+- Opens and positions configured Explorer windows with `SetWindowPos`.
+- Stores relative coordinates rather than fixed pixels.
+- Captures ordinary visible, non-minimized application windows.
+- Matches snapshots by executable, native window class, and title preference.
+- Restarts missing ordinary desktop applications when possible.
+- Restores foreground state.
+- Uses explicit saved browser URLs when provided.
+
+## Action model
+
+An action currently contains:
+
+```text
+id
+title
+technology
+task
+context
+type
+value
+state
+arguments
+working_directory
+```
+
+Technology, Task, Context, and Action title are separate facets. They are not stored as one hierarchical name.
+
+### Presentation versus search
+
+Compact result rows show:
+
+```text
+Action title · Context
+```
+
+The full explanation path is:
+
+```text
+Technology > Task > Context > Action title
+```
+
+Search indexes title, technology, task, context, type, value, and maturity state. Multiple query terms use AND semantics.
+
+This separation allows visual simplification without losing retrieval power.
+
+## Supported action types
+
+The current allow-list includes:
+
+- `copy_text`
+- `open_url`
+- `open_file`
+- `open_folder`
+- `launch_app`
+- `build_url_copy`
+- `build_url_open`
+- `build_url_selection_open`
+- `transform_list_csv`
+- `workspace_template`
+- `window_layout`
+- `restore_window_snapshot`
+
+Action types that cause external effects use constrained implementations. `launch_app`, for example, accepts an existing absolute `.exe`, fixed argument list, and optional validated working directory.
+
+## Input and output flow
+
+```text
+External selected text
+        |
+        | Ctrl+Alt+P -> Ctrl+C before focus changes
+        v
+captured_selection
+        |
+        v
+Input / Output workspace <---- Paste / manual edit
+        |
+        +-- transformation -> replace workspace + copy result
+        +-- URL builder -> consume workspace -> copy/open URL
+        `-- copy-only action -> clipboard, workspace unchanged
+```
+
+Input / Output is working data, not action documentation. Action explanations appear as temporary result tooltips.
+
+## Focus contexts and slots
+
+The application currently implements a focus context rather than a complete multi-context inference engine.
+
+```text
+1–5  global pinned actions
+6–9  focus-context actions
+other rows  ordinary search matches
+```
+
+Changing the focus context changes slots 6–9 only. Search always remains global.
+
+The longer-term context model includes identity, knowledge, capabilities, and optional activation, with one focus context and multiple supporting contexts.
+
+## Storage
+
+All data is local and inspectable.
+
+### `data/actions.json`
+
+Reviewed portable action records shared through Git.
+
+### `data/local_actions.json`
+
+Ignored personal and machine-specific actions. New Inbox conversions, cheat-sheet promotions, and snapshots are written here by default.
+
+### `data/inbox.json`
+
+Ignored captured material awaiting or recording conversion.
+
+### `data/palette.json`
+
+Ignored per-machine focus context, pinned IDs, and explicit context slot IDs.
+
+### `data/cheatsheets/*.json`
+
+Structured reference sheets.
+
+### `data/layouts/*.json`
+
+Hand-authored relative window layouts.
+
+### `data/layouts/snapshots/*.json`
+
+Captured window situations, including local executable paths, titles, monitor placement, foreground metadata, and optional launch URLs.
+
+Snapshots are ignored because they may contain private local working information.
+
+Safe initial structures are tracked as `data/*.example.json` and copied by `setup-context-palette.bat`.
+
+## Window layout details
+
+### Monitor ordering
+
+Monitor index `0` is the primary monitor. Remaining monitors are ordered by desktop coordinates.
+
+### Relative placement
+
+Positions use values from 0 to 1 within a monitor's usable work area:
+
+```json
+{
+  "monitor": 1,
+  "x": 0,
+  "y": 0.5,
+  "width": 1,
+  "height": 0.5
+}
+```
+
+This means bottom half of the second monitor.
+
+### Snapshot limitations
+
+Standard Win32 enumeration exposes window titles, classes, processes, and rectangles, but not a reliable browser-tab URL or unsaved document state.
+
+Consequences:
+
+- Browser launch URLs are explicit user-provided metadata.
+- Browser history and tab groups are not reconstructed.
+- Packaged/protected applications may not start from captured executable paths.
+- Changed titles use executable/class fallback matching, which can swap similar browser windows.
+- Full background Z-order is not yet restored.
+
+## Threading and responsiveness
+
+Tkinter widgets are only accessed from the main thread.
+
+- The hotkey message loop runs in a daemon thread and writes a lightweight queue message.
+- The single-instance listener also signals through a queue.
+- The Tk main loop polls requests every 100 ms.
+- No database, network service, web frontend, or heavy UI framework is initialized.
+
+Window layout restore may wait briefly for launched windows to appear. This occurs only when the user explicitly executes a layout or restore action.
+
+## Tooltips and Help
+
+There are two tooltip mechanisms:
+
+1. Action tooltip: temporary in-list explanation of the selected action.
+2. Widget tooltip: delayed hover help for main controls.
+
+Detailed help is stored once in `docs/HELP.md` and displayed by the in-app searchable Help window.
+
+## Security model
+
+- Treat loaded actions and captured text as untrusted data.
+- Only allow known action types.
+- Validate URLs to `http` or `https`.
+- Validate files, folders, executables, and working directories before opening.
+- Do not execute arbitrary shell command strings.
+- Keep API keys out of version-controlled files.
+- Require explicit user action for launches, window restoration, trust promotion, and browser URL metadata.
+
+## Testing strategy
+
+Tests use `unittest` and focus on pure or callback-injected behavior.
+
+- Action parsing, search, execution dispatch, transformations, and URL building.
+- Inbox and cheat-sheet persistence.
+- Slot calculation and palette-state persistence.
+- Hotkey constants and single-instance behavior.
+- Window-layout schema selection and snapshot matching.
+
+External UI and Windows behavior also require documented manual tests. Current manually verified behavior includes two-monitor Explorer placement and snapshot capture/restore round trips.
+
+Run:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover tests
+```
+
+## Extension rules
+
+When adding an action type:
+
+1. Add it to `SUPPORTED_ACTION_TYPES`.
+2. Validate every new persisted field.
+3. Keep pure transformation logic separate from UI/platform effects.
+4. Inject external behavior through a callback where practical.
+5. Add an action tooltip explanation.
+6. Add automated tests or a documented manual test.
+7. Update Help, Architecture, MVP/Backlog, and Decisions as appropriate.
+
+When adding context behavior:
+
+1. Preserve global search.
+2. Do not silently switch the user's focus context.
+3. Keep pinned slots stable.
+4. Explain inputs, outputs, clipboard effects, opened targets, and trust state.
+5. Prefer composition over duplicating actions.
+
+## Known architectural next steps
+
+- Standalone structured context records.
+- Supporting-context composition and weighted ranking.
+- Type-specific action editors.
+- Safe linear action sequences.
+- Clipboard preservation/restoration transactions.
+- Snapshot selection and launch-target editor.
+- Optional application-aware context suggestions.
+- Rich HTML and image actions.

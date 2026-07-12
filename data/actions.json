@@ -1,0 +1,188 @@
+{
+  "actions": [
+    {
+      "id": "general-current-date",
+      "title": "Copy current date placeholder",
+      "context": "General",
+      "technology": "Windows",
+      "task": "Insert date and time",
+      "type": "copy_text",
+      "value": "Replace this with today's date when date actions are implemented.",
+      "state": "Draft"
+    },
+    {
+      "id": "general-open-project-folder",
+      "title": "Open Context Palette folder",
+      "context": "General",
+      "technology": "Windows Explorer",
+      "task": "Project navigation",
+      "type": "open_folder",
+      "value": ".",
+      "state": "Draft"
+    },
+    {
+      "id": "general-open-python-docs",
+      "title": "Open Python documentation",
+      "context": "General",
+      "technology": "Browser / Python",
+      "task": "Technical reference",
+      "type": "open_url",
+      "value": "https://docs.python.org/3/",
+      "state": "Draft"
+    },
+    {
+      "id": "colruyt-open-product",
+      "title": "Open selected product ID",
+      "context": "Colruyt",
+      "technology": "Browser",
+      "task": "Product lookup",
+      "type": "build_url_selection_open",
+      "value": "https://www.colruyt.be/nl/producten/{id_url}",
+      "state": "Draft"
+    },
+    {
+      "id": "database-select-template",
+      "title": "Copy basic SELECT template",
+      "context": "Database",
+      "technology": "SQL",
+      "task": "Query authoring",
+      "type": "copy_text",
+      "value": "SELECT column_name\nFROM table_name\nWHERE condition;",
+      "state": "Draft"
+    },
+    {
+      "id": "database-lines-to-sql-list",
+      "title": "Convert lines to SQL string list",
+      "context": "Database",
+      "technology": "SQL",
+      "task": "Prepare query input",
+      "type": "transform_list_csv",
+      "value": "sql_strings",
+      "state": "Draft"
+    },
+    {
+      "id": "database-cte-template",
+      "title": "Copy basic CTE template",
+      "context": "Database",
+      "technology": "SQL",
+      "task": "Query authoring",
+      "type": "copy_text",
+      "value": "WITH cte_name AS (\n    SELECT column_name\n    FROM table_name\n)\nSELECT *\nFROM cte_name;",
+      "state": "Draft"
+    },
+    {
+      "id": "email-greeting",
+      "title": "Copy professional greeting",
+      "context": "Email",
+      "technology": "Mail",
+      "task": "Reply writing",
+      "type": "copy_text",
+      "value": "Hello,\n\nThank you for your message.",
+      "state": "Draft"
+    },
+    {
+      "id": "email-follow-up",
+      "title": "Copy follow-up template",
+      "context": "Email",
+      "technology": "Mail",
+      "task": "Follow-up",
+      "type": "copy_text",
+      "value": "Hello,\n\nI wanted to follow up on the message below. Please let me know when you have a chance to review it.\n\nBest regards,",
+      "state": "Draft"
+    },
+    {
+      "id": "email-signature",
+      "title": "Copy standard signature",
+      "context": "Email",
+      "technology": "Mail",
+      "task": "Reply writing",
+      "type": "copy_text",
+      "value": "Best regards,\nJef",
+      "state": "Draft"
+    },
+    {
+      "id": "developing-open-vscode",
+      "title": "Open Context Palette in VS Code",
+      "context": "Developing Context Palette",
+      "technology": "VS Code / Python",
+      "task": "Develop Context Palette",
+      "type": "launch_app",
+      "value": "%LOCALAPPDATA%\\Programs\\Microsoft VS Code\\Code.exe",
+      "arguments": [
+        "%PROJECT_ROOT%"
+      ],
+      "working_directory": "%PROJECT_ROOT%",
+      "state": "Draft"
+    },
+    {
+      "id": "time-registration-open-outlook",
+      "title": "Open Outlook for agenda and mail",
+      "context": "Tijdsregistratie",
+      "technology": "Outlook",
+      "task": "Reconstruct workday",
+      "type": "launch_app",
+      "value": "%PROGRAMFILES%\\Microsoft Office\\root\\Office16\\OUTLOOK.EXE",
+      "state": "Draft"
+    },
+    {
+      "id": "time-registration-open-dummy-app",
+      "title": "Open dummy registration app",
+      "context": "Tijdsregistratie",
+      "technology": "Browser",
+      "task": "Register time",
+      "type": "open_url",
+      "value": "https://www.colruyt.be/nl/",
+      "state": "Draft"
+    },
+    {
+      "id": "time-registration-copy-record-template",
+      "title": "Copy time-registration record template",
+      "context": "Tijdsregistratie",
+      "technology": "Text / Clipboard",
+      "task": "Prepare registration",
+      "type": "workspace_template",
+      "value": "Datum: %LDF%\nVan: \nTot: \nPauze: \nDuur: \nProject: \nTaak: \nOmschrijving: \nBron: Agenda + OneNote\nStatus: Nog te registreren",
+      "state": "Draft"
+    },
+    {
+      "id": "developing-open-project-folder",
+      "title": "Open project folder",
+      "context": "Developing Context Palette",
+      "technology": "Windows Explorer",
+      "task": "Develop Context Palette",
+      "type": "open_folder",
+      "value": "%PROJECT_ROOT%",
+      "state": "Draft"
+    },
+    {
+      "id": "developing-arrange-three-explorers",
+      "title": "Arrange three Explorer windows",
+      "context": "Developing Context Palette",
+      "technology": "Windows Explorer / Win32",
+      "task": "Configure workspace",
+      "type": "window_layout",
+      "value": "data/layouts/three-explorers.json",
+      "state": "Draft"
+    },
+    {
+      "id": "draft-8ed62547f42e",
+      "title": "w11 shortuts",
+      "context": "win11",
+      "technology": "Windows 11",
+      "task": "Shortcut reference",
+      "type": "copy_text",
+      "value": "Here are some of the most useful Windows 11 shortcuts people often forget:\n\nWin + V \u2014 Clipboard history (if enabled)\nWin + H \u2014 Voice typing\nWin + Shift + S \u2014 Screenshot snip (tool)\nWin + D \u2014 Show/hide desktop\nWin + M \u2014 Minimize all windows\nWin + Ctrl + Space \u2014 Switch input language/keyboard\nWin + Space \u2014 Switch keyboard layout (when multiple layouts)\nWin + . (period) \u2014 Emoji panel / symbols\nWin + Z \u2014 Snap Layouts (layout menu)\nWin + Left/Right (with window focus) \u2014 Snap window to half\nWin + G \u2014 Xbox Game Bar (if enabled)\nCtrl + Shift + Esc \u2014 Task Manager (direct)\nAlt + Tab \u2014 Switch apps (hold Alt to preview)\nCtrl + Shift + Click (on app in taskbar) \u2014 Open new instance of app",
+      "state": "Draft"
+    },
+    {
+      "id": "draft-feba1aeda53f",
+      "title": "Quick Settings",
+      "context": "Windows 11 Productivity, Development & Debugging",
+      "technology": "Windows 11",
+      "task": "Quick settings",
+      "type": "copy_text",
+      "value": "Quick Settings: Win + A",
+      "state": "Draft"
+    }
+  ]
+}
