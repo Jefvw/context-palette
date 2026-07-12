@@ -6,17 +6,32 @@ Developers can find the current implementation architecture in `docs/ARCHITECTUR
 
 Multi-PC cloning, GitHub publishing, portable paths, and shared/local data are documented in `docs/MULTI_PC_DEVELOPMENT.md`.
 
+Power Automate Desktop and PowerToys setup is documented in `integrations/README.md`.
+
 ## Open and close the palette
 
 - Start once with `run-context-palette.bat`.
-- Press `Ctrl+Alt+P` to capture the current text selection and show the resident palette.
+- Press `F9` or `Ctrl+Alt+P` to capture the current text selection and show the resident palette. On laptops in media-key mode, use `Fn+F9` or enable Fn Lock.
+- The palette opens on the monitor containing the mouse cursor, close to the cursor position at the moment the shortcut was pressed.
 - Press `Esc`, click `Hide`, or close the window to hide it.
 - Click `Quit` to stop the resident process completely.
 - If a development instance becomes stuck, run `stop-context-palette.bat` and start again.
 
+External Windows tools may safely show and pre-filter the existing instance:
+
+```powershell
+.\integrations\Invoke-ContextPalette.ps1 -Context "Database" -Search "SQL"
+```
+
+This does not execute the highlighted action. Avoid passing secrets or selected text as command-line search values.
+
 ## Focus context
 
+Contexts do not have to be created through the UI. Shared definitions live in `data/contexts.json`; private or work-specific definitions live in ignored `data/local_contexts.json`. The complete format and QTP-style recipes are in `docs/CONTEXT_CONFIGURATION.md`.
+
 The Focus context tells Context Palette what kind of work is currently most important. It changes slots 6 through 9 and influences which actions appear first.
+
+Focus and Find are compact one-line controls. Hover over or click their `?` buttons for guidance without permanently consuming screen space.
 
 - Slots `1–5` are personal pinned actions and never change with context.
 - Slots `6–9` are the top four actions for the selected focus context.
@@ -31,18 +46,23 @@ Search matches Technology, Task, Context, Action name, type, and content.
 - Press Enter, double-click, or click `Run selected`.
 - Numpad 1 through 9 executes the corresponding fixed slot.
 - Number-row 1 through 9 executes slots when focus is not in a text entry field.
-- Selecting an action briefly shows an explanation tooltip.
+- Selecting an action updates the slim communication line at the bottom.
 
 Blue rows are pinned slots 1–5. Green rows are focus-context slots 6–9. Neutral rows are other search results.
 
 ## Input / Output workspace
 
-Input / Output is editable working data, not a preview.
+Input / Output is a permanent editable working text box, not an action preview. When the palette opens it shows the current clipboard or captured selection. Actions can read or replace it. Its toolbar is intentionally omitted to save space.
+
+Numbered action triggering is deliberately active only while Find has focus. In every other control—including Clipboard / Input / Output, the result list, context selector, and buttons—`1` through `9` do not execute actions. This makes Find the explicit keyboard command mode. Standard text editing remains available in the workspace.
+
+The bottom communication line always stays one row high. Hover over it for the complete selected-action explanation; click it to open the full message in a selectable information window.
 
 - A text selection captured with `Ctrl+Alt+P` appears here.
-- `Paste` replaces it with current clipboard text.
+- `Ctrl+V` pastes at the cursor; the right-click command `Replace with clipboard` replaces everything.
 - Type or edit text directly.
-- `Clear` empties it.
+- The right-click command `Clear` empties it.
+- The right-click menu also provides Undo, Redo, Cut, Copy, Paste, Select all, and Copy all.
 - Transform actions read it and place their result back in it.
 - URL-builder actions use it as selected input when it is not empty.
 
@@ -52,7 +72,7 @@ Example: in the Database context, `Convert lines to SQL string list` turns separ
 
 ### Run selected
 
-Executes the highlighted action. The exact effect depends on the action type and is described in its tooltip.
+Executes the highlighted action. The exact effect appears in the bottom communication line when selected.
 
 ### Capture
 
@@ -64,7 +84,15 @@ Records visible, non-minimized application windows, monitors, relative positions
 
 ### Inbox
 
-Shows captured items. An item can be converted into a structured Draft action with Technology, Task, Context, Action name, and content.
+Shows captured items. An item can be converted into a structured Draft action with Technology, Task, Context, Action name, and a guided action type.
+
+For a URL built from selected or copied text, choose **Build URL — copy and open using selection/clipboard** and use a template such as:
+
+```text
+http://linkto/archives/{id_url}
+```
+
+`{id_url}` is replaced with URL-encoded text from Input / Output, the captured selection, or the clipboard. The creator displays a live example before saving. Copy-only and open-only variants can instead ask for input when run.
 
 ### Sheets
 
@@ -108,7 +136,7 @@ Example:
 Browser > Product lookup > Colruyt > Open selected product ID
 ```
 
-To keep the launcher fast to scan, result rows show only `Action name · Context`. Technology and Task remain fully searchable and are shown in the action tooltip.
+To keep the launcher fast to scan, result rows show only `Action name · Context`. Technology and Task remain fully searchable and appear in the bottom communication line.
 
 ## Window layouts and snapshots
 
@@ -148,7 +176,7 @@ Another application may own the shortcut. Quit duplicate instances and restart C
 
 ### Selected text was not captured
 
-Some applications block simulated copy operations. Copy manually, open Context Palette, and click `Paste` in Input / Output.
+Some applications block simulated copy operations. Copy manually, open Context Palette, then press `Ctrl+V` or use the text box's right-click menu.
 
 ### Snapshot restore cannot restore everything
 

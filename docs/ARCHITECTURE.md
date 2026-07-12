@@ -30,6 +30,7 @@ run-context-palette.bat
         v
 pythonw.exe -> context_palette.main
         |
+        +-- parse constrained show/context/search integration arguments
         +-- notify existing instance and exit
         |
         `-- create Tk root and LauncherApp
@@ -60,7 +61,7 @@ Presentation and application orchestration.
 - Builds the Tkinter interface.
 - Maintains the active focus context.
 - Renders numbered slots and search results.
-- Owns Input / Output, action explanation tooltips, button tooltips, Inbox, sheets, Help, and action editors.
+- Owns Input / Output, the communication line, systematic widget tooltips, Inbox, sheets, Help, and action editors.
 - Connects platform-independent action execution to Windows-specific callbacks.
 - Ensures Tk operations stay on the Tk main thread.
 
@@ -91,10 +92,15 @@ Stores and calculates launcher organization.
 
 Native Windows hotkey and selection-copy support using `ctypes`.
 
-- Registers `Ctrl+Alt+P` with `RegisterHotKey`.
+- Registers one-key `F9` and fallback `Ctrl+Alt+P` with `RegisterHotKey` and no-repeat behaviour.
 - Runs the Windows message loop on a daemon thread.
 - Queues activation back to `LauncherApp`; it does not manipulate Tk widgets from the background thread.
 - Sends a constrained `Ctrl+C` sequence before the palette takes focus.
+- Captures cursor coordinates and the nearest monitor work area in the hotkey thread, then positions the palette near that point while keeping the complete window on-screen.
+
+### `contexts.py`
+
+Loads and validates standalone shared and local context definitions. A definition provides identity metadata and up to four preferred action IDs. Explicit per-machine choices in `palette.json` override configured defaults.
 
 ### `single_instance.py`
 
@@ -102,7 +108,17 @@ Resident-process coordination through a localhost socket.
 
 - Only the first process owns the port.
 - Later processes send a show request and terminate.
+- Requests may carry only `command`, `context`, and `search` string fields in size-limited JSON.
+- Invalid commands and fields are ignored; the bridge cannot execute actions or shell commands.
 - The port is derived from the project path to reduce collisions between workspaces.
+
+### Windows integration boundary
+
+`main.py` accepts optional `--context` and `--search` arguments. `integrations/Invoke-ContextPalette.ps1` provides the parameterized wrapper for Power Automate Desktop; the ordinary batch launcher remains argumentless.
+
+PowerToys Keyboard Manager can remap a shortcut to the canonical `Ctrl+Alt+P` hotkey, preserving selection capture. PowerToys Workspaces can start the ordinary launcher. A native PowerToys Run plug-in remains separate because it would introduce a version-specific .NET build and packaging surface.
+
+The bridge is attended by design: it may reveal and filter the palette but cannot run an action by ID. Any future unattended execution API requires a Trusted-action policy, confirmation rules, structured results, and separate security tests.
 
 ### `inbox.py`
 
@@ -112,6 +128,8 @@ Capture Inbox domain model and persistence.
 - Loads and validates Inbox JSON.
 - Updates maturity state.
 - Keeps captured material separate from actions until conversion.
+
+The Inbox creation UI supports guided `copy_text` and URL-builder Drafts. URL templates are validated through the same domain function used at execution, and the dialog keeps its action footer outside the expandable form so buttons remain visible at smaller window sizes.
 
 ### `cheatsheets.py`
 
@@ -207,7 +225,11 @@ Input / Output workspace <---- Paste / manual edit
         `-- copy-only action -> clipboard, workspace unchanged
 ```
 
-Input / Output is working data, not action documentation. Action explanations appear as temporary result tooltips.
+Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown and can be explicitly copied, pasted, cleared, or replaced by actions. Action explanations and application status share a slim bottom communication line.
+
+Numbered action dispatch is enabled only when the Find entry owns focus. All other widgets suppress it, making shortcut mode explicit and preventing accidental execution while navigating or editing. The communication line never wraps; its full untruncated action explanation is retained separately for a dynamic hover tooltip and click-open detail window.
+
+The numbered-slot colour legend and workspace toolbar are intentionally not rendered. Slot numbers and row colours carry the distinction; standard editing plus a context menu preserve clipboard operations without consuming permanent vertical space.
 
 ## Focus contexts and slots
 
@@ -230,6 +252,10 @@ All data is local and inspectable.
 ### `data/actions.json`
 
 Reviewed portable action records shared through Git.
+
+### `data/contexts.json` and `data/local_contexts.json`
+
+The shared file contains reviewed portable context definitions. The ignored local file contains personal or work-specific definitions.
 
 ### `data/local_actions.json`
 
@@ -306,10 +332,10 @@ Window layout restore may wait briefly for launched windows to appear. This occu
 
 ## Tooltips and Help
 
-There are two tooltip mechanisms:
+There are two guidance mechanisms:
 
-1. Action tooltip: temporary in-list explanation of the selected action.
-2. Widget tooltip: delayed hover help for main controls.
+1. Communication line: bounded selected-action explanation, results, warnings, and errors.
+2. Widget tooltip: delayed hover help for every label and button, including compact `?` guidance buttons. Explicit descriptions override automatically installed fallbacks.
 
 Detailed help is stored once in `docs/HELP.md` and displayed by the in-app searchable Help window.
 
@@ -349,7 +375,7 @@ When adding an action type:
 2. Validate every new persisted field.
 3. Keep pure transformation logic separate from UI/platform effects.
 4. Inject external behavior through a callback where practical.
-5. Add an action tooltip explanation.
+5. Add a communication-line explanation.
 6. Add automated tests or a documented manual test.
 7. Update Help, Architecture, MVP/Backlog, and Decisions as appropriate.
 

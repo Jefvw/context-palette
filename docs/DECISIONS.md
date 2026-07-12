@@ -2,6 +2,54 @@
 
 Record durable product and technical decisions here.
 
+## 2026-07-12 - Use screen space for results and stable guidance
+
+**Decision:** Collapse Focus and Find to single rows, keep Input / Output as a permanent clipboard-backed text box, and use a slim bottom line for action explanations and application communication. Every label and button receives hover guidance; specific descriptions override automatic fallbacks.
+
+**Reason:** Search results are the primary interaction and deserve most vertical space. Guidance remains available through small `?` controls and a predictable location.
+
+**Consequences:** The text box always remains directly editable and usable by actions. The communication line stays compact so results retain most vertical space.
+
+The slot legend and text toolbar are also omitted: their functions remain discoverable through row numbering, tooltips, standard text shortcuts, and the workspace context menu.
+
+## 2026-07-12 - Add F9 as the one-key launcher
+
+**Decision:** Register F9 and Ctrl+Alt+P simultaneously. Both perform selection capture and cursor-based positioning, with key-repeat suppression.
+
+**Reason:** F9 is present on laptops and usually has fewer global conflicts than F12, while the established chord remains a reliable fallback.
+
+**Consequences:** Media-key laptop modes may require Fn+F9 or Fn Lock. Applications that normally use F9 will not receive it while Context Palette owns the global shortcut.
+
+## 2026-07-12 - Position shortcut opens at the cursor monitor
+
+**Decision:** Capture cursor and monitor work-area coordinates when the global shortcut fires, then place the palette near that point after selection capture.
+
+**Reason:** In a multi-monitor workflow, the cursor is the clearest indication of where the user's attention is. Capturing immediately avoids positioning based on later focus changes.
+
+**Consequences:** The window flips left or upward near screen edges and is clamped inside the selected monitor. Power Automate and ordinary launcher opens retain their existing position.
+
+## 2026-07-12 - Make standalone contexts file-first
+
+**Decision:** Load shared `contexts.json` and ignored `local_contexts.json` independently from actions. Context definitions carry identity metadata and up to four preferred action IDs.
+
+**Reason:** Contexts must be configurable upfront, transferable between PCs, and editable with any text or AI assistant without depending on an unfinished management UI.
+
+**Consequences:** Explicit local palette slots override configured defaults. Shared and local context names must be unique. Internal context information remains in the ignored local file.
+
+## 2026-07-12 - Let Inbox conversion start from the intended result
+
+**Decision:** The Draft creator first asks what the action should do and adapts its content guidance accordingly. URL builders expose copy/open behaviour, require `{id}` or `{id_url}`, and show a live example. Primary buttons live in a fixed footer.
+
+**Reason:** A capture is source material, not necessarily the final output. Hardcoding conversion to copy-text concealed existing URL-builder capabilities, while a bottom footer inside expanding content could make the buttons disappear.
+
+## 2026-07-12 - Keep Windows automation integration attended and optional
+
+**Decision:** Power Automate Desktop and PowerToys integrate through a constrained localhost show request containing only optional context and search text. Batch and PowerShell wrappers expose the same surface. It cannot run an action or arbitrary command.
+
+**Reason:** This provides useful integration without making either Windows product a dependency or bypassing Context Palette's visible action selection and trust model.
+
+**Consequences:** A native PowerToys Run plug-in remains a separately packaged future adapter. Unattended action execution is deferred until Trusted-action authorization, confirmation policy, structured results, and security tests are designed.
+
 ## 2026-07-10 - Use a local Python virtual environment for development
 
 **Decision:** Use a project-local `.venv` directory for development commands.

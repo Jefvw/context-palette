@@ -1,6 +1,36 @@
 {
   "actions": [
     {
+      "id": "qtp-copy-date-time",
+      "title": "Copy current date and time",
+      "context": "QTP Essentials",
+      "technology": "Windows / Clipboard",
+      "task": "Insert date and time",
+      "type": "copy_text",
+      "value": "%LDF% %LTF%",
+      "state": "Draft"
+    },
+    {
+      "id": "qtp-copy-url-encoded-clipboard",
+      "title": "Copy URL-encoded clipboard text",
+      "context": "QTP Essentials",
+      "technology": "Clipboard",
+      "task": "Encode text",
+      "type": "copy_text",
+      "value": "%CLIPBOARD_URL%",
+      "state": "Draft"
+    },
+    {
+      "id": "archives-open-selected-item",
+      "title": "Open selected archive item",
+      "context": "Archives",
+      "technology": "Browser",
+      "task": "Archive lookup",
+      "type": "build_url_selection_open",
+      "value": "http://linkto/archives/{id_url}",
+      "state": "Draft"
+    },
+    {
       "id": "general-current-date",
       "title": "Copy current date placeholder",
       "context": "General",

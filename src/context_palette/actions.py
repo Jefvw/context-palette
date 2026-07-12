@@ -136,6 +136,36 @@ def draft_copy_text_action(
     )
 
 
+def draft_build_url_action(
+    *,
+    title: str,
+    context: str,
+    template: str,
+    action_type: str = "build_url_selection_open",
+    technology: str = "",
+    task: str = "",
+) -> Action:
+    allowed_types = {"build_url_copy", "build_url_open", "build_url_selection_open"}
+    if action_type not in allowed_types:
+        raise ActionError("Unsupported URL-builder action type.")
+    clean_title = title.strip()
+    clean_context = context.strip() or "General"
+    clean_template = template.strip()
+    if not clean_title:
+        raise ActionError("Action title cannot be empty.")
+    build_url(clean_template, "example")
+    return Action(
+        id=f"draft-{uuid4().hex[:12]}",
+        title=clean_title,
+        context=clean_context,
+        type=action_type,
+        value=clean_template,
+        state="Draft",
+        technology=technology.strip(),
+        task=task.strip(),
+    )
+
+
 def edited_copy_text_action(action: Action, *, title: str, context: str, value: str) -> Action:
     if action.type != "copy_text" or action.state != "Draft":
         raise ActionError("Only draft copy-text actions can be edited right now.")
@@ -243,9 +273,14 @@ def execute_action(
         return "Transformed the list and copied the result."
 
     if action.type == "build_url_selection_open":
-        if selected_text is None:
-            raise ActionError("No selected text was captured. Select an ID before opening the palette.")
-        url = build_url(action.value, selected_text)
+        identifier = selected_text
+        if not identifier and clipboard_getter is not None:
+            identifier = clipboard_getter()
+        if not identifier:
+            raise ActionError(
+                "No input was found. Select or copy an ID, or place it in Input / Output."
+            )
+        url = build_url(action.value, identifier)
         if clipboard_setter is None:
             raise ActionError("No clipboard is available for copying the URL.")
         clipboard_setter(url)

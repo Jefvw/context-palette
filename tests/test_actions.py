@@ -15,6 +15,7 @@ from context_palette.actions import (
     ActionError,
     append_action,
     build_url,
+    draft_build_url_action,
     draft_copy_text_action,
     edited_copy_text_action,
     execute_action,
@@ -29,6 +30,28 @@ from context_palette.actions import (
 
 
 class ActionTests(unittest.TestCase):
+    def test_draft_build_url_action_validates_and_preserves_metadata(self):
+        action = draft_build_url_action(
+            title="Open archive",
+            technology="Browser",
+            task="Archive lookup",
+            context="Archives",
+            template="http://linkto/archives/{id_url}",
+        )
+
+        self.assertEqual(action.type, "build_url_selection_open")
+        self.assertEqual(action.value, "http://linkto/archives/{id_url}")
+        self.assertEqual(action.technology, "Browser")
+        self.assertEqual(action.state, "Draft")
+
+    def test_draft_build_url_action_rejects_template_without_input_placeholder(self):
+        with self.assertRaises(ActionError):
+            draft_build_url_action(
+                title="Open archive",
+                context="Archives",
+                template="http://linkto/archives/",
+            )
+
     def test_load_actions_filters_archived_items(self):
         path = self._write_actions(
             [
@@ -202,6 +225,27 @@ class ActionTests(unittest.TestCase):
         self.assertEqual(copied, ["https://www.colruyt.be/nl/producten/5331"])
         self.assertEqual(opened[0].value, "https://www.colruyt.be/nl/producten/5331")
         self.assertIn("Copied", message)
+
+    def test_execute_build_url_uses_clipboard_when_selection_is_unavailable(self):
+        copied = []
+        opened = []
+        action = Action(
+            "archive",
+            "Open archive",
+            "Archives",
+            "build_url_selection_open",
+            "http://linkto/archives/{id_url}",
+        )
+
+        execute_action(
+            action,
+            clipboard_getter=lambda: "ABC 123",
+            clipboard_setter=copied.append,
+            opener=opened.append,
+        )
+
+        self.assertEqual(copied, ["http://linkto/archives/ABC%20123"])
+        self.assertEqual(opened[0].value, "http://linkto/archives/ABC%20123")
 
     def test_list_to_comma_separated_supports_plain_and_sql_strings(self):
         self.assertEqual(list_to_comma_separated("one\ntwo\nthree"), "one, two, three")

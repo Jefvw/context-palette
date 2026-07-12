@@ -6,6 +6,10 @@ Technical implementation and module boundaries are documented in `docs\ARCHITECT
 
 For cloning, setup, safe GitHub publishing, shared versus local data, and AI-assisted development on multiple PCs, see `docs\MULTI_PC_DEVELOPMENT.md`.
 
+For Power Automate Desktop and PowerToys integration, see `integrations\README.md`.
+
+Contexts can be configured outside the UI. See `docs\CONTEXT_CONFIGURATION.md` for shared/local JSON, preferred slots, and QTP-style recipes.
+
 The project is intentionally small at this stage. The current focus is to build the first local prototype without requiring administrator rights, installers, services, registry changes, AutoHotkey, or external services.
 
 ## Current status
@@ -16,10 +20,11 @@ It can:
 
 - open a small launcher window;
 - stay resident so later opens are fast;
+- open with one-key `F9`, with `Ctrl+Alt+P` retained as fallback;
 - use a compact search-first palette layout;
 - search sample actions;
-- show the selected action preview as a temporary tooltip near the result;
-- provide an editable Input / Output workspace for selected, pasted, typed, and transformed text;
+- show selected-action guidance in a stable information area;
+- provide a persistent editable Clipboard / Input / Output workspace for selected, pasted, typed, and transformed text;
 - copy saved text actions to the clipboard;
 - open safe URL, file, folder, or explicitly configured application targets;
 - capture clipboard text into a local Inbox;
@@ -36,6 +41,8 @@ It can:
 - search action technology, task, context, title, type, and value.
 - detect connected Windows screens and apply constrained window layouts.
 - open complete searchable local help from the app and explain main buttons with hover tooltips.
+- accept safe external show, context, and search requests from Windows automation tools.
+- load standalone shared and local context definitions with preconfigured slots 6–9.
 
 ## Development environment
 
@@ -209,18 +216,20 @@ Use `{id}` in the URL template to insert the ID literally, or `{id_url}` to URL-
 
 Selecting `ABC 12` before opening Context Palette builds `https://example.com/items/ABC%2012`.
 
-Selecting an action briefly shows a tooltip explaining what it will do. This keeps the explanation close to the result without permanently occupying workspace space.
+Selecting an action updates the slim communication line at the bottom with its searchable path and expected effect. Results, warnings, and errors use that same predictable line.
+
+The line remains one row high. Hovering shows the full explanation, while clicking opens selectable details. Numbered action triggering works only while Find has focus and is disabled everywhere else.
 
 ### Input / Output workspace
 
 The field below the results is working data rather than an action preview:
 
 - Text selected before `Ctrl+Alt+P` is captured into the field.
-- `Paste` replaces the field with current clipboard text.
+- `Ctrl+V` pastes normally; right-click `Replace with clipboard` replaces the complete field.
 - Text can be typed or edited directly.
 - Transform actions read the field and replace it with their result.
 - Transformation results are also copied to the clipboard.
-- `Clear` empties the field.
+- Right-click `Clear` empties the field; the same menu exposes the standard editing commands.
 
 For example, choose the `Database` focus context and run `Convert lines to SQL string list` on:
 
@@ -247,7 +256,7 @@ The included `data\layouts\three-explorers.json` example is available in the `De
 - With two or more screens, the project folder fills screen 1; `data` and `docs` use the top and bottom halves of screen 2.
 - With one screen, project, `data`, and `docs` use three columns.
 
-The preview tooltip reports the currently detected screen count before execution. Monitor index `0` is the primary screen.
+The communication line reports the currently detected screen count before execution. Monitor index `0` is the primary screen.
 
 ### Capture and restore a window snapshot
 

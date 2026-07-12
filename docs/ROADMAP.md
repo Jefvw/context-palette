@@ -28,3 +28,5 @@ Phase 6
 
 Phase 7
 □ Optional AutoHotkey integration
+✓ Attended Power Automate Desktop and PowerToys show/context/search bridge
+□ Optional separately packaged PowerToys Run plug-in

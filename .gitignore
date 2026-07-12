@@ -6,6 +6,7 @@ __pycache__/
 # Per-machine and personal runtime data. Safe examples remain tracked.
 /data/inbox.json
 /data/local_actions.json
+/data/local_contexts.json
 /data/palette.json
 /data/layouts/snapshots/
 

@@ -2,26 +2,58 @@ from __future__ import annotations
 
 import socket
 import threading
+import json
 from typing import Callable
 
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 49371
 MESSAGE_SHOW = b"show"
+MAX_MESSAGE_SIZE = 8192
 
 
-def notify_existing_instance(port: int = DEFAULT_PORT) -> bool:
+def encode_request(request: dict[str, str]) -> bytes:
+    allowed = {"command", "search", "context"}
+    if set(request) - allowed:
+        raise ValueError("Unsupported integration request field.")
+    message = json.dumps(request, ensure_ascii=False).encode("utf-8")
+    if len(message) > MAX_MESSAGE_SIZE:
+        raise ValueError("Integration request is too large.")
+    return message
+
+
+def decode_request(message: bytes) -> dict[str, str] | None:
+    if message == MESSAGE_SHOW:
+        return {"command": "show"}
+    try:
+        value = json.loads(message.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(value, dict) or value.get("command") != "show":
+        return None
+    if set(value) - {"command", "search", "context"}:
+        return None
+    if not all(isinstance(item, str) for item in value.values()):
+        return None
+    return value
+
+
+def notify_existing_instance(
+    port: int = DEFAULT_PORT,
+    request: dict[str, str] | None = None,
+) -> bool:
+    message = MESSAGE_SHOW if request is None else encode_request(request)
     try:
         with socket.create_connection((HOST, port), timeout=0.2) as client:
-            client.sendall(MESSAGE_SHOW)
+            client.sendall(message)
         return True
     except OSError:
         return False
 
 
 class SingleInstanceServer:
-    def __init__(self, on_show: Callable[[], None], port: int = DEFAULT_PORT) -> None:
-        self.on_show = on_show
+    def __init__(self, on_request: Callable[[dict[str, str]], None], port: int = DEFAULT_PORT) -> None:
+        self.on_request = on_request
         self.port = port
         self._stop_event = threading.Event()
         self._server: socket.socket | None = None
@@ -57,8 +89,10 @@ class SingleInstanceServer:
 
             with client:
                 try:
-                    message = client.recv(16)
+                    message = client.recv(MAX_MESSAGE_SIZE + 1)
                 except OSError:
                     continue
-            if message == MESSAGE_SHOW:
-                self.on_show()
+            if len(message) <= MAX_MESSAGE_SIZE:
+                request = decode_request(message)
+                if request is not None:
+                    self.on_request(request)

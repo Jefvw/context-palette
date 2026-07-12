@@ -30,6 +30,7 @@ if not exist ".venv\Scripts\python.exe" (
 
 if not exist "data\inbox.json" copy /y "data\inbox.example.json" "data\inbox.json" >nul
 if not exist "data\local_actions.json" copy /y "data\local_actions.example.json" "data\local_actions.json" >nul
+if not exist "data\local_contexts.json" copy /y "data\local_contexts.example.json" "data\local_contexts.json" >nul
 if not exist "data\palette.json" copy /y "data\palette.example.json" "data\palette.json" >nul
 if not exist "data\layouts\snapshots" mkdir "data\layouts\snapshots"
 

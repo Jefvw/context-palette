@@ -15,6 +15,8 @@
 
 ## Done
 
+- Load standalone shared/local context definitions with descriptions and preferred actions for slots 6–9.
+
 - Establish the project structure.
 - Choose the minimum portable Python setup.
 - Decide the initial storage format.
@@ -44,6 +46,8 @@
 - Replace the permanent preview pane with action tooltips and an editable Input / Output workspace.
 - Add a lines-to-SQL-string-list transformation that updates Input / Output and the clipboard.
 - Align Inbox draft creation with Technology, Task, Context, and Action name metadata.
+- Guide Inbox conversion into copy-text and URL-builder actions with live validation and a fixed visible footer.
+- Add a constrained show/context/search bridge and setup guidance for Power Automate Desktop and PowerToys.
 
 ## Next
 
@@ -65,6 +69,8 @@
 - Add optional application-aware context suggestions; never require automatic switching.
 - Global shortcut investigation.
 - Optional AutoHotkey adapter.
+- Evaluate an independently packaged native PowerToys Run plug-in after the attended integration proves useful.
+- Design a Trusted-action external API before allowing unattended Power Automate execution.
 - LLM-assisted context authoring.
 - Pop-up app cheat sheets.
 - LLM-assisted cheat sheet drafts for frequently used programs.

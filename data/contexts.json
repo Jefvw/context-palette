@@ -1,0 +1,45 @@
+{
+  "contexts": [
+    {
+      "name": "General",
+      "description": "Reusable actions that are useful in any application.",
+      "preferred_action_ids": [
+        "qtp-copy-date-time",
+        "general-open-project-folder",
+        "general-open-python-docs"
+      ]
+    },
+    {
+      "name": "QTP Essentials",
+      "description": "The most useful QuickTextPaste-style text, clipboard, URL, and list operations.",
+      "technology": "Windows / Clipboard",
+      "task": "Fast text reuse",
+      "preferred_action_ids": [
+        "qtp-copy-date-time",
+        "qtp-copy-url-encoded-clipboard",
+        "database-lines-to-sql-list",
+        "archives-open-selected-item"
+      ]
+    },
+    {
+      "name": "Archives",
+      "description": "Build an archive URL from selected, workspace, or clipboard text.",
+      "technology": "Browser",
+      "task": "Archive lookup",
+      "preferred_action_ids": [
+        "archives-open-selected-item"
+      ]
+    },
+    {
+      "name": "Tijdsregistratie",
+      "description": "Reconstruct the workday and prepare time-registration input.",
+      "technology": "Browser / Outlook / OneNote",
+      "task": "Register time",
+      "preferred_action_ids": [
+        "time-registration-open-outlook",
+        "time-registration-open-dummy-app",
+        "time-registration-copy-record-template"
+      ]
+    }
+  ]
+}

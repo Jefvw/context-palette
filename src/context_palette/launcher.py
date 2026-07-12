@@ -11,6 +11,8 @@ from .actions import (
     Action,
     ActionError,
     append_action,
+    build_url,
+    draft_build_url_action,
     draft_copy_text_action,
     edited_copy_text_action,
     execute_action,
@@ -29,7 +31,8 @@ from .cheatsheets import (
     filter_cheatsheet,
     load_cheatsheets,
 )
-from .hotkeys import GlobalHotkey, send_copy_shortcut
+from .hotkeys import GlobalHotkey, cursor_location, send_copy_shortcut, window_position_near_cursor
+from .contexts import ContextDefinition, ContextError, load_combined_contexts
 from .inbox import InboxError, InboxItem, append_inbox_item, create_clipboard_item, load_inbox_items
 from .inbox import update_inbox_item_state
 from .single_instance import SingleInstanceServer
@@ -53,7 +56,7 @@ from .window_layouts import (
 
 
 class WidgetTooltip:
-    def __init__(self, widget: tk.Widget, text: str) -> None:
+    def __init__(self, widget: tk.Widget, text: str | Callable[[], str]) -> None:
         self.widget = widget
         self.text = text
         self.window: tk.Toplevel | None = None
@@ -61,6 +64,7 @@ class WidgetTooltip:
         widget.bind("<Enter>", self._schedule, add="+")
         widget.bind("<Leave>", self.hide, add="+")
         widget.bind("<ButtonPress>", self.hide, add="+")
+        setattr(widget, "_context_palette_has_tooltip", True)
 
     def _schedule(self, _event=None) -> None:
         self.hide()
@@ -71,11 +75,12 @@ class WidgetTooltip:
         if not self.widget.winfo_exists():
             return
         window = tk.Toplevel(self.widget)
+        setattr(window, "_context_palette_tooltip_window", True)
         window.overrideredirect(True)
         window.attributes("-topmost", True)
         label = tk.Label(
             window,
-            text=self.text,
+            text=self.text() if callable(self.text) else self.text,
             justify=tk.LEFT,
             wraplength=360,
             background="#ffffe0",
@@ -107,15 +112,21 @@ class LauncherApp:
         root: tk.Tk,
         actions_path: Path,
         local_actions_path: Path,
+        contexts_path: Path,
+        local_contexts_path: Path,
         palette_path: Path,
         inbox_path: Path,
         cheatsheets_dir: Path,
         instance_port: int,
+        initial_request: dict[str, str] | None = None,
     ) -> None:
         self.root = root
         self.actions_path = actions_path
         self.local_actions_path = local_actions_path
         self.local_action_ids: set[str] = set()
+        self.contexts_path = contexts_path
+        self.local_contexts_path = local_contexts_path
+        self.context_definitions: list[ContextDefinition] = []
         self.palette_path = palette_path
         self.inbox_path = inbox_path
         self.cheatsheets_dir = cheatsheets_dir
@@ -125,9 +136,9 @@ class LauncherApp:
         self.displayed_slots: list[int | None] = []
         self.slot_actions: dict[int, Action] = {}
         self.palette_state = PaletteState()
-        self.show_requests: queue.Queue[str] = queue.Queue()
-        self.instance_server = SingleInstanceServer(lambda: self.show_requests.put("show"), instance_port)
-        self.hotkey = GlobalHotkey(lambda: self.show_requests.put("hotkey"))
+        self.show_requests: queue.Queue[dict[str, str]] = queue.Queue()
+        self.instance_server = SingleInstanceServer(self.show_requests.put, instance_port)
+        self.hotkey = GlobalHotkey(self._queue_hotkey_request)
         self.captured_selection: str | None = None
         self.source_foreground_handle: int | None = None
         self.hotkey_available = False
@@ -135,15 +146,14 @@ class LauncherApp:
         self.search_entry: ttk.Entry | None = None
         self.search_var = tk.StringVar()
         self.context_var = tk.StringVar(value="General")
-        self.preview_tooltip: ttk.Label | None = None
-        self.preview_after_id: str | None = None
         self.widget_tooltips: list[WidgetTooltip] = []
-        self.preview_var = tk.StringVar(value="Select an action to preview it.")
+        self.action_info_full = "Select an action to see what it reads and what it will do."
         self.status_var = tk.StringVar(value="Ready")
         self.search_var.trace_add("write", lambda *_args: self._refresh_results())
 
         self._build_ui()
         self._load_actions()
+        self._load_contexts()
         self._load_palette_state()
         self._refresh_results()
         if not self.instance_server.start():
@@ -151,15 +161,19 @@ class LauncherApp:
             return
         self.hotkey_available = self.hotkey.start()
         if self.hotkey_available:
-            self.status_var.set("Ready. Ctrl+Alt+P shows Context Palette.")
+            shortcuts = " or ".join(reversed(self.hotkey.available_shortcuts))
+            self.status_var.set(f"Ready. {shortcuts} shows Context Palette.")
         else:
-            self.status_var.set("Ctrl+Alt+P is unavailable. Auto-hide is disabled.")
+            self.status_var.set("F9 and Ctrl+Alt+P are unavailable. Auto-hide is disabled.")
+        if initial_request:
+            self.show_requests.put(initial_request)
         self._poll_show_requests()
+        self._audit_tooltips()
 
     def _build_ui(self) -> None:
         self.root.title("Context Palette")
-        self.root.geometry("720x620")
-        self.root.minsize(560, 460)
+        self.root.geometry("720x560")
+        self.root.minsize(560, 420)
         self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
         self.root.bind("<FocusOut>", self._schedule_hide_when_inactive)
         self.root.bind("<FocusIn>", self._cancel_scheduled_hide)
@@ -175,35 +189,35 @@ class LauncherApp:
         outer.pack(fill=tk.BOTH, expand=True)
 
         context_panel = ttk.Frame(outer)
-        context_panel.pack(fill=tk.X, pady=(0, 10))
-        context_text = ttk.Frame(context_panel)
-        context_text.pack(side=tk.LEFT)
-        ttk.Label(context_text, text="FOCUS CONTEXT", style="Muted.TLabel").pack(anchor=tk.W)
-        ttk.Label(context_text, text="What are you working on?", style="Heading.TLabel").pack(anchor=tk.W)
+        context_panel.pack(fill=tk.X, pady=(0, 7))
+        focus_label = ttk.Label(context_panel, text="Focus", style="Heading.TLabel")
+        focus_label.pack(side=tk.LEFT)
+        self._tooltip(focus_label, "Choose what you are working on. This changes context slots 6–9.")
         self.context_picker = ttk.Combobox(
             context_panel,
             textvariable=self.context_var,
             state="readonly",
-            width=32,
+            width=36,
             font=("Segoe UI", 10),
         )
-        self.context_picker.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(18, 0), ipady=3)
+        self.context_picker.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(12, 6), ipady=2)
         self.context_picker.bind("<<ComboboxSelected>>", lambda _event: self._change_focus_context())
-
-        ttk.Separator(outer).pack(fill=tk.X, pady=(0, 10))
-        ttk.Label(outer, text="Find an action", style="Heading.TLabel").pack(anchor=tk.W)
-        ttk.Label(
-            outer,
-            text="Search by technology, task, context, or action name",
-            style="Muted.TLabel",
-        ).pack(anchor=tk.W, pady=(1, 0))
+        context_help = ttk.Button(context_panel, text="?", width=3, command=self._show_help)
+        context_help.pack(side=tk.RIGHT)
+        self._tooltip(
+            context_help,
+            "Focus changes slots 6–9. It does not limit global search. Open Help for context configuration.",
+        )
 
         search_row = ttk.Frame(outer)
-        search_row.pack(fill=tk.X, pady=(6, 7))
+        search_row.pack(fill=tk.X, pady=(0, 7))
+        find_label = ttk.Label(search_row, text="Find", style="Heading.TLabel")
+        find_label.pack(side=tk.LEFT)
+        self._tooltip(find_label, "Type any technology, task, context, action name, type, or content.")
 
         search = ttk.Entry(search_row, textvariable=self.search_var, font=("Segoe UI", 11))
         self.search_entry = search
-        search.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=5)
+        search.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(15, 6), ipady=3)
         search.focus_set()
         search.bind("<KeyPress>", self._handle_keypress)
         search.bind("<Return>", lambda _event: self._execute_selected())
@@ -215,16 +229,12 @@ class LauncherApp:
             style="Accent.TButton",
         )
         run_button.pack(side=tk.LEFT, padx=(8, 0))
-        self._tooltip(run_button, "Execute the highlighted action. Check its action tooltip for input and effect.")
-
-        slot_legend = ttk.Frame(outer)
-        slot_legend.pack(fill=tk.X, pady=(0, 5))
-        ttk.Label(slot_legend, text="1–5  PINNED", style="Pin.TLabel").pack(side=tk.LEFT)
-        ttk.Label(slot_legend, text="6–9  FOCUS CONTEXT", style="Context.TLabel").pack(
-            side=tk.LEFT, padx=(7, 0)
-        )
-        ttk.Label(slot_legend, text="Double-click or press Enter to run", style="Muted.TLabel").pack(
-            side=tk.RIGHT
+        self._tooltip(run_button, "Execute the highlighted action. Its input and effect appear in Action info below.")
+        search_help = ttk.Button(search_row, text="?", width=3, command=self._show_help)
+        search_help.pack(side=tk.LEFT, padx=(6, 0))
+        self._tooltip(
+            search_help,
+            "Search globally across technology, task, context, action name, type, and content.",
         )
 
         results_frame = ttk.Frame(outer)
@@ -253,25 +263,9 @@ class LauncherApp:
         self.root.bind("<Control-l>", lambda _event: self.focus_search())
         self.root.bind("<Control-i>", lambda _event: self._capture_clipboard())
 
-        workspace_panel = ttk.LabelFrame(outer, text=" Input / Output workspace ", padding=8)
-        workspace_panel.pack(fill=tk.X, pady=(10, 0))
-        workspace_header = ttk.Frame(workspace_panel)
-        workspace_header.pack(fill=tk.X)
-        ttk.Label(
-            workspace_header,
-            text="Selection, pasted input, and transformation results",
-            style="Muted.TLabel",
-        ).pack(side=tk.LEFT)
-        paste_button = ttk.Button(workspace_header, text="Paste", command=self._paste_into_workspace)
-        paste_button.pack(side=tk.RIGHT, padx=(6, 0))
-        self._tooltip(paste_button, "Replace Input / Output with current clipboard text.")
-        clear_button = ttk.Button(
-            workspace_header, text="Clear", command=lambda: self._set_workspace_text("")
-        )
-        clear_button.pack(side=tk.RIGHT)
-        self._tooltip(clear_button, "Empty the Input / Output workspace. This does not clear the clipboard.")
+        self.workspace_panel = ttk.LabelFrame(outer, text=" Clipboard / Input / Output ", padding=8)
         self.workspace = tk.Text(
-            workspace_panel,
+            self.workspace_panel,
             height=5,
             wrap=tk.WORD,
             undo=True,
@@ -281,7 +275,22 @@ class LauncherApp:
             padx=7,
             pady=6,
         )
-        self.workspace.pack(fill=tk.X, pady=(6, 0))
+        self.workspace.pack(fill=tk.X)
+        self.workspace.bind("<Control-a>", self._select_all_workspace)
+        self.workspace.bind("<Control-A>", self._select_all_workspace)
+        self.workspace.bind("<Button-3>", self._show_workspace_menu)
+        self.workspace_menu = tk.Menu(self.workspace, tearoff=False)
+        self.workspace_menu.add_command(label="Undo", command=lambda: self.workspace.event_generate("<<Undo>>"))
+        self.workspace_menu.add_command(label="Redo", command=lambda: self.workspace.event_generate("<<Redo>>"))
+        self.workspace_menu.add_separator()
+        self.workspace_menu.add_command(label="Cut", command=lambda: self.workspace.event_generate("<<Cut>>"))
+        self.workspace_menu.add_command(label="Copy", command=lambda: self.workspace.event_generate("<<Copy>>"))
+        self.workspace_menu.add_command(label="Paste", command=lambda: self.workspace.event_generate("<<Paste>>"))
+        self.workspace_menu.add_command(label="Select all", command=self._select_all_workspace)
+        self.workspace_menu.add_separator()
+        self.workspace_menu.add_command(label="Copy all", command=self._copy_workspace_to_clipboard)
+        self.workspace_menu.add_command(label="Replace with clipboard", command=self._paste_into_workspace)
+        self.workspace_menu.add_command(label="Clear", command=lambda: self._set_workspace_text(""))
 
         controls = ttk.Frame(outer)
         controls.pack(fill=tk.X, pady=(10, 0))
@@ -317,12 +326,104 @@ class LauncherApp:
         help_button.pack(side=tk.RIGHT, padx=(0, 6))
         self._tooltip(help_button, "Open the complete local Context Palette help document.")
 
-        exit_controls = ttk.Frame(outer)
-        exit_controls.pack(fill=tk.X, pady=(6, 0))
-        ttk.Label(exit_controls, textvariable=self.status_var, style="Muted.TLabel").pack(side=tk.LEFT)
+        self.workspace_panel.pack(fill=tk.X, pady=(7, 0))
 
-    def _tooltip(self, widget: tk.Widget, text: str) -> None:
+        status_label = ttk.Label(
+            outer,
+            textvariable=self.status_var,
+            style="Muted.TLabel",
+            anchor=tk.W,
+        )
+        status_label.pack(fill=tk.X, pady=(5, 0), anchor=tk.W)
+        self._tooltip(status_label, self._status_tooltip_text)
+        status_label.bind("<Button-1>", lambda _event: self._show_action_info_dialog())
+
+    def _tooltip(self, widget: tk.Widget, text: str | Callable[[], str]) -> None:
         self.widget_tooltips.append(WidgetTooltip(widget, text))
+
+    def _select_all_workspace(self, _event=None) -> str:
+        self.workspace.tag_add(tk.SEL, "1.0", "end-1c")
+        self.workspace.mark_set(tk.INSERT, "1.0")
+        self.workspace.see(tk.INSERT)
+        return "break"
+
+    def _show_workspace_menu(self, event: tk.Event) -> str:
+        self.workspace.focus_set()
+        try:
+            self.workspace_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.workspace_menu.grab_release()
+        return "break"
+
+    def _status_tooltip_text(self) -> str:
+        current = self.status_var.get().strip()
+        if self.action_info_full and self.action_info_full != current:
+            return f"{self.action_info_full}\n\nCurrent message: {current}"
+        return current or "No current message."
+
+    def _show_action_info_dialog(self) -> None:
+        window = tk.Toplevel(self.root)
+        window.title("Context Palette information")
+        window.geometry("620x300")
+        window.minsize(440, 220)
+        outer = ttk.Frame(window, padding=10)
+        outer.pack(fill=tk.BOTH, expand=True)
+        text = tk.Text(outer, wrap=tk.WORD, font=("Segoe UI", 10), padx=8, pady=8)
+        text.pack(fill=tk.BOTH, expand=True)
+        text.insert("1.0", self._status_tooltip_text())
+        text.configure(state=tk.DISABLED)
+        close_button = ttk.Button(outer, text="Close", command=window.destroy)
+        close_button.pack(anchor=tk.E, pady=(8, 0))
+        window.transient(self.root)
+        window.lift()
+
+    def _audit_tooltips(self) -> None:
+        descriptions = {
+            "1–5  PINNED": "Global shortcuts that stay in slots 1–5 in every context.",
+            "6–9  FOCUS CONTEXT": "The four preferred actions for the current Focus context.",
+            "Selection, pasted input, and transformation results": (
+                "This editable text is read by input-aware actions and may contain clipboard or action output."
+            ),
+        }
+
+        def visit(widget: tk.Widget) -> None:
+            if getattr(widget, "_context_palette_tooltip_window", False):
+                return
+            if isinstance(widget, (ttk.Label, ttk.LabelFrame, ttk.Button, tk.Label, tk.Button)) and not getattr(
+                widget, "_context_palette_has_tooltip", False
+            ):
+                try:
+                    text = str(widget.cget("text")).strip()
+                except tk.TclError:
+                    text = ""
+                if text:
+                    explanation = descriptions.get(text, f"{text}: hover guidance for this control.")
+                else:
+                    explanation = "Shows contextual information for this field."
+                self._tooltip(widget, explanation)
+            for child in widget.winfo_children():
+                visit(child)
+
+        visit(self.root)
+        self.root.after(750, self._audit_tooltips)
+
+    def _queue_hotkey_request(self) -> None:
+        request = {"command": "hotkey"}
+        try:
+            x, y, left, top, right, bottom = cursor_location()
+            request.update(
+                {
+                    "cursor_x": str(x),
+                    "cursor_y": str(y),
+                    "work_left": str(left),
+                    "work_top": str(top),
+                    "work_right": str(right),
+                    "work_bottom": str(bottom),
+                }
+            )
+        except OSError:
+            pass
+        self.show_requests.put(request)
 
     def show_window(self) -> None:
         self._cancel_scheduled_hide()
@@ -334,18 +435,18 @@ class LauncherApp:
         self.root.focus_force()
         self.search_var.set("")
         self._reload()
+        self._sync_workspace_from_clipboard()
         self.root.after(80, self.focus_search)
 
     def hide_window(self) -> None:
         self._cancel_scheduled_hide()
         if not self.hotkey_available:
-            self.status_var.set("Cannot hide because Ctrl+Alt+P is unavailable.")
+            self.status_var.set("Cannot hide because no global shortcut is available.")
             return
-        self.status_var.set("Hidden. Use Ctrl+Alt+P to show Context Palette.")
+        self.status_var.set("Hidden. Use F9 or Ctrl+Alt+P to show Context Palette.")
         self.root.withdraw()
 
     def quit_app(self) -> None:
-        self._hide_action_tooltip()
         self.hotkey.stop()
         self.instance_server.stop()
         self.root.destroy()
@@ -379,28 +480,63 @@ class LauncherApp:
                 request = self.show_requests.get_nowait()
             except queue.Empty:
                 break
-            if request == "hotkey":
+            if request.get("command") == "hotkey":
                 # Wait for Ctrl+Alt+P to be released, copy while the source app
                 # still has focus, then show the palette.
-                self.root.after(100, self._capture_selection)
+                self.root.after(100, lambda value=request: self._capture_selection(value))
             else:
-                self.show_window()
+                self._handle_external_request(request)
         self.root.after(100, self._poll_show_requests)
 
-    def _capture_selection(self) -> None:
+    def _handle_external_request(self, request: dict[str, str]) -> None:
+        self.show_window()
+        requested_context = request.get("context", "").strip()
+        if requested_context:
+            contexts = {value.casefold(): value for value in self.context_picker.cget("values")}
+            matched_context = contexts.get(requested_context.casefold())
+            if matched_context:
+                self.context_var.set(matched_context)
+                self._change_focus_context()
+            else:
+                self.status_var.set(f"Unknown integration context: {requested_context}")
+        search = request.get("search", "").strip()
+        if search:
+            self.search_var.set(search)
+            self.root.after(80, self.focus_search)
+
+    def _capture_selection(self, request: dict[str, str]) -> None:
         self.source_foreground_handle = int(ctypes.windll.user32.GetForegroundWindow())
         send_copy_shortcut()
-        self.root.after(120, self._finish_selection_capture)
+        self.root.after(120, lambda: self._finish_selection_capture(request))
 
-    def _finish_selection_capture(self) -> None:
+    def _finish_selection_capture(self, request: dict[str, str]) -> None:
         try:
             value = self.root.clipboard_get()
             self.captured_selection = value.strip() or None
         except tk.TclError:
             self.captured_selection = None
         self.show_window()
+        self._position_for_hotkey(request)
         if self.captured_selection is not None:
             self._set_workspace_text(self.captured_selection)
+
+    def _position_for_hotkey(self, request: dict[str, str]) -> None:
+        keys = ("cursor_x", "cursor_y", "work_left", "work_top", "work_right", "work_bottom")
+        if not all(key in request for key in keys):
+            return
+        try:
+            values = [int(request[key]) for key in keys]
+        except ValueError:
+            return
+        self.root.update_idletasks()
+        width = max(self.root.winfo_width(), self.root.winfo_reqwidth())
+        height = max(self.root.winfo_height(), self.root.winfo_reqheight())
+        x, y = window_position_near_cursor(
+            (values[0], values[1]),
+            (width, height),
+            (values[2], values[3], values[4], values[5]),
+        )
+        self.root.geometry(f"+{x}+{y}")
 
     def _load_actions(self) -> None:
         try:
@@ -417,13 +553,38 @@ class LauncherApp:
     def _action_storage_path(self, action: Action) -> Path:
         return self.local_actions_path if action.id in self.local_action_ids else self.actions_path
 
+    def _load_contexts(self) -> None:
+        try:
+            self.context_definitions = load_combined_contexts(
+                self.contexts_path,
+                self.local_contexts_path,
+            )
+        except ContextError as exc:
+            self.context_definitions = []
+            messagebox.showerror("Context Palette", str(exc))
+
     def _load_palette_state(self) -> None:
         try:
             self.palette_state = load_palette_state(self.palette_path)
         except ActionError as exc:
             self.palette_state = PaletteState()
             messagebox.showerror("Context Palette", str(exc))
-        contexts = sorted({action.context for action in self.actions}, key=str.casefold)
+        configured_names = {context.name for context in self.context_definitions}
+        contexts = sorted(configured_names | {action.context for action in self.actions}, key=str.casefold)
+        configured_slots = dict(self.palette_state.context_slots)
+        known_action_ids = {action.id for action in self.actions}
+        for definition in self.context_definitions:
+            if definition.name not in configured_slots and definition.preferred_action_ids:
+                configured_slots[definition.name] = tuple(
+                    action_id
+                    for action_id in definition.preferred_action_ids
+                    if action_id in known_action_ids
+                )
+        self.palette_state = PaletteState(
+            self.palette_state.pinned_action_ids,
+            self.palette_state.focus_context,
+            configured_slots,
+        )
         if self.palette_state.focus_context not in contexts and contexts:
             self.palette_state = PaletteState(
                 self.palette_state.pinned_action_ids,
@@ -443,6 +604,12 @@ class LauncherApp:
         save_palette_state(self.palette_path, self.palette_state)
         self._refresh_results()
         self.status_var.set(f"Focus context: {context}")
+        definition = next(
+            (item for item in self.context_definitions if item.name.casefold() == context.casefold()),
+            None,
+        )
+        if definition and definition.description:
+            self.status_var.set(f"{context}: {definition.description}")
 
     def _refresh_results(self) -> None:
         self.filtered_actions = search_actions(self.actions, self.search_var.get())
@@ -610,9 +777,19 @@ class LauncherApp:
     def _update_preview(self) -> None:
         action = self._selected_action()
         if action is None:
-            self._hide_action_tooltip()
+            self.action_info_full = "Select an action to see what it reads and what it will do."
+            self.status_var.set("Select an action to see what it reads and what it will do.")
             return
-        self._show_action_tooltip(action.display_text, self._preview_text(action))
+        detail = self._preview_text(action)
+        lines = detail.splitlines()
+        if len(lines) > 5:
+            detail = "\n".join(lines[:5]) + "\n…"
+        if len(detail) > 520:
+            detail = detail[:517].rstrip() + "…"
+        compact_detail = " · ".join(line.strip() for line in detail.splitlines() if line.strip())
+        self.action_info_full = f"{action.display_text}\n\n{self._preview_text(action)}"
+        message = f"{action.display_text} — {compact_detail}"
+        self.status_var.set(message[:217].rstrip() + "…" if len(message) > 220 else message)
 
     def _preview_text(self, action: Action) -> str:
         try:
@@ -722,35 +899,6 @@ class LauncherApp:
         except (WindowLayoutError, ActionError, ValueError) as exc:
             messagebox.showerror("Context Palette", str(exc))
 
-    def _show_action_tooltip(self, title: str, detail: str) -> None:
-        self._hide_action_tooltip()
-        selected = self.results.curselection()
-        if not selected:
-            return
-        bbox = self.results.bbox(selected[0])
-        y = (bbox[1] + bbox[3] + 2) if bbox is not None else 4
-        tooltip = ttk.Label(
-            self.results,
-            text=f"{title}\n{detail}",
-            justify=tk.LEFT,
-            wraplength=max(260, self.results.winfo_width() - 80),
-            padding=8,
-            relief=tk.SOLID,
-            borderwidth=1,
-        )
-        tooltip.place(x=38, y=y)
-        tooltip.lift()
-        self.preview_tooltip = tooltip
-        self.preview_after_id = self.root.after(5000, self._hide_action_tooltip)
-
-    def _hide_action_tooltip(self) -> None:
-        if self.preview_after_id is not None:
-            self.root.after_cancel(self.preview_after_id)
-            self.preview_after_id = None
-        if self.preview_tooltip is not None:
-            self.preview_tooltip.destroy()
-            self.preview_tooltip = None
-
     def _workspace_text(self) -> str:
         return self.workspace.get("1.0", "end-1c").strip()
 
@@ -764,6 +912,21 @@ class LauncherApp:
             self.status_var.set("Pasted clipboard text into Input / Output")
         except tk.TclError:
             messagebox.showerror("Context Palette", "The clipboard does not contain text.")
+
+    def _sync_workspace_from_clipboard(self) -> None:
+        try:
+            value = self.root.clipboard_get()
+        except tk.TclError:
+            return
+        self._set_workspace_text(value)
+
+    def _copy_workspace_to_clipboard(self) -> None:
+        value = self._workspace_text()
+        if not value:
+            self.status_var.set("Input / Output is empty; nothing was copied.")
+            return
+        self._set_clipboard(value)
+        self.status_var.set("Copied Input / Output to the clipboard.")
 
     def _set_clipboard(self, value: str) -> None:
         self.root.clipboard_clear()
@@ -899,14 +1062,8 @@ class LauncherApp:
         return None
 
     def _plain_number_from_text_input(self, event: tk.Event) -> bool:
-        keycode = int(getattr(event, "keycode", 0) or 0)
-        return (
-            event.widget is not None
-            and event.widget == self.root.focus_get()
-            and isinstance(event.widget, ttk.Entry)
-            and str(event.keysym).isdigit()
-            and not 97 <= keycode <= 105
-        )
+        focused_widget = self.root.focus_get()
+        return focused_widget is not self.search_entry
 
 
 class HelpWindow:
@@ -1083,6 +1240,13 @@ class InboxWindow:
 
 
 class DraftActionCreator:
+    ACTION_TYPES = {
+        "Copy captured text": "copy_text",
+        "Build URL — copy and open using selection/clipboard": "build_url_selection_open",
+        "Build URL — copy only and ask for input": "build_url_copy",
+        "Build URL — open only and ask for input": "build_url_open",
+    }
+
     def __init__(
         self,
         parent: tk.Toplevel,
@@ -1095,8 +1259,8 @@ class DraftActionCreator:
         self.on_save = on_save
         self.window = tk.Toplevel(parent)
         self.window.title("Create Draft Action")
-        self.window.geometry("560x520")
-        self.window.minsize(480, 440)
+        self.window.geometry("680x620")
+        self.window.minsize(520, 440)
 
         technologies = sorted({action.technology for action in actions if action.technology}, key=str.casefold)
         tasks = sorted({action.task for action in actions if action.task}, key=str.casefold)
@@ -1106,40 +1270,73 @@ class DraftActionCreator:
         self.task_var = tk.StringVar()
         self.context_var = tk.StringVar(value=initial_context or "General")
         self.title_var = tk.StringVar(value=item.title)
+        self.action_type_var = tk.StringVar(value="Copy captured text")
+        self.guidance_var = tk.StringVar()
+        self.example_var = tk.StringVar()
 
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
 
-        self._field(outer, "Technology", self.technology_var, technologies)
-        self._field(outer, "Task", self.task_var, tasks)
-        self._field(outer, "Context", self.context_var, contexts)
-
-        ttk.Label(outer, text="Action name").pack(anchor=tk.W, pady=(8, 0))
-        title_entry = ttk.Entry(outer, textvariable=self.title_var)
-        title_entry.pack(fill=tk.X, pady=(3, 0))
-
-        ttk.Label(outer, text="Action type").pack(anchor=tk.W, pady=(8, 0))
-        type_field = ttk.Entry(outer)
-        type_field.insert(0, "Copy text")
-        type_field.configure(state="readonly")
-        type_field.pack(fill=tk.X, pady=(3, 0))
-
-        ttk.Label(outer, text="Input / content").pack(anchor=tk.W, pady=(8, 0))
-        self.content = tk.Text(outer, height=10, wrap=tk.WORD, undo=True)
-        self.content.pack(fill=tk.BOTH, expand=True, pady=(3, 0))
-        self.content.insert("1.0", item.content)
-
-        self.path_var = tk.StringVar()
-        ttk.Label(outer, textvariable=self.path_var).pack(anchor=tk.W, pady=(8, 0))
-        for variable in (self.technology_var, self.task_var, self.context_var, self.title_var):
-            variable.trace_add("write", lambda *_args: self._update_path())
-
         controls = ttk.Frame(outer)
-        controls.pack(fill=tk.X, pady=(10, 0))
+        controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
         ttk.Button(controls, text="Create Draft", command=self._save).pack(side=tk.LEFT)
         ttk.Button(controls, text="Cancel", command=self.window.destroy).pack(side=tk.RIGHT)
 
+        form = ttk.Frame(outer)
+        form.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        ttk.Label(
+            form,
+            text="What should this action do?",
+            style="Heading.TLabel",
+        ).pack(anchor=tk.W)
+        ttk.Label(
+            form,
+            text="Choose the result first; the fields below adapt to that choice.",
+            style="Muted.TLabel",
+        ).pack(anchor=tk.W, pady=(1, 6))
+        type_field = ttk.Combobox(
+            form,
+            textvariable=self.action_type_var,
+            values=list(self.ACTION_TYPES),
+            state="readonly",
+        )
+        type_field.pack(fill=tk.X)
+        type_field.bind("<<ComboboxSelected>>", lambda _event: self._action_type_changed())
+
+        metadata = ttk.Frame(form)
+        metadata.pack(fill=tk.X, pady=(6, 0))
+        left = ttk.Frame(metadata)
+        left.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
+        right = ttk.Frame(metadata)
+        right.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._field(left, "Technology", self.technology_var, technologies)
+        self._field(right, "Task", self.task_var, tasks)
+        self._field(left, "Context", self.context_var, contexts)
+
+        ttk.Label(right, text="Action name").pack(anchor=tk.W, pady=(8, 0))
+        title_entry = ttk.Entry(right, textvariable=self.title_var)
+        title_entry.pack(fill=tk.X, pady=(3, 0))
+
+        self.content_label = ttk.Label(form, text="Captured text to copy")
+        self.content_label.pack(anchor=tk.W, pady=(8, 0))
+        self.content = tk.Text(form, height=7, wrap=tk.WORD, undo=True)
+        self.content.pack(fill=tk.BOTH, expand=True, pady=(3, 0))
+        self.content.insert("1.0", item.content)
+        self.content.bind("<KeyRelease>", lambda _event: self._update_example())
+
+        ttk.Label(form, textvariable=self.guidance_var, style="Muted.TLabel", wraplength=620).pack(
+            anchor=tk.W, pady=(6, 0)
+        )
+        ttk.Label(form, textvariable=self.example_var, wraplength=620).pack(anchor=tk.W, pady=(4, 0))
+
+        self.path_var = tk.StringVar()
+        ttk.Label(form, textvariable=self.path_var).pack(anchor=tk.W, pady=(6, 0))
+        for variable in (self.technology_var, self.task_var, self.context_var, self.title_var):
+            variable.trace_add("write", lambda *_args: self._update_path())
+
         self._update_path()
+        self._action_type_changed()
         self.window.transient(parent)
         self.window.grab_set()
         title_entry.focus_set()
@@ -1168,15 +1365,60 @@ class DraftActionCreator:
         ]
         self.path_var.set("Displayed as: " + " > ".join(parts))
 
+    def _action_type_changed(self) -> None:
+        action_type = self.ACTION_TYPES[self.action_type_var.get()]
+        if action_type == "copy_text":
+            self.content_label.configure(text="Captured text to copy")
+            self.guidance_var.set("The Inbox capture becomes the reusable text produced by this action.")
+        else:
+            self.content_label.configure(text="URL template")
+            self.guidance_var.set(
+                "Put {id_url} where the selected/copied text belongs. It is safely URL-encoded. "
+                "Example: http://linkto/archives/{id_url}"
+            )
+            current = self.content.get("1.0", "end-1c").strip()
+            if "{id}" not in current and "{id_url}" not in current:
+                if current.startswith(("http://", "https://")):
+                    separator = "" if current.endswith("/") else "/"
+                    self.content.delete("1.0", tk.END)
+                    self.content.insert("1.0", current + separator + "{id_url}")
+        self._update_example()
+
+    def _update_example(self) -> None:
+        action_type = self.ACTION_TYPES[self.action_type_var.get()]
+        if action_type == "copy_text":
+            self.example_var.set("Result: copies the text above.")
+            return
+        template = self.content.get("1.0", "end-1c").strip()
+        try:
+            example = build_url(template, "ABC 123")
+            effect = "copy and open" if action_type == "build_url_selection_open" else (
+                "copy" if action_type == "build_url_copy" else "open"
+            )
+            self.example_var.set(f"Example input: ABC 123  →  {example}\nEffect: {effect}")
+        except ActionError as exc:
+            self.example_var.set(f"Template needs attention: {exc}")
+
     def _save(self) -> None:
         try:
-            action = draft_copy_text_action(
-                title=self.title_var.get(),
-                technology=self.technology_var.get(),
-                task=self.task_var.get(),
-                context=self.context_var.get(),
-                value=self.content.get("1.0", "end-1c"),
-            )
+            action_type = self.ACTION_TYPES[self.action_type_var.get()]
+            common = {
+                "title": self.title_var.get(),
+                "technology": self.technology_var.get(),
+                "task": self.task_var.get(),
+                "context": self.context_var.get(),
+            }
+            if action_type == "copy_text":
+                action = draft_copy_text_action(
+                    **common,
+                    value=self.content.get("1.0", "end-1c"),
+                )
+            else:
+                action = draft_build_url_action(
+                    **common,
+                    template=self.content.get("1.0", "end-1c"),
+                    action_type=action_type,
+                )
         except ActionError as exc:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
             return
@@ -1407,19 +1649,25 @@ class CheatSheetWindow:
 def run(
     actions_path: Path,
     local_actions_path: Path,
+    contexts_path: Path,
+    local_contexts_path: Path,
     palette_path: Path,
     inbox_path: Path,
     cheatsheets_dir: Path,
     instance_port: int,
+    initial_request: dict[str, str] | None = None,
 ) -> None:
     root = tk.Tk()
     LauncherApp(
         root,
         actions_path,
         local_actions_path,
+        contexts_path,
+        local_contexts_path,
         palette_path,
         inbox_path,
         cheatsheets_dir,
         instance_port,
+        initial_request,
     )
     root.mainloop()

@@ -32,6 +32,7 @@ Implemented in the first prototype:
 * Searches within the selected cheat sheet.
 * Promotes a cheat-sheet item into a draft copy-text action.
 * Reads action data from local JSON.
+* Accepts attended show, context, and search requests from optional Windows automation integrations.
 
 Not implemented yet:
 
