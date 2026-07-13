@@ -17,6 +17,14 @@ from context_palette.cheatsheets import (
 
 
 class CheatSheetTests(unittest.TestCase):
+    def test_shared_company_reference_sheet_loads_and_finds_servicenow_prefix(self):
+        sheets = load_cheatsheets(ROOT / "data" / "cheatsheets")
+        sheet = next(sheet for sheet in sheets if sheet.id == "company-reference-prefixes")
+
+        filtered = filter_cheatsheet(sheet, "SCTASK")
+
+        self.assertEqual(filtered.sections[0].items[0].label, "SCTASK — Service Catalog tasks")
+
     def test_load_cheatsheet(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "win11.json"

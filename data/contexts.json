@@ -31,6 +31,25 @@
       ]
     },
     {
+      "name": "Product lookup",
+      "description": "Open a selected product identifier in commercial and internal product-information systems.",
+      "technology": "Browser / Product systems",
+      "task": "Product identification",
+      "preferred_action_ids": [
+        "colruyt-open-product",
+        "product-lookup-productinfoscreen",
+        "product-lookup-myproduct-any-id",
+        "product-lookup-rti"
+      ]
+    },
+    {
+      "name": "ServiceNow",
+      "description": "ServiceNow reference recognition. Executable URL actions will be added when the complete base URL is available.",
+      "technology": "Browser / ServiceNow",
+      "task": "Work item lookup",
+      "preferred_action_ids": []
+    },
+    {
       "name": "Tijdsregistratie",
       "description": "Reconstruct the workday and prepare time-registration input.",
       "technology": "Browser / Outlook / OneNote",

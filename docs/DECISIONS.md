@@ -518,3 +518,11 @@ The slot legend and text toolbar are also omitted: their functions remain discov
 **Decision:** Add `setup-context-palette.bat` for local venv/runtime initialization and a Windows GitHub Actions workflow using Python 3.12.
 
 **Reason:** A clone should become usable without reconstructing this machine's Codex-specific Python environment. Automated Windows tests catch portability regressions for source changes.
+
+## 2026-07-13 - Share reviewed work lookup templates explicitly
+
+**Decision:** Track the reviewed product-system URL builders and Archive/ServiceNow reference-prefix sheet so they are available on both development and work PCs. Each product destination is a separate Draft action. ServiceNow remains reference-only until its complete URL template is known.
+
+**Reason:** These actions are useful portable configuration rather than captured runtime state. Separate actions keep execution predictable and searchable while allowing four common destinations to occupy the focus slots.
+
+**Privacy boundary:** This exception was explicitly approved for GitHub synchronization. The tracked values contain internal host names and example reference shapes, but no credentials, access tokens, personal identifiers, captured clipboard content, or machine paths. Runtime data remains ignored.

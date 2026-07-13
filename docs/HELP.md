@@ -133,7 +133,7 @@ Technology > Task > Context > Action name
 Example:
 
 ```text
-Browser > Product lookup > Colruyt > Open selected product ID
+Browser / Colruyt > Commercial product ID > Product lookup > Open Colruyt product ID
 ```
 
 To keep the launcher fast to scan, result rows show only `Action name · Context`. Technology and Task remain fully searchable and appear in the bottom communication line.
@@ -143,6 +143,12 @@ To keep the launcher fast to scan, result rows show only `Action name · Context
 Configured `window_layout` actions can open Explorer folders and position them across detected screens. Relative coordinates allow layouts to adapt to screen resolution.
 
 `Snapshot` captures an existing window situation. Restore first matches open windows by executable, native window class, and title. Missing ordinary desktop applications are started when possible. Explicit browser launch URLs reopen missing browser windows. Exact unsaved document state and browser history cannot be reconstructed generically.
+
+## Product and reference lookups
+
+Choose the `Product lookup` focus context, select or copy an identifier, then run a destination action. The action URL-encodes the identifier, copies the complete URL, and opens it in the default browser. Shared actions are available for Colruyt, Bio-Planet, ProductInfoScreen, FIC, RTI, Solucious, and the supported MyProduct entity types.
+
+The `Company Reference Prefixes` sheet documents known Archive and ServiceNow prefixes. Archive references can already be opened with `Open selected archive item`. ServiceNow is reference-only until its complete URL template is configured.
 
 ## Action maturity
 
@@ -157,7 +163,7 @@ Configured `window_layout` actions can open Explorer folders and position them a
 - `data/local_actions.json`: ignored personal and machine-specific actions.
 - `data/inbox.json`: ignored captures.
 - `data/palette.json`: ignored per-machine focus context, pins, and context slots.
-- `data/cheatsheets`: local cheat sheets.
+- `data/cheatsheets`: reviewed cheat sheets shared through Git.
 - `data/layouts`: configured layouts and captured snapshots.
 
 ## Safety boundaries

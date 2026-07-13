@@ -315,19 +315,20 @@ The action remains searchable, but its state changes from `Draft` to `Trusted`.
 
 ## Cheat Sheets
 
-Click `Sheets` to open local app/topic cheat sheets in a popup.
+Click `Sheets` to open reviewed app/topic cheat sheets in a popup.
 
 Use the search box inside the cheat-sheet popup to filter the selected sheet. For the Windows 11 sheet, useful searches include `clipboard`, `snap`, `wsl`, `task manager`, and `network`.
 
 Select a cheat-sheet item and click `Promote to Draft` to create a draft copy-text action from it. The new action appears in launcher search and can be edited or marked trusted.
 
-The first incorporated sheet is:
+The incorporated sheets include:
 
 ```text
 data\cheatsheets\win11.json
+data\cheatsheets\company-references.json
 ```
 
-It came from your Windows 11 cheat-sheet file and is loaded as the `Windows 11 Productivity, Development & Debugging` sheet.
+The company-reference sheet makes Archive and ServiceNow prefixes searchable. Product URL builders are grouped in the `Product lookup` focus context; select or copy an ID and run one destination-specific action to copy and open its URL.
 
 ## Data storage
 

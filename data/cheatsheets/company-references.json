@@ -1,0 +1,45 @@
+{
+  "id": "company-reference-prefixes",
+  "title": "Company Reference Prefixes",
+  "kind": "workflow",
+  "aliases": [
+    "archives",
+    "archive",
+    "servicenow",
+    "references",
+    "work items"
+  ],
+  "summary": "Recognize Archive and ServiceNow references before opening or searching for the corresponding item.",
+  "updated_at": "2026-07-13",
+  "sections": [
+    {
+      "title": "Archives",
+      "items": [
+        { "label": "CHA — Changes", "detail": "Example: cha123456", "tags": ["archive", "change", "cha"] },
+        { "label": "COM — Communications", "detail": "Examples: com123.456.789 or com123456789", "tags": ["archive", "communication", "com"] },
+        { "label": "DOC — Documents", "detail": "Example: doc123456", "tags": ["archive", "document", "doc"] },
+        { "label": "RAP — iRap reports", "detail": "Example: rap12345", "tags": ["archive", "report", "irap", "rap"] },
+        { "label": "SUBCHA — Subchanges", "detail": "Example: subcha123456", "tags": ["archive", "subchange", "subcha"] },
+        { "label": "TEM — Templates", "detail": "Example: tem12356", "tags": ["archive", "template", "tem"] }
+      ]
+    },
+    {
+      "title": "ServiceNow — URL pending",
+      "items": [
+        { "label": "CHG — Changes", "detail": "Example: chg123456", "tags": ["servicenow", "change", "chg"] },
+        { "label": "CTASK — Change Tasks", "detail": "Example: ctask123456", "tags": ["servicenow", "change task", "ctask"] },
+        { "label": "IMS — Interactions", "detail": "Example: ims123456", "tags": ["servicenow", "interaction", "ims"] },
+        { "label": "INC — Incidents", "detail": "Example: inc123456", "tags": ["servicenow", "incident", "inc"] },
+        { "label": "INCTASK — Incident Tasks", "detail": "Example: inctask123456", "tags": ["servicenow", "incident task", "inctask"] },
+        { "label": "KB — Knowledge Base articles", "detail": "Example: kb123456", "tags": ["servicenow", "knowledge base", "kb"] },
+        { "label": "OUT — Outages", "detail": "Example: out123456", "tags": ["servicenow", "outage", "out"] },
+        { "label": "PRB — Problems", "detail": "Example: prb123456", "tags": ["servicenow", "problem", "prb"] },
+        { "label": "PTASK — Problem Tasks", "detail": "Example: ptask123456", "tags": ["servicenow", "problem task", "ptask"] },
+        { "label": "PTSK — Private Tasks", "detail": "Example: ptsk123456", "tags": ["servicenow", "private task", "ptsk"] },
+        { "label": "REQ — Requests", "detail": "Example: req123456", "tags": ["servicenow", "request", "req"] },
+        { "label": "RITM — Request Items", "detail": "Example: ritm123456", "tags": ["servicenow", "request item", "ritm"] },
+        { "label": "SCTASK — Service Catalog tasks", "detail": "Example: sctask123456", "tags": ["servicenow", "catalog task", "sctask"] }
+      ]
+    }
+  ]
+}

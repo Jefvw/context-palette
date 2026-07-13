@@ -30,6 +30,41 @@ from context_palette.actions import (
 
 
 class ActionTests(unittest.TestCase):
+    def test_shared_product_lookup_actions_build_valid_urls(self):
+        actions = {action.id: action for action in load_actions(ROOT / "data" / "actions.json")}
+        expected = {
+            "colruyt-open-product": "https://www.colruyt.be/nl/producten/5331",
+            "product-lookup-bioplanet": "https://www.bioplanet.be/nl/producten/5331",
+            "product-lookup-productinfoscreen": (
+                "https://productinfoscreen.colruyt.int/productinfoscreen/consultArticle.xhtml"
+                "?technicalArticleNumber=5331"
+            ),
+            "product-lookup-fic": "https://fic.colruytgroup.com/productinfo/nl/algc/5331",
+            "product-lookup-rti": "https://rti.colruytgroup.com/nl/product-info/5331",
+            "product-lookup-solucious": "https://www.solucious.be/5331",
+            "product-lookup-myproduct-retail-article": (
+                "https://myproduct.colruyt.int/#/product-entities/RETAILARTICLE/5331"
+            ),
+            "product-lookup-myproduct-base-product": (
+                "https://myproduct.colruyt.int/#/product-entities/RETAILBASEPRODUCT/5331"
+            ),
+            "product-lookup-myproduct-gtin": (
+                "https://myproduct.colruyt.int/#/product-entities/RETAILTRADEITEM/5331"
+            ),
+            "product-lookup-myproduct-pss": (
+                "https://myproduct.colruyt.int/#/product-entities/PRODUCTSPECIFICATIONSHEET/5331"
+            ),
+            "product-lookup-myproduct-any-id": (
+                "https://myproduct.colruyt.int/#/product-entities?productId=5331"
+            ),
+        }
+
+        self.assertTrue(expected.keys() <= actions.keys())
+        for action_id, expected_url in expected.items():
+            action = actions[action_id]
+            self.assertEqual(action.type, "build_url_selection_open")
+            self.assertEqual(build_url(action.value, "5331"), expected_url)
+
     def test_draft_build_url_action_validates_and_preserves_metadata(self):
         action = draft_build_url_action(
             title="Open archive",

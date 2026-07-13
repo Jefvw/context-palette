@@ -12,6 +12,18 @@ from context_palette.contexts import ContextError, load_combined_contexts, load_
 
 
 class ContextTests(unittest.TestCase):
+    def test_shared_product_lookup_context_has_four_existing_preferred_actions(self):
+        contexts = {context.name: context for context in load_contexts(ROOT / "data" / "contexts.json")}
+        action_ids = {
+            item["id"]
+            for item in json.loads((ROOT / "data" / "actions.json").read_text(encoding="utf-8"))["actions"]
+        }
+
+        preferred = contexts["Product lookup"].preferred_action_ids
+
+        self.assertEqual(len(preferred), 4)
+        self.assertTrue(set(preferred) <= action_ids)
+
     def test_loads_context_with_preferred_actions(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "contexts.json"

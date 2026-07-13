@@ -15,6 +15,8 @@
 
 ## Done
 
+- Add shared product-system URL builders plus searchable Archive and ServiceNow reference prefixes.
+
 - Load standalone shared/local context definitions with descriptions and preferred actions for slots 6–9.
 
 - Establish the project structure.

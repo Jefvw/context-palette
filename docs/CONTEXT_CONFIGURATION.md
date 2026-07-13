@@ -7,9 +7,9 @@ Contexts and actions are plain JSON. Restart Context Palette after editing.
 - `data/contexts.json`: portable, reviewable contexts shared through Git.
 - `data/local_contexts.json`: personal or work-specific contexts; ignored by Git.
 - `data/actions.json`: portable actions referenced by shared contexts.
-- `data/local_actions.json`: personal actions, internal URLs, and machine-specific paths; ignored by Git.
+- `data/local_actions.json`: personal actions, unreviewed internal URLs, and machine-specific paths; ignored by Git.
 
-Do not put internal URLs, customer names, work paths, or OneNote identifiers in shared files.
+Do not put internal URLs, customer names, work paths, or OneNote identifiers in shared files by default. A reviewed work URL may be shared only with explicit approval and must not contain credentials, tokens, personal IDs, or captured user data.
 
 ## Context shape
 
@@ -41,6 +41,8 @@ Do not put internal URLs, customer names, work paths, or OneNote identifiers in 
 ```
 
 Input comes from Input / Output, captured selection, or clipboard. `{id_url}` URL-encodes it. The resulting URL is copied and opened.
+
+`Product lookup` is a shared example of a larger context: its four preferred actions fill slots 6–9, while additional destination-specific URL builders remain available through Find. Keeping one destination per action prevents one identifier from opening many browser windows unintentionally.
 
 ## Most useful QTP-style patterns
 

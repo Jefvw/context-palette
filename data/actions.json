@@ -62,12 +62,112 @@
     },
     {
       "id": "colruyt-open-product",
-      "title": "Open selected product ID",
-      "context": "Colruyt",
-      "technology": "Browser",
-      "task": "Product lookup",
+      "title": "Open Colruyt product ID",
+      "context": "Product lookup",
+      "technology": "Browser / Colruyt",
+      "task": "Commercial product ID",
       "type": "build_url_selection_open",
       "value": "https://www.colruyt.be/nl/producten/{id_url}",
+      "state": "Draft"
+    },
+    {
+      "id": "product-lookup-bioplanet",
+      "title": "Open Bio-Planet product ID",
+      "context": "Product lookup",
+      "technology": "Browser / Bio-Planet",
+      "task": "Commercial product ID",
+      "type": "build_url_selection_open",
+      "value": "https://www.bioplanet.be/nl/producten/{id_url}",
+      "state": "Draft"
+    },
+    {
+      "id": "product-lookup-productinfoscreen",
+      "title": "Open ProductInfoScreen technical article",
+      "context": "Product lookup",
+      "technology": "Browser / ProductInfoScreen",
+      "task": "Technical article number",
+      "type": "build_url_selection_open",
+      "value": "https://productinfoscreen.colruyt.int/productinfoscreen/consultArticle.xhtml?technicalArticleNumber={id_url}",
+      "state": "Draft"
+    },
+    {
+      "id": "product-lookup-fic",
+      "title": "Open FIC technical article",
+      "context": "Product lookup",
+      "technology": "Browser / FIC",
+      "task": "Technical article number",
+      "type": "build_url_selection_open",
+      "value": "https://fic.colruytgroup.com/productinfo/nl/algc/{id_url}",
+      "state": "Draft"
+    },
+    {
+      "id": "product-lookup-rti",
+      "title": "Open RTI technical article",
+      "context": "Product lookup",
+      "technology": "Browser / RTI",
+      "task": "Technical article number",
+      "type": "build_url_selection_open",
+      "value": "https://rti.colruytgroup.com/nl/product-info/{id_url}",
+      "state": "Draft"
+    },
+    {
+      "id": "product-lookup-solucious",
+      "title": "Open Solucious technical article",
+      "context": "Product lookup",
+      "technology": "Browser / Solucious",
+      "task": "Technical article number",
+      "type": "build_url_selection_open",
+      "value": "https://www.solucious.be/{id_url}",
+      "state": "Draft"
+    },
+    {
+      "id": "product-lookup-myproduct-retail-article",
+      "title": "Open MyProduct retail article",
+      "context": "Product lookup",
+      "technology": "Browser / MyProduct",
+      "task": "Technical article number",
+      "type": "build_url_selection_open",
+      "value": "https://myproduct.colruyt.int/#/product-entities/RETAILARTICLE/{id_url}",
+      "state": "Draft"
+    },
+    {
+      "id": "product-lookup-myproduct-base-product",
+      "title": "Open MyProduct base product",
+      "context": "Product lookup",
+      "technology": "Browser / MyProduct",
+      "task": "Technical base product ID",
+      "type": "build_url_selection_open",
+      "value": "https://myproduct.colruyt.int/#/product-entities/RETAILBASEPRODUCT/{id_url}",
+      "state": "Draft"
+    },
+    {
+      "id": "product-lookup-myproduct-gtin",
+      "title": "Open MyProduct trade item by GTIN",
+      "context": "Product lookup",
+      "technology": "Browser / MyProduct",
+      "task": "GTIN lookup",
+      "type": "build_url_selection_open",
+      "value": "https://myproduct.colruyt.int/#/product-entities/RETAILTRADEITEM/{id_url}",
+      "state": "Draft"
+    },
+    {
+      "id": "product-lookup-myproduct-pss",
+      "title": "Open MyProduct specification sheet",
+      "context": "Product lookup",
+      "technology": "Browser / MyProduct",
+      "task": "PSS_MAIN_SEQ lookup",
+      "type": "build_url_selection_open",
+      "value": "https://myproduct.colruyt.int/#/product-entities/PRODUCTSPECIFICATIONSHEET/{id_url}",
+      "state": "Draft"
+    },
+    {
+      "id": "product-lookup-myproduct-any-id",
+      "title": "Search MyProduct by any ID",
+      "context": "Product lookup",
+      "technology": "Browser / MyProduct",
+      "task": "Any product ID",
+      "type": "build_url_selection_open",
+      "value": "https://myproduct.colruyt.int/#/product-entities?productId={id_url}",
       "state": "Draft"
     },
     {
