@@ -5,6 +5,7 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 from typing import Callable, Iterable
 from urllib.parse import quote, urlparse
@@ -53,9 +54,28 @@ class Action:
 
     @property
     def compact_display_text(self) -> str:
-        if self.context and self.context != self.title:
-            return f"{self.title}  ·  {self.context}"
-        return self.title
+        title = self.title.strip()
+        commands = ("Open", "Copy", "Convert", "Search", "Arrange", "Restore")
+        for command in commands:
+            prefix = command + " "
+            if title.casefold().startswith(prefix.casefold()):
+                return f"{command} → {title[len(prefix):].strip()}"
+
+        inferred_command = {
+            "copy_text": "Copy",
+            "workspace_template": "Copy",
+            "transform_list_csv": "Convert",
+            "open_url": "Open",
+            "open_file": "Open",
+            "open_folder": "Open",
+            "launch_app": "Open",
+            "build_url_copy": "Copy",
+            "build_url_open": "Open",
+            "build_url_selection_open": "Open",
+            "window_layout": "Arrange",
+            "restore_window_snapshot": "Restore",
+        }.get(self.type)
+        return f"{inferred_command} → {title}" if inferred_command else title
 
 
 def load_actions(path: Path) -> list[Action]:
@@ -70,24 +90,34 @@ def load_actions(path: Path) -> list[Action]:
         raise ActionError("Action file must contain an 'actions' list.")
 
     actions = [_parse_action(item, index) for index, item in enumerate(raw["actions"], start=1)]
+    _ensure_unique_action_ids(actions, path)
     return [action for action in actions if action.state in VISIBLE_STATES]
 
 
 def load_combined_actions(shared_path: Path, local_path: Path) -> tuple[list[Action], set[str]]:
     shared_actions = load_actions(shared_path)
     local_actions = load_actions(local_path) if local_path.exists() else []
-    shared_ids = {action.id for action in shared_actions}
-    local_ids = {action.id for action in local_actions}
-    duplicate_ids = shared_ids.intersection(local_ids)
+    shared_ids = {action.id.casefold(): action.id for action in shared_actions}
+    local_ids_by_key = {action.id.casefold(): action.id for action in local_actions}
+    duplicate_ids = shared_ids.keys() & local_ids_by_key.keys()
     if duplicate_ids:
         raise ActionError(
-            "Local action IDs duplicate shared actions: " + ", ".join(sorted(duplicate_ids))
+            "Local action IDs duplicate shared actions: "
+            + ", ".join(sorted(local_ids_by_key[key] for key in duplicate_ids))
         )
-    return shared_actions + local_actions, local_ids
+    return shared_actions + local_actions, {action.id for action in local_actions}
 
 
 def append_action(path: Path, action: Action) -> None:
     data = _load_action_data(path)
+    action_key = action.id.casefold()
+    existing_ids = {
+        item.get("id").casefold()
+        for item in data["actions"]
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    if action_key in existing_ids:
+        raise ActionError(f"Action ID already exists: {action.id}")
     data["actions"].append(_action_to_dict(action))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -347,6 +377,55 @@ def list_to_comma_separated(value: str, *, sql_strings: bool = False) -> str:
     return ", ".join(items)
 
 
+def transform_text(
+    value: str,
+    operation: str,
+    *,
+    prefix: str = "",
+    suffix: str = "",
+) -> str:
+    """Apply a constrained, previewable transformation to workspace text."""
+    if operation == "lowercase":
+        return value.lower()
+    if operation == "uppercase":
+        return value.upper()
+    if operation == "normalize_spaces":
+        return re.sub(r"[ \t]+", " ", value)
+    if operation == "prefix_suffix_lines":
+        return _affix_each_line(value, prefix, suffix)
+    if operation == "remove_duplicate_lines":
+        return _remove_duplicate_lines(value)
+    raise ActionError(f"Unsupported text transformation: {operation}")
+
+
+def _affix_each_line(value: str, prefix: str, suffix: str) -> str:
+    if not value:
+        return value
+    transformed: list[str] = []
+    for chunk in value.splitlines(keepends=True):
+        body = chunk.rstrip("\r\n")
+        ending = chunk[len(body) :]
+        transformed.append(prefix + body + suffix + ending)
+    return "".join(transformed)
+
+
+def _remove_duplicate_lines(value: str) -> str:
+    if not value:
+        return value
+    lines = value.splitlines()
+    seen: set[str] = set()
+    unique = []
+    for line in lines:
+        if line not in seen:
+            seen.add(line)
+            unique.append(line)
+    separator = "\r\n" if "\r\n" in value else "\r" if "\r" in value else "\n"
+    result = separator.join(unique)
+    if value.endswith(("\r", "\n")):
+        result += separator
+    return result
+
+
 def expanded_action(
     action: Action,
     *,
@@ -355,7 +434,14 @@ def expanded_action(
 ) -> Action:
     """Return an action with QuickTextPaste-style template variables resolved."""
     clipboard = ""
-    if clipboard_getter is not None:
+    template_values = [action.value, *action.arguments]
+    if action.working_directory:
+        template_values.append(action.working_directory)
+    clipboard_tokens = ("%CLIPBOARD%", "%CLIPBOARD_URL%", "%pptxt%", "%cpy_txt_urlencode%")
+    needs_clipboard = any(
+        token in value for value in template_values for token in clipboard_tokens
+    )
+    if needs_clipboard and clipboard_getter is not None:
         try:
             clipboard = clipboard_getter()
         except Exception as exc:
@@ -492,6 +578,17 @@ def _parse_action(item: object, index: int) -> Action:
         technology=technology,
         task=task,
     )
+
+
+def _ensure_unique_action_ids(actions: Iterable[Action], path: Path) -> None:
+    seen: dict[str, str] = {}
+    for action in actions:
+        key = action.id.casefold()
+        if key in seen:
+            raise ActionError(
+                f"Action IDs must be unique in {path}: {seen[key]} and {action.id}"
+            )
+        seen[key] = action.id
 
 
 def _load_action_data(path: Path) -> dict[str, list[object]]:

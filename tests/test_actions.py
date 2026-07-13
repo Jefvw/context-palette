@@ -24,12 +24,39 @@ from context_palette.actions import (
     list_to_comma_separated,
     load_combined_actions,
     search_actions,
+    transform_text,
     trusted_action,
     update_action,
 )
 
 
 class ActionTests(unittest.TestCase):
+    def test_workspace_case_transformations(self):
+        self.assertEqual(transform_text("AbC É", "lowercase"), "abc é")
+        self.assertEqual(transform_text("AbC é", "uppercase"), "ABC É")
+
+    def test_workspace_normalize_spaces_preserves_line_breaks(self):
+        value = "one   two\nthree\t\tfour"
+
+        self.assertEqual(transform_text(value, "normalize_spaces"), "one two\nthree four")
+
+    def test_workspace_prefix_suffix_applies_to_every_line(self):
+        value = "one\n\ntwo\n"
+
+        self.assertEqual(
+            transform_text(value, "prefix_suffix_lines", prefix="[", suffix="]"),
+            "[one]\n[]\n[two]\n",
+        )
+
+    def test_workspace_remove_duplicate_lines_preserves_order_and_final_newline(self):
+        value = "one\r\ntwo\r\none\r\n"
+
+        self.assertEqual(transform_text(value, "remove_duplicate_lines"), "one\r\ntwo\r\n")
+
+    def test_workspace_transform_rejects_unknown_operation(self):
+        with self.assertRaises(ActionError):
+            transform_text("text", "unknown")
+
     def test_shared_product_lookup_actions_build_valid_urls(self):
         actions = {action.id: action for action in load_actions(ROOT / "data" / "actions.json")}
         expected = {
@@ -137,6 +164,33 @@ class ActionTests(unittest.TestCase):
             with self.assertRaises(ActionError):
                 load_combined_actions(shared, local)
 
+    def test_load_actions_rejects_case_insensitive_duplicate_ids(self):
+        path = self._write_actions(
+            [
+                {"id": "Lookup", "title": "One", "context": "General", "type": "copy_text", "value": "x"},
+                {"id": "lookup", "title": "Two", "context": "General", "type": "copy_text", "value": "y"},
+            ]
+        )
+
+        with self.assertRaises(ActionError):
+            load_actions(path)
+
+    def test_combined_actions_reject_case_insensitive_duplicate_ids(self):
+        with tempfile.TemporaryDirectory() as directory:
+            shared = Path(directory) / "shared.json"
+            local = Path(directory) / "local.json"
+            shared.write_text(
+                json.dumps({"actions": [{"id": "Lookup", "title": "One", "context": "General", "type": "copy_text", "value": "x"}]}),
+                encoding="utf-8",
+            )
+            local.write_text(
+                json.dumps({"actions": [{"id": "lookup", "title": "Two", "context": "General", "type": "copy_text", "value": "y"}]}),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ActionError):
+                load_combined_actions(shared, local)
+
     def test_search_matches_context_and_title(self):
         actions = [
             Action("email", "Copy greeting", "Email", "copy_text", "Hello"),
@@ -146,7 +200,7 @@ class ActionTests(unittest.TestCase):
         self.assertEqual([action.id for action in search_actions(actions, "email greeting")], ["email"])
         self.assertEqual([action.id for action in search_actions(actions, "select")], ["database"])
 
-    def test_compact_display_hides_search_metadata_but_keeps_context(self):
+    def test_compact_display_separates_command_and_hides_context(self):
         action = Action(
             "item",
             "Open selected product",
@@ -157,9 +211,14 @@ class ActionTests(unittest.TestCase):
             task="Product lookup",
         )
 
-        self.assertEqual(action.compact_display_text, "Open selected product  ·  Colruyt")
+        self.assertEqual(action.compact_display_text, "Open → selected product")
         self.assertIn("Browser", action.display_text)
         self.assertEqual(search_actions([action], "browser product lookup"), [action])
+
+    def test_compact_display_infers_command_when_title_has_no_verb(self):
+        action = Action("settings", "Quick Settings", "Windows", "copy_text", "Win + A")
+
+        self.assertEqual(action.compact_display_text, "Copy → Quick Settings")
 
     def test_execute_copy_text_uses_clipboard_callback(self):
         copied = []
@@ -207,6 +266,18 @@ class ActionTests(unittest.TestCase):
 
         self.assertEqual(opened, [action])
         self.assertIn("Opened", message)
+
+    def test_open_target_without_clipboard_tokens_does_not_read_clipboard(self):
+        opened = []
+        action = Action("config", "Edit config", "Configuration", "open_file", "C:\\config.json")
+
+        execute_action(
+            action,
+            clipboard_getter=lambda: (_ for _ in ()).throw(RuntimeError("not text")),
+            opener=opened.append,
+        )
+
+        self.assertEqual(opened[0].value, "C:\\config.json")
 
     def test_build_url_inserts_and_url_encodes_identifier(self):
         result = build_url(
@@ -348,6 +419,15 @@ class ActionTests(unittest.TestCase):
         self.assertEqual(loaded[0].context, "Email")
         self.assertEqual(loaded[0].value, "Hello")
         self.assertEqual(loaded[0].state, "Draft")
+
+    def test_append_action_rejects_duplicate_id(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "actions.json"
+            action = Action("same", "One", "General", "copy_text", "one")
+            append_action(path, action)
+
+            with self.assertRaises(ActionError):
+                append_action(path, Action("SAME", "Two", "General", "copy_text", "two"))
 
     def test_draft_copy_text_action_accepts_technology_and_task(self):
         action = draft_copy_text_action(

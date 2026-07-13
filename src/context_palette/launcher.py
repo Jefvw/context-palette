@@ -20,6 +20,7 @@ from .actions import (
     load_combined_actions,
     load_actions,
     search_actions,
+    transform_text,
     trusted_action,
     update_action,
 )
@@ -31,11 +32,19 @@ from .cheatsheets import (
     filter_cheatsheet,
     load_cheatsheets,
 )
+from .command_surface import (
+    CommandGroup,
+    CommandItem,
+    CommandSurfaceError,
+    command_configuration_paths,
+    load_combined_command_groups,
+)
 from .hotkeys import GlobalHotkey, cursor_location, send_copy_shortcut, window_position_near_cursor
 from .contexts import ContextDefinition, ContextError, load_combined_contexts
 from .inbox import InboxError, InboxItem, append_inbox_item, create_clipboard_item, load_inbox_items
 from .inbox import update_inbox_item_state
 from .single_instance import SingleInstanceServer
+from .tooltips import ListboxItemTooltip, WidgetTooltip
 from .palette_state import (
     PaletteState,
     action_slots,
@@ -55,55 +64,22 @@ from .window_layouts import (
 )
 
 
-class WidgetTooltip:
-    def __init__(self, widget: tk.Widget, text: str | Callable[[], str]) -> None:
-        self.widget = widget
-        self.text = text
-        self.window: tk.Toplevel | None = None
-        self.after_id: str | None = None
-        widget.bind("<Enter>", self._schedule, add="+")
-        widget.bind("<Leave>", self.hide, add="+")
-        widget.bind("<ButtonPress>", self.hide, add="+")
-        setattr(widget, "_context_palette_has_tooltip", True)
-
-    def _schedule(self, _event=None) -> None:
-        self.hide()
-        self.after_id = self.widget.after(500, self.show)
-
-    def show(self) -> None:
-        self.after_id = None
-        if not self.widget.winfo_exists():
-            return
-        window = tk.Toplevel(self.widget)
-        setattr(window, "_context_palette_tooltip_window", True)
-        window.overrideredirect(True)
-        window.attributes("-topmost", True)
-        label = tk.Label(
-            window,
-            text=self.text() if callable(self.text) else self.text,
-            justify=tk.LEFT,
-            wraplength=360,
-            background="#ffffe0",
-            foreground="#202124",
-            relief=tk.SOLID,
-            borderwidth=1,
-            padx=7,
-            pady=5,
-            font=("Segoe UI", 9),
+class PrefixSuffixDialog(simpledialog.Dialog):
+    def body(self, master: tk.Misc) -> tk.Widget:
+        ttk.Label(master, text="Prefix for every line").grid(row=0, column=0, sticky=tk.W)
+        self.prefix_var = tk.StringVar()
+        prefix_entry = ttk.Entry(master, textvariable=self.prefix_var, width=42)
+        prefix_entry.grid(row=1, column=0, sticky=tk.EW, pady=(3, 9))
+        ttk.Label(master, text="Suffix for every line").grid(row=2, column=0, sticky=tk.W)
+        self.suffix_var = tk.StringVar()
+        ttk.Entry(master, textvariable=self.suffix_var, width=42).grid(
+            row=3, column=0, sticky=tk.EW, pady=(3, 0)
         )
-        label.pack()
-        x = self.widget.winfo_rootx()
-        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
-        window.geometry(f"+{x}+{y}")
-        self.window = window
+        master.columnconfigure(0, weight=1)
+        return prefix_entry
 
-    def hide(self, _event=None) -> None:
-        if self.after_id is not None:
-            self.widget.after_cancel(self.after_id)
-            self.after_id = None
-        if self.window is not None:
-            self.window.destroy()
-            self.window = None
+    def apply(self) -> None:
+        self.result = (self.prefix_var.get(), self.suffix_var.get())
 
 
 class LauncherApp:
@@ -114,6 +90,8 @@ class LauncherApp:
         local_actions_path: Path,
         contexts_path: Path,
         local_contexts_path: Path,
+        command_surface_path: Path,
+        local_command_surface_path: Path,
         palette_path: Path,
         inbox_path: Path,
         cheatsheets_dir: Path,
@@ -127,6 +105,9 @@ class LauncherApp:
         self.contexts_path = contexts_path
         self.local_contexts_path = local_contexts_path
         self.context_definitions: list[ContextDefinition] = []
+        self.command_surface_path = command_surface_path
+        self.local_command_surface_path = local_command_surface_path
+        self.command_groups: list[CommandGroup] = []
         self.palette_path = palette_path
         self.inbox_path = inbox_path
         self.cheatsheets_dir = cheatsheets_dir
@@ -153,6 +134,7 @@ class LauncherApp:
 
         self._build_ui()
         self._load_actions()
+        self._load_command_surface()
         self._load_contexts()
         self._load_palette_state()
         self._refresh_results()
@@ -172,8 +154,8 @@ class LauncherApp:
 
     def _build_ui(self) -> None:
         self.root.title("Context Palette")
-        self.root.geometry("720x560")
-        self.root.minsize(560, 420)
+        self.root.geometry("760x580")
+        self.root.minsize(680, 450)
         self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
         self.root.bind("<FocusOut>", self._schedule_hide_when_inactive)
         self.root.bind("<FocusIn>", self._cancel_scheduled_hide)
@@ -187,6 +169,14 @@ class LauncherApp:
 
         outer = ttk.Frame(self.root, padding=14)
         outer.pack(fill=tk.BOTH, expand=True)
+
+        self._build_header(outer)
+        self._build_results_area(outer)
+        self._bind_main_shortcuts()
+        self._build_workspace(outer)
+        self._build_footer(outer)
+
+    def _build_header(self, outer: ttk.Frame) -> None:
 
         context_panel = ttk.Frame(outer)
         context_panel.pack(fill=tk.X, pady=(0, 7))
@@ -237,8 +227,12 @@ class LauncherApp:
             "Search globally across technology, task, context, action name, type, and content.",
         )
 
-        results_frame = ttk.Frame(outer)
-        results_frame.pack(fill=tk.BOTH, expand=True)
+    def _build_results_area(self, outer: ttk.Frame) -> None:
+
+        results_area = ttk.Panedwindow(outer, orient=tk.HORIZONTAL)
+        results_area.pack(fill=tk.BOTH, expand=True)
+        results_frame = ttk.Frame(results_area)
+        results_area.add(results_frame, weight=1)
         scrollbar = ttk.Scrollbar(results_frame, orient=tk.VERTICAL)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.results = tk.Listbox(
@@ -257,13 +251,49 @@ class LauncherApp:
         self.results.bind("<<ListboxSelect>>", lambda _event: self._update_preview())
         self.results.bind("<Double-Button-1>", lambda _event: self._execute_selected())
         self.results.bind("<Return>", lambda _event: self._execute_selected())
+        self.results_tooltip = ListboxItemTooltip(self.results, self._result_tooltip_text)
+
+        self.command_surface_panel = ttk.Frame(results_area, padding=(8, 0, 0, 0))
+        results_area.add(self.command_surface_panel, weight=1)
+        surface_body = ttk.Frame(self.command_surface_panel)
+        surface_body.pack(fill=tk.BOTH, expand=True)
+        surface_scrollbar = ttk.Scrollbar(surface_body, orient=tk.VERTICAL)
+        surface_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.command_surface_canvas = tk.Canvas(
+            surface_body,
+            highlightthickness=0,
+            borderwidth=0,
+            yscrollcommand=surface_scrollbar.set,
+        )
+        self.command_surface_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        surface_scrollbar.configure(command=self.command_surface_canvas.yview)
+        self.command_tiles_frame = ttk.Frame(self.command_surface_canvas)
+        self.command_tiles_window = self.command_surface_canvas.create_window(
+            (0, 0), window=self.command_tiles_frame, anchor=tk.NW
+        )
+        self.command_tiles_frame.bind(
+            "<Configure>",
+            lambda _event: self.command_surface_canvas.configure(
+                scrollregion=self.command_surface_canvas.bbox("all")
+            ),
+        )
+        self.command_surface_canvas.bind(
+            "<Configure>",
+            lambda event: self.command_surface_canvas.itemconfigure(
+                self.command_tiles_window, width=event.width
+            ),
+        )
+
+    def _bind_main_shortcuts(self) -> None:
 
         self.root.bind("<KeyPress>", self._handle_keypress)
         self.root.bind("<Escape>", lambda _event: self.hide_window())
         self.root.bind("<Control-l>", lambda _event: self.focus_search())
         self.root.bind("<Control-i>", lambda _event: self._capture_clipboard())
 
-        self.workspace_panel = ttk.LabelFrame(outer, text=" Clipboard / Input / Output ", padding=8)
+    def _build_workspace(self, outer: ttk.Frame) -> None:
+
+        self.workspace_panel = ttk.Frame(outer)
         self.workspace = tk.Text(
             self.workspace_panel,
             height=5,
@@ -275,7 +305,7 @@ class LauncherApp:
             padx=7,
             pady=6,
         )
-        self.workspace.pack(fill=tk.X)
+        self.workspace.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.workspace.bind("<Control-a>", self._select_all_workspace)
         self.workspace.bind("<Control-A>", self._select_all_workspace)
         self.workspace.bind("<Button-3>", self._show_workspace_menu)
@@ -291,40 +321,74 @@ class LauncherApp:
         self.workspace_menu.add_command(label="Copy all", command=self._copy_workspace_to_clipboard)
         self.workspace_menu.add_command(label="Replace with clipboard", command=self._paste_into_workspace)
         self.workspace_menu.add_command(label="Clear", command=lambda: self._set_workspace_text(""))
+        self.workspace_transform_menu = tk.Menu(self.workspace_menu, tearoff=False)
+        self.workspace_transform_menu.add_command(
+            label="lowercase", command=lambda: self._transform_workspace("lowercase", "lowercase")
+        )
+        self.workspace_transform_menu.add_command(
+            label="UPPERCASE", command=lambda: self._transform_workspace("uppercase", "UPPERCASE")
+        )
+        self.workspace_transform_menu.add_command(
+            label="Normalize consecutive spaces",
+            command=lambda: self._transform_workspace("normalize_spaces", "Normalized spaces"),
+        )
+        self.workspace_transform_menu.add_command(
+            label="Prefix / suffix every line…", command=self._prefix_suffix_workspace
+        )
+        self.workspace_transform_menu.add_command(
+            label="Remove duplicate lines",
+            command=lambda: self._transform_workspace("remove_duplicate_lines", "Removed duplicate lines"),
+        )
+        self.workspace_menu.add_cascade(label="Transform", menu=self.workspace_transform_menu)
+        self.workspace_transform_button = ttk.Button(
+            self.workspace_panel,
+            text="⋮",
+            width=3,
+            command=self._show_workspace_transform_button_menu,
+        )
+        self.workspace_transform_button.pack(side=tk.RIGHT, anchor=tk.N, padx=(5, 0))
+        self._tooltip(
+            self.workspace_transform_button,
+            "Transform selected text, or the complete field when nothing is selected. Results are copied.",
+        )
+
+    def _build_footer(self, outer: ttk.Frame) -> None:
 
         controls = ttk.Frame(outer)
         controls.pack(fill=tk.X, pady=(10, 0))
+        for column in range(5):
+            controls.columnconfigure(column, weight=1, uniform="controls")
 
         capture_button = ttk.Button(controls, text="Capture", command=self._capture_clipboard)
-        capture_button.pack(side=tk.LEFT)
+        capture_button.grid(row=0, column=0, sticky=tk.EW, padx=(0, 3), pady=(0, 3))
         self._tooltip(capture_button, "Save current clipboard text to Inbox after asking for a title.")
         snapshot_button = ttk.Button(controls, text="Snapshot", command=self._capture_window_snapshot)
-        snapshot_button.pack(side=tk.LEFT, padx=(6, 0))
+        snapshot_button.grid(row=0, column=1, sticky=tk.EW, padx=3, pady=(0, 3))
         self._tooltip(snapshot_button, "Capture visible window positions and create a Draft restore action in this context.")
         inbox_button = ttk.Button(controls, text="Inbox", command=self._show_inbox)
-        inbox_button.pack(side=tk.LEFT, padx=(6, 0))
+        inbox_button.grid(row=0, column=2, sticky=tk.EW, padx=3, pady=(0, 3))
         self._tooltip(inbox_button, "Review captures and convert them into structured Draft actions.")
         sheets_button = ttk.Button(controls, text="Sheets", command=self._show_cheatsheets)
-        sheets_button.pack(side=tk.LEFT, padx=(6, 0))
+        sheets_button.grid(row=0, column=3, sticky=tk.EW, padx=3, pady=(0, 3))
         self._tooltip(sheets_button, "Open searchable local cheat sheets and promote useful entries to Draft actions.")
         edit_button = ttk.Button(controls, text="Edit", command=self._edit_selected)
-        edit_button.pack(side=tk.LEFT, padx=(6, 0))
+        edit_button.grid(row=0, column=4, sticky=tk.EW, padx=(3, 0), pady=(0, 3))
         self._tooltip(edit_button, "Edit the selected Draft copy-text action. Other action types are currently read-only.")
         pin_button = ttk.Button(controls, text="Pin", command=self._toggle_selected_pin)
-        pin_button.pack(side=tk.LEFT, padx=(6, 0))
+        pin_button.grid(row=1, column=0, sticky=tk.EW, padx=(0, 3))
         self._tooltip(pin_button, "Pin or unpin the selected action in stable slots 1–5.")
         trust_button = ttk.Button(controls, text="Trust", command=self._mark_selected_trusted)
-        trust_button.pack(side=tk.LEFT, padx=(6, 0))
+        trust_button.grid(row=1, column=1, sticky=tk.EW, padx=3)
         self._tooltip(trust_button, "Mark the selected reviewed Draft action as Trusted after confirmation.")
-        quit_button = ttk.Button(controls, text="Quit", command=self.quit_app)
-        quit_button.pack(side=tk.RIGHT)
-        self._tooltip(quit_button, "Stop Context Palette completely and release Ctrl+Alt+P.")
-        hide_button = ttk.Button(controls, text="Hide", command=self.hide_window)
-        hide_button.pack(side=tk.RIGHT, padx=(0, 6))
-        self._tooltip(hide_button, "Hide the palette but keep it resident. Reopen with Ctrl+Alt+P.")
         help_button = ttk.Button(controls, text="Help", command=self._show_help)
-        help_button.pack(side=tk.RIGHT, padx=(0, 6))
+        help_button.grid(row=1, column=2, sticky=tk.EW, padx=3)
         self._tooltip(help_button, "Open the complete local Context Palette help document.")
+        hide_button = ttk.Button(controls, text="Hide", command=self.hide_window)
+        hide_button.grid(row=1, column=3, sticky=tk.EW, padx=3)
+        self._tooltip(hide_button, "Hide the palette but keep it resident. Reopen with Ctrl+Alt+P.")
+        quit_button = ttk.Button(controls, text="Quit", command=self.quit_app)
+        quit_button.grid(row=1, column=4, sticky=tk.EW, padx=(3, 0))
+        self._tooltip(quit_button, "Stop Context Palette completely and release Ctrl+Alt+P.")
 
         self.workspace_panel.pack(fill=tk.X, pady=(7, 0))
 
@@ -341,6 +405,18 @@ class LauncherApp:
     def _tooltip(self, widget: tk.Widget, text: str | Callable[[], str]) -> None:
         self.widget_tooltips.append(WidgetTooltip(widget, text))
 
+    def _result_tooltip_text(self, index: int) -> str:
+        if index < 0 or index >= len(self.displayed_actions):
+            return ""
+        action = self.displayed_actions[index]
+        lines = [f"Context: {action.context or 'General'}"]
+        if action.technology:
+            lines.append(f"Technology: {action.technology}")
+        if action.task:
+            lines.append(f"Task: {action.task}")
+        lines.append(f"Action: {action.title}")
+        return "\n".join(lines)
+
     def _select_all_workspace(self, _event=None) -> str:
         self.workspace.tag_add(tk.SEL, "1.0", "end-1c")
         self.workspace.mark_set(tk.INSERT, "1.0")
@@ -354,6 +430,64 @@ class LauncherApp:
         finally:
             self.workspace_menu.grab_release()
         return "break"
+
+    def _show_workspace_transform_button_menu(self) -> None:
+        self.workspace.focus_set()
+        try:
+            self.workspace_transform_menu.tk_popup(
+                self.workspace_transform_button.winfo_rootx(),
+                self.workspace_transform_button.winfo_rooty()
+                + self.workspace_transform_button.winfo_height(),
+            )
+        finally:
+            self.workspace_transform_menu.grab_release()
+
+    def _workspace_transform_range(self) -> tuple[str, str, bool]:
+        try:
+            return self.workspace.index(tk.SEL_FIRST), self.workspace.index(tk.SEL_LAST), True
+        except tk.TclError:
+            return "1.0", "end-1c", False
+
+    def _transform_workspace(
+        self,
+        operation: str,
+        description: str,
+        *,
+        prefix: str = "",
+        suffix: str = "",
+    ) -> None:
+        start, end, had_selection = self._workspace_transform_range()
+        source = self.workspace.get(start, end)
+        if not source:
+            self.status_var.set("Input / Output is empty; nothing was transformed.")
+            return
+        try:
+            result = transform_text(source, operation, prefix=prefix, suffix=suffix)
+        except ActionError as exc:
+            messagebox.showerror("Context Palette", str(exc))
+            return
+        self.workspace.edit_separator()
+        self.workspace.replace(start, end, result)
+        self.workspace.edit_separator()
+        result_end = self.workspace.index(f"{start}+{len(result)}c")
+        self.workspace.mark_set(tk.INSERT, result_end)
+        if had_selection:
+            self.workspace.tag_add(tk.SEL, start, result_end)
+        self._set_clipboard(result)
+        scope = "selection" if had_selection else "complete field"
+        self.status_var.set(f"{description} in {scope}; result copied to clipboard.")
+
+    def _prefix_suffix_workspace(self) -> None:
+        dialog = PrefixSuffixDialog(self.root, title="Prefix / suffix every line")
+        if dialog.result is None:
+            return
+        prefix, suffix = dialog.result
+        self._transform_workspace(
+            "prefix_suffix_lines",
+            "Added line prefix / suffix",
+            prefix=prefix,
+            suffix=suffix,
+        )
 
     def _status_tooltip_text(self) -> str:
         current = self.status_var.get().strip()
@@ -550,6 +684,122 @@ class LauncherApp:
             self.status_var.set("Could not load actions")
             messagebox.showerror("Context Palette", str(exc))
 
+    def _load_command_surface(self) -> None:
+        try:
+            self.command_groups = load_combined_command_groups(
+                self.command_surface_path,
+                self.local_command_surface_path,
+            )
+        except CommandSurfaceError as exc:
+            self.command_groups = []
+            messagebox.showerror("Context Palette", str(exc))
+        self._render_command_surface()
+
+    def _render_command_surface(self) -> None:
+        for child in self.command_tiles_frame.winfo_children():
+            child.destroy()
+        if not self.command_groups:
+            empty = ttk.Label(
+                self.command_tiles_frame,
+                text="No quick-action groups configured.",
+                style="Muted.TLabel",
+                wraplength=260,
+            )
+            empty.pack(fill=tk.X, pady=8)
+            self._tooltip(empty, "Configure groups in data/command_surface.json or the local override file.")
+            return
+
+        for column in range(2):
+            self.command_tiles_frame.columnconfigure(column, weight=1, uniform="surface")
+        for index, group in enumerate(self.command_groups):
+            row, column = divmod(index, 2)
+            area = ttk.LabelFrame(self.command_tiles_frame, text=group.label, padding=6)
+            area.grid(row=row, column=column, sticky=tk.NSEW, padx=3, pady=3)
+            for button_column in range(2):
+                area.columnconfigure(button_column, weight=1, uniform=f"group-{group.id}")
+            for item_index, item in enumerate(group.items):
+                item_row, item_column = divmod(item_index, 2)
+                control = ttk.Label(
+                    area,
+                    text=item.label,
+                    anchor=tk.CENTER,
+                    relief=tk.SOLID,
+                    padding=(6, 5),
+                    cursor="hand2",
+                )
+                control.grid(
+                    row=item_row,
+                    column=item_column,
+                    sticky=tk.EW,
+                    padx=2,
+                    pady=2,
+                )
+                self._tooltip(
+                    control,
+                    "Left-click to edit this menu and its actions. Right-click to execute an action.",
+                )
+                control.bind(
+                    "<Button-1>",
+                    lambda _event, selected_group=group: self._open_command_configuration(
+                        selected_group
+                    ),
+                    add="+",
+                )
+                control.bind(
+                    "<Button-3>",
+                    lambda event, selected_item=item: self._show_item_menu(event, selected_item),
+                    add="+",
+                )
+
+    def _open_command_configuration(self, group: CommandGroup) -> None:
+        surface_path, actions_path = command_configuration_paths(
+            group,
+            self.command_surface_path,
+            self.local_command_surface_path,
+            self.actions_path,
+            self.local_actions_path,
+        )
+        for path, title in (
+            (surface_path, "Edit command-surface menus"),
+            (actions_path, "Edit command-surface actions"),
+        ):
+            self._execute_action(
+                Action(
+                    id=f"configure-{path.stem}",
+                    title=title,
+                    context="Configuration",
+                    type="open_file",
+                    value=str(path.resolve()),
+                    state="Trusted",
+                    technology="JSON",
+                    task="Configure quick actions",
+                )
+            )
+        self.status_var.set(f"Opened menu and action configuration for {group.label}.")
+
+    def _show_item_menu(self, event: tk.Event, item: CommandItem) -> str:
+        actions_by_id = {action.id: action for action in self.actions}
+        action_ids = list(item.action_ids)
+        if item.primary_action_id and item.primary_action_id not in action_ids:
+            action_ids.insert(0, item.primary_action_id)
+        menu = tk.Menu(self.root, tearoff=False)
+        for action_id in action_ids:
+            action = actions_by_id.get(action_id)
+            if action is None:
+                continue
+            menu.add_command(
+                label=action.compact_display_text,
+                command=lambda selected_action=action: self._execute_action(selected_action),
+            )
+        if menu.index(tk.END) is None:
+            menu.add_command(label="No available actions", state=tk.DISABLED)
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+            menu.destroy()
+        return "break"
+
     def _action_storage_path(self, action: Action) -> Path:
         return self.local_actions_path if action.id in self.local_action_ids else self.actions_path
 
@@ -612,6 +862,7 @@ class LauncherApp:
             self.status_var.set(f"{context}: {definition.description}")
 
     def _refresh_results(self) -> None:
+        self.results_tooltip.hide()
         self.filtered_actions = search_actions(self.actions, self.search_var.get())
         self.slot_actions = action_slots(self.actions, self.palette_state)
         matching_ids = {action.id for action in self.filtered_actions}
@@ -644,6 +895,7 @@ class LauncherApp:
 
     def _reload(self) -> None:
         self._load_actions()
+        self._load_command_surface()
         self._load_palette_state()
         self._refresh_results()
 
@@ -667,6 +919,9 @@ class LauncherApp:
             self.status_var.set("No action selected")
             return
 
+        self._execute_action(action)
+
+    def _execute_action(self, action: Action) -> None:
         try:
             message = execute_action(
                 action,
@@ -727,22 +982,7 @@ class LauncherApp:
         if action is None:
             self.status_var.set(f"No action in slot {slot}")
             return "break"
-        try:
-            message = execute_action(
-                action,
-                clipboard_setter=self._set_clipboard,
-                clipboard_getter=self._get_clipboard_text,
-                input_provider=self._ask_for_action_input,
-                selected_text=self._workspace_text() or self.captured_selection,
-                input_text=self._workspace_text(),
-                output_setter=self._set_workspace_text,
-                window_layout_runner=self._run_window_layout,
-                window_snapshot_runner=self._run_window_snapshot,
-            )
-            self.status_var.set(message)
-        except ActionError as exc:
-            self.status_var.set("Action failed")
-            messagebox.showerror("Context Palette", str(exc))
+        self._execute_action(action)
         return "break"
 
     def _move_selection(self, offset: int, event: tk.Event) -> str:
@@ -1651,6 +1891,8 @@ def run(
     local_actions_path: Path,
     contexts_path: Path,
     local_contexts_path: Path,
+    command_surface_path: Path,
+    local_command_surface_path: Path,
     palette_path: Path,
     inbox_path: Path,
     cheatsheets_dir: Path,
@@ -1664,6 +1906,8 @@ def run(
         local_actions_path,
         contexts_path,
         local_contexts_path,
+        command_surface_path,
+        local_command_surface_path,
         palette_path,
         inbox_path,
         cheatsheets_dir,

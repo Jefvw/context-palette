@@ -56,19 +56,14 @@ def window_position_near_cursor(
     cursor: tuple[int, int],
     window_size: tuple[int, int],
     work_area: tuple[int, int, int, int],
-    gap: int = 12,
 ) -> tuple[int, int]:
-    """Place a window near the cursor while keeping it inside its monitor."""
+    """Use the cursor as top-left anchor, clamped inside its monitor."""
     cursor_x, cursor_y = cursor
     width, height = window_size
     left, top, right, bottom = work_area
-    x = cursor_x + gap
-    y = cursor_y + gap
-    if x + width > right:
-        x = cursor_x - width - gap
-    if y + height > bottom:
-        y = cursor_y - height - gap
-    return max(left, min(x, right - width)), max(top, min(y, bottom - height))
+    x = max(left, min(cursor_x, right - width))
+    y = max(top, min(cursor_y, bottom - height))
+    return x, y
 
 
 def send_copy_shortcut() -> None:

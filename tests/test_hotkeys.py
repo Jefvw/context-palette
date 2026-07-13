@@ -26,22 +26,22 @@ class HotkeyTests(unittest.TestCase):
         self.assertEqual(MOD_NOREPEAT, 0x4000)
         self.assertEqual(WM_HOTKEY, 0x0312)
 
-    def test_window_opens_below_and_right_of_cursor_when_space_is_available(self):
+    def test_cursor_is_window_top_left_when_space_is_available(self):
         self.assertEqual(
             window_position_near_cursor((100, 100), (300, 200), (0, 0, 1920, 1040)),
-            (112, 112),
+            (100, 100),
         )
 
-    def test_window_flips_and_stays_inside_cursor_monitor(self):
+    def test_window_clamps_inside_cursor_monitor_near_bottom_right(self):
         self.assertEqual(
             window_position_near_cursor((1900, 1000), (700, 600), (0, 0, 1920, 1040)),
-            (1188, 388),
+            (1220, 440),
         )
 
     def test_window_supports_monitor_with_negative_coordinates(self):
         self.assertEqual(
             window_position_near_cursor((-100, 100), (700, 600), (-1920, 0, 0, 1040)),
-            (-812, 112),
+            (-700, 100),
         )
 
 

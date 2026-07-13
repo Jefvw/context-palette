@@ -2,6 +2,9 @@
 
 ## Now
 
+- Make JSON persistence atomic and recoverable before expanding authoring features.
+- Add a Windows launcher construction/close smoke test.
+- Extract secondary windows from `launcher.py` incrementally without changing their behaviour.
 - Define contexts as standalone records with identity, knowledge, capabilities, and optional activation.
 - Add a context selector/filter and a context detail view.
 - Refine the implemented focus-context picker and 1-5 pinned / 6-9 context slot layout after manual testing.
@@ -15,6 +18,9 @@
 
 ## Done
 
+- Add a global JSON-configured quick-action surface with primary buttons and per-group right-click menus.
+- Simplify action rows to `Command → subject`, move metadata to row tooltips, and narrow the palette without hiding management buttons.
+- Add fast inline workspace transformations with selection-aware editing, automatic clipboard output, and one-step Undo.
 - Add shared product-system URL builders plus searchable Archive and ServiceNow reference prefixes.
 
 - Load standalone shared/local context definitions with descriptions and preferred actions for slots 6–9.
@@ -53,7 +59,7 @@
 
 ## Next
 
-- Add previewable selected-text transformations: case, literal replace, whitespace/line endings, and URL encoding.
+- Extend selected-text transformations with literal replace, line-ending cleanup, URL encoding/decoding, and additional line operations.
 - Add clipboard transaction support with preserve/restore as the safe default.
 - Add constrained linear sequences for paste, Tab, Enter, waits, and supported open/launch actions.
 - Add context activation bundles for URLs, files, folders, applications, and quick-reference material.

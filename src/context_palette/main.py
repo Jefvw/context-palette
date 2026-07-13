@@ -39,6 +39,15 @@ def integration_request(arguments: list[str]) -> dict[str, str]:
     return request
 
 
+def initial_launcher_request(request: dict[str, str]) -> dict[str, str] | None:
+    """Keep a bare first-launch workspace empty.
+
+    The first process already owns a visible root window. Replaying a plain
+    ``show`` request would synchronize stale clipboard text into the workspace.
+    """
+    return request if request.get("search") or request.get("context") else None
+
+
 def main(arguments: list[str] | None = None) -> None:
     root = project_root()
     os.environ.setdefault("PROJECT_ROOT", str(root))
@@ -52,11 +61,13 @@ def main(arguments: list[str] | None = None) -> None:
         root / "data" / "local_actions.json",
         root / "data" / "contexts.json",
         root / "data" / "local_contexts.json",
+        root / "data" / "command_surface.json",
+        root / "data" / "local_command_surface.json",
         root / "data" / "palette.json",
         root / "data" / "inbox.json",
         root / "data" / "cheatsheets",
         port,
-        request,
+        initial_launcher_request(request),
     )
 
 

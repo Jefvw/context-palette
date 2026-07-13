@@ -32,6 +32,7 @@ Never commit personal/runtime data:
 
 - `data/inbox.json`
 - `data/local_actions.json`
+- `data/local_command_surface.json`
 - `data/palette.json`
 - `data/layouts/snapshots/`
 

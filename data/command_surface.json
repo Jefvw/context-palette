@@ -1,0 +1,139 @@
+{
+  "groups": [
+    {
+      "id": "product-systems",
+      "label": "Product systems",
+      "items": [
+        {
+          "id": "colruyt",
+          "label": "Colruyt",
+          "primary_action_id": "colruyt-open-product",
+          "action_ids": ["colruyt-open-product"]
+        },
+        {
+          "id": "bioplanet",
+          "label": "Bio-Planet",
+          "primary_action_id": "product-lookup-bioplanet",
+          "action_ids": ["product-lookup-bioplanet"]
+        },
+        {
+          "id": "technical-article",
+          "label": "Technical article",
+          "primary_action_id": "product-lookup-productinfoscreen",
+          "action_ids": [
+            "product-lookup-productinfoscreen",
+            "product-lookup-fic",
+            "product-lookup-rti",
+            "product-lookup-solucious"
+          ]
+        },
+        {
+          "id": "myproduct",
+          "label": "MyProduct",
+          "primary_action_id": "product-lookup-myproduct-any-id",
+          "action_ids": [
+            "product-lookup-myproduct-any-id",
+            "product-lookup-myproduct-retail-article",
+            "product-lookup-myproduct-base-product",
+            "product-lookup-myproduct-gtin",
+            "product-lookup-myproduct-pss"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "navigation",
+      "label": "Navigation",
+      "items": [
+        {
+          "id": "project-folder",
+          "label": "Project folder",
+          "primary_action_id": "general-open-project-folder",
+          "action_ids": ["general-open-project-folder", "developing-open-project-folder"]
+        },
+        {
+          "id": "python-docs",
+          "label": "Python docs",
+          "primary_action_id": "general-open-python-docs",
+          "action_ids": ["general-open-python-docs"]
+        },
+        {
+          "id": "vs-code",
+          "label": "VS Code",
+          "primary_action_id": "developing-open-vscode",
+          "action_ids": ["developing-open-vscode"]
+        },
+        {
+          "id": "explorer-layout",
+          "label": "Explorer layout",
+          "primary_action_id": "developing-arrange-three-explorers",
+          "action_ids": ["developing-arrange-three-explorers"]
+        }
+      ]
+    },
+    {
+      "id": "references",
+      "label": "References",
+      "items": [
+        {
+          "id": "archives",
+          "label": "Archives",
+          "primary_action_id": "archives-open-selected-item",
+          "action_ids": ["archives-open-selected-item"]
+        },
+        {
+          "id": "product-reference",
+          "label": "Product lookup",
+          "primary_action_id": "product-lookup-myproduct-any-id",
+          "action_ids": [
+            "product-lookup-myproduct-any-id",
+            "product-lookup-productinfoscreen",
+            "product-lookup-rti"
+          ]
+        },
+        {
+          "id": "python-reference",
+          "label": "Python",
+          "primary_action_id": "general-open-python-docs",
+          "action_ids": ["general-open-python-docs"]
+        }
+      ]
+    },
+    {
+      "id": "clipboard-sql",
+      "label": "Clipboard & SQL",
+      "items": [
+        {
+          "id": "date-time",
+          "label": "Date & time",
+          "primary_action_id": "qtp-copy-date-time",
+          "action_ids": ["qtp-copy-date-time"]
+        },
+        {
+          "id": "url-encode",
+          "label": "URL encode",
+          "primary_action_id": "qtp-copy-url-encoded-clipboard",
+          "action_ids": ["qtp-copy-url-encoded-clipboard"]
+        },
+        {
+          "id": "sql-list",
+          "label": "SQL list",
+          "primary_action_id": "database-lines-to-sql-list",
+          "action_ids": ["database-lines-to-sql-list"]
+        },
+        {
+          "id": "sql-templates",
+          "label": "SQL templates",
+          "primary_action_id": "database-select-template",
+          "action_ids": ["database-select-template", "database-cte-template"]
+        },
+        {
+          "id": "greeting",
+          "label": "Greeting",
+          "primary_action_id": "email-greeting",
+          "action_ids": ["email-greeting", "email-follow-up", "email-signature"]
+        }
+      ]
+    }
+  ]
+}

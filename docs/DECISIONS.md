@@ -2,6 +2,22 @@
 
 Record durable product and technical decisions here.
 
+## 2026-07-13 - Keep a bare first-launch workspace empty
+
+**Decision:** Do not replay a synthetic `show` request when the first Context Palette process starts without an explicit context or search parameter.
+
+**Reason:** The root window is already visible. Replaying `show` immediately synchronized arbitrary existing clipboard text into Input / Output, making the application appear to start with unexplained content such as `{`.
+
+**Consequences:** A normal application start has an empty workspace. F9 selection capture, later attended show requests, and first launches with explicit integration parameters retain their existing behaviour.
+
+## 2026-07-13 - Refactor incrementally around existing boundaries
+
+**Decision:** Keep the current architecture and reduce concentrated UI complexity incrementally. Extract reusable tooltip mechanics, divide main-window construction into named sections, and reject case-insensitive duplicate action IDs. Record the broader findings in `docs/TECHNICAL_REVIEW.md`.
+
+**Reason:** The prototype has good constrained domain modules and tests; a rewrite would add risk without improving the product loop. The clearest maintenance problem is the size and responsibility count of `launcher.py`, while ambiguous IDs are a concrete data-integrity risk for pins, context slots, menus, edits, and trust promotion.
+
+**Consequences:** Visible behaviour and JSON schemas remain unchanged. Future maintenance should prioritize atomic JSON writes, a Windows UI smoke test, and mechanical extraction of secondary windows before considering new abstractions or dependencies.
+
 ## 2026-07-12 - Use screen space for results and stable guidance
 
 **Decision:** Collapse Focus and Find to single rows, keep Input / Output as a permanent clipboard-backed text box, and use a slim bottom line for action explanations and application communication. Every label and button receives hover guidance; specific descriptions override automatic fallbacks.
@@ -526,3 +542,37 @@ The slot legend and text toolbar are also omitted: their functions remain discov
 **Reason:** These actions are useful portable configuration rather than captured runtime state. Separate actions keep execution predictable and searchable while allowing four common destinations to occupy the focus slots.
 
 **Privacy boundary:** This exception was explicitly approved for GitHub synchronization. The tracked values contain internal host names and example reference shapes, but no credentials, access tokens, personal identifiers, captured clipboard content, or machine paths. Runtime data remains ignored.
+
+## 2026-07-13 - Keep fast text manipulation inside Tkinter
+
+**Decision:** Extend the existing Input / Output `Text` widget with pure Python transformations rather than adopting QScintilla. Remove the workspace heading, expose transformations through both the context menu and one compact `⋮` button, apply them to the selection or complete field, and copy every result automatically.
+
+**Reason:** The required high-frequency operations do not need a programmer-editor component. QScintilla depends on PyQt/Qt, cannot be embedded naturally in the current Tkinter widget tree, adds installation and packaging weight, and introduces GPL/commercial licensing considerations. The dependency-free implementation preserves fast resident startup and work-PC portability.
+
+**First operations:** lowercase, UPPERCASE, normalize consecutive horizontal spaces, add a prefix/suffix to every line, and remove duplicate lines while preserving first-occurrence order.
+
+## 2026-07-13 - Make action rows command-first and narrow the palette
+
+**Decision:** Render launcher rows as `Command → subject` and remove the trailing context from the permanent list text. Infer a command from the constrained action type only when the title has no recognized leading command. Show Context, Technology, Task, and the original title in a delayed row tooltip. Reduce the default window width from 720 to 520 pixels and arrange all ten management buttons in two rows of five.
+
+**Reason:** Command-first rows are faster to scan and eliminate repeated context text. The previous wide listbox had no separate right pane; narrowing the complete window returns that unused screen area while the two-row button grid preserves direct access to every function.
+
+## 2026-07-13 - Use the right half as a global command surface
+
+**Decision:** Restore a wider two-column launcher and use its right half for JSON-configured global quick-action groups. Each group contains multiple compact labels. Left-click opens the label's owning menu configuration and corresponding action file; right-click exposes its executable action-ID menu. Groups are independent of Focus context and shared/local configuration is separated.
+
+**Reason:** The intended empty area was not screen space to remove but room for persistent utilities. Referencing existing action IDs keeps this surface customizable without creating a second or less constrained execution mechanism.
+
+**Boundary:** The first version is configured upfront in JSON. An in-app visual editor, context-conditional groups, drag ordering, and richer controls remain future refinements.
+
+## 2026-07-13 - Anchor F9 opens at the cursor
+
+**Decision:** Treat the cursor coordinates captured at F9 as the desired top-left corner of the palette. Clamp that position only when the window would cross the selected monitor's work-area edge.
+
+**Reason:** A fixed anchor is more predictable than adding a gap or flipping the window around the cursor. It makes the shortcut feel like placing the palette exactly where attention is focused.
+
+## 2026-07-13 - Read clipboard text only for clipboard templates
+
+**Decision:** Template expansion calls the clipboard getter only when an action value, argument, or working directory contains a supported clipboard variable.
+
+**Reason:** Ordinary file, folder, URL, and application targets do not depend on clipboard text. Eager clipboard reads caused unrelated actions—including opening command-surface configuration—to fail when the clipboard held an image or another non-text format.

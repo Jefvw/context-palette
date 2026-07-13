@@ -43,6 +43,8 @@ pythonw.exe -> context_palette.main
 
 The first process remains resident. Later launches notify it through a project-specific localhost port and exit. This avoids repeated Python and Tk startup cost.
 
+A bare first process displays its already-created root window without replaying a synthetic `show` request. This keeps Input / Output empty on application startup. First launches carrying an explicit integration context or search term still process those parameters.
+
 ## Source modules
 
 ### `main.py`
@@ -61,9 +63,12 @@ Presentation and application orchestration.
 - Builds the Tkinter interface.
 - Maintains the active focus context.
 - Renders numbered slots and search results.
+- Renders a global JSON-configured quick-action surface beside search results.
 - Owns Input / Output, the communication line, systematic widget tooltips, Inbox, sheets, Help, and action editors.
 - Connects platform-independent action execution to Windows-specific callbacks.
 - Ensures Tk operations stay on the Tk main thread.
+
+The main-window construction is divided into focused header, results/command-surface, shortcut, workspace, and footer builders. Secondary Help, Inbox, Draft, and Cheat Sheet windows still live in this module and are the next safe extraction boundary; this is documented in `TECHNICAL_REVIEW.md`.
 
 The launcher does not implement action transformations or window matching directly. Those responsibilities live in specialized modules.
 
@@ -78,6 +83,7 @@ Important principles:
 - Arbitrary shell commands are rejected.
 - Pure transformations are separated from UI callbacks.
 - Platform effects are injected through callbacks where practical, enabling tests without opening applications.
+- Clipboard access during template expansion is lazy: actions without clipboard variables do not fail when the clipboard contains a non-text format.
 
 ### `palette_state.py`
 
@@ -88,6 +94,14 @@ Stores and calculates launcher organization.
 - Duplicate actions across both groups are intentional.
 - Missing context slots fall back to useful General/available actions.
 
+### `command_surface.py`
+
+Loads and validates global quick-action groups and their compact items from shared and local JSON. Each item has an individual action menu and retains its source configuration path. Groups reference existing action IDs; they do not define a second execution language. Duplicate group IDs and duplicate item IDs within a group are rejected case-insensitively.
+
+### `tooltips.py`
+
+Owns delayed tooltip behaviour for ordinary widgets and individual listbox rows. Keeping these presentation helpers outside `launcher.py` prevents the main application orchestrator from also owning reusable hover-window mechanics.
+
 ### `hotkeys.py`
 
 Native Windows hotkey and selection-copy support using `ctypes`.
@@ -96,7 +110,7 @@ Native Windows hotkey and selection-copy support using `ctypes`.
 - Runs the Windows message loop on a daemon thread.
 - Queues activation back to `LauncherApp`; it does not manipulate Tk widgets from the background thread.
 - Sends a constrained `Ctrl+C` sequence before the palette takes focus.
-- Captures cursor coordinates and the nearest monitor work area in the hotkey thread, then positions the palette near that point while keeping the complete window on-screen.
+- Captures cursor coordinates and the nearest monitor work area in the hotkey thread, then uses the cursor as the palette's top-left anchor. The position is clamped only when needed to keep the complete window on-screen.
 
 ### `contexts.py`
 
@@ -176,8 +190,10 @@ Technology, Task, Context, and Action title are separate facets. They are not st
 Compact result rows show:
 
 ```text
-Action title · Context
+Command → subject
 ```
+
+The command is taken from a recognized leading verb such as Open, Copy, Convert, Search, Arrange, or Restore. When a title does not include one, a suitable command is inferred from the constrained action type. Context, Technology, Task, and the original title are shown in a delayed per-row hover tooltip.
 
 The full explanation path is:
 
@@ -188,6 +204,10 @@ Technology > Task > Context > Action title
 Search indexes title, technology, task, context, type, value, and maturity state. Multiple query terms use AND semantics.
 
 This separation allows visual simplification without losing retrieval power.
+
+The main window defaults to `760x580` with a `680x450` minimum. A horizontal paned area gives the left half to command-first search results and the right half to the global quick-action surface. Management buttons use a five-column, two-row grid so every function remains visible.
+
+Each group renders as a subarea containing multiple compact labels. Left-click opens the owning command-surface JSON plus the corresponding shared/local action JSON. Right-click exposes the item's action-ID list through the same `_execute_action` path used by selected and numbered actions.
 
 ## Supported action types
 
@@ -225,11 +245,11 @@ Input / Output workspace <---- Paste / manual edit
         `-- copy-only action -> clipboard, workspace unchanged
 ```
 
-Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown and can be explicitly copied, pasted, cleared, or replaced by actions. Action explanations and application status share a slim bottom communication line.
+Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `launcher.py` owns selection ranges, one-step Undo grouping, clipboard updates, and menus. Action explanations and application status share a slim bottom communication line.
 
 Numbered action dispatch is enabled only when the Find entry owns focus. All other widgets suppress it, making shortcut mode explicit and preventing accidental execution while navigating or editing. The communication line never wraps; its full untruncated action explanation is retained separately for a dynamic hover tooltip and click-open detail window.
 
-The numbered-slot colour legend and workspace toolbar are intentionally not rendered. Slot numbers and row colours carry the distinction; standard editing plus a context menu preserve clipboard operations without consuming permanent vertical space.
+The numbered-slot colour legend and workspace heading are intentionally not rendered. Slot numbers and row colours carry the distinction. Standard editing and transformations are available through the context menu, with a compact `⋮` transform button as the only persistent workspace control.
 
 ## Focus contexts and slots
 
@@ -253,9 +273,15 @@ All data is local and inspectable.
 
 Reviewed portable action records shared through Git.
 
+Action IDs are unique case-insensitively within a file and across shared/local files. This keeps pins, context slots, command-surface references, edits, and trust promotion unambiguous.
+
 ### `data/contexts.json` and `data/local_contexts.json`
 
 The shared file contains reviewed portable context definitions. The ignored local file contains personal or work-specific definitions.
+
+### `data/command_surface.json` and `data/local_command_surface.json`
+
+The shared file contains portable global quick-action groups. The ignored local file can add personal or machine-specific groups. Both refer to actions by stable ID.
 
 ### `data/local_actions.json`
 

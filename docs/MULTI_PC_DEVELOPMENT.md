@@ -20,7 +20,7 @@ No open-source license has been selected yet. Keep the repository private, or ch
 
    ```powershell
    git status --short
-   git check-ignore data\inbox.json data\local_actions.json data\palette.json
+   git check-ignore data\inbox.json data\local_actions.json data\local_command_surface.json data\palette.json
    git check-ignore data\layouts\snapshots\example.json
    ```
 
@@ -56,6 +56,7 @@ The setup script creates `.venv`, copies safe local-data templates when needed, 
 - Documentation.
 - `data/actions.json`: reviewed portable actions suitable for every computer.
 - `data/cheatsheets`: reviewed shared cheat sheets.
+- `data/command_surface.json`: reviewed shared global quick-action groups.
 - `data/layouts` except snapshots: reviewed portable example layouts.
 - `data/*.example.json`: initial local-data templates.
 
@@ -63,6 +64,7 @@ The setup script creates `.venv`, copies safe local-data templates when needed, 
 
 - `data/inbox.json`: captured content.
 - `data/local_actions.json`: personal or machine-specific actions.
+- `data/local_command_surface.json`: personal or machine-specific quick-action groups.
 - `data/palette.json`: pins, focus context, and per-PC slots.
 - `data/layouts/snapshots/`: window titles, paths, URLs, and monitor layouts.
 - `.venv`: the local Python environment.

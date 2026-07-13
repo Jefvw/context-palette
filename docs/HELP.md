@@ -12,7 +12,7 @@ Power Automate Desktop and PowerToys setup is documented in `integrations/README
 
 - Start once with `run-context-palette.bat`.
 - Press `F9` or `Ctrl+Alt+P` to capture the current text selection and show the resident palette. On laptops in media-key mode, use `Fn+F9` or enable Fn Lock.
-- The palette opens on the monitor containing the mouse cursor, close to the cursor position at the moment the shortcut was pressed.
+- The palette uses the mouse cursor position at shortcut time as its top-left corner. Near a monitor edge it shifts only as far as needed to keep the complete window visible.
 - Press `Esc`, click `Hide`, or close the window to hide it.
 - Click `Quit` to stop the resident process completely.
 - If a development instance becomes stuck, run `stop-context-palette.bat` and start again.
@@ -45,14 +45,25 @@ Search matches Technology, Task, Context, Action name, type, and content.
 - Use Up/Down, Page Up/Page Down, Home, and End to navigate.
 - Press Enter, double-click, or click `Run selected`.
 - Numpad 1 through 9 executes the corresponding fixed slot.
-- Number-row 1 through 9 executes slots when focus is not in a text entry field.
+- Number-row 1 through 9 executes slots only while Find has focus.
 - Selecting an action updates the slim communication line at the bottom.
 
 Blue rows are pinned slots 1–5. Green rows are focus-context slots 6–9. Neutral rows are other search results.
 
+## Quick-action surface
+
+The right half contains global configurable subareas. Each subarea contains multiple compact action labels/buttons and stays visible when Focus changes.
+
+- Left-click a label to open its technical menu configuration and corresponding action file in the default JSON editor.
+- Right-click that label to open its individually assigned executable action menu.
+- Every item uses the same selected text, Input / Output, clipboard, and safe action executor as the search list.
+- Configure shared groups in `data/command_surface.json` and private groups in `data/local_command_surface.json`.
+
+The complete JSON format is documented in `docs/COMMAND_SURFACE_CONFIGURATION.md`.
+
 ## Input / Output workspace
 
-Input / Output is a permanent editable working text box, not an action preview. When the palette opens it shows the current clipboard or captured selection. Actions can read or replace it. Its toolbar is intentionally omitted to save space.
+Input / Output is a permanent editable working text box, not an action preview. A fresh application start leaves it empty. Reopening the resident palette can show the current clipboard or captured selection. Actions can read or replace it. The heading and permanent toolbar are omitted to maximize editing space.
 
 Numbered action triggering is deliberately active only while Find has focus. In every other control—including Clipboard / Input / Output, the result list, context selector, and buttons—`1` through `9` do not execute actions. This makes Find the explicit keyboard command mode. Standard text editing remains available in the workspace.
 
@@ -63,6 +74,10 @@ The bottom communication line always stays one row high. Hover over it for the c
 - Type or edit text directly.
 - The right-click command `Clear` empties it.
 - The right-click menu also provides Undo, Redo, Cut, Copy, Paste, Select all, and Copy all.
+- Open `Transform` through the right-click menu or the compact `⋮` button.
+- A transform changes the selection, or the complete field when nothing is selected.
+- Every transform result is copied to the clipboard automatically and can be reverted with one Undo.
+- Available transforms are lowercase, UPPERCASE, consecutive-space normalization, prefix/suffix on every line, and duplicate-line removal.
 - Transform actions read it and place their result back in it.
 - URL-builder actions use it as selected input when it is not empty.
 
@@ -136,7 +151,9 @@ Example:
 Browser / Colruyt > Commercial product ID > Product lookup > Open Colruyt product ID
 ```
 
-To keep the launcher fast to scan, result rows show only `Action name · Context`. Technology and Task remain fully searchable and appear in the bottom communication line.
+To keep the launcher fast to scan, result rows show `Command → subject`, for example `Open → Colruyt product ID`. Context, Technology, and Task remain fully searchable and appear in the row's hover tooltip and the bottom communication line.
+
+The main palette opens at a compact width. Its ten management buttons use two rows of five so every button remains directly available without forcing the result list to occupy unused horizontal screen space.
 
 ## Window layouts and snapshots
 

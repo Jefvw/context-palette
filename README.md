@@ -22,6 +22,7 @@ It can:
 - stay resident so later opens are fast;
 - open with one-key `F9`, with `Ctrl+Alt+P` retained as fallback;
 - use a compact search-first palette layout;
+- expose configurable global quick-action groups beside search results;
 - search sample actions;
 - show selected-action guidance in a stable information area;
 - provide a persistent editable Clipboard / Input / Output workspace for selected, pasted, typed, and transformed text;
@@ -158,7 +159,7 @@ Keyboard controls:
 - `Ctrl+L`: focus the search box.
 - `Ctrl+I`: capture the current clipboard text into the Inbox.
 - Numpad `1` through `9`: run the matching action with that visible slot number.
-- Keyboard-row `1` through `9`: run the matching action in that visible slot when the search box is not focused.
+- Keyboard-row `1` through `9`: run the matching action in that visible slot only while Find has focus.
 
 ### Focus context and numbered slots
 
@@ -169,7 +170,9 @@ Choose a focus context above the search field. The numbered slots have stable me
 
 An action may deliberately appear in both groups. Use `Pin / Unpin` on the selected action to manage the five global pins. Pins, focus context, and optional explicit context slots are stored in `data\palette.json`.
 
-Action names can include `technology` and `task` metadata in addition to context and title. All these fields participate in search.
+Result rows use the compact form `Command → subject`, such as `Open → Colruyt product ID`. Hover a row to see its Context, Technology, Task, and original action name. All those fields continue to participate in search.
+
+The right half is configured through `data\command_surface.json`. It contains grouped subareas with multiple compact labels: left-click opens the technical menu/action configuration and right-click opens that label's executable action menu. Personal groups can be added in ignored `data\local_command_surface.json`; see `docs\COMMAND_SURFACE_CONFIGURATION.md`.
 
 For copy-text actions, the saved text is copied to the clipboard.
 
@@ -226,6 +229,8 @@ The field below the results is working data rather than an action preview:
 
 - Text selected before `Ctrl+Alt+P` is captured into the field.
 - `Ctrl+V` pastes normally; right-click `Replace with clipboard` replaces the complete field.
+- Right-click `Transform` or use the compact `⋮` button for lowercase, UPPERCASE, space normalization, per-line prefix/suffix, and duplicate-line removal.
+- Inline transformations affect the selection, or the complete field when nothing is selected, then copy the result automatically.
 - Text can be typed or edited directly.
 - Transform actions read the field and replace it with their result.
 - Transformation results are also copied to the clipboard.
