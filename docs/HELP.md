@@ -2,6 +2,8 @@
 
 Context Palette is a fast, portable Windows launcher for reusable actions, working contexts, captured material, transformations, and workspace layouts.
 
+The interface uses a light grey, teal, and aqua theme with Segoe UI typography. Teal highlights primary actions and active selections; the two aqua row shades distinguish pinned and focus-context slots. Hover and keyboard-focus states provide additional feedback without changing the launcher layout.
+
 Developers can find the current implementation architecture in `docs/ARCHITECTURE.md` and decision history in `docs/DECISIONS.md`.
 
 Multi-PC cloning, GitHub publishing, portable paths, and shared/local data are documented in `docs/MULTI_PC_DEVELOPMENT.md`.
@@ -15,7 +17,7 @@ Power Automate Desktop and PowerToys setup is documented in `integrations/README
 - The palette uses the mouse cursor position at shortcut time as its top-left corner. Near a monitor edge it shifts only as far as needed to keep the complete window visible.
 - Press `Esc`, click `Hide`, or close the window to hide it.
 - Click `Quit` to stop the resident process completely.
-- If a development instance becomes stuck, run `stop-context-palette.bat` and start again.
+- If a development instance becomes stuck, run `stop-context-palette.bat` and start again. The stop command targets this project's virtual-environment GUI and foreground diagnostic process trees; it does not stop unrelated Python applications or Context Palette clones in other folders.
 
 External Windows tools may safely show and pre-filter the existing instance:
 
@@ -101,6 +103,20 @@ Records visible, non-minimized application windows, monitors, relative positions
 
 Shows captured items. An item can be converted into a structured Draft action with Technology, Task, Context, Action name, and a guided action type.
 
+Select an Inbox item and click **Ask AI** for an attended AI-guidance workflow:
+
+1. Choose one saved-text proposal, up to three saved-text proposals, or one fixed website action.
+2. Review the generated request, including the captured material, before sharing it.
+3. Click **Copy AI request** and paste it into the AI of your choice.
+4. Paste the AI's JSON response into Context Palette.
+5. Click **Review proposals**, inspect the validated Drafts, and select which ones to create.
+
+To test the workflow without sending captured material anywhere, click **Insert test response** and then **Review proposals**. Context Palette creates that example locally from the selected capture. If a multi-proposal AI response contains both valid and invalid proposals, valid proposals remain selectable and each rejected proposal is reported separately.
+
+The response must be plain JSON in the displayed format. Context Palette also accepts exactly one complete `json` Markdown fence because many AI tools add it automatically; surrounding commentary, multiple fences, and malformed envelopes remain invalid. Context Palette does not send data to an AI automatically, store an API key, accept shell commands, or create Trusted actions. Created proposals are saved in local actions and must still be tested and refined.
+
+The standard action catalogue and current AI eligibility are documented in `docs/ACTION_TYPES.md`. The first AI-enabled types are `copy_text` and `open_url`. Website proposals require a complete HTTP or HTTPS address and remain Drafts until reviewed and tested.
+
 For a URL built from selected or copied text, choose **Build URL — copy and open using selection/clipboard** and use a template such as:
 
 ```text
@@ -182,6 +198,16 @@ The `Company Reference Prefixes` sheet documents known Archive and ServiceNow pr
 - `data/palette.json`: ignored per-machine focus context, pins, and context slots.
 - `data/cheatsheets`: reviewed cheat sheets shared through Git.
 - `data/layouts`: configured layouts and captured snapshots.
+
+When Context Palette updates a JSON file, it writes and flushes a temporary sibling before replacing the destination. If a previous destination existed, it is preserved beside the file with `.bak` appended. Backup and temporary files are local and ignored by Git because they can contain private data.
+
+Developers and advanced users can validate all shared and local configuration, compile the source, and run every automated test with:
+
+```powershell
+.\check-context-palette.bat
+```
+
+The configuration report identifies the owning context, command item, or palette slot when an action reference is missing. The check is read-only.
 
 ## Safety boundaries
 

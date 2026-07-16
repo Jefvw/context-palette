@@ -69,3 +69,15 @@ Before handing off:
 2. Run `git diff --check`.
 3. Confirm runtime/personal files are not staged.
 4. Clearly separate automated verification from manual Windows UI verification.
+
+## Efficient Codex execution
+
+- Read only the documentation sections relevant to the current task.
+- Combine related edits into one focused patch whenever practical.
+- Combine independent repository checks and final verification commands.
+- Do not repeat a successful check unless later changes invalidate it.
+- Use targeted tests while editing, then run the required complete suite once.
+- Do not restart the GUI unless runtime behavior changed or the user requests it.
+- If a file-edit operation takes more than 10 seconds, report its elapsed time
+  and do not retry the identical edit unless it failed.
+- Distinguish Codex tool latency from measured Windows filesystem latency.

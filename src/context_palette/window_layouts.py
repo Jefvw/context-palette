@@ -10,6 +10,8 @@ import time
 from datetime import datetime, timezone
 import re
 
+from .persistence import atomic_write_json
+
 
 class WindowLayoutError(Exception):
     """Raised when a window layout cannot be loaded or applied."""
@@ -200,7 +202,7 @@ def capture_window_snapshot(
         "screen_count": len(monitors),
         "windows": windows,
     }
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    atomic_write_json(path, data)
     return path
 
 
@@ -297,7 +299,7 @@ def set_snapshot_launch_target(path: Path, window_index: int, target: str) -> No
     if not isinstance(windows, list) or not 0 <= window_index < len(windows):
         raise WindowLayoutError("Snapshot browser window was not found.")
     windows[window_index]["launch_target"] = clean_target
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    atomic_write_json(path, data)
 
 
 def _visible_windows() -> list[dict[str, object]]:

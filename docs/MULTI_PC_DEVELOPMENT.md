@@ -48,6 +48,64 @@ No open-source license has been selected yet. Keep the repository private, or ch
 
 The setup script creates `.venv`, copies safe local-data templates when needed, creates the snapshot directory, verifies Tkinter, and runs tests.
 
+## Python environments and dependencies across computers
+
+`.venv` is an isolated project environment, but it is not a portable Python installation. It contains machine-specific paths to the Python installation that created it. Do not copy, commit, or synchronize `.venv` between computers. Create it separately on every computer with `setup-context-palette.bat`.
+
+Git transfers source files and dependency declarations; it does not transfer packages installed inside `.venv`. Installing a library on one computer therefore does not make that library available on another computer after `git pull` unless the dependency is also recorded in `requirements.txt`.
+
+The project uses this contract:
+
+- `.venv`: ignored, disposable, and local to one computer.
+- `requirements.txt`: tracked in Git and shared by every computer.
+- `setup-context-palette.bat`: creates the local environment and installs everything declared in `requirements.txt`.
+- Python and Tcl/Tk: installed separately on each Windows computer and used as the base for its local environment.
+
+Context Palette currently has no third-party dependencies. `requirements.txt` is present as the shared dependency contract and contains comments only.
+
+### Adding a third-party library
+
+Do not add a dependency casually. First verify that it works on Windows without administrator rights, supports Python 3.12, is actively maintained, and materially improves the application. Record the rationale in the appropriate project documentation.
+
+After choosing a dependency:
+
+1. Install it into this project's environment, never into the global Python installation:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m pip install package-name
+   ```
+
+2. Add the reviewed package and an explicit version to `requirements.txt`, for example:
+
+   ```text
+   package-name==1.2.3
+   ```
+
+   Do not blindly commit the complete output of `pip freeze`; it can include incidental or machine-specific packages. Record the direct dependency deliberately, and include transitive pins only when reproducibility requires them.
+
+3. Run setup and the complete tests:
+
+   ```powershell
+   .\setup-context-palette.bat
+   .\.venv\Scripts\python.exe -m unittest discover tests
+   ```
+
+4. Commit `requirements.txt` together with the code, tests, and documentation that require the library.
+5. Push the commit.
+
+On another computer:
+
+```powershell
+git pull --ff-only
+.\setup-context-palette.bat
+```
+
+Setup installs the declared dependencies into that computer's own `.venv` and runs the tests. Run setup after any pull that changes `requirements.txt`.
+
+### Repairing or rebuilding an environment
+
+An environment is disposable. If `.venv` was copied from another computer, points to a missing Python executable, or behaves inconsistently, stop the application, remove or rename `.venv`, and run setup again. Local Context Palette data is stored under `data`, not inside `.venv`, so rebuilding the environment does not remove Inbox items, private actions, pins, or snapshots.
+
 ## Shared versus local data
 
 ### Shared through Git
@@ -128,7 +186,7 @@ Ask assistants to:
 
 ```text
 git pull
-setup-context-palette.bat  (first time only, or after environment loss)
+setup-context-palette.bat  (first time, after environment loss, or when requirements.txt changes)
 develop and test
 git status
 git add reviewed source/config only

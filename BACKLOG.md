@@ -2,7 +2,6 @@
 
 ## Now
 
-- Make JSON persistence atomic and recoverable before expanding authoring features.
 - Add a Windows launcher construction/close smoke test.
 - Extract secondary windows from `launcher.py` incrementally without changing their behaviour.
 - Define contexts as standalone records with identity, knowledge, capabilities, and optional activation.
@@ -18,6 +17,8 @@
 
 ## Done
 
+- Add a standard action catalogue, generated overview, type-specific AI guidance, fixed-website proposals, and safe single-fence JSON normalization.
+- Make application JSON persistence atomic and recoverable, with a read-only cross-file configuration check command.
 - Add a global JSON-configured quick-action surface with primary buttons and per-group right-click menus.
 - Simplify action rows to `Command → subject`, move metadata to row tooltips, and narrow the palette without hiding management buttons.
 - Add fast inline workspace transformations with selection-aware editing, automatic clipboard output, and one-step Undo.

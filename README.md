@@ -8,6 +8,8 @@ For cloning, setup, safe GitHub publishing, shared versus local data, and AI-ass
 
 For Power Automate Desktop and PowerToys integration, see `integrations\README.md`.
 
+For the standard action overview, portability notes, and current AI eligibility, see `docs\ACTION_TYPES.md`.
+
 Contexts can be configured outside the UI. See `docs\CONTEXT_CONFIGURATION.md` for shared/local JSON, preferred slots, and QTP-style recipes.
 
 The project is intentionally small at this stage. The current focus is to build the first local prototype without requiring administrator rights, installers, services, registry changes, AutoHotkey, or external services.
@@ -56,6 +58,8 @@ setup-context-palette.bat
 ```
 
 It creates the local environment and private runtime files from safe examples, verifies Tkinter, and runs the tests.
+
+The environment is isolated but machine-local: do not copy `.venv` between computers. Git does not transfer packages installed inside it. Shared third-party dependencies belong in the tracked `requirements.txt`; setup installs that declaration into each computer's own environment. Run setup again after pulling a change to `requirements.txt`. See `docs\MULTI_PC_DEVELOPMENT.md` for the complete add, commit, pull, and rebuild workflow.
 
 On this machine, Python 3.12 is installed under the user's profile. A nearby Codex project that already uses Tkinter was checked, and it uses Codex's bundled Python runtime as the base for its `.venv`.
 
@@ -131,7 +135,7 @@ During development, if old hidden instances get stuck, run:
 .\stop-context-palette.bat
 ```
 
-Then start Context Palette again.
+Then start Context Palette again. The stop command terminates this project's virtual-environment GUI and foreground diagnostic process trees without targeting unrelated Python applications or clones in other folders.
 
 You can optionally create a per-PC Desktop shortcut to `run-context-palette.bat`. Shortcut files are ignored by Git because their target paths are machine-specific. Use that shortcut, the batch file, or a taskbar pin to start Context Palette the first time.
 
@@ -361,13 +365,21 @@ docs\CHEATSHEET_FORMAT.md
 
 There are currently no third-party Python dependencies.
 
-The local environment currently does not include `pip`. This is acceptable for the first launcher prototype because it can use Python's standard library and Tkinter.
+`requirements.txt` is the tracked dependency declaration shared through Git. It currently contains no packages. Tkinter is supplied by the standard python.org Windows installation rather than installed with `pip`.
 
 ## Help
 
 Click `Help` in the main palette to open the complete searchable local guide. The source document is `docs\HELP.md` and can also be read directly in a text editor. Hover over a main button briefly to see its documented input, effect, and important limitation.
 
 ## Run tests
+
+Run the complete configuration, compilation, and automated test check:
+
+```powershell
+.\check-context-palette.bat
+```
+
+This command does not open the GUI or modify application data. It exits with an error when configuration or tests fail.
 
 Required:
 

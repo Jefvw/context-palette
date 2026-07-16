@@ -43,6 +43,15 @@ if errorlevel 1 (
     exit /b 1
 )
 
+if exist "requirements.txt" (
+    echo Installing project dependencies...
+    ".venv\Scripts\python.exe" -m pip install -r requirements.txt
+    if errorlevel 1 (
+        echo ERROR: Could not install project dependencies.
+        exit /b 1
+    )
+)
+
 echo Running tests...
 ".venv\Scripts\python.exe" -m unittest discover tests
 if errorlevel 1 (

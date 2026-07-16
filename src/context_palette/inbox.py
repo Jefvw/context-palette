@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
+from .persistence import atomic_write_json
+
 
 class InboxError(Exception):
     """Raised when an inbox item cannot be saved or loaded."""
@@ -50,8 +52,7 @@ def create_clipboard_item(
 def append_inbox_item(path: Path, item: InboxItem) -> None:
     data = _load_inbox_data(path)
     data["items"].append(_item_to_dict(item))
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    atomic_write_json(path, data)
 
 
 def update_inbox_item_state(path: Path, item_id: str, state: str) -> None:
@@ -66,7 +67,7 @@ def update_inbox_item_state(path: Path, item_id: str, state: str) -> None:
     if not changed:
         raise InboxError(f"Inbox item was not found: {item_id}")
 
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    atomic_write_json(path, data)
 
 
 def load_inbox_items(path: Path) -> list[InboxItem]:

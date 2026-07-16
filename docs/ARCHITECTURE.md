@@ -68,7 +68,7 @@ Presentation and application orchestration.
 - Connects platform-independent action execution to Windows-specific callbacks.
 - Ensures Tk operations stay on the Tk main thread.
 
-The main-window construction is divided into focused header, results/command-surface, shortcut, workspace, and footer builders. Secondary Help, Inbox, Draft, and Cheat Sheet windows still live in this module and are the next safe extraction boundary; this is documented in `TECHNICAL_REVIEW.md`.
+The main-window construction is divided into focused header, results/command-surface, shortcut, workspace, and footer builders. Inbox, Draft, and Cheat Sheet windows still live in this module and are the next safe extraction boundary; this is documented in `TECHNICAL_REVIEW.md`.
 
 The launcher does not implement action transformations or window matching directly. Those responsibilities live in specialized modules.
 
@@ -84,6 +84,22 @@ Important principles:
 - Pure transformations are separated from UI callbacks.
 - Platform effects are injected through callbacks where practical, enabling tests without opening applications.
 - Clipboard access during template expansion is lazy: actions without clipboard variables do not fail when the clipboard contains a non-text format.
+
+### `action_types.py`
+
+Defines the machine-readable catalogue for every supported action type: user label, family, description, required fields, input/output effects, portability, AI eligibility, and type-specific AI guidance. `actions.py` derives its supported-type set from this catalogue, and AI prompt generation consumes the same definitions.
+
+The catalogue renders `docs/ACTION_TYPES.md`; an automated test requires the user-readable overview to remain identical to the executable definitions.
+
+### `persistence.py`
+
+Owns JSON replacement for application-written data. It serializes to a temporary sibling file, flushes it to disk, preserves the previous destination as `<name>.bak`, and uses `os.replace` so readers see either the previous complete file or the new complete file. Temporary and backup files are ignored by Git because they can contain private runtime data.
+
+Actions, Inbox state, palette state, captured snapshots, and snapshot launch-target edits use this single writer.
+
+### `configuration_check.py`
+
+Provides a read-only project validation report and command-line exit status. It reuses the existing action, context, command-surface, Inbox, palette, cheat-sheet, and window-layout loaders, then verifies that context, command-surface, and palette action references resolve. `check-context-palette.bat` runs this validation before source compilation and the complete unit suite.
 
 ### `palette_state.py`
 
@@ -101,6 +117,14 @@ Loads and validates global quick-action groups and their compact items from shar
 ### `tooltips.py`
 
 Owns delayed tooltip behaviour for ordinary widgets and individual listbox rows. Keeping these presentation helpers outside `launcher.py` prevents the main application orchestrator from also owning reusable hover-window mechanics.
+
+### `style.py`
+
+Owns the shared native ttk theme, Segoe UI font policy, grey/teal/aqua palette, and hover/focus state maps. Classic Tk widget defaults are applied through the root option database. The module changes presentation only; widget construction, layout, geometry, and action behaviour remain in their existing owners.
+
+### `help_window.py`
+
+Owns construction and in-document search for the searchable Help window. `launcher.py` retains orchestration responsibility and opens this focused secondary view with the project Help path.
 
 ### `hotkeys.py`
 
@@ -144,6 +168,12 @@ Capture Inbox domain model and persistence.
 - Keeps captured material separate from actions until conversion.
 
 The Inbox creation UI supports guided `copy_text` and URL-builder Drafts. URL templates are validated through the same domain function used at execution, and the dialog keeps its action footer outside the expandable form so buttons remain visible at smaller window sizes.
+
+### `ai_guidance.py` and `ai_guidance_window.py`
+
+`ai_guidance.py` builds a user-previewable request from an Inbox capture, a constrained prompt variation, and catalogue-owned type guidance. It parses plain versioned JSON or exactly one complete JSON Markdown fence without surrounding commentary. It accepts only the variation's catalogue-enabled action types, rejects unknown fields, and creates actions through type-specific Draft constructors. Envelope errors reject the response; proposal errors are reported individually so valid siblings remain reviewable. A local example response supports evaluation without contacting an AI.
+
+`ai_guidance_window.py` owns the attended clipboard handoff: choose guidance, review and copy the request, paste an AI response, validate and select proposals, and explicitly create local Draft actions. It also exposes the local test-response path and per-proposal validation status. Selected proposals are batch-validated before the local action file is written. The window does not contact an AI provider, store credentials, or promote actions to Trusted.
 
 ### `cheatsheets.py`
 
@@ -374,6 +404,7 @@ Detailed help is stored once in `docs/HELP.md` and displayed by the in-app searc
 - Do not execute arbitrary shell command strings.
 - Keep API keys out of version-controlled files.
 - Require explicit user action for launches, window restoration, trust promotion, and browser URL metadata.
+- Treat captured text and AI responses as untrusted data. AI requests are previewed and copied manually; responses must pass the versioned proposal schema and existing action validation before selected proposals become local Drafts.
 
 ## Testing strategy
 
@@ -391,6 +422,12 @@ Run:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover tests
+```
+
+For the complete configuration, compilation, and test check, run:
+
+```powershell
+.\check-context-palette.bat
 ```
 
 ## Extension rules

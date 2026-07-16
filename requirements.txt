@@ -1,0 +1,2 @@
+# Context Palette currently uses only the Python standard library and Tkinter.
+# Add reviewed, portable third-party runtime dependencies here with pinned versions.

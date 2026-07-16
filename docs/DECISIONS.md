@@ -2,6 +2,36 @@
 
 Record durable product and technical decisions here.
 
+## 2026-07-15 - Use one action-type catalogue for validation, documentation, and AI guidance
+
+**Decision:** Define every supported action type in one catalogue containing its user label, family, required fields, input/output effects, portability, AI eligibility, and type-specific prompt guidance. Derive runtime supported types and the generated action overview from that catalogue. Enable AI proposals for `copy_text` and validated fixed `open_url` Drafts.
+
+**Reason:** Independent lists in validation, documentation, editors, and AI prompts would drift as the application adapts. A small declarative catalogue makes later additions explicit and testable without introducing a framework.
+
+**Alternatives considered:** A complete separate prompt per type would duplicate shared safety and schema instructions. Enabling every type immediately would let AI invent machine paths, executable targets, or snapshot configuration before type-specific review flows exist.
+
+**Consequences:** The catalogue is the supported-type source of truth and its generated Markdown overview is test-locked. AI requests combine shared safety text with catalogue guidance. Exactly one complete JSON Markdown fence is normalized, while commentary and multiple blocks remain invalid. Remaining types are explicitly not yet AI-proposable.
+
+## 2026-07-15 - Centralize recoverable JSON writes and configuration checks
+
+**Decision:** Route application JSON writes through one standard-library helper that flushes a temporary sibling, preserves the prior file as `.bak`, and atomically replaces the destination. Add a read-only configuration checker that reuses domain loaders and validates cross-file action references before compilation and tests.
+
+**Reason:** Interrupted direct writes could corrupt complete local data files, while configuration mistakes were discovered only when opening affected UI paths. A shared writer and one repeatable check make user and AI-assisted adaptation safer.
+
+**Alternatives considered:** A database or third-party persistence library would add portability and migration costs. Per-module recovery logic would duplicate subtle file-handling behavior. Reimplementing schemas in the checker would risk disagreement with runtime validation.
+
+**Consequences:** Existing JSON formats and public domain interfaces remain unchanged. Previous file contents are retained in ignored sibling backups; successful later writes replace the prior backup. The checker validates structure and references but does not execute actions or prove external Windows targets are available.
+
+## 2026-07-14 - Modernize styling with native ttk
+
+**Decision:** Centralize the grey, teal, and aqua palette, Segoe UI fonts, widget styling, and interaction-state maps in `style.py`. Use Python's bundled Tk/ttk `clam` theme as the styling base and retain the existing widget tree and geometry.
+
+**Reason:** A single native style module improves visual consistency and maintainability while preserving portable, administrator-free setup. It also avoids adding and packaging a third-party theme solely for appearance.
+
+**Alternatives considered:** Sun Valley, Azure, and ttkbootstrap provide richer Windows-like visuals, but each adds an external dependency and ongoing compatibility surface. Custom widget classes and layout changes were unnecessary for the requested visual refresh.
+
+**Consequences:** Buttons, entries, group headings, quick-action labels, selections, and focus states share one palette. Native ttk cannot guarantee identical rounded corners across Windows versions, but the application remains standard-library-only and its layout and public behavior are unchanged.
+
 ## 2026-07-13 - Keep a bare first-launch workspace empty
 
 **Decision:** Do not replay a synthetic `show` request when the first Context Palette process starts without an explicit context or search parameter.

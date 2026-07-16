@@ -14,6 +14,7 @@ from context_palette.actions import (
     Action,
     ActionError,
     append_action,
+    append_actions,
     build_url,
     draft_build_url_action,
     draft_copy_text_action,
@@ -428,6 +429,36 @@ class ActionTests(unittest.TestCase):
 
             with self.assertRaises(ActionError):
                 append_action(path, Action("SAME", "Two", "General", "copy_text", "two"))
+
+    def test_append_actions_validates_complete_batch_before_writing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "actions.json"
+            append_action(path, Action("existing", "Existing", "General", "copy_text", "one"))
+
+            with self.assertRaises(ActionError):
+                append_actions(
+                    path,
+                    [
+                        Action("new", "New", "General", "copy_text", "two"),
+                        Action("EXISTING", "Duplicate", "General", "copy_text", "three"),
+                    ],
+                )
+
+            self.assertEqual([action.id for action in load_actions(path)], ["existing"])
+
+    def test_append_actions_writes_all_valid_actions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "actions.json"
+
+            append_actions(
+                path,
+                [
+                    Action("one", "One", "General", "copy_text", "first"),
+                    Action("two", "Two", "General", "copy_text", "second"),
+                ],
+            )
+
+            self.assertEqual([action.id for action in load_actions(path)], ["one", "two"])
 
     def test_draft_copy_text_action_accepts_technology_and_task(self):
         action = draft_copy_text_action(

@@ -12,24 +12,11 @@ from urllib.parse import quote, urlparse
 from uuid import uuid4
 import webbrowser
 
+from .persistence import atomic_write_json
+from .action_types import SUPPORTED_ACTION_TYPES
+
 
 VISIBLE_STATES = {"Draft", "Trusted"}
-SUPPORTED_ACTION_TYPES = {
-    "copy_text",
-    "open_url",
-    "open_file",
-    "open_folder",
-    "launch_app",
-    "build_url_copy",
-    "build_url_open",
-    "build_url_selection_open",
-    "transform_list_csv",
-    "workspace_template",
-    "window_layout",
-    "restore_window_snapshot",
-}
-
-
 class ActionError(Exception):
     """Raised when an action cannot be loaded or executed safely."""
 
@@ -109,18 +96,27 @@ def load_combined_actions(shared_path: Path, local_path: Path) -> tuple[list[Act
 
 
 def append_action(path: Path, action: Action) -> None:
+    append_actions(path, [action])
+
+
+def append_actions(path: Path, actions: Iterable[Action]) -> None:
+    new_actions = list(actions)
+    if not new_actions:
+        return
     data = _load_action_data(path)
-    action_key = action.id.casefold()
     existing_ids = {
         item.get("id").casefold()
         for item in data["actions"]
         if isinstance(item, dict) and isinstance(item.get("id"), str)
     }
-    if action_key in existing_ids:
-        raise ActionError(f"Action ID already exists: {action.id}")
-    data["actions"].append(_action_to_dict(action))
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    batch_ids: set[str] = set()
+    for action in new_actions:
+        action_key = action.id.casefold()
+        if action_key in existing_ids or action_key in batch_ids:
+            raise ActionError(f"Action ID already exists: {action.id}")
+        batch_ids.add(action_key)
+    data["actions"].extend(_action_to_dict(action) for action in new_actions)
+    atomic_write_json(path, data)
 
 
 def update_action(path: Path, updated_action: Action) -> None:
@@ -135,7 +131,7 @@ def update_action(path: Path, updated_action: Action) -> None:
     if not changed:
         raise ActionError(f"Action was not found: {updated_action.id}")
 
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    atomic_write_json(path, data)
 
 
 def draft_copy_text_action(
@@ -159,6 +155,34 @@ def draft_copy_text_action(
         title=clean_title,
         context=clean_context,
         type="copy_text",
+        value=clean_value,
+        state="Draft",
+        technology=technology.strip(),
+        task=task.strip(),
+    )
+
+
+def draft_open_url_action(
+    *,
+    title: str,
+    context: str,
+    value: str,
+    technology: str = "",
+    task: str = "",
+) -> Action:
+    clean_title = title.strip()
+    clean_context = context.strip() or "General"
+    clean_value = value.strip()
+    if not clean_title:
+        raise ActionError("Action title cannot be empty.")
+    parsed = urlparse(clean_value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ActionError("Action URL must be a complete http:// or https:// address.")
+    return Action(
+        id=f"draft-{uuid4().hex[:12]}",
+        title=clean_title,
+        context=clean_context,
+        type="open_url",
         value=clean_value,
         state="Draft",
         technology=technology.strip(),

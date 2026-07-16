@@ -11,6 +11,7 @@ from .actions import (
     Action,
     ActionError,
     append_action,
+    append_actions,
     build_url,
     draft_build_url_action,
     draft_copy_text_action,
@@ -24,6 +25,7 @@ from .actions import (
     trusted_action,
     update_action,
 )
+from .ai_guidance_window import AIGuidanceWindow
 from .cheatsheets import (
     CheatSheet,
     CheatSheetError,
@@ -40,10 +42,12 @@ from .command_surface import (
     load_combined_command_groups,
 )
 from .hotkeys import GlobalHotkey, cursor_location, send_copy_shortcut, window_position_near_cursor
+from .help_window import HelpWindow
 from .contexts import ContextDefinition, ContextError, load_combined_contexts
 from .inbox import InboxError, InboxItem, append_inbox_item, create_clipboard_item, load_inbox_items
 from .inbox import update_inbox_item_state
 from .single_instance import SingleInstanceServer
+from .style import COLORS, configure_theme
 from .tooltips import ListboxItemTooltip, WidgetTooltip
 from .palette_state import (
     PaletteState,
@@ -160,12 +164,7 @@ class LauncherApp:
         self.root.bind("<FocusOut>", self._schedule_hide_when_inactive)
         self.root.bind("<FocusIn>", self._cancel_scheduled_hide)
 
-        style = ttk.Style(self.root)
-        style.configure("Heading.TLabel", font=("Segoe UI", 11, "bold"))
-        style.configure("Muted.TLabel", foreground="#5f6368")
-        style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"), padding=(14, 6))
-        style.configure("Pin.TLabel", background="#e8f0fe", foreground="#174ea6", padding=(7, 3))
-        style.configure("Context.TLabel", background="#e6f4ea", foreground="#137333", padding=(7, 3))
+        configure_theme(self.root)
 
         outer = ttk.Frame(self.root, padding=14)
         outer.pack(fill=tk.BOTH, expand=True)
@@ -722,6 +721,7 @@ class LauncherApp:
                 control = ttk.Label(
                     area,
                     text=item.label,
+                    style="Surface.TLabel",
                     anchor=tk.CENTER,
                     relief=tk.SOLID,
                     padding=(6, 5),
@@ -882,9 +882,17 @@ class LauncherApp:
             prefix = f"{slot}. " if slot is not None else "   "
             self.results.insert(tk.END, f"{prefix}{action.compact_display_text}")
             if slot is not None and 1 <= slot <= 5:
-                self.results.itemconfigure(index, background="#e8f0fe", foreground="#174ea6")
+                self.results.itemconfigure(
+                    index,
+                    background=COLORS["row_light"],
+                    foreground=COLORS["text"],
+                )
             elif slot is not None and 6 <= slot <= 9:
-                self.results.itemconfigure(index, background="#e6f4ea", foreground="#137333")
+                self.results.itemconfigure(
+                    index,
+                    background=COLORS["row_aqua"],
+                    foreground=COLORS["text"],
+                )
         if self.displayed_actions:
             self.results.selection_set(0)
             self.results.activate(0)
@@ -1306,73 +1314,6 @@ class LauncherApp:
         return focused_widget is not self.search_entry
 
 
-class HelpWindow:
-    def __init__(self, parent: tk.Tk, help_path: Path) -> None:
-        self.window = tk.Toplevel(parent)
-        self.window.title("Context Palette Help")
-        self.window.geometry("760x680")
-        self.window.minsize(520, 420)
-        self.search_var = tk.StringVar()
-
-        outer = ttk.Frame(self.window, padding=12)
-        outer.pack(fill=tk.BOTH, expand=True)
-
-        header = ttk.Frame(outer)
-        header.pack(fill=tk.X, pady=(0, 8))
-        ttk.Label(header, text="Context Palette Help", style="Heading.TLabel").pack(side=tk.LEFT)
-        search = ttk.Entry(header, textvariable=self.search_var, width=28)
-        search.pack(side=tk.RIGHT, padx=(6, 0))
-        search.bind("<Return>", lambda _event: self._find_next())
-        ttk.Button(header, text="Find next", command=self._find_next).pack(side=tk.RIGHT)
-
-        content_frame = ttk.Frame(outer)
-        content_frame.pack(fill=tk.BOTH, expand=True)
-        scrollbar = ttk.Scrollbar(content_frame, orient=tk.VERTICAL)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.content = tk.Text(
-            content_frame,
-            wrap=tk.WORD,
-            font=("Segoe UI", 10),
-            padx=10,
-            pady=8,
-            yscrollcommand=scrollbar.set,
-        )
-        self.content.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.configure(command=self.content.yview)
-        self.content.tag_configure("found", background="#fff2a8")
-
-        try:
-            text = help_path.read_text(encoding="utf-8")
-        except OSError as exc:
-            text = f"Help could not be loaded from:\n{help_path}\n\n{exc}"
-        self.content.insert("1.0", text)
-        self.content.configure(state=tk.DISABLED)
-
-        footer = ttk.Frame(outer)
-        footer.pack(fill=tk.X, pady=(8, 0))
-        ttk.Label(footer, text=str(help_path), style="Muted.TLabel").pack(side=tk.LEFT)
-        ttk.Button(footer, text="Close", command=self.window.destroy).pack(side=tk.RIGHT)
-        self.window.transient(parent)
-        self.window.lift()
-        search.focus_set()
-
-    def _find_next(self) -> None:
-        query = self.search_var.get().strip()
-        if not query:
-            return
-        self.content.tag_remove("found", "1.0", tk.END)
-        start = self.content.index(f"{self.content.index(tk.INSERT)} +1c")
-        position = self.content.search(query, start, stopindex=tk.END, nocase=True)
-        if not position:
-            position = self.content.search(query, "1.0", stopindex=tk.END, nocase=True)
-        if not position:
-            return
-        end = f"{position}+{len(query)}c"
-        self.content.tag_add("found", position, end)
-        self.content.see(position)
-        self.content.mark_set(tk.INSERT, end)
-
-
 class InboxWindow:
     def __init__(
         self,
@@ -1413,6 +1354,9 @@ class InboxWindow:
         controls.pack(fill=tk.X, pady=(8, 0))
         ttk.Button(controls, text="Convert to Draft Action", command=self._convert_selected).pack(
             side=tk.LEFT
+        )
+        ttk.Button(controls, text="Ask AI", command=self._ask_ai_for_selected).pack(
+            side=tk.LEFT, padx=(6, 0)
         )
         ttk.Button(controls, text="Close", command=self.window.destroy).pack(side=tk.RIGHT)
 
@@ -1467,6 +1411,34 @@ class InboxWindow:
             item.suggested_context or self.focus_context,
             self._save_created_action,
         )
+
+    def _ask_ai_for_selected(self) -> None:
+        item = self._selected_item()
+        if item is None:
+            return
+        contexts = {action.context for action in self.actions if action.context}
+        contexts.update((self.focus_context, item.suggested_context, "General"))
+        AIGuidanceWindow(
+            self.window,
+            item,
+            contexts,
+            self._save_ai_actions,
+        )
+
+    def _save_ai_actions(self, item: InboxItem, actions: list[Action]) -> None:
+        try:
+            append_actions(self.actions_path, actions)
+            update_inbox_item_state(self.inbox_path, item.id, "Draft")
+            self.items = load_inbox_items(self.inbox_path)
+            self._load_items()
+            self.on_change()
+            messagebox.showinfo(
+                "Context Palette",
+                f"Created {len(actions)} local Draft action(s).",
+                parent=self.window,
+            )
+        except (ActionError, InboxError) as exc:
+            messagebox.showerror("Context Palette", str(exc), parent=self.window)
 
     def _save_created_action(self, item: InboxItem, action: Action) -> None:
         try:

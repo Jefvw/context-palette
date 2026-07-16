@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from .actions import Action, ActionError
+from .persistence import atomic_write_json
 
 
 @dataclass(frozen=True)
@@ -55,7 +56,7 @@ def save_palette_state(path: Path, state: PaletteState) -> None:
             context: list(ids[:4]) for context, ids in (state.context_slots or {}).items()
         },
     }
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    atomic_write_json(path, data)
 
 
 def action_slots(actions: list[Action], state: PaletteState) -> dict[int, Action]:
