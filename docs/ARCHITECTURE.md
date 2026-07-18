@@ -14,7 +14,7 @@ Use related documents for other purposes:
 
 Context Palette is optimized for:
 
-1. Fast resident use through `Ctrl+Alt+P`.
+1. Fast resident use through `F9`, with `Ctrl+Alt+P` as a fallback.
 2. Portable operation from a user-writable Windows folder.
 3. No administrator requirement, installer, service, registry modification, or mandatory AutoHotkey.
 4. Inspectable local JSON and Markdown data.
@@ -35,9 +35,9 @@ pythonw.exe -> context_palette.main
         |
         `-- create Tk root and LauncherApp
                 |
-                +-- load actions, palette state, Inbox, and cheat sheets
+                +-- load actions, contexts, command surface, palette state, Inbox, and cheat sheets
                 +-- start localhost single-instance listener
-                +-- register Ctrl+Alt+P on a background message thread
+                +-- register F9 and Ctrl+Alt+P on a background message thread
                 `-- run the Tk main loop
 ```
 
@@ -100,6 +100,10 @@ Actions, Inbox state, palette state, captured snapshots, and snapshot launch-tar
 ### `configuration_check.py`
 
 Provides a read-only project validation report and command-line exit status. It reuses the existing action, context, command-surface, Inbox, palette, cheat-sheet, and window-layout loaders, then verifies that context, command-surface, and palette action references resolve. `check-context-palette.bat` runs this validation before source compilation and the complete unit suite.
+
+### `configuration_window.py` and `configuration_data.py`
+
+Provide the guided personal-configuration workspace and its persistence operations. Action creation starts from the executable built-in action catalogue, which includes a concrete example for every type. All personal action types are editable. Personal contexts can assign slots 6–9, and personal right-side buttons can reference existing actions without exposing technical IDs. Shared records are visible but read-only. Writes use the same atomic JSON replacement path as the rest of the application.
 
 ### `palette_state.py`
 
@@ -235,9 +239,11 @@ Search indexes title, technology, task, context, type, value, and maturity state
 
 This separation allows visual simplification without losing retrieval power.
 
-The main window defaults to `760x580` with a `680x450` minimum. A horizontal paned area gives the left half to command-first search results and the right half to the global quick-action surface. Management buttons use a five-column, two-row grid so every function remains visible.
+The main window defaults to `780x600` with a `700x480` minimum. A responsive horizontal paned area gives the left half to command-first search results and the right half to the global quick-action surface. Both panes expose headings and live counts. Management buttons use a compact five-column, two-row grid so every function remains visible.
 
 Each group renders as a subarea containing multiple compact labels. Left-click opens the owning command-surface JSON plus the corresponding shared/local action JSON. Right-click exposes the item's action-ID list through the same `_execute_action` path used by selected and numbered actions.
+
+Quick-action labels participate in keyboard focus. Enter or Space executes the first available primary action. Empty search, Inbox, cheat-sheet, and command-surface states contain recovery guidance rather than blank widgets. Reloads use a short busy cursor/status state; local loading is intentionally not animated.
 
 ## Supported action types
 
@@ -381,10 +387,17 @@ Tkinter widgets are only accessed from the main thread.
 
 - The hotkey message loop runs in a daemon thread and writes a lightweight queue message.
 - The single-instance listener also signals through a queue.
+- Explicit window layout and snapshot restores run on one daemon worker because missing-window matching may take seconds. Results return through a queue and are presented by the Tk main thread.
 - The Tk main loop polls requests every 100 ms.
 - No database, network service, web frontend, or heavy UI framework is initialized.
 
-Window layout restore may wait briefly for launched windows to appear. This occurs only when the user explicitly executes a layout or restore action.
+Configuration reloads are skipped when active file existence, modification time, and size are unchanged. Typed search changes are coalesced over 40 ms before recalculating slots and rows.
+
+Window layout restore may wait briefly for launched windows to appear, but this no longer blocks Tk rendering or input. Only one window action runs at a time.
+
+## Diagnostics
+
+The standard-library logging system writes bounded local diagnostics to ignored `data/context-palette.log`. The file rotates at 512 KB and keeps two backups. Logging setup failure does not prevent application startup. Clipboard and Input / Output contents are not written deliberately.
 
 ## Tooltips and Help
 
@@ -434,13 +447,13 @@ For the complete configuration, compilation, and test check, run:
 
 When adding an action type:
 
-1. Add it to `SUPPORTED_ACTION_TYPES`.
-2. Validate every new persisted field.
+1. Add one definition to the catalogue in `action_types.py`; `SUPPORTED_ACTION_TYPES` is derived from it.
+2. Add type-specific parsing, validation, execution, and Draft creation as required.
 3. Keep pure transformation logic separate from UI/platform effects.
 4. Inject external behavior through a callback where practical.
-5. Add a communication-line explanation.
-6. Add automated tests or a documented manual test.
-7. Update Help, Architecture, MVP/Backlog, and Decisions as appropriate.
+5. Regenerate `docs/ACTION_TYPES.md` through the catalogue-owned renderer.
+6. Add automated tests and any required manual Windows check.
+7. Update Help, Architecture, Changelog, MVP/Backlog, and Decisions as appropriate.
 
 When adding context behavior:
 
@@ -452,11 +465,11 @@ When adding context behavior:
 
 ## Known architectural next steps
 
-- Standalone structured context records.
-- Supporting-context composition and weighted ranking.
-- Type-specific action editors.
-- Safe linear action sequences.
-- Clipboard preservation/restoration transactions.
-- Snapshot selection and launch-target editor.
-- Optional application-aware context suggestions.
-- Rich HTML and image actions.
+- Extract secondary Inbox, Draft, sheet, and snapshot views from `launcher.py` without changing behavior.
+- Add supporting-context composition and weighted ranking.
+- Design safe linear action sequences and clipboard transactions as explicit, previewable models.
+- Improve snapshot selection and launch-target editing.
+- Consider optional application-aware context suggestions that never switch focus silently.
+- Add rich HTML and image actions only with explicit clipboard semantics.
+
+These are proposals, not implemented capabilities. See [Roadmap](ROADMAP.md).

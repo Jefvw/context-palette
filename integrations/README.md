@@ -2,6 +2,8 @@
 
 Context Palette exposes a small, safe command-line surface for Power Automate Desktop and PowerToys. It only shows and filters the palette; it cannot execute arbitrary commands or silently run an action.
 
+This is the project’s only supported external integration API. The accepted fields and security boundary are also described in [Architecture](../docs/ARCHITECTURE.md).
+
 ## Stable commands
 
 From the repository root:
@@ -13,7 +15,7 @@ From the repository root:
 .\integrations\Invoke-ContextPalette.ps1 -Context "Database" -Search "SQL template"
 ```
 
-The first call starts the resident app. Wrapper calls send a structured request over localhost to that same instance. Context matching is case-insensitive. An unknown context shows the palette and reports a status message without changing context.
+The first call starts the resident app. Wrapper calls send a size-limited structured request over localhost to that same instance. The protocol accepts only `command`, `context`, and `search` string fields; the wrapper exposes the supported show/context/search subset. Context matching is case-insensitive. An unknown context shows the palette and reports a status message without changing context.
 
 For automation tools that work better with PowerShell, use:
 

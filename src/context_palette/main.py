@@ -7,6 +7,7 @@ import sys
 import zlib
 
 from .launcher import run
+from .diagnostics import configure_logging
 from .single_instance import notify_existing_instance
 
 
@@ -51,6 +52,7 @@ def initial_launcher_request(request: dict[str, str]) -> dict[str, str] | None:
 def main(arguments: list[str] | None = None) -> None:
     root = project_root()
     os.environ.setdefault("PROJECT_ROOT", str(root))
+    configure_logging(root / "data" / "context-palette.log")
     port = project_port(root)
     request = integration_request(sys.argv[1:] if arguments is None else arguments)
     if notify_existing_instance(port, request):

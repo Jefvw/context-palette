@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 import ctypes
+import logging
 import queue
+import threading
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 from typing import Callable
@@ -41,6 +43,7 @@ from .command_surface import (
     command_configuration_paths,
     load_combined_command_groups,
 )
+from .configuration_window import ConfigurationWindow
 from .hotkeys import GlobalHotkey, cursor_location, send_copy_shortcut, window_position_near_cursor
 from .help_window import HelpWindow
 from .contexts import ContextDefinition, ContextError, load_combined_contexts
@@ -66,6 +69,9 @@ from .window_layouts import (
     restore_window_snapshot,
     set_snapshot_launch_target,
 )
+
+LOGGER = logging.getLogger("context_palette.launcher")
+LOGGER.addHandler(logging.NullHandler())
 
 
 def suggest_url_template(value: str) -> str:
@@ -132,6 +138,7 @@ class LauncherApp:
         self.slot_actions: dict[int, Action] = {}
         self.palette_state = PaletteState()
         self.show_requests: queue.Queue[dict[str, str]] = queue.Queue()
+        self.window_action_results: queue.Queue[tuple[bool, str]] = queue.Queue()
         self.instance_server = SingleInstanceServer(self.show_requests.put, instance_port)
         self.hotkey = GlobalHotkey(self._queue_hotkey_request)
         self.captured_selection: str | None = None
@@ -139,12 +146,17 @@ class LauncherApp:
         self.hotkey_available = False
         self.hide_after_id: str | None = None
         self.search_entry: ttk.Entry | None = None
+        self.search_refresh_after_id: str | None = None
+        self.window_action_in_progress = False
+        self.configuration_signature_cache: tuple[tuple[str, int, int], ...] = ()
         self.search_var = tk.StringVar()
         self.context_var = tk.StringVar(value="General")
+        self.results_count_var = tk.StringVar(value="0 actions")
+        self.surface_count_var = tk.StringVar(value="0 buttons")
         self.widget_tooltips: list[WidgetTooltip] = []
         self.action_info_full = "Select an action to see what it reads and what it will do."
         self.status_var = tk.StringVar(value="Ready")
-        self.search_var.trace_add("write", lambda *_args: self._refresh_results())
+        self.search_var.trace_add("write", lambda *_args: self._schedule_refresh_results())
 
         self._build_ui()
         self._load_actions()
@@ -152,6 +164,7 @@ class LauncherApp:
         self._load_contexts()
         self._load_palette_state()
         self._refresh_results()
+        self.configuration_signature_cache = self._configuration_signature()
         if not self.instance_server.start():
             self.root.after(0, self.root.destroy)
             return
@@ -161,6 +174,7 @@ class LauncherApp:
             self.status_var.set(f"Ready. {shortcuts} shows Context Palette.")
         else:
             self.status_var.set("F9 and Ctrl+Alt+P are unavailable. Auto-hide is disabled.")
+            LOGGER.warning("Global hotkeys unavailable; automatic hiding is disabled")
         if initial_request:
             self.show_requests.put(initial_request)
         self._poll_show_requests()
@@ -168,15 +182,15 @@ class LauncherApp:
 
     def _build_ui(self) -> None:
         self.root.title("Context Palette")
-        self.root.geometry("760x580")
-        self.root.minsize(680, 450)
+        self.root.geometry("780x600")
+        self.root.minsize(700, 480)
         self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
         self.root.bind("<FocusOut>", self._schedule_hide_when_inactive)
         self.root.bind("<FocusIn>", self._cancel_scheduled_hide)
 
         configure_theme(self.root)
 
-        outer = ttk.Frame(self.root, padding=14)
+        outer = ttk.Frame(self.root, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
 
         self._build_header(outer)
@@ -188,7 +202,7 @@ class LauncherApp:
     def _build_header(self, outer: ttk.Frame) -> None:
 
         context_panel = ttk.Frame(outer)
-        context_panel.pack(fill=tk.X, pady=(0, 7))
+        context_panel.pack(fill=tk.X, pady=(0, 8))
         focus_label = ttk.Label(context_panel, text="Focus", style="Heading.TLabel")
         focus_label.pack(side=tk.LEFT)
         self._tooltip(focus_label, "Choose what you are working on. This changes context slots 6–9.")
@@ -199,37 +213,54 @@ class LauncherApp:
             width=36,
             font=("Segoe UI", 10),
         )
-        self.context_picker.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(12, 6), ipady=2)
+        self.context_picker.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(10, 6))
         self.context_picker.bind("<<ComboboxSelected>>", lambda _event: self._change_focus_context())
         context_help = ttk.Button(context_panel, text="?", width=3, command=self._show_help)
         context_help.pack(side=tk.RIGHT)
+        configure_button = ttk.Button(
+            context_panel,
+            text="Configure…",
+            command=self._show_configuration,
+            style="Compact.TButton",
+        )
+        configure_button.pack(side=tk.RIGHT, padx=(0, 6))
+        self._tooltip(
+            configure_button,
+            "Create personal actions from built-in types and configure contexts and right-side buttons.",
+        )
         self._tooltip(
             context_help,
             "Focus changes slots 6–9. It does not limit global search. Open Help for context configuration.",
         )
 
         search_row = ttk.Frame(outer)
-        search_row.pack(fill=tk.X, pady=(0, 7))
-        find_label = ttk.Label(search_row, text="Find", style="Heading.TLabel")
+        search_row.pack(fill=tk.X, pady=(0, 8))
+        find_label = ttk.Label(search_row, text="Find action", style="Heading.TLabel")
         find_label.pack(side=tk.LEFT)
         self._tooltip(find_label, "Type any technology, task, context, action name, type, or content.")
 
         search = ttk.Entry(search_row, textvariable=self.search_var, font=("Segoe UI", 11))
         self.search_entry = search
-        search.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(15, 6), ipady=3)
+        search.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(10, 6))
         search.focus_set()
         search.bind("<KeyPress>", self._handle_keypress)
         search.bind("<Return>", lambda _event: self._execute_selected())
 
         run_button = ttk.Button(
             search_row,
-            text="Run selected",
+            text="Run",
             command=self._execute_selected,
             style="Accent.TButton",
         )
         run_button.pack(side=tk.LEFT, padx=(8, 0))
         self._tooltip(run_button, "Execute the highlighted action. Its input and effect appear in Action info below.")
-        search_help = ttk.Button(search_row, text="?", width=3, command=self._show_help)
+        search_help = ttk.Button(
+            search_row,
+            text="?",
+            width=3,
+            command=self._show_help,
+            style="Compact.TButton",
+        )
         search_help.pack(side=tk.LEFT, padx=(6, 0))
         self._tooltip(
             search_help,
@@ -242,17 +273,29 @@ class LauncherApp:
         results_area.pack(fill=tk.BOTH, expand=True)
         results_frame = ttk.Frame(results_area)
         results_area.add(results_frame, weight=1)
-        scrollbar = ttk.Scrollbar(results_frame, orient=tk.VERTICAL)
+        results_header = ttk.Frame(results_frame)
+        results_header.pack(fill=tk.X, pady=(0, 5))
+        ttk.Label(results_header, text="Actions", style="PaneHeader.TLabel").pack(side=tk.LEFT)
+        ttk.Label(
+            results_header,
+            textvariable=self.results_count_var,
+            style="Muted.TLabel",
+        ).pack(side=tk.RIGHT)
+        results_body = ttk.Frame(results_frame)
+        results_body.pack(fill=tk.BOTH, expand=True)
+        scrollbar = ttk.Scrollbar(results_body, orient=tk.VERTICAL)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.results = tk.Listbox(
-            results_frame,
+            results_body,
             activestyle="dotbox",
             font=("Segoe UI", 10),
             selectmode=tk.BROWSE,
             yscrollcommand=scrollbar.set,
             borderwidth=1,
             relief=tk.SOLID,
-            highlightthickness=0,
+            highlightthickness=1,
+            highlightcolor=COLORS["focus"],
+            highlightbackground=COLORS["border"],
         )
         self.results.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.configure(command=self.results.yview)
@@ -264,6 +307,16 @@ class LauncherApp:
 
         self.command_surface_panel = ttk.Frame(results_area, padding=(8, 0, 0, 0))
         results_area.add(self.command_surface_panel, weight=1)
+        surface_header = ttk.Frame(self.command_surface_panel)
+        surface_header.pack(fill=tk.X, pady=(0, 5))
+        ttk.Label(surface_header, text="Quick actions", style="PaneHeader.TLabel").pack(
+            side=tk.LEFT
+        )
+        ttk.Label(
+            surface_header,
+            textvariable=self.surface_count_var,
+            style="Muted.TLabel",
+        ).pack(side=tk.RIGHT)
         surface_body = ttk.Frame(self.command_surface_panel)
         surface_body.pack(fill=tk.BOTH, expand=True)
         surface_scrollbar = ttk.Scrollbar(surface_body, orient=tk.VERTICAL)
@@ -298,14 +351,31 @@ class LauncherApp:
         self.root.bind("<KeyPress>", self._handle_keypress)
         self.root.bind("<Escape>", lambda _event: self.hide_window())
         self.root.bind("<Control-l>", lambda _event: self.focus_search())
+        self.root.bind("<Control-k>", lambda _event: self.focus_search())
         self.root.bind("<Control-i>", lambda _event: self._capture_clipboard())
+        self.root.bind("<Control-comma>", lambda _event: self._show_configuration())
+        self.root.bind("<F1>", lambda _event: self._show_help())
 
     def _build_workspace(self, outer: ttk.Frame) -> None:
 
         self.workspace_panel = ttk.Frame(outer)
+        workspace_header = ttk.Frame(self.workspace_panel)
+        workspace_header.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(
+            workspace_header,
+            text="Input / Output",
+            style="PaneHeader.TLabel",
+        ).pack(side=tk.LEFT)
+        ttk.Label(
+            workspace_header,
+            text="Selection, clipboard, and transformation workspace",
+            style="Muted.TLabel",
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        workspace_body = ttk.Frame(self.workspace_panel)
+        workspace_body.pack(fill=tk.X)
         self.workspace = tk.Text(
-            self.workspace_panel,
-            height=5,
+            workspace_body,
+            height=4,
             wrap=tk.WORD,
             undo=True,
             font=("Consolas", 10),
@@ -350,10 +420,11 @@ class LauncherApp:
         )
         self.workspace_menu.add_cascade(label="Transform", menu=self.workspace_transform_menu)
         self.workspace_transform_button = ttk.Button(
-            self.workspace_panel,
+            workspace_body,
             text="⋮",
             width=3,
             command=self._show_workspace_transform_button_menu,
+            style="Compact.TButton",
         )
         self.workspace_transform_button.pack(side=tk.RIGHT, anchor=tk.N, padx=(5, 0))
         self._tooltip(
@@ -364,7 +435,7 @@ class LauncherApp:
     def _build_footer(self, outer: ttk.Frame) -> None:
 
         controls = ttk.Frame(outer)
-        controls.pack(fill=tk.X, pady=(10, 0))
+        controls.pack(fill=tk.X, pady=(8, 0))
         for column in range(5):
             controls.columnconfigure(column, weight=1, uniform="controls")
 
@@ -399,15 +470,21 @@ class LauncherApp:
         quit_button.grid(row=1, column=4, sticky=tk.EW, padx=(3, 0))
         self._tooltip(quit_button, "Stop Context Palette completely and release Ctrl+Alt+P.")
 
-        self.workspace_panel.pack(fill=tk.X, pady=(7, 0))
+        for child in controls.winfo_children():
+            try:
+                child.configure(style="Compact.TButton")
+            except tk.TclError:
+                pass
+
+        self.workspace_panel.pack(fill=tk.X, pady=(8, 0))
 
         status_label = ttk.Label(
             outer,
             textvariable=self.status_var,
-            style="Muted.TLabel",
+            style="Status.TLabel",
             anchor=tk.W,
         )
-        status_label.pack(fill=tk.X, pady=(5, 0), anchor=tk.W)
+        status_label.pack(fill=tk.X, pady=(4, 0), anchor=tk.W)
         self._tooltip(status_label, self._status_tooltip_text)
         status_label.bind("<Button-1>", lambda _event: self._show_action_info_dialog())
 
@@ -548,7 +625,6 @@ class LauncherApp:
                 visit(child)
 
         visit(self.root)
-        self.root.after(750, self._audit_tooltips)
 
     def _queue_hotkey_request(self) -> None:
         request = {"command": "hotkey"}
@@ -577,7 +653,7 @@ class LauncherApp:
         self.root.after(100, lambda: self.root.attributes("-topmost", False))
         self.root.focus_force()
         self.search_var.set("")
-        self._reload()
+        self._reload_if_changed()
         self._sync_workspace_from_clipboard()
         self.root.after(80, self.focus_search)
 
@@ -618,6 +694,7 @@ class LauncherApp:
             self.root.withdraw()
 
     def _poll_show_requests(self) -> None:
+        self._drain_window_action_results()
         while True:
             try:
                 request = self.show_requests.get_nowait()
@@ -630,6 +707,22 @@ class LauncherApp:
             else:
                 self._handle_external_request(request)
         self.root.after(100, self._poll_show_requests)
+
+    def _drain_window_action_results(self) -> None:
+        while True:
+            try:
+                succeeded, message = self.window_action_results.get_nowait()
+            except queue.Empty:
+                return
+            self.window_action_in_progress = False
+            self.root.configure(cursor="")
+            self.status_var.set(message)
+            if not succeeded:
+                messagebox.showerror(
+                    "Window action failed",
+                    f"{message}\n\nThe palette remains available; review the local diagnostic log for details.",
+                    parent=self.root,
+                )
 
     def _handle_external_request(self, request: dict[str, str]) -> None:
         self.show_window()
@@ -690,8 +783,13 @@ class LauncherApp:
             self.status_var.set(f"Loaded {len(self.actions)} actions")
         except ActionError as exc:
             self.actions = []
-            self.status_var.set("Could not load actions")
-            messagebox.showerror("Context Palette", str(exc))
+            self.status_var.set("Actions could not be loaded. Open Configure after fixing the file.")
+            messagebox.showerror(
+                "Actions could not be loaded",
+                f"{exc}\n\nNo actions were changed. Correct the action file and choose Configure or restart.",
+                parent=self.root,
+            )
+            LOGGER.exception("Action configuration failed to load")
 
     def _load_command_surface(self) -> None:
         try:
@@ -701,52 +799,63 @@ class LauncherApp:
             )
         except CommandSurfaceError as exc:
             self.command_groups = []
-            messagebox.showerror("Context Palette", str(exc))
+            messagebox.showerror(
+                "Quick actions could not be loaded",
+                f"{exc}\n\nThe searchable action list is still available. Correct the button configuration and reload.",
+                parent=self.root,
+            )
+            LOGGER.exception("Quick-action configuration failed to load")
         self._render_command_surface()
 
     def _render_command_surface(self) -> None:
         for child in self.command_tiles_frame.winfo_children():
             child.destroy()
+        button_count = sum(len(group.items) for group in self.command_groups)
+        self.surface_count_var.set(
+            f"{button_count} button" if button_count == 1 else f"{button_count} buttons"
+        )
         if not self.command_groups:
             empty = ttk.Label(
                 self.command_tiles_frame,
-                text="No quick-action groups configured.",
+                text="No quick actions yet.\nUse Configure → Right-side buttons to add one.",
                 style="Muted.TLabel",
                 wraplength=260,
+                justify=tk.LEFT,
             )
-            empty.pack(fill=tk.X, pady=8)
-            self._tooltip(empty, "Configure groups in data/command_surface.json or the local override file.")
+            empty.pack(fill=tk.X, padx=8, pady=12)
+            self._tooltip(empty, "Create a personal quick-action button from Configure.")
             return
 
         for column in range(2):
             self.command_tiles_frame.columnconfigure(column, weight=1, uniform="surface")
         for index, group in enumerate(self.command_groups):
             row, column = divmod(index, 2)
-            area = ttk.LabelFrame(self.command_tiles_frame, text=group.label, padding=6)
-            area.grid(row=row, column=column, sticky=tk.NSEW, padx=3, pady=3)
-            for button_column in range(2):
+            area = ttk.LabelFrame(self.command_tiles_frame, text=group.label, padding=4)
+            area.grid(row=row, column=column, sticky=tk.NSEW, padx=2, pady=2)
+            for button_column in range(3):
                 area.columnconfigure(button_column, weight=1, uniform=f"group-{group.id}")
             for item_index, item in enumerate(group.items):
-                item_row, item_column = divmod(item_index, 2)
+                item_row, item_column = divmod(item_index, 3)
                 control = ttk.Label(
                     area,
                     text=item.label,
                     style="Surface.TLabel",
                     anchor=tk.CENTER,
                     relief=tk.SOLID,
-                    padding=(6, 5),
+                    padding=(3, 2),
                     cursor="hand2",
+                    takefocus=True,
                 )
                 control.grid(
                     row=item_row,
                     column=item_column,
                     sticky=tk.EW,
-                    padx=2,
-                    pady=2,
+                    padx=1,
+                    pady=1,
                 )
                 self._tooltip(
                     control,
-                    "Left-click to execute. Right-click to choose an action. Shift/Ctrl+click to edit menu config.",
+                    "Left-click or Enter runs the primary action. Right-click chooses an action. Shift/Ctrl+click edits configuration.",
                 )
                 control.bind(
                     "<Button-1>",
@@ -762,6 +871,29 @@ class LauncherApp:
                     lambda event, selected_item=item: self._show_item_menu(event, selected_item),
                     add="+",
                 )
+                control.bind(
+                    "<Return>",
+                    lambda _event, selected_item=item: self._execute_item_primary(selected_item),
+                    add="+",
+                )
+                control.bind(
+                    "<space>",
+                    lambda _event, selected_item=item: self._execute_item_primary(selected_item),
+                    add="+",
+                )
+
+    def _execute_item_primary(self, item: CommandItem) -> str:
+        actions_by_id = {action.id: action for action in self.actions}
+        candidate_ids = [item.primary_action_id, *item.action_ids]
+        action = next(
+            (actions_by_id[action_id] for action_id in candidate_ids if action_id in actions_by_id),
+            None,
+        )
+        if action is None:
+            self.status_var.set(f"{item.label} has no available action. Open Configure to assign one.")
+            return "break"
+        self._execute_action(action)
+        return "break"
 
     def _handle_command_item_left_click(
         self,
@@ -894,6 +1026,7 @@ class LauncherApp:
             self.palette_state.context_slots,
         )
         save_palette_state(self.palette_path, self.palette_state)
+        self.configuration_signature_cache = self._configuration_signature()
         self._refresh_results()
         self.status_var.set(f"Focus context: {context}")
         definition = next(
@@ -904,6 +1037,12 @@ class LauncherApp:
             self.status_var.set(f"{context}: {definition.description}")
 
     def _refresh_results(self) -> None:
+        if self.search_refresh_after_id is not None:
+            try:
+                self.root.after_cancel(self.search_refresh_after_id)
+            except tk.TclError:
+                pass
+            self.search_refresh_after_id = None
         self.results_tooltip.hide()
         self.filtered_actions = search_actions(self.actions, self.search_var.get())
         self.slot_actions = action_slots(self.actions, self.palette_state)
@@ -938,16 +1077,75 @@ class LauncherApp:
         if self.displayed_actions:
             self.results.selection_set(0)
             self.results.activate(0)
-        self.status_var.set(
-            f"{len(self.filtered_actions)} matches. Slots 1-5 pinned; 6-9 {self.palette_state.focus_context}."
-        )
+        count = len(self.filtered_actions)
+        self.results_count_var.set(f"{count} action" if count == 1 else f"{count} actions")
+        if not self.displayed_actions:
+            query = self.search_var.get().strip()
+            empty_message = (
+                f'No actions match “{query}”.\nClear Find or use Configure to create one.'
+                if query
+                else "No actions are available.\nUse Configure to create your first personal action."
+            )
+            self.results.insert(tk.END, empty_message)
+            self.results.itemconfigure(
+                0,
+                foreground=COLORS["muted_text"],
+                background=COLORS["surface"],
+            )
+            self.status_var.set("No matching action. Clear Find or create one in Configure.")
+        else:
+            self.status_var.set(
+                f"{count} matches · slots 1–5 pinned · slots 6–9 {self.palette_state.focus_context}"
+            )
         self._update_preview()
 
-    def _reload(self) -> None:
-        self._load_actions()
-        self._load_command_surface()
-        self._load_palette_state()
+    def _schedule_refresh_results(self) -> None:
+        if self.search_refresh_after_id is not None:
+            self.root.after_cancel(self.search_refresh_after_id)
+        self.search_refresh_after_id = self.root.after(40, self._run_scheduled_refresh)
+
+    def _run_scheduled_refresh(self) -> None:
+        self.search_refresh_after_id = None
         self._refresh_results()
+
+    def _configuration_signature(self) -> tuple[tuple[str, int, int], ...]:
+        paths = (
+            self.actions_path,
+            self.local_actions_path,
+            self.contexts_path,
+            self.local_contexts_path,
+            self.command_surface_path,
+            self.local_command_surface_path,
+            self.palette_path,
+        )
+        signature = []
+        for path in paths:
+            try:
+                stat = path.stat()
+                signature.append((str(path), stat.st_mtime_ns, stat.st_size))
+            except OSError:
+                signature.append((str(path), -1, -1))
+        return tuple(signature)
+
+    def _reload_if_changed(self) -> None:
+        if self._configuration_signature() == self.configuration_signature_cache:
+            LOGGER.debug("Configuration unchanged; skipped full reload")
+            return
+        self._reload()
+
+    def _reload(self) -> None:
+        self.status_var.set("Refreshing actions, contexts, and buttons…")
+        self.root.configure(cursor="wait")
+        self.root.update_idletasks()
+        try:
+            self._load_actions()
+            self._load_command_surface()
+            self._load_contexts()
+            self._load_palette_state()
+            self._refresh_results()
+            self.configuration_signature_cache = self._configuration_signature()
+        finally:
+            self.root.configure(cursor="")
 
     def _toggle_selected_pin(self) -> None:
         action = self._selected_action()
@@ -957,6 +1155,7 @@ class LauncherApp:
         try:
             self.palette_state = toggle_pin(self.palette_state, action.id)
             save_palette_state(self.palette_path, self.palette_state)
+            self.configuration_signature_cache = self._configuration_signature()
             self._refresh_results()
             verb = "Pinned" if action.id in self.palette_state.pinned_action_ids else "Unpinned"
             self.status_var.set(f"{verb}: {action.display_text}")
@@ -972,6 +1171,9 @@ class LauncherApp:
         self._execute_action(action)
 
     def _execute_action(self, action: Action) -> None:
+        if action.type in {"window_layout", "restore_window_snapshot"}:
+            self._execute_window_action_async(action)
+            return
         try:
             message = execute_action(
                 action,
@@ -988,6 +1190,37 @@ class LauncherApp:
         except ActionError as exc:
             self.status_var.set("Action failed")
             messagebox.showerror("Context Palette", str(exc))
+            LOGGER.exception("Action failed: id=%s type=%s", action.id, action.type)
+
+    def _execute_window_action_async(self, action: Action) -> None:
+        if self.window_action_in_progress:
+            self.status_var.set("A window action is already running. Wait for it to finish.")
+            return
+        self.window_action_in_progress = True
+        self.root.configure(cursor="wait")
+        self.status_var.set(f"Running {action.title}… The palette remains responsive.")
+
+        def worker() -> None:
+            try:
+                message = execute_action(
+                    action,
+                    window_layout_runner=self._run_window_layout,
+                    window_snapshot_runner=self._run_window_snapshot,
+                )
+                self.window_action_results.put((True, message))
+            except Exception as exc:
+                LOGGER.exception(
+                    "Background window action failed: id=%s type=%s",
+                    action.id,
+                    action.type,
+                )
+                self.window_action_results.put((False, str(exc)))
+
+        threading.Thread(
+            target=worker,
+            name="context-palette-window-action",
+            daemon=True,
+        ).start()
 
     def _edit_selected(self) -> None:
         action = self._selected_action()
@@ -1285,6 +1518,19 @@ class LauncherApp:
     def _show_help(self) -> None:
         HelpWindow(self.root, self.actions_path.parent.parent / "docs" / "HELP.md")
 
+    def _show_configuration(self) -> None:
+        ConfigurationWindow(
+            self.root,
+            actions=self.actions,
+            local_action_ids=self.local_action_ids,
+            local_actions_path=self.local_actions_path,
+            contexts_path=self.contexts_path,
+            local_contexts_path=self.local_contexts_path,
+            command_surface_path=self.command_surface_path,
+            local_command_surface_path=self.local_command_surface_path,
+            on_change=self._reload,
+        )
+
     def _show_cheatsheets(self) -> None:
         try:
             sheets = load_cheatsheets(self.cheatsheets_dir)
@@ -1377,11 +1623,17 @@ class InboxWindow:
         self.window.title("Context Palette Inbox")
         self.window.geometry("640x420")
         self.window.minsize(480, 320)
+        self.window.bind("<Escape>", lambda _event: self.window.destroy())
 
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(outer, text=f"Inbox items: {len(items)}").pack(anchor=tk.W)
+        ttk.Label(outer, text="Capture Inbox", style="Title.TLabel").pack(anchor=tk.W)
+        ttk.Label(
+            outer,
+            text=f"{len(items)} captured item{'s' if len(items) != 1 else ''} · turn useful material into a Draft action",
+            style="Muted.TLabel",
+        ).pack(anchor=tk.W, pady=(2, 8))
 
         self.listbox = tk.Listbox(outer, activestyle="dotbox", height=8)
         self.listbox.pack(fill=tk.BOTH, expand=True, pady=(4, 8))
@@ -1394,13 +1646,23 @@ class InboxWindow:
 
         controls = ttk.Frame(outer)
         controls.pack(fill=tk.X, pady=(8, 0))
-        ttk.Button(controls, text="Convert to Draft Action", command=self._convert_selected).pack(
-            side=tk.LEFT
+        self.convert_button = ttk.Button(
+            controls,
+            text="Convert to Draft Action",
+            command=self._convert_selected,
+            style="Accent.TButton",
         )
-        ttk.Button(controls, text="Ask AI", command=self._ask_ai_for_selected).pack(
+        self.convert_button.pack(side=tk.LEFT)
+        self.ai_button = ttk.Button(controls, text="Ask AI", command=self._ask_ai_for_selected)
+        self.ai_button.pack(
             side=tk.LEFT, padx=(6, 0)
         )
-        ttk.Button(controls, text="Close", command=self.window.destroy).pack(side=tk.RIGHT)
+        ttk.Button(
+            controls,
+            text="Close",
+            command=self.window.destroy,
+            style="Compact.TButton",
+        ).pack(side=tk.RIGHT)
 
         self._load_items()
 
@@ -1411,6 +1673,16 @@ class InboxWindow:
         if self.items:
             self.listbox.selection_set(0)
             self.listbox.activate(0)
+            self.convert_button.configure(state=tk.NORMAL)
+            self.ai_button.configure(state=tk.NORMAL)
+        else:
+            self.listbox.insert(
+                tk.END,
+                "Inbox is empty — use Capture in the main palette to save clipboard text.",
+            )
+            self.listbox.itemconfigure(0, foreground=COLORS["muted_text"])
+            self.convert_button.configure(state=tk.DISABLED)
+            self.ai_button.configure(state=tk.DISABLED)
         self._update_preview()
 
     def _update_preview(self) -> None:
@@ -1515,6 +1787,7 @@ class DraftActionCreator:
         self.window.title("Create Draft Action")
         self.window.geometry("680x620")
         self.window.minsize(520, 440)
+        self.window.bind("<Escape>", lambda _event: self.window.destroy())
 
         technologies = sorted({action.technology for action in actions if action.technology}, key=str.casefold)
         tasks = sorted({action.task for action in actions if action.task}, key=str.casefold)
@@ -1693,6 +1966,7 @@ class DraftActionEditor:
         self.window.title("Edit Draft Action")
         self.window.geometry("560x420")
         self.window.minsize(440, 320)
+        self.window.bind("<Escape>", lambda _event: self.window.destroy())
 
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
@@ -1747,11 +2021,17 @@ class CheatSheetWindow:
         self.window.title("Context Palette Cheat Sheets")
         self.window.geometry("760x520")
         self.window.minsize(560, 360)
+        self.window.bind("<Escape>", lambda _event: self.window.destroy())
 
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(outer, text=f"Cheat sheets: {len(sheets)}").pack(anchor=tk.W)
+        ttk.Label(outer, text="Cheat sheets", style="Title.TLabel").pack(anchor=tk.W)
+        ttk.Label(
+            outer,
+            text=f"{len(sheets)} local reference sheet{'s' if len(sheets) != 1 else ''}",
+            style="Muted.TLabel",
+        ).pack(anchor=tk.W, pady=(2, 8))
 
         self.listbox = tk.Listbox(outer, activestyle="dotbox", height=6, exportselection=False)
         self.listbox.pack(fill=tk.X, pady=(4, 8))
@@ -1779,8 +2059,13 @@ class CheatSheetWindow:
 
         controls = ttk.Frame(outer)
         controls.pack(fill=tk.X, pady=(8, 0))
-        ttk.Label(controls, textvariable=self.status_var).pack(side=tk.LEFT)
-        ttk.Button(controls, text="Close", command=self.window.destroy).pack(side=tk.RIGHT)
+        ttk.Label(controls, textvariable=self.status_var, style="Status.TLabel").pack(side=tk.LEFT)
+        ttk.Button(
+            controls,
+            text="Close",
+            command=self.window.destroy,
+            style="Compact.TButton",
+        ).pack(side=tk.RIGHT)
 
         self._load_sheets()
         self.window.transient(parent)
@@ -1802,6 +2087,12 @@ class CheatSheetWindow:
         self.items.delete(0, tk.END)
 
         if sheet is None:
+            self.items.insert(
+                tk.END,
+                "No cheat sheets are available. Add a local sheet or check configuration.",
+            )
+            self.items.itemconfigure(0, foreground=COLORS["muted_text"])
+            self.status_var.set("No cheat sheets available")
             self._update_preview()
             return
 
@@ -1816,7 +2107,15 @@ class CheatSheetWindow:
             self.items.activate(0)
             self.status_var.set(f"{len(self.filtered_items)} matching items")
         else:
-            self.status_var.set("No matching items")
+            query = self.search_var.get().strip()
+            self.items.insert(
+                tk.END,
+                f'No entries match “{query}”. Clear search to show all entries.'
+                if query
+                else "This sheet has no entries.",
+            )
+            self.items.itemconfigure(0, foreground=COLORS["muted_text"])
+            self.status_var.set("No matching entries")
         self._update_preview()
 
     def _select_sheet(self) -> None:

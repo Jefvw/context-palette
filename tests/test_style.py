@@ -42,11 +42,11 @@ class FakeStyle:
 
 
 class StyleTests(unittest.TestCase):
-    def test_reference_palette_uses_supplied_grey_teal_and_aqua_colors(self):
-        self.assertEqual(COLORS["topic_header"], "#a6a6a6")
-        self.assertEqual(COLORS["accent"], "#43bdb3")
-        self.assertEqual(COLORS["row_aqua"], "#cce7e5")
-        self.assertEqual(COLORS["row_light"], "#e4f1f0")
+    def test_palette_uses_high_contrast_text_and_selection_colors(self):
+        self.assertEqual(COLORS["text"], "#1f2933")
+        self.assertEqual(COLORS["accent"], "#087f78")
+        self.assertEqual(COLORS["focus"], "#005fcc")
+        self.assertNotEqual(COLORS["row_aqua"], COLORS["row_light"])
 
     def test_configure_theme_centralizes_fonts_colors_and_interaction_states(self):
         root = FakeRoot()
@@ -58,9 +58,11 @@ class StyleTests(unittest.TestCase):
         self.assertEqual(style.used_theme, "clam")
         self.assertIn(("*Font", "{Segoe UI} 10"), root.options)
         self.assertEqual(root.configuration["background"], COLORS["background"])
+        self.assertEqual(style.configurations["Title.TLabel"]["font"], ("Segoe UI Semibold", 14))
         self.assertEqual(style.configurations["Heading.TLabel"]["font"], ("Segoe UI Semibold", 11))
         self.assertEqual(style.configurations["Accent.TButton"]["background"], COLORS["accent"])
-        self.assertEqual(style.configurations["Surface.TLabel"]["background"], COLORS["row_light"])
+        self.assertEqual(style.configurations["Surface.TLabel"]["background"], COLORS["surface"])
+        self.assertEqual(style.configurations["Treeview"]["rowheight"], 25)
         self.assertIn("background", style.maps["TButton"])
         self.assertIn("bordercolor", style.maps["TEntry"])
 

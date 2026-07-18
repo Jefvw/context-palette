@@ -1,0 +1,68 @@
+# Performance and Best-Practices Audit
+
+Date: 2026-07-18
+
+## Scope and measurements
+
+Context Palette is a local resident Tkinter application. It has no database, remote API, web bundle, package download, or network data-loading path. The audit covered startup imports, configuration reloads, search rendering, recurring callbacks, widget lifecycle, long-running Windows operations, persistence, logging, and security validation.
+
+Measured launcher import time on the development machine was approximately 93 ms. Secondary UI modules accounted for only a few milliseconds, so lazy imports were not introduced.
+
+## Implemented findings
+
+### Recurring tooltip audit retained destroyed widgets
+
+- **Why it mattered:** a 750 ms callback repeatedly walked the complete widget tree. Tooltip objects held strong widget references, allowing closed secondary windows to remain reachable.
+- **Estimated impact:** medium memory/CPU impact during long resident sessions.
+- **Improvement:** the stable main window is audited once. Tooltip timers and windows cancel safely when their owning widget is destroyed.
+- **Result:** no recurring tree traversal and no tooltip-owned reference chain for destroyed widgets.
+
+### Every show rebuilt unchanged configuration
+
+- **Why it mattered:** the global shortcut is the hottest interaction path, but each show reread JSON and recreated quick-action widgets.
+- **Estimated impact:** medium latency and rendering work, increasing with action/button count.
+- **Improvement:** cache file existence, nanosecond modification time, and size for all active configuration files. Reload only when that signature changes; explicit in-app reloads remain authoritative.
+- **Result:** ordinary show operations reuse the in-memory model and existing widgets while external edits are still detected.
+
+### Search redrew for every variable notification
+
+- **Why it mattered:** filtering also recalculates slots, rebuilds list rows, changes selection, and refreshes preview/status.
+- **Estimated impact:** low with 31 actions; potentially medium with hundreds.
+- **Improvement:** coalesce typed changes over 40 ms. Context changes and explicit reloads stay immediate.
+- **Result:** fast typing causes one final redraw per short burst without perceptible search delay.
+
+### Window restore blocked the Tk thread
+
+- **Why it mattered:** missing-window matching can wait several seconds per launched target, freezing paint and input.
+- **Estimated impact:** high for incomplete layouts; none for ordinary actions.
+- **Improvement:** window layout/restore runs on one daemon worker. Results return through a queue drained by the existing main-thread poller. Concurrent restores are rejected with clear status.
+- **Result:** the palette remains responsive and all Tk access stays on the main thread.
+
+### Failures had no durable diagnostic record
+
+- **Why it mattered:** intermittent configuration and restore failures were difficult to investigate after a dialog closed.
+- **Estimated impact:** medium supportability impact; negligible runtime cost.
+- **Improvement:** standard-library rotating logging writes to ignored `data/context-palette.log`, capped at 512 KB with two backups. Logging failure never prevents startup.
+- **Result:** bounded local diagnostics without adding a dependency or logging clipboard/workspace contents.
+
+### Snapshot browser URL validation was incomplete
+
+- **Why it mattered:** prefix-only checking accepted malformed values such as `https://`.
+- **Estimated impact:** low likelihood, medium correctness/security value.
+- **Improvement:** require a complete HTTP(S) URL with a hostname and a valid snapshot-window object.
+- **Result:** snapshot launch metadata now matches ordinary URL safety expectations.
+
+## Reviewed and intentionally unchanged
+
+- **Database queries:** no database exists.
+- **API usage:** no remote runtime API exists; the AI workflow is manual clipboard handoff.
+- **Bundle size:** no web bundle or third-party UI framework exists.
+- **Lazy loading:** measured import cost is already small; lazy imports would reduce maintainability for negligible gain.
+- **100 ms queue polling:** retained to keep global-hotkey and single-instance activation responsive.
+- **Atomic JSON persistence:** retained; durability is more important than micro-optimizing tiny local files.
+- **Large `launcher.py`:** a maintenance concern, not a measured runtime bottleneck. Incremental secondary-window extraction remains the safe refactoring path.
+- **Caching parsed action expansions:** not added because templates may depend on current clipboard/date/time values.
+
+## Verification
+
+Automated tests cover signature invalidation, search coalescing, background result queuing, bounded log rotation, URL validation, full launcher construction/close, and existing domain behavior. Manual Windows verification remains appropriate for responsiveness during a restore that must launch missing applications.

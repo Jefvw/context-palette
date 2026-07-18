@@ -1,328 +1,99 @@
-# Context Palette — Product Vision
+# Product vision
+
+This document describes durable direction. It is not a claim that every capability exists. Current status is defined by [MVP](MVP.md), current implementation by [Architecture](ARCHITECTURE.md), and sequencing by [Roadmap](ROADMAP.md).
 
 ## Problem
 
-Existing text-expansion and shortcut tools are useful for executing predefined commands, but they become difficult to maintain as the number of snippets and shortcuts grows.
+Snippet and shortcut tools become difficult to scan and maintain as their collections grow. Work is naturally divided into contexts—database work, reporting, communication, analysis, projects—but a flat list does not carry the relevant terminology, references, tools, or repeated procedures.
 
-The user works in several distinct contexts, including:
-
-* database querying;
-* data analysis;
-* interaction with LLMs;
-* email management;
-* reporting;
-* temporary projects.
-
-Each task requires different prompts, snippets, terminology, applications, references, and procedures.
-
-A large undifferentiated collection of hotkeys is difficult to remember and maintain.
-
-Configuration files such as INI files are also inaccessible to users who are not experienced developers.
+Configuration also becomes inaccessible when routine changes require editing opaque command strings or technical identifiers.
 
 ## Product concept
 
-Context Palette is a portable Windows application that organizes reusable work around contexts rather than isolated hotkeys.
+Context Palette is a portable Windows application that organizes reusable work around explicit contexts and constrained actions.
 
-A context represents a type of work or a specific task.
+The intended experience has two equally important modes:
 
-Examples:
-
-* Database;
-* Data Analysis;
-* Email;
-* LLM;
-* Revenue Analysis;
-* Monthly Reporting;
-* Temporary Customer Project.
-
-A context can contain:
-
-* actions;
-* text snippets;
-* quick cheat sheets;
-* prompt templates;
-* launch commands;
-* business definitions;
-* terminology;
-* reference notes;
-* examples;
-* variables;
-* development notes;
-* recent feedback.
-
-## What a context can do
-
-A context is a reusable work package, not merely a category attached to actions. It combines four dimensions:
-
-### Identity
-
-The context explains what kind of work it represents, when it is useful, its maturity, and how it relates to broader or narrower contexts.
-
-### Knowledge
-
-The context carries the information needed while working: terminology, rules, examples, references, cheat sheets, and lessons captured from previous use.
-
-### Capabilities
-
-The context exposes relevant actions and transformations. These may consume selected text or clipboard content and produce text, URLs, opened targets, or a short safe action sequence.
-
-### Activation
-
-The context may prepare a workspace by opening a constrained set of applications, folders, files, URLs, and its own quick reference. Activation is visible and editable; it is not arbitrary scripting.
+- **Use:** choose a focus, find an action, understand its effect, and run it quickly.
+- **Build:** capture useful material during real work, turn it into a Draft, test and refine it, then mark it Trusted deliberately.
 
 ```text
-Choose context
--> capture current input
--> prepare workspace
--> expose relevant knowledge and actions
--> execute and preview safely
--> capture feedback for refinement
+Capture → Draft → Test → Refine → Trusted
 ```
 
-## Context input and output
+Archived material leaves normal retrieval without being silently destroyed.
 
-A context can declare inputs such as selected text, clipboard content, prompted fields, a chosen file or folder, or no input. Outputs may include copied or pasted text, a transformed selection, a built URL, an opened workspace, filled form fields, rich content, an image, or a new refinement note.
+## Context model
 
-Inputs and outputs should be explicit in previews so the user can understand what an action will read, change, open, or preserve.
+The long-term context model has four dimensions:
 
-## Productivity capabilities inspired by QuickTextPaste
+| Dimension | Purpose | Current status |
+| --- | --- | --- |
+| Identity | Name, description, technology, task, and intended use | Implemented |
+| Knowledge | References, terminology, examples, and cheat sheets | Partly implemented |
+| Capabilities | Preferred actions and transformations | Implemented at a basic level |
+| Activation | Visible bundle of reviewed applications, folders, files, URLs, and references | Proposed |
 
-Context Palette will incorporate five capability families without copying QTP's opaque command syntax:
+One context is the explicit focus. Supporting contexts may contribute knowledge or ranking in the future, but they must not make action retrieval unpredictable or switch focus silently.
 
-1. Previewable transformations of selected text.
-2. Context activation through safe workspace bundles.
+## Explicit effects
+
+An action should make its inputs and effects understandable:
+
+- whether it reads selected text, Input / Output, clipboard text, prompted fields, or no input;
+- whether it copies or transforms text;
+- which URL, file, folder, application, or layout it opens;
+- whether it changes window placement;
+- what remains recoverable after failure.
+
+This principle is more important than matching the command language of an older automation tool.
+
+## Capability direction
+
+Context Palette may grow through five families:
+
+1. Previewable selected-text transformations.
+2. Visible context workspace activation.
 3. Constrained linear form-filling sequences.
 4. Clipboard transactions that preserve and restore prior content.
 5. Rich-content and image actions with format-aware previews.
 
-These capabilities belong to contexts and use the same Capture, Draft, Test, Refine, Trusted, and Archived lifecycle as other actions.
+Only the first family and constrained window preparation are currently implemented. The others remain proposals until their preview, recovery, testing, and trust behavior is designed.
 
-## App cheat sheets
+## Knowledge and cheat sheets
 
-Context Palette should eventually help the user become productive inside the current application, not only launch actions.
+Searchable structured cheat sheets are implemented. They keep shortcuts, reference notes, and procedures available without opening a browser, and individual entries can become Draft actions.
 
-One future feature is a small pop-up cheat sheet for an application or work context. It would show the most useful commands, shortcuts, notes, and reminders for that specific app without opening a browser.
+Future work may add richer context knowledge, maintenance queues, and attended AI-assisted drafting. AI assistance must remain reviewable: the user sees what leaves the application, responses are treated as untrusted, and created actions begin as Drafts.
 
-Examples:
+## Product principles
 
-* VS Code: project commands, useful shortcuts, common terminal commands, debugging notes.
-* Codex: project goal, next task, useful prompts, local run commands.
-* Email: tone rules, common replies, follow-up patterns.
-* Database tools: query templates, naming conventions, common checks.
+1. **Fast first:** repeated use must feel immediate.
+2. **Contextual, not hidden:** explicit focus improves relevance without silent automation.
+3. **Constrained effects:** no arbitrary shell-command action.
+4. **Local ownership:** configuration and captured material remain inspectable local files.
+5. **Draft before trust:** generation and capture never imply approval.
+6. **Portable by default:** user-writable Windows folders, no administrator requirement.
+7. **Progressive complexity:** ordinary configuration uses names and guided forms; advanced JSON remains reviewable.
+8. **Recoverable changes:** persistence and future multi-step behavior should define failure recovery.
+9. **No framework for its own sake:** add dependencies only when product value outweighs portability and maintenance cost.
 
-These cheat sheets should follow the same lifecycle as actions:
+## Success
 
-```text
-Capture
--> Draft
--> Test
--> Refine
--> Trusted
-```
+The product succeeds when a user can:
 
-LLM-assisted generation of cheat sheets for frequently used programs is a promising later feature, but it should wait until local contexts, editing, previewing, and trust states are working.
+- retrieve a repeated action in seconds;
+- understand what it will read and do;
+- add a useful personal action without managing technical IDs;
+- keep stable muscle-memory actions while changing work focus;
+- capture improvements during real work without interrupting the task;
+- transfer reviewed portable configuration without leaking personal runtime data;
+- maintain the system as the number of contexts and actions grows.
 
-## Two equally important modes
+## Long-term exclusions
 
-### Use mode
-
-The user opens a launcher, searches for an action, and executes it.
-
-Example:
-
-```text
-Database › Explain selected SQL
-Database › Insert SELECT template
-Analysis › Analyze copied results
-Email › Rewrite professionally
-```
-
-### Build mode
-
-The user captures, develops, tests, and improves contexts and actions while doing real work.
-
-The user should not need to leave the current task and navigate a complex settings interface merely to record something useful.
-
-## Central workflow
-
-```text
-Capture
-→ Draft
-→ Test
-→ Refine
-→ Promote
-→ Review
-```
-
-### Capture
-
-The user records something reusable with minimal interruption.
-
-Possible captured material:
-
-* selected text;
-* clipboard content;
-* SQL;
-* a prompt;
-* a useful email response;
-* a procedure;
-* a business rule;
-* an action idea;
-* a complete task context.
-
-Captured material enters an Inbox.
-
-### Draft
-
-The user converts captured material into a structured action or context.
-
-A draft may define:
-
-* name;
-* description;
-* context;
-* action type;
-* expected input;
-* action content;
-* expected output;
-* test example.
-
-### Test
-
-The user can run the draft with sample input and inspect the result.
-
-The tool records whether the result was:
-
-* useful;
-* in need of improvement;
-* incorrect.
-
-### Refine
-
-The user can edit the action immediately after use or testing.
-
-The system should preserve the original input, produced output, and user correction when practical.
-
-### Promote
-
-Actions have simple maturity states:
-
-* Inbox;
-* Draft;
-* Trusted;
-* Archived.
-
-Unproven or sensitive actions should require preview.
-
-### Review
-
-The application presents a manageable maintenance queue containing items such as:
-
-* uncategorized captures;
-* drafts needing work;
-* possible duplicates;
-* trusted candidates;
-* unused actions.
-
-## Context hierarchy
-
-Contexts may exist at several levels.
-
-### Core
-
-Reusable actions that are broadly applicable.
-
-Examples:
-
-* copy text;
-* paste text;
-* rewrite;
-* summarize;
-* open a URL.
-
-### Domain
-
-A general area of work.
-
-Examples:
-
-* Database;
-* Email;
-* Analysis;
-* LLM.
-
-### Task
-
-A recurring, more specific workflow.
-
-Examples:
-
-* Revenue Analysis;
-* Monthly Reporting;
-* Query Documentation.
-
-### Temporary
-
-A project-specific context that may later be archived.
-
-Examples:
-
-* FY2026 Budget Review;
-* Customer Migration Project.
-
-## Context composition
-
-Contexts should be composable.
-
-For example:
-
-* Email may reuse a general Rewrite capability while adding email-specific tone rules.
-* Database may reuse Summarize while adding SQL terminology.
-* Revenue Analysis may inherit database actions and add business definitions.
-
-Avoid duplicating identical actions across contexts.
-
-## User experience principles
-
-* Search is more important than remembering hotkeys.
-* Capture must be faster than organizing.
-* Draft material must be separated from trusted material.
-* The application must explain its behaviour.
-* Actions should be previewable and testable.
-* Management should use clear forms rather than raw configuration files.
-* Advanced behaviour should remain optional.
-* The application must degrade gracefully when global hotkeys or automation are blocked.
-* User data must remain portable and inspectable.
-
-## Target environment
-
-* Windows;
-* no administrator privileges;
-* potentially restrictive corporate environment;
-* small laptop;
-* no guaranteed developer tools;
-* no guaranteed AutoHotkey;
-* no guaranteed local LLM;
-* portable user-writable folder.
-
-## Non-goals for the first version
-
-The first version will not attempt to provide:
-
-* arbitrary process automation;
-* unrestricted scripting;
-* autonomous database access;
-* autonomous email sending;
-* a plugin marketplace;
-* cloud synchronization;
-* collaborative editing;
-* model fine-tuning;
-* semantic vector search;
-* complex workflow graphs;
-* automatic context detection.
-
-These may be reconsidered only after the central capture-development loop has been validated.
-
-## Product success
-
-The product succeeds when the user can progressively build a useful personal system during normal work without the system itself becoming another maintenance burden.
+- Opaque arbitrary command execution.
+- Unattended execution of unreviewed actions.
+- Mandatory cloud accounts or services.
+- Silent context switching.
+- Automatic publication of captured or machine-specific data.

@@ -15,6 +15,7 @@ class WidgetTooltip:
         widget.bind("<Enter>", self._schedule, add="+")
         widget.bind("<Leave>", self.hide, add="+")
         widget.bind("<ButtonPress>", self.hide, add="+")
+        widget.bind("<Destroy>", self.hide, add="+")
         setattr(widget, "_context_palette_has_tooltip", True)
 
     def _schedule(self, _event=None) -> None:
@@ -50,10 +51,16 @@ class WidgetTooltip:
 
     def hide(self, _event=None) -> None:
         if self.after_id is not None:
-            self.widget.after_cancel(self.after_id)
+            try:
+                self.widget.after_cancel(self.after_id)
+            except tk.TclError:
+                pass
             self.after_id = None
         if self.window is not None:
-            self.window.destroy()
+            try:
+                self.window.destroy()
+            except tk.TclError:
+                pass
             self.window = None
 
 
@@ -71,6 +78,7 @@ class ListboxItemTooltip:
         listbox.bind("<Motion>", self._motion, add="+")
         listbox.bind("<Leave>", self.hide, add="+")
         listbox.bind("<ButtonPress>", self.hide, add="+")
+        listbox.bind("<Destroy>", self.hide, add="+")
 
     def _motion(self, event: tk.Event) -> None:
         index = self._index_at(event.y)
@@ -124,9 +132,15 @@ class ListboxItemTooltip:
 
     def hide(self, _event=None) -> None:
         if self.after_id is not None:
-            self.listbox.after_cancel(self.after_id)
+            try:
+                self.listbox.after_cancel(self.after_id)
+            except tk.TclError:
+                pass
             self.after_id = None
         if self.window is not None:
-            self.window.destroy()
+            try:
+                self.window.destroy()
+            except tk.TclError:
+                pass
             self.window = None
         self.index = None

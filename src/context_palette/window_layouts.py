@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import subprocess
 import time
+from urllib.parse import urlparse
 from datetime import datetime, timezone
 import re
 
@@ -292,13 +293,19 @@ def set_snapshot_launch_target(path: Path, window_index: int, target: str) -> No
     clean_target = target.strip()
     if not clean_target:
         return
-    if not clean_target.startswith(("http://", "https://")):
-        raise WindowLayoutError("Browser launch target must start with http:// or https://.")
+    parsed = urlparse(clean_target)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise WindowLayoutError(
+            "Browser launch target must be a complete http:// or https:// address."
+        )
     data = json.loads(path.read_text(encoding="utf-8"))
     windows = data.get("windows", []) if isinstance(data, dict) else []
     if not isinstance(windows, list) or not 0 <= window_index < len(windows):
         raise WindowLayoutError("Snapshot browser window was not found.")
-    windows[window_index]["launch_target"] = clean_target
+    window = windows[window_index]
+    if not isinstance(window, dict):
+        raise WindowLayoutError("Snapshot browser window has invalid data.")
+    window["launch_target"] = clean_target
     atomic_write_json(path, data)
 
 

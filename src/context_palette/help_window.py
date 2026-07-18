@@ -11,7 +11,9 @@ class HelpWindow:
         self.window.title("Context Palette Help")
         self.window.geometry("760x680")
         self.window.minsize(520, 420)
+        self.window.bind("<Escape>", lambda _event: self.window.destroy())
         self.search_var = tk.StringVar()
+        self.search_status_var = tk.StringVar(value="Ctrl+F focuses search · Enter finds next")
 
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
@@ -22,6 +24,7 @@ class HelpWindow:
         search = ttk.Entry(header, textvariable=self.search_var, width=28)
         search.pack(side=tk.RIGHT, padx=(6, 0))
         search.bind("<Return>", lambda _event: self._find_next())
+        self.window.bind("<Control-f>", lambda _event: self._focus_search(search))
         ttk.Button(header, text="Find next", command=self._find_next).pack(side=tk.RIGHT)
 
         content_frame = ttk.Frame(outer)
@@ -49,8 +52,17 @@ class HelpWindow:
 
         footer = ttk.Frame(outer)
         footer.pack(fill=tk.X, pady=(8, 0))
-        ttk.Label(footer, text=str(help_path), style="Muted.TLabel").pack(side=tk.LEFT)
-        ttk.Button(footer, text="Close", command=self.window.destroy).pack(side=tk.RIGHT)
+        ttk.Label(
+            footer,
+            textvariable=self.search_status_var,
+            style="Status.TLabel",
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            footer,
+            text="Close",
+            command=self.window.destroy,
+            style="Compact.TButton",
+        ).pack(side=tk.RIGHT)
         self.window.transient(parent)
         self.window.lift()
         search.focus_set()
@@ -58,6 +70,7 @@ class HelpWindow:
     def _find_next(self) -> None:
         query = self.search_var.get().strip()
         if not query:
+            self.search_status_var.set("Type a word or phrase to search Help.")
             return
         self.content.tag_remove("found", "1.0", tk.END)
         start = self.content.index(f"{self.content.index(tk.INSERT)} +1c")
@@ -65,8 +78,15 @@ class HelpWindow:
         if not position:
             position = self.content.search(query, "1.0", stopindex=tk.END, nocase=True)
         if not position:
+            self.search_status_var.set(f'No Help result for “{query}”.')
             return
         end = f"{position}+{len(query)}c"
         self.content.tag_add("found", position, end)
         self.content.see(position)
         self.content.mark_set(tk.INSERT, end)
+        self.search_status_var.set(f'Found “{query}”. Press Enter for the next result.')
+
+    def _focus_search(self, search: ttk.Entry) -> str:
+        search.focus_set()
+        search.selection_range(0, tk.END)
+        return "break"

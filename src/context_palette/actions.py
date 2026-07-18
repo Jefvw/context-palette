@@ -220,6 +220,86 @@ def draft_build_url_action(
     )
 
 
+def configured_draft_action(
+    *,
+    title: str,
+    context: str,
+    action_type: str,
+    value: str,
+    technology: str = "",
+    task: str = "",
+    arguments: Iterable[str] = (),
+    working_directory: str = "",
+) -> Action:
+    """Create a validated local Draft from the built-in action catalogue."""
+    clean_title = title.strip()
+    clean_value = value.strip()
+    if not clean_title:
+        raise ActionError("Action title cannot be empty.")
+    if action_type not in SUPPORTED_ACTION_TYPES:
+        raise ActionError(f"Unsupported action type: {action_type}")
+    if not clean_value:
+        raise ActionError("The action value cannot be empty.")
+    if action_type == "open_url":
+        parsed = urlparse(clean_value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ActionError("Action URL must be a complete http:// or https:// address.")
+    if action_type in {"build_url_copy", "build_url_open", "build_url_selection_open"}:
+        build_url(clean_value, "example")
+    if action_type == "transform_list_csv" and clean_value not in {"csv", "sql_strings"}:
+        raise ActionError("List conversion must use csv or sql_strings.")
+
+    return Action(
+        id=f"draft-{uuid4().hex[:12]}",
+        title=clean_title,
+        context=context.strip() or "General",
+        type=action_type,
+        value=clean_value,
+        state="Draft",
+        arguments=tuple(argument.strip() for argument in arguments if argument.strip()),
+        working_directory=working_directory.strip() or None,
+        technology=technology.strip(),
+        task=task.strip(),
+    )
+
+
+def edited_configured_action(
+    action: Action,
+    *,
+    title: str,
+    context: str,
+    action_type: str,
+    value: str,
+    technology: str = "",
+    task: str = "",
+    arguments: Iterable[str] = (),
+    working_directory: str = "",
+) -> Action:
+    """Validate edits while preserving an action's stable identity and maturity."""
+    validated = configured_draft_action(
+        title=title,
+        context=context,
+        action_type=action_type,
+        value=value,
+        technology=technology,
+        task=task,
+        arguments=arguments,
+        working_directory=working_directory,
+    )
+    return Action(
+        id=action.id,
+        title=validated.title,
+        context=validated.context,
+        type=validated.type,
+        value=validated.value,
+        state=action.state,
+        arguments=validated.arguments,
+        working_directory=validated.working_directory,
+        technology=validated.technology,
+        task=validated.task,
+    )
+
+
 def edited_copy_text_action(action: Action, *, title: str, context: str, value: str) -> Action:
     if action.type != "copy_text" or action.state != "Draft":
         raise ActionError("Only draft copy-text actions can be edited right now.")

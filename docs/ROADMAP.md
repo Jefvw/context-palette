@@ -1,32 +1,33 @@
-Phase 0
-✔ Product vision
-✔ Development process
+# Roadmap
 
-Phase 1
-□ Launcher
-□ Search
-□ Actions
+The roadmap describes ordered product outcomes, not commitments or implemented behavior. Current behavior is defined by [MVP](MVP.md) and [Architecture](ARCHITECTURE.md); concrete tasks live in the root [Backlog](../BACKLOG.md).
 
-Phase 2
-□ Contexts
-□ Inbox
-□ Drafts
+## Now — make repeated actions effortless
 
-Phase 3
-□ Testing
-□ Trusted actions
-□ Review queue
+- Validate the guided Configure experience with real personal actions, contexts, and right-side button sets.
+- Improve discoverability of actions and action effects without exposing technical IDs.
+- Complete manual Windows accessibility and responsive-layout checks.
+- Continue reducing `launcher.py` responsibilities through behavior-preserving extraction.
 
-Phase 4
-□ LLM integration
+## Next — deepen safe context workflows
 
-Phase 5
-□ Workflows
+- Add richer context composition and ranking while preserving explicit focus and global search.
+- Improve snapshot selection, launch-target editing, and recovery reporting.
+- Design clipboard preservation/restoration as an explicit transaction with tests.
+- Design a small previewable linear sequence model; no loops, conditions, or arbitrary commands.
+- Expand AI-proposable action types only where type-specific validation and review are adequate.
 
-Phase 6
-□ Context composition
+## Later — optional adapters and richer actions
 
-Phase 7
-□ Optional AutoHotkey integration
-✓ Attended Power Automate Desktop and PowerToys show/context/search bridge
-□ Optional separately packaged PowerToys Run plug-in
+- Application-aware context suggestions that never switch focus silently.
+- Rich text, HTML, image, and character-picker actions with explicit clipboard behavior.
+- Optional adapters such as a separately packaged PowerToys Run plug-in.
+- A guarded action-ID automation API only after Trusted authorization, confirmation policy, structured results, and security tests exist.
+
+## Explicit non-goals
+
+- Arbitrary shell-command execution.
+- Hidden or automatic execution of unreviewed actions.
+- Cloud storage as a requirement.
+- Automatic context switching without user control.
+- Replacing the lightweight Tkinter application with a heavy framework solely for appearance.

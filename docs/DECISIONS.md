@@ -2,6 +2,24 @@
 
 Record durable product and technical decisions here.
 
+Decision entries are historical and append-only. Their consequences describe the system at the time; use `ARCHITECTURE.md`, `HELP.md`, and `MVP.md` for current behavior.
+
+## 2026-07-18 - Repair stale local environments during setup
+
+**Decision:** Test the existing virtual environment by running its interpreter rather than trusting that `python.exe` exists. Preserve an unusable environment as `.venv-unusable`, select the first genuinely runnable Python 3.12 interpreter, and recreate `.venv`. Make the launcher reject missing or unusable environments with a setup instruction.
+
+**Reason:** Python virtual environments contain absolute paths and can retain executable shims after the project or base Python moves. File-existence checks incorrectly treated that state as healthy, blocking setup, launch, and verification.
+
+**Consequences:** Recovery is non-destructive and leaves personal data untouched. Setup stops rather than overwrite an existing `.venv-unusable`. A working Python 3.12 installation with Tcl/Tk is still required.
+
+## 2026-07-18 - Separate current documentation, history, and planning
+
+**Decision:** Use `ARCHITECTURE.md` and `HELP.md` for current behavior, `MVP.md` for the implemented scope boundary, `ROADMAP.md` for ordered outcomes, the root `BACKLOG.md` for actionable future work, `CHANGELOG.md` for user-visible history, and this file for chronological rationale. Add a documentation index and keep the root agent guide authoritative.
+
+**Reason:** The prototype grew quickly and several documents mixed current behavior, completed work, proposals, and old consequences. Clear ownership reduces drift and helps both developers and AI agents distinguish executable fact from direction.
+
+**Consequences:** Historical decisions are not rewritten when implementation advances. Current documents must label deferred behavior explicitly. Generated action-type documentation remains owned by the executable catalogue.
+
 ## 2026-07-15 - Use one action-type catalogue for validation, documentation, and AI guidance
 
 **Decision:** Define every supported action type in one catalogue containing its user label, family, required fields, input/output effects, portability, AI eligibility, and type-specific prompt guidance. Derive runtime supported types and the generated action overview from that catalogue. Enable AI proposals for `copy_text` and validated fixed `open_url` Drafts.
@@ -612,3 +630,27 @@ The slot legend and text toolbar are also omitted: their functions remain discov
 **Decision:** Change command-surface item interaction so ordinary left-click executes the item's primary available action. Keep right-click as the explicit action-selection menu. Preserve configuration access through Shift+click or Ctrl+click on an item label.
 
 **Reason:** The surface is presented as quick action buttons. Requiring right-click for execution made routine use feel non-functional and added avoidable friction. Modifier-assisted configuration retains direct access to JSON editing without sacrificing fast execution.
+
+## 2026-07-18 - Configure personal actions, contexts, and buttons through one guided window
+
+**Decision:** Add a Configure window beside the Focus selector. Action creation begins by choosing a built-in action type and reviewing its input, output, and portability guidance. The same window edits personal contexts and their slots 6–9, plus personal right-side buttons and their action references.
+
+**Reason:** Routine configuration should not require understanding several JSON files or remembering action-type identifiers. Starting with the executable action catalogue keeps the UI aligned with validation and makes effects visible before a Draft is created.
+
+**Boundary:** Shared project examples are visible but read-only. Personal actions of every built-in type are editable; their stable identity and Draft/Trusted state are preserved. Technical context, action, group, and button IDs remain internal references and are generated automatically where the user should not need to manage them.
+
+## 2026-07-18 - Prioritize the find, run, and repeat-action journey in the interface
+
+**Decision:** Standardize the launcher and secondary windows around a neutral high-contrast theme, explicit pane headings and counts, compact consistent spacing, native keyboard focus, actionable empty states, human-readable action choices, and non-blocking success feedback. Keep text labels on important controls and use native Tk widgets rather than adding an icon or animation dependency.
+
+**Reason:** The primary user needs to identify an action quickly, run it with minimal attention, and turn repeated work into a context-specific action. Visual competition, blank states, hidden keyboard behavior, and internal IDs add friction to that journey.
+
+**Accessibility boundary:** Tkinter does not provide web ARIA attributes. Accessibility uses native Windows controls, visible labels, predictable tab order, focus borders, keyboard equivalents, strong contrast, and status text. Decorative animation is omitted because configuration loads locally in under a second and motion would add delay without useful state information.
+
+## 2026-07-18 - Optimize the resident hot path without adding infrastructure
+
+**Decision:** Detect unchanged configuration before reload, coalesce typed search changes briefly, audit stable main-window tooltips once, and move only long-running window layout/restore work to one background worker. Add a bounded ignored diagnostic log and keep the existing 100 ms main-thread queue drain.
+
+**Reason:** Showing and searching the palette must remain immediate over long resident sessions. Rebuilding unchanged widgets, recurring widget-tree traversal, and multi-second restore waits on the Tk thread are avoidable costs. A database, cache service, async framework, or broad UI refactor would cost more maintainability than it saves.
+
+**Consequences:** External JSON edits remain detectable through file signatures. Date/clipboard-dependent action expansion is never cached. Tk widgets remain main-thread-only. Window actions reject concurrent execution and report completion through the existing queue poller.

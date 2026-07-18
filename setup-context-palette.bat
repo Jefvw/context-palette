@@ -1,25 +1,49 @@
 @echo off
-setlocal
+setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 echo Context Palette setup
 echo =====================
 
-if not exist ".venv\Scripts\python.exe" (
-    echo Creating local Python environment...
-    where py >nul 2>nul
-    if not errorlevel 1 (
-        py -3.12 -m venv .venv 2>nul
-        if errorlevel 1 py -3 -m venv .venv
-    ) else (
-        where python >nul 2>nul
-        if errorlevel 1 (
-            echo ERROR: Python 3 was not found.
-            echo Install Python 3.12 from https://www.python.org/downloads/windows/
+if exist ".venv\Scripts\python.exe" (
+    ".venv\Scripts\python.exe" -c "import sys, tkinter" >nul 2>nul
+    if errorlevel 1 (
+        echo Existing .venv is unusable, usually because the project or Python moved.
+        if exist ".venv-unusable" (
+            echo ERROR: Cannot preserve .venv because .venv-unusable already exists.
+            echo Rename or remove .venv-unusable, then run setup again.
             exit /b 1
         )
-        python -m venv .venv
+        move ".venv" ".venv-unusable" >nul
+        if errorlevel 1 (
+            echo ERROR: Could not preserve the unusable environment as .venv-unusable.
+            echo Stop Context Palette and close programs using .venv, then try again.
+            exit /b 1
+        )
+        echo Preserved the old environment as .venv-unusable.
     )
+)
+
+if not exist ".venv\Scripts\python.exe" (
+    echo Creating local Python environment...
+    set "PYTHON_CMD="
+    py -3.12 -c "import sys, tkinter" >nul 2>nul
+    if not errorlevel 1 set "PYTHON_CMD=py -3.12"
+    if not defined PYTHON_CMD (
+        py -3 -c "import sys, tkinter; raise SystemExit(sys.version_info < (3, 12))" >nul 2>nul
+        if not errorlevel 1 set "PYTHON_CMD=py -3"
+    )
+    if not defined PYTHON_CMD (
+        python -c "import sys, tkinter; raise SystemExit(sys.version_info < (3, 12))" >nul 2>nul
+        if not errorlevel 1 set "PYTHON_CMD=python"
+    )
+    if not defined PYTHON_CMD (
+        echo ERROR: A usable Python 3.12 installation was not found.
+        echo Install Python 3.12 from https://www.python.org/downloads/windows/
+        echo Ensure the Python launcher or python.exe is available, then run setup again.
+        exit /b 1
+    )
+    !PYTHON_CMD! -m venv .venv
     if errorlevel 1 (
         echo ERROR: Could not create .venv.
         exit /b 1
@@ -38,7 +62,7 @@ if not exist "data\layouts\snapshots" mkdir "data\layouts\snapshots"
 echo Verifying Python and Tkinter...
 ".venv\Scripts\python.exe" -c "import sys, tkinter; print('Python', sys.version.split()[0], '- Tk', tkinter.TkVersion)"
 if errorlevel 1 (
-    echo ERROR: Python works, but Tkinter is unavailable.
+    echo ERROR: The local Python environment cannot load Tkinter.
     echo Use the standard Python installer from python.org with Tcl/Tk enabled.
     exit /b 1
 )

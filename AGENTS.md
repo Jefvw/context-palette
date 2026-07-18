@@ -33,8 +33,10 @@ Never commit personal/runtime data:
 - `data/inbox.json`
 - `data/local_actions.json`
 - `data/local_command_surface.json`
+- `data/local_contexts.json`
 - `data/palette.json`
 - `data/layouts/snapshots/`
+- `data/context-palette.log*`
 
 Snapshots can contain window titles, executable paths, URLs, and other private working context.
 
@@ -51,6 +53,8 @@ From the repository root:
 .\stop-context-palette.bat
 ```
 
+Use `.\check-context-palette.bat` for the complete configuration, compilation, and test check.
+
 ## Change rules
 
 - Inspect existing changes before editing; they may be user-owned.
@@ -59,6 +63,7 @@ From the repository root:
 - Add a dated entry to `docs/DECISIONS.md` for important choices.
 - Update `docs/HELP.md` for user-visible behavior.
 - Update README, MVP, and Backlog where appropriate.
+- Update `CHANGELOG.md` for user-visible changes.
 - Do not rewrite Git history, delete user data, push, or publish without explicit authorization.
 
 ## Completion checks

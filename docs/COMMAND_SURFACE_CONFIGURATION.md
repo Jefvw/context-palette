@@ -1,16 +1,23 @@
-# Configure the quick-action surface
+# Right-side button configuration
 
-The right half of Context Palette is a global command surface. It is independent of the selected Focus context and contains groups with multiple compact controls.
+The right pane is a global quick-action surface that remains visible when Focus or Find changes.
 
-## Files
+## Recommended: Configure window
+
+Open **Configure > Right-side buttons** to create or edit personal groups and buttons. The form:
+
+- lists actions by human-readable name;
+- generates stable group and button IDs;
+- saves to ignored `data/local_command_surface.json`;
+- keeps reviewed shared groups visible but read-only.
+
+## Advanced JSON files
 
 - `data/command_surface.json`: reviewed portable groups shared through Git.
-- `data/local_command_surface.json`: optional personal or machine-specific groups ignored by Git.
-- `data/local_command_surface.example.json`: safe empty template copied by setup.
+- `data/local_command_surface.json`: personal or machine-specific groups ignored by Git.
+- `data/local_command_surface.example.json`: safe template copied by setup.
 
-Shared and local groups are combined. Group IDs must be unique, including differences in letter case. Item IDs must be unique inside their group.
-
-## Group and item shape
+Shared and local group IDs must be unique case-insensitively. Button IDs must be unique within their group.
 
 ```json
 {
@@ -31,27 +38,29 @@ Shared and local groups are combined. Group IDs must be unique, including differ
 }
 ```
 
-Group fields:
+| Field | Meaning |
+| --- | --- |
+| Group `id` | Stable internal reference |
+| Group `label` | Visible heading |
+| `items` | Ordered buttons in the group |
+| Item `id` | Stable internal reference within the group |
+| Item `label` | Visible compact label |
+| `primary_action_id` | Optional action used by Enter/Space |
+| `action_ids` | Actions offered by the right-click menu |
 
-- `id`: stable unique configuration ID.
-- `label`: short heading for the subarea.
-- `items`: any number of compact labels/buttons in the subarea.
-
-Item fields:
-
-- `id`: stable ID unique inside the group.
-- `label`: compact visible label text.
-- `primary_action_id`: optional preferred action inserted first in the right-click menu when it is not already listed.
-- `action_ids`: actions shown in this item's right-click menu.
-
-Every action ID should refer to an existing shared or local action. Missing menu IDs are skipped.
+Every action ID should resolve to an existing shared or local action. The configuration checker reports missing references with the owning group and button.
 
 ## Interaction
 
-- Left-click a label to execute its primary available action.
-- Right-click that label to select one of its assigned actions.
-- Shift+click or Ctrl+click a label to open the owning command-surface JSON and corresponding shared/local action JSON in the default editor.
-- Actions use the same Input / Output, selected-text, clipboard, URL validation, and constrained execution path as actions in the left search list.
-- Edit the JSON and restart Context Palette, or use an existing Reload path, to rebuild the surface.
+- Left-click runs the primary available action.
+- Right-click opens the button’s assigned action menu.
+- Shift+click or Ctrl+click opens the owning JSON configuration and corresponding action file.
+- Enter or Space runs the first available primary action when the button has focus.
 
-The surface does not execute command strings. It only references allow-listed Context Palette actions.
+All routes use the same constrained executor as search results. Buttons never execute command strings.
+
+After an external JSON edit, return to or reopen the palette. Changed files are detected by signature and reloaded; a restart is normally unnecessary.
+
+## Limitations
+
+Groups are global, not context-conditional. Drag ordering and richer controls are not implemented. Shared configuration remains file-reviewed and read-only in Configure.

@@ -1,18 +1,6 @@
-# Cheat Sheet Format
+# Cheat-sheet format
 
-This is the proposed local format for app or topic cheat sheets.
-
-Use one JSON file per application or topic:
-
-```text
-data\cheatsheets\vscode.json
-data\cheatsheets\codex.json
-data\cheatsheets\email.json
-```
-
-JSON is the first format because it is easy for Context Palette to load, search, validate, and display in a popup without adding dependencies.
-
-## Recommended Structure
+Context Palette loads one structured JSON file per application, project, workflow, or topic from `data/cheatsheets/`. Sheets are searchable in the app, and an individual entry can be promoted to a personal `copy_text` Draft action.
 
 ```json
 {
@@ -21,10 +9,10 @@ JSON is the first format because it is easy for Context Palette to load, search,
   "kind": "application",
   "aliases": ["code", "visual studio code"],
   "summary": "Daily commands and reminders for working in VS Code.",
-  "updated_at": "2026-07-11",
+  "updated_at": "2026-07-18",
   "sections": [
     {
-      "title": "Start Here",
+      "title": "Start here",
       "items": [
         {
           "label": "Open command palette",
@@ -32,51 +20,29 @@ JSON is the first format because it is easy for Context Palette to load, search,
           "tags": ["shortcut", "navigation"]
         }
       ]
-    },
-    {
-      "title": "Project Commands",
-      "items": [
-        {
-          "label": "Run tests",
-          "detail": ".\\.venv\\Scripts\\python.exe -m unittest discover tests",
-          "tags": ["command", "testing"]
-        }
-      ]
     }
   ]
 }
 ```
 
-## Field Guide
+## Fields
 
-- `id`: short stable name, lowercase if possible.
-- `title`: display name shown in the popup.
-- `kind`: usually `application`, `topic`, `project`, or `workflow`.
-- `aliases`: search words that should also find this sheet.
-- `summary`: one short sentence.
-- `updated_at`: date the sheet was last reviewed.
-- `sections`: grouped information for scanning.
-- `label`: short visible item name.
-- `detail`: the useful text, shortcut, command, note, or reminder.
-- `tags`: optional search/filter hints.
+| Field | Meaning |
+| --- | --- |
+| `id` | Stable sheet identifier |
+| `title` | Display name |
+| `kind` | Descriptive category such as `application`, `topic`, `project`, or `workflow` |
+| `aliases` | Additional sheet search terms |
+| `summary` | Short overview |
+| `updated_at` | Last content-review date |
+| `sections` | Ordered groups |
+| Section `title` | Group heading and search text |
+| Item `label` | Short visible name |
+| Item `detail` | Useful text, shortcut, command, or note |
+| Item `tags` | Optional item search terms |
 
-## Why This Shape
+Search covers sheet and section metadata plus item labels, details, and tags.
 
-The popup can show sections directly.
+Promotion copies one item into `data/local_actions.json` as a Draft. It does not modify the source sheet. Review command-like text before trusting or using it; a cheat-sheet detail is reference text, not an executable shell action.
 
-Search can match title, aliases, section titles, labels, details, and tags.
-
-LLM-created drafts can fill this structure without deciding UI layout.
-
-Later, trusted cheat-sheet items can become launcher actions without converting a whole document by hand.
-
-## Keep Separate From Markdown For Now
-
-Markdown is pleasant for humans, but structured JSON is easier for the app to:
-
-- show compact popup sections;
-- search individual items;
-- promote one item into an action;
-- mark individual items as draft or trusted later.
-
-If you are drafting by hand, write the content in any form first, then convert it into this JSON shape when it is ready to plug into Context Palette.
+JSON is used because it supports validation, item-level search, and item-level promotion without a third-party parser. Markdown can still be used for drafting before content is converted to this structure.

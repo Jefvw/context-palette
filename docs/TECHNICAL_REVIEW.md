@@ -2,6 +2,8 @@
 
 Date: 2026-07-13
 
+This is a dated review, not the current architecture source of truth. See [Architecture](ARCHITECTURE.md) for current behavior. Status notes below were updated on 2026-07-18; the original rationale remains useful.
+
 ## Conclusion
 
 Context Palette has a sound prototype architecture and does not need a rewrite. The standard-library boundary, constrained action model, callback-injected effects, local data ownership, and automated domain tests are good foundations for a portable Windows tool.
@@ -19,13 +21,13 @@ The main technical risk is concentrated UI orchestration. `launcher.py` still ow
 
 ## Findings and priorities
 
-### High: make JSON writes resilient
+### Completed: make JSON writes resilient
 
-Actions, Inbox items, palette state, and snapshots currently write JSON directly to their destination. An interrupted write can damage the complete file. Introduce one standard-library persistence helper that writes a temporary sibling file, flushes it, and atomically replaces the destination. Add recovery or backup guidance before expanding authoring features.
+Application-managed JSON now uses `persistence.py` to flush a temporary sibling, preserve the prior destination as `.bak`, and atomically replace the destination. The configuration checker reuses domain loaders and validates cross-file references.
 
-### High: add a minimal Windows UI smoke test
+### Completed: add a minimal Windows UI smoke test
 
-Unit tests cover domain behaviour but do not construct and close the complete Tk application. Add a Windows-only smoke test or repeatable diagnostic mode that builds the launcher with temporary data and immediately closes it. Keep manual verification for focus, global hotkeys, tooltips, monitor placement, and external application opening.
+The Windows-only suite now constructs the complete Tk application with temporary data, processes pending layout work, and closes it through the normal shutdown path. The test isolates global-hotkey and single-instance operating-system boundaries so it cannot claim those integrations during a test run. Manual verification remains necessary for focus, global hotkeys, tooltips, monitor placement, and external application opening.
 
 ### Medium: continue splitting `launcher.py`
 
@@ -35,9 +37,9 @@ The UI construction is now divided into header, results/command surface, shortcu
 
 `execute_action` remains understandable, but its branches implicitly determine clipboard reads, clipboard writes, workspace output, prompts, and external opening. Before safe action sequences or clipboard transactions are added, define and test explicit effect metadata or a small execution-result model. Avoid a class hierarchy until multiple real action types need it.
 
-### Medium: normalize persistence and error handling
+### Partly completed: normalize persistence and error handling
 
-Several modules repeat JSON loading/writing and UI error-dialog patterns. Consolidate only the stable common parts: safe JSON replacement, schema-root validation, and presentation of domain errors. Keep module-specific validation close to its domain.
+Safe JSON replacement is centralized. Module-specific schema validation remains close to each domain, which is intentional. Presentation of validation errors can still be made more consistent as secondary windows are extracted.
 
 ### Low: improve automated quality checks
 
@@ -53,10 +55,8 @@ The current `unittest`, `compileall`, and `git diff --check` checks are useful. 
 
 ## Recommended refactoring order
 
-1. Add atomic JSON persistence and tests.
-2. Add a Windows launcher construction/close smoke test.
-3. Extract secondary windows from `launcher.py` one family at a time.
-4. Define clipboard and workspace effects before implementing transactions and sequences.
-5. Reassess only after those capabilities have real usage feedback.
+1. Extract secondary windows from `launcher.py` one family at a time.
+2. Define clipboard and workspace effects before implementing transactions and sequences.
+3. Reassess only after those capabilities have real usage feedback.
 
 This order improves reliability and maintainability without delaying product learning or replacing working code for stylistic reasons.

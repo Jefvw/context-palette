@@ -19,6 +19,9 @@ class FakeSearchVar:
     def get(self) -> str:
         return self.value
 
+    def set(self, value: str) -> None:
+        self.value = value
+
 
 class FakeHelpContent:
     def __init__(self, positions: dict[str, str] | None = None) -> None:
@@ -51,6 +54,7 @@ class FakeHelpContent:
 def help_window(query: str, content: FakeHelpContent) -> HelpWindow:
     window = HelpWindow.__new__(HelpWindow)
     window.search_var = FakeSearchVar(query)
+    window.search_status_var = FakeSearchVar("")
     window.content = content
     return window
 

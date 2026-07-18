@@ -2,7 +2,7 @@
 
 Context Palette is a fast, portable Windows launcher for reusable actions, working contexts, captured material, transformations, and workspace layouts.
 
-The interface uses a light grey, teal, and aqua theme with Segoe UI typography. Teal highlights primary actions and active selections; the two aqua row shades distinguish pinned and focus-context slots. Hover and keyboard-focus states provide additional feedback without changing the launcher layout.
+The interface uses a clean neutral surface with Segoe UI typography and a high-contrast dark teal accent. Teal is reserved for primary actions and active selections. Two light teal row shades distinguish pinned and focus-context slots, while slot numbers preserve the same meaning without relying on color alone. Native focus borders make keyboard location visible.
 
 Developers can find the current implementation architecture in `docs/ARCHITECTURE.md` and decision history in `docs/DECISIONS.md`.
 
@@ -16,6 +16,8 @@ Power Automate Desktop and PowerToys setup is documented in `integrations/README
 - Press `F9` or `Ctrl+Alt+P` to capture the current text selection and show the resident palette. On laptops in media-key mode, use `Fn+F9` or enable Fn Lock.
 - The palette uses the mouse cursor position at shortcut time as its top-left corner. Near a monitor edge it shifts only as far as needed to keep the complete window visible.
 - Press `Esc`, click `Hide`, or close the window to hide it.
+- Press `Ctrl+L` or `Ctrl+K` to return keyboard focus to Find.
+- Press `Ctrl+I` to capture clipboard text, `Ctrl+,` to open Configure, or `F1` to open Help.
 - Click `Quit` to stop the resident process completely.
 - If a development instance becomes stuck, run `stop-context-palette.bat` and start again. The stop command targets this project's virtual-environment GUI and foreground diagnostic process trees; it does not stop unrelated Python applications or Context Palette clones in other folders.
 
@@ -29,7 +31,7 @@ This does not execute the highlighted action. Avoid passing secrets or selected 
 
 ## Focus context
 
-Contexts do not have to be created through the UI. Shared definitions live in `data/contexts.json`; private or work-specific definitions live in ignored `data/local_contexts.json`. The complete format and QTP-style recipes are in `docs/CONTEXT_CONFIGURATION.md`.
+Click **Configure** beside the Focus selector to create or edit personal contexts and choose up to four preferred actions for slots 6 through 9. Shared definitions remain visible but read-only. Shared definitions live in `data/contexts.json`; private or work-specific definitions live in ignored `data/local_contexts.json`. The complete format and QTP-style recipes are in `docs/CONTEXT_CONFIGURATION.md`.
 
 The Focus context tells Context Palette what kind of work is currently most important. It changes slots 6 through 9 and influences which actions appear first.
 
@@ -45,10 +47,12 @@ Search matches Technology, Task, Context, Action name, type, and content.
 
 - Type to filter actions.
 - Use Up/Down, Page Up/Page Down, Home, and End to navigate.
-- Press Enter, double-click, or click `Run selected`.
+- Press Enter, double-click, or click **Run**.
 - Numpad 1 through 9 executes the corresponding fixed slot.
 - Number-row 1 through 9 executes slots only while Find has focus.
 - Selecting an action updates the slim communication line at the bottom.
+
+The Actions heading shows the current match count. When nothing matches, the list explains how to clear Find or create an action instead of presenting a blank pane.
 
 Blue rows are pinned slots 1–5. Green rows are focus-context slots 6–9. Neutral rows are other search results.
 
@@ -59,14 +63,30 @@ The right half contains global configurable subareas. Each subarea contains mult
 - Left-click a label to execute its primary configured action.
 - Right-click that label to open its individually assigned executable action menu.
 - Shift+click or Ctrl+click a label to open its technical menu configuration and corresponding action file in the default JSON editor.
+- Tab to a quick action and press Enter or Space to run its primary action.
 - Every item uses the same selected text, Input / Output, clipboard, and safe action executor as the search list.
 - Configure shared groups in `data/command_surface.json` and private groups in `data/local_command_surface.json`.
+- Use **Configure > Right-side buttons** to add or edit personal groups and buttons without editing JSON. Choose existing actions from lists; stable IDs are generated from the visible names when left blank.
+- Quick-action groups use three compact button columns with reduced padding so more actions fit without enlarging the palette.
+
+## Configure
+
+Click **Configure** beside the Focus selector for the guided personal-configuration workspace:
+
+- **Actions:** edit every kind of personal action, including URLs, files, folders, applications, transformations, layouts, and snapshots. Shared actions remain read-only.
+- **Built-in action types:** inspect what each built-in type reads and does, see a concrete example, then create a validated personal Draft.
+- **Contexts:** add or edit personal contexts and assign actions to slots 6–9.
+- **Right-side buttons:** add or edit personal button groups and assign existing actions. Technical IDs are generated automatically and are not shown in the normal form.
+
+Changes are saved atomically to ignored local files. Shared project examples are shown for reference but cannot be changed in this window. New actions always begin as Drafts and still require testing before they can be marked Trusted.
+
+Context slots and button assignments show human-readable action names and contexts. Internal IDs remain stored for stable references but are not part of the normal editing workflow. Successful saves appear in the Configure footer without interrupting work with a confirmation dialog.
 
 The complete JSON format is documented in `docs/COMMAND_SURFACE_CONFIGURATION.md`.
 
 ## Input / Output workspace
 
-Input / Output is a permanent editable working text box, not an action preview. A fresh application start leaves it empty. Reopening the resident palette can show the current clipboard or captured selection. Actions can read or replace it. The heading and permanent toolbar are omitted to maximize editing space.
+Input / Output is a permanent editable working text box, not an action preview. A fresh application start leaves it empty. Reopening the resident palette can show the current clipboard or captured selection. Actions can read or replace it. Its compact heading explains the field without adding a separate toolbar.
 
 Numbered action triggering is deliberately active only while Find has focus. In every other control—including Clipboard / Input / Output, the result list, context selector, and buttons—`1` through `9` do not execute actions. This makes Find the explicit keyboard command mode. Standard text editing remains available in the workspace.
 
@@ -88,7 +108,7 @@ Example: in the Database context, `Convert lines to SQL string list` turns separ
 
 ## Main buttons
 
-### Run selected
+### Run
 
 Executes the highlighted action. The exact effect appears in the bottom communication line when selected.
 
@@ -132,7 +152,7 @@ Opens searchable local cheat sheets. Individual cheat-sheet entries can be promo
 
 ### Edit
 
-Edits the selected Draft copy-text action. Other action types remain read-only until type-specific editors are added.
+Edits the selected Draft copy-text action from the launcher. To edit any personal built-in action type, open **Configure > Actions**. Shared actions and Trusted actions remain read-only in the launcher edit flow.
 
 ### Pin
 
@@ -197,8 +217,11 @@ The `Company Reference Prefixes` sheet documents known Archive and ServiceNow pr
 - `data/local_actions.json`: ignored personal and machine-specific actions.
 - `data/inbox.json`: ignored captures.
 - `data/palette.json`: ignored per-machine focus context, pins, and context slots.
+- `data/local_contexts.json`: ignored personal context definitions.
+- `data/local_command_surface.json`: ignored personal right-side buttons.
 - `data/cheatsheets`: reviewed cheat sheets shared through Git.
 - `data/layouts`: configured layouts and captured snapshots.
+- `data/context-palette.log*`: ignored bounded local diagnostics.
 
 When Context Palette updates a JSON file, it writes and flushes a temporary sibling before replacing the destination. If a previous destination existed, it is preserved beside the file with `.bak` appended. Backup and temporary files are local and ignored by Git because they can contain private data.
 
@@ -215,6 +238,10 @@ The configuration report identifies the owning context, command item, or palette
 Context Palette uses constrained action types. It does not execute arbitrary shell command strings. Draft actions should be previewed and tested before they are marked Trusted. Browser URLs and application paths remain visible in local files.
 
 ## Troubleshooting
+
+Configuration reloads show a brief busy cursor and status message. Because all configuration is local and normally loads in under a second, Context Palette does not show a spinner that would flicker during ordinary use. Errors identify the affected area and preserve the rest of the launcher where possible.
+
+For an intermittent startup, configuration, or window-restore problem, inspect `data/context-palette.log`. The local log is ignored by Git, rotates automatically, and does not deliberately record clipboard or Input / Output contents.
 
 ### New features are reported as unsupported
 

@@ -34,6 +34,7 @@ class AIGuidanceWindow:
         self.window.title("Ask AI for Draft Action Proposals")
         self.window.geometry("780x700")
         self.window.minsize(620, 520)
+        self.window.bind("<Escape>", lambda _event: self.window.destroy())
 
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
@@ -143,10 +144,8 @@ class AIGuidanceWindow:
         text = self.request.get("1.0", "end-1c")
         self.window.clipboard_clear()
         self.window.clipboard_append(text)
-        messagebox.showinfo(
-            "Context Palette",
-            "AI request copied. Paste it into your chosen AI, then paste its JSON response here.",
-            parent=self.window,
+        self.review_status_var.set(
+            "AI request copied. Paste it into your chosen AI, then paste its JSON response here."
         )
 
     def _paste_response(self) -> None:

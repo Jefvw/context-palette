@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.window_layouts import (
+    WindowLayoutError,
     _match_snapshot_window,
     browser_windows_without_launch_url,
     load_window_layout,
@@ -75,6 +76,17 @@ class WindowLayoutTests(unittest.TestCase):
             saved = json.loads(path.read_text(encoding="utf-8"))
 
         self.assertEqual(saved["windows"][0]["launch_target"], "https://example.com")
+
+    def test_browser_snapshot_rejects_incomplete_launch_url(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "snapshot.json"
+            path.write_text(
+                json.dumps({"windows": [{"title": "Browser"}]}),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(WindowLayoutError):
+                set_snapshot_launch_target(path, 0, "https://")
 
 
 if __name__ == "__main__":

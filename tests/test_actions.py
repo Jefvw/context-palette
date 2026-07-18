@@ -16,6 +16,8 @@ from context_palette.actions import (
     append_action,
     append_actions,
     build_url,
+    configured_draft_action,
+    edited_configured_action,
     draft_build_url_action,
     draft_copy_text_action,
     edited_copy_text_action,
@@ -32,6 +34,50 @@ from context_palette.actions import (
 
 
 class ActionTests(unittest.TestCase):
+    def test_configured_draft_action_uses_built_in_type_and_validates_value(self):
+        action = configured_draft_action(
+            title="Open documentation",
+            context="Developing",
+            action_type="open_url",
+            value="https://docs.python.org/",
+            technology="Python",
+        )
+
+        self.assertEqual(action.type, "open_url")
+        self.assertEqual(action.state, "Draft")
+        self.assertEqual(action.technology, "Python")
+
+        with self.assertRaises(ActionError):
+            configured_draft_action(
+                title="Broken URL",
+                context="General",
+                action_type="open_url",
+                value="not-a-url",
+            )
+
+    def test_edited_configured_action_preserves_identity_and_maturity(self):
+        original = Action(
+            id="personal-docs",
+            title="Open old docs",
+            context="General",
+            type="open_url",
+            value="https://example.com/old",
+            state="Trusted",
+        )
+
+        edited = edited_configured_action(
+            original,
+            title="Open current docs",
+            context="Developing",
+            action_type="open_url",
+            value="https://docs.python.org/",
+        )
+
+        self.assertEqual(edited.id, "personal-docs")
+        self.assertEqual(edited.state, "Trusted")
+        self.assertEqual(edited.title, "Open current docs")
+        self.assertEqual(edited.context, "Developing")
+
     def test_workspace_case_transformations(self):
         self.assertEqual(transform_text("AbC É", "lowercase"), "abc é")
         self.assertEqual(transform_text("AbC é", "uppercase"), "ABC É")

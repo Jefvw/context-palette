@@ -10,17 +10,17 @@ No open-source license has been selected yet. Keep the repository private, or ch
 
 ## First computer: publish preparation
 
-1. Confirm tests pass:
+1. Run the complete check:
 
    ```powershell
-   .\.venv\Scripts\python.exe -m unittest discover tests
+   .\check-context-palette.bat
    ```
 
 2. Confirm ignored personal files are not staged:
 
    ```powershell
    git status --short
-   git check-ignore data\inbox.json data\local_actions.json data\local_command_surface.json data\palette.json
+   git check-ignore data\inbox.json data\local_actions.json data\local_contexts.json data\local_command_surface.json data\palette.json data\context-palette.log
    git check-ignore data\layouts\snapshots\example.json
    ```
 
@@ -104,7 +104,7 @@ Setup installs the declared dependencies into that computer's own `.venv` and ru
 
 ### Repairing or rebuilding an environment
 
-An environment is disposable. If `.venv` was copied from another computer, points to a missing Python executable, or behaves inconsistently, stop the application, remove or rename `.venv`, and run setup again. Local Context Palette data is stored under `data`, not inside `.venv`, so rebuilding the environment does not remove Inbox items, private actions, pins, or snapshots.
+An environment is disposable. If `.venv` was copied from another computer or points to a missing Python executable, run setup again. Setup detects the unusable environment, preserves it as `.venv-unusable`, and creates a fresh one. If that backup name already exists, rename or remove the old backup before retrying. Local Context Palette data is stored under `data`, not inside `.venv`, so rebuilding the environment does not remove Inbox items, private actions, contexts, buttons, pins, or snapshots.
 
 ## Shared versus local data
 
@@ -113,6 +113,7 @@ An environment is disposable. If `.venv` was copied from another computer, point
 - Source code and tests.
 - Documentation.
 - `data/actions.json`: reviewed portable actions suitable for every computer.
+- `data/contexts.json`: reviewed portable context definitions.
 - `data/cheatsheets`: reviewed shared cheat sheets.
 - `data/command_surface.json`: reviewed shared global quick-action groups.
 - `data/layouts` except snapshots: reviewed portable example layouts.
@@ -122,9 +123,11 @@ An environment is disposable. If `.venv` was copied from another computer, point
 
 - `data/inbox.json`: captured content.
 - `data/local_actions.json`: personal or machine-specific actions.
+- `data/local_contexts.json`: personal or work-specific contexts.
 - `data/local_command_surface.json`: personal or machine-specific quick-action groups.
 - `data/palette.json`: pins, focus context, and per-PC slots.
 - `data/layouts/snapshots/`: window titles, paths, URLs, and monitor layouts.
+- `data/context-palette.log*`: bounded local diagnostics.
 - `.venv`: the local Python environment.
 
 ## Portable paths
@@ -173,8 +176,8 @@ Ask assistants to:
 
 - preserve ignored runtime files;
 - never copy local data into tracked examples automatically;
-- run the full test suite;
-- update Architecture, Decisions, Help, and Backlog when behavior changes;
+- run the complete check and relevant manual tests;
+- update Architecture, Decisions, Help, Changelog, and planning documents when appropriate;
 - show `git status` before committing;
 - never push without explicit approval.
 
