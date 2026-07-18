@@ -44,12 +44,13 @@ Item fields:
 - `primary_action_id`: optional preferred action inserted first in the right-click menu when it is not already listed.
 - `action_ids`: actions shown in this item's right-click menu.
 
-Every action ID should refer to an existing shared or local action. Missing menu IDs are skipped. Labels never execute on left-click; execution is deliberately reserved for their right-click menus.
+Every action ID should refer to an existing shared or local action. Missing menu IDs are skipped.
 
 ## Interaction
 
-- Left-click a label to open the owning command-surface JSON and corresponding shared/local action JSON in the default editor.
+- Left-click a label to execute its primary available action.
 - Right-click that label to select one of its assigned actions.
+- Shift+click or Ctrl+click a label to open the owning command-surface JSON and corresponding shared/local action JSON in the default editor.
 - Actions use the same Input / Output, selected-text, clipboard, URL validation, and constrained execution path as actions in the left search list.
 - Edit the JSON and restart Context Palette, or use an existing Reload path, to rebuild the surface.
 

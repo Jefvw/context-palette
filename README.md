@@ -2,15 +2,17 @@
 
 Context Palette is a portable Windows productivity tool for building and using reusable contexts and actions.
 
-Technical implementation and module boundaries are documented in `docs\ARCHITECTURE.md`. Chronological rationale for important choices is recorded in `docs\DECISIONS.md`.
+Technical implementation and module boundaries are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Chronological rationale for important choices is recorded in [docs/DECISIONS.md](docs/DECISIONS.md).
 
-For cloning, setup, safe GitHub publishing, shared versus local data, and AI-assisted development on multiple PCs, see `docs\MULTI_PC_DEVELOPMENT.md`.
+For cloning, setup, safe GitHub publishing, shared versus local data, and AI-assisted development on multiple PCs, see [docs/MULTI_PC_DEVELOPMENT.md](docs/MULTI_PC_DEVELOPMENT.md).
 
-For Power Automate Desktop and PowerToys integration, see `integrations\README.md`.
+For Power Automate Desktop and PowerToys integration, see [integrations/README.md](integrations/README.md).
 
-For the standard action overview, portability notes, and current AI eligibility, see `docs\ACTION_TYPES.md`.
+For the standard action overview, portability notes, and current AI eligibility, see [docs/ACTION_TYPES.md](docs/ACTION_TYPES.md).
 
-Contexts can be configured outside the UI. See `docs\CONTEXT_CONFIGURATION.md` for shared/local JSON, preferred slots, and QTP-style recipes.
+Contexts can be configured outside the UI. See [docs/CONTEXT_CONFIGURATION.md](docs/CONTEXT_CONFIGURATION.md) for shared/local JSON, preferred slots, and QTP-style recipes.
+
+For a complete file-first setup flow (contexts, actions, command surface, validation, and restart), see [docs/CONFIGURE_WITH_FILES.md](docs/CONFIGURE_WITH_FILES.md).
 
 The project is intentionally small at this stage. The current focus is to build the first local prototype without requiring administrator rights, installers, services, registry changes, AutoHotkey, or external services.
 
@@ -59,7 +61,7 @@ setup-context-palette.bat
 
 It creates the local environment and private runtime files from safe examples, verifies Tkinter, and runs the tests.
 
-The environment is isolated but machine-local: do not copy `.venv` between computers. Git does not transfer packages installed inside it. Shared third-party dependencies belong in the tracked `requirements.txt`; setup installs that declaration into each computer's own environment. Run setup again after pulling a change to `requirements.txt`. See `docs\MULTI_PC_DEVELOPMENT.md` for the complete add, commit, pull, and rebuild workflow.
+The environment is isolated but machine-local: do not copy `.venv` between computers. Git does not transfer packages installed inside it. Shared third-party dependencies belong in the tracked `requirements.txt`; setup installs that declaration into each computer's own environment. Run setup again after pulling a change to `requirements.txt`. See [docs/MULTI_PC_DEVELOPMENT.md](docs/MULTI_PC_DEVELOPMENT.md) for the complete add, commit, pull, and rebuild workflow.
 
 On this machine, Python 3.12 is installed under the user's profile. A nearby Codex project that already uses Tkinter was checked, and it uses Codex's bundled Python runtime as the base for its `.venv`.
 
@@ -172,11 +174,11 @@ Choose a focus context above the search field. The numbered slots have stable me
 - `1` through `5`: globally pinned actions, independent of the focus context.
 - `6` through `9`: the top four actions configured or selected for the focus context.
 
-An action may deliberately appear in both groups. Use `Pin / Unpin` on the selected action to manage the five global pins. Pins, focus context, and optional explicit context slots are stored in `data\palette.json`.
+An action may deliberately appear in both groups. Use `Pin / Unpin` on the selected action to manage the five global pins. Pins, focus context, and optional explicit context slots are stored in [data/palette.json](data/palette.json).
 
 Result rows use the compact form `Command → subject`, such as `Open → Colruyt product ID`. Hover a row to see its Context, Technology, Task, and original action name. All those fields continue to participate in search.
 
-The right half is configured through `data\command_surface.json`. It contains grouped subareas with multiple compact labels: left-click opens the technical menu/action configuration and right-click opens that label's executable action menu. Personal groups can be added in ignored `data\local_command_surface.json`; see `docs\COMMAND_SURFACE_CONFIGURATION.md`.
+The right half is configured through [data/command_surface.json](data/command_surface.json). It contains grouped subareas with multiple compact labels: left-click opens the technical menu/action configuration and right-click opens that label's executable action menu. Personal groups can be added in ignored [data/local_command_surface.json](data/local_command_surface.json); see [docs/COMMAND_SURFACE_CONFIGURATION.md](docs/COMMAND_SURFACE_CONFIGURATION.md).
 
 For copy-text actions, the saved text is copied to the clipboard.
 
@@ -258,9 +260,9 @@ Copy-only actions do not replace Input / Output. URL actions can consume the fie
 
 ### Window layouts
 
-The `window_layout` action type detects connected screens, opens configured Explorer folders, and places their windows using relative monitor coordinates. Layouts are inspectable JSON files under `data\layouts`.
+The `window_layout` action type detects connected screens, opens configured Explorer folders, and places their windows using relative monitor coordinates. Layouts are inspectable JSON files under [data/layouts](data/layouts).
 
-The included `data\layouts\three-explorers.json` example is available in the `Developing Context Palette` focus context as `Arrange three Explorer windows`:
+The included [data/layouts/three-explorers.json](data/layouts/three-explorers.json) example is available in the `Developing Context Palette` focus context as `Arrange three Explorer windows`:
 
 - With two or more screens, the project folder fills screen 1; `data` and `docs` use the top and bottom halves of screen 2.
 - With one screen, project, `data`, and `docs` use three columns.
@@ -269,7 +271,7 @@ The communication line reports the currently detected screen count before execut
 
 ### Capture and restore a window snapshot
 
-Arrange your open application windows, choose the appropriate focus context, and click `Snapshot`. Give the situation a name. Context Palette stores ordinary visible, non-minimized application windows with their executable, title, class, screen, relative position, and whether the window was foreground under `data\layouts\snapshots`.
+Arrange your open application windows, choose the appropriate focus context, and click `Snapshot`. Give the situation a name. Context Palette stores ordinary visible, non-minimized application windows with their executable, title, class, screen, relative position, and whether the window was foreground under [data/layouts/snapshots](data/layouts/snapshots).
 
 For each detected browser window, Snapshot asks for an optional launch URL. Windows does not expose normal browser-tab URLs through the ordinary window API, so explicit confirmation is more reliable and does not disturb the browser or clipboard. Saved URLs are used when a missing browser window must be reopened.
 
@@ -294,7 +296,7 @@ If the status line says `Ctrl+Alt+P is unavailable`, the app will stay visible w
 5. The capture is saved to:
 
 ```text
-data\inbox.json
+[data/inbox.json](data/inbox.json)
 ```
 
 This is the first capture step only. Converting an Inbox item into a draft action comes later.
@@ -333,8 +335,8 @@ Select a cheat-sheet item and click `Promote to Draft` to create a draft copy-te
 The incorporated sheets include:
 
 ```text
-data\cheatsheets\win11.json
-data\cheatsheets\company-references.json
+[data/cheatsheets/win11.json](data/cheatsheets/win11.json)
+[data/cheatsheets/company-references.json](data/cheatsheets/company-references.json)
 ```
 
 The company-reference sheet makes Archive and ServiceNow prefixes searchable. Product URL builders are grouped in the `Product lookup` focus context; select or copy an ID and run one destination-specific action to copy and open its URL.
@@ -344,13 +346,13 @@ The company-reference sheet makes Archive and ServiceNow prefixes searchable. Pr
 The prototype reads actions from:
 
 ```text
-data\actions.json
+[data/actions.json](data/actions.json)
 ```
 
 The prototype writes captures to:
 
 ```text
-data\inbox.json
+[data/inbox.json](data/inbox.json)
 ```
 
 These files are plain JSON so they can be inspected and backed up easily. Editing is still manual for now; the action editor comes later.
@@ -358,7 +360,7 @@ These files are plain JSON so they can be inspected and backed up easily. Editin
 Proposed app/topic cheat-sheet files are documented in:
 
 ```text
-docs\CHEATSHEET_FORMAT.md
+[docs/CHEATSHEET_FORMAT.md](docs/CHEATSHEET_FORMAT.md)
 ```
 
 ## Dependencies
@@ -369,7 +371,7 @@ There are currently no third-party Python dependencies.
 
 ## Help
 
-Click `Help` in the main palette to open the complete searchable local guide. The source document is `docs\HELP.md` and can also be read directly in a text editor. Hover over a main button briefly to see its documented input, effect, and important limitation.
+Click `Help` in the main palette to open the complete searchable local guide. The source document is [docs/HELP.md](docs/HELP.md) and can also be read directly in a text editor. Hover over a main button briefly to see its documented input, effect, and important limitation.
 
 ## Run tests
 
@@ -416,7 +418,7 @@ OK
 18. Copy a short sentence from another app.
 19. Click `Capture`, or press `Ctrl+I`.
 20. Give it a title.
-21. Confirm `data\inbox.json` contains the captured text.
+21. Confirm [data/inbox.json](data/inbox.json) contains the captured text.
 22. Click `Inbox`.
 23. Confirm the captured item appears with a preview.
 24. Click `Convert to Draft Action`.

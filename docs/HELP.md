@@ -56,8 +56,9 @@ Blue rows are pinned slots 1–5. Green rows are focus-context slots 6–9. Neut
 
 The right half contains global configurable subareas. Each subarea contains multiple compact action labels/buttons and stays visible when Focus changes.
 
-- Left-click a label to open its technical menu configuration and corresponding action file in the default JSON editor.
+- Left-click a label to execute its primary configured action.
 - Right-click that label to open its individually assigned executable action menu.
+- Shift+click or Ctrl+click a label to open its technical menu configuration and corresponding action file in the default JSON editor.
 - Every item uses the same selected text, Input / Output, clipboard, and safe action executor as the search list.
 - Configure shared groups in `data/command_surface.json` and private groups in `data/local_command_surface.json`.
 
@@ -117,13 +118,13 @@ The response must be plain JSON in the displayed format. Context Palette also ac
 
 The standard action catalogue and current AI eligibility are documented in `docs/ACTION_TYPES.md`. The first AI-enabled types are `copy_text` and `open_url`. Website proposals require a complete HTTP or HTTPS address and remain Drafts until reviewed and tested.
 
-For a URL built from selected or copied text, choose **Build URL — copy and open using selection/clipboard** and use a template such as:
+For a URL built from selected or copied text, choose **Build URL — open from selected or copied ID** and use a template such as:
 
 ```text
-http://linkto/archives/{id_url}
+https://domain-product.atlassian.net/browse/{id_url}
 ```
 
-`{id_url}` is replaced with URL-encoded text from Input / Output, the captured selection, or the clipboard. The creator displays a live example before saving. Copy-only and open-only variants can instead ask for input when run.
+If the Inbox item already contains only the stable base URL, such as `https://domain-product.atlassian.net/browse/`, the creator appends `{id_url}` for you when you pick that action type. `{id_url}` is replaced with URL-encoded text from Input / Output, the captured selection, or the clipboard. The creator displays a live example before saving. Copy-only and open-only variants can instead ask for input when run.
 
 ### Sheets
 

@@ -1,0 +1,90 @@
+{
+  "id": "powertoys-feature-shortcuts",
+  "title": "PowerToys Feature Shortcuts",
+  "kind": "application",
+  "aliases": [
+    "powertoys",
+    "shortcuts",
+    "hotkeys",
+    "windows",
+    "launcher"
+  ],
+  "summary": "Current PowerToys feature shortcuts and activation methods, including utilities that use context menus or tray actions instead of global hotkeys.",
+  "updated_at": "2026-07-16",
+  "sections": [
+    {
+      "title": "Global launchers and overlays",
+      "items": [
+        { "label": "Command Palette", "detail": "Win + Alt + Space", "tags": ["launcher", "command palette", "global shortcut"] },
+        { "label": "PowerToys Run", "detail": "Alt + Space", "tags": ["launcher", "run", "global shortcut"] },
+        { "label": "Shortcut Guide", "detail": "Win + Shift + ?", "tags": ["reference", "shortcuts", "overlay"] }
+      ]
+    },
+    {
+      "title": "Clipboard, color, and text tools",
+      "items": [
+        { "label": "Advanced Paste", "detail": "Win + Shift + V", "tags": ["clipboard", "paste", "text"] },
+        { "label": "Color Picker", "detail": "Win + Shift + C", "tags": ["color", "picker", "design"] },
+        { "label": "Text Extractor", "detail": "Win + Shift + T", "tags": ["ocr", "text", "capture"] },
+        { "label": "Quick Accent", "detail": "Hold character key, then Space or Left/Right Arrow", "tags": ["typing", "accent", "characters"] }
+      ]
+    },
+    {
+      "title": "Window and layout utilities",
+      "items": [
+        { "label": "Always On Top", "detail": "Win + Ctrl + T", "tags": ["window", "pin", "always on top"] },
+        { "label": "FancyZones editor", "detail": "Win + Shift + `", "tags": ["window", "layout", "zones"] },
+        { "label": "FancyZones quick layout switch", "detail": "Win + Ctrl + Alt + [number]", "tags": ["window", "layout", "zones"] },
+        { "label": "Crop And Lock — Thumbnail mode", "detail": "Win + Ctrl + Shift + T", "tags": ["crop", "thumbnail", "window"] },
+        { "label": "Crop And Lock — Reparent mode", "detail": "Win + Ctrl + Shift + R", "tags": ["crop", "reparent", "window"] },
+        { "label": "Peek", "detail": "Space (while file is selected in File Explorer)", "tags": ["preview", "file explorer", "space"] },
+        { "label": "Screen Ruler", "detail": "Win + Ctrl + Shift + M", "tags": ["measure", "screen", "pixels"] },
+        { "label": "Workspaces editor", "detail": "Win + Ctrl + `", "tags": ["workspace", "layout", "desktop"] },
+        { "label": "Grab And Move", "detail": "Hold Alt and drag: left-click moves, right-click resizes (modifier configurable)", "tags": ["window", "move", "resize"] }
+      ]
+    },
+    {
+      "title": "Mouse utilities",
+      "items": [
+        { "label": "Find My Mouse", "detail": "Default activation: press Left Ctrl twice (other methods available)", "tags": ["mouse", "cursor", "find"] },
+        { "label": "Mouse Highlighter", "detail": "Win + Shift + H", "tags": ["mouse", "click", "highlight"] },
+        { "label": "Gliding cursor (Mouse Pointer Crosshairs)", "detail": "Win + Alt + .", "tags": ["mouse", "crosshairs", "accessibility"] },
+        { "label": "CursorWrap", "detail": "Custom activation shortcut (configurable in Mouse Utilities)", "tags": ["mouse", "cursorwrap", "configurable"] },
+        { "label": "Mouse Jump", "detail": "Custom activation shortcut (configurable in Mouse Utilities)", "tags": ["mouse", "jump", "configurable"] },
+        { "label": "Mouse Pointer Crosshairs", "detail": "Custom activation shortcut (configurable in Mouse Utilities)", "tags": ["mouse", "crosshairs", "configurable"] }
+      ]
+    },
+    {
+      "title": "ZoomIt defaults in PowerToys",
+      "items": [
+        { "label": "Zoom toggle", "detail": "Ctrl + 1", "tags": ["zoomit", "zoom", "presentation"] },
+        { "label": "Draw without zoom", "detail": "Ctrl + 2", "tags": ["zoomit", "draw", "presentation"] },
+        { "label": "Start break timer", "detail": "Ctrl + 3", "tags": ["zoomit", "break", "timer"] },
+        { "label": "Live zoom toggle", "detail": "Ctrl + 4", "tags": ["zoomit", "live zoom", "presentation"] },
+        { "label": "Record toggle", "detail": "Ctrl + 5", "tags": ["zoomit", "record", "video"] },
+        { "label": "Record selected region", "detail": "Ctrl + Shift + 5", "tags": ["zoomit", "record", "region"] },
+        { "label": "Snip toggle", "detail": "Ctrl + 6", "tags": ["zoomit", "snip", "capture"] },
+        { "label": "DemoType toggle", "detail": "Ctrl + 7", "tags": ["zoomit", "demotype", "typing demo"] }
+      ]
+    },
+    {
+      "title": "Utilities without a global default hotkey",
+      "items": [
+        { "label": "Awake", "detail": "No global shortcut. Use PowerToys Settings or tray menu.", "tags": ["awake", "tray", "power"] },
+        { "label": "Command Not Found", "detail": "No hotkey. Works in PowerShell when a command is not found.", "tags": ["powershell", "command not found", "winget"] },
+        { "label": "Environment Variables", "detail": "No global shortcut. Open from PowerToys Settings.", "tags": ["environment variables", "profiles", "settings"] },
+        { "label": "File Explorer add-ons", "detail": "No hotkey. Works through File Explorer preview/thumbnail integration.", "tags": ["file explorer", "preview", "thumbnail"] },
+        { "label": "File Locksmith", "detail": "No hotkey. Use File Explorer right-click context menu.", "tags": ["file locksmith", "context menu", "locks"] },
+        { "label": "Hosts File Editor", "detail": "No hotkey. Open from PowerToys tray icon menu.", "tags": ["hosts", "dns", "tray"] },
+        { "label": "Image Resizer", "detail": "No hotkey. Use File Explorer right-click context menu.", "tags": ["image", "resize", "context menu"] },
+        { "label": "Keyboard Manager", "detail": "No launch hotkey. Configure remaps in PowerToys Settings.", "tags": ["keyboard", "remap", "settings"] },
+        { "label": "Light Switch", "detail": "No global shortcut. Configure automatic schedule in settings.", "tags": ["theme", "light", "dark"] },
+        { "label": "Mouse Without Borders", "detail": "No documented global default shortcut.", "tags": ["multi pc", "mouse", "keyboard"] },
+        { "label": "New+", "detail": "No hotkey. Use File Explorer right-click context menu.", "tags": ["new+", "templates", "context menu"] },
+        { "label": "Power Display", "detail": "Activation shortcut is configurable in settings (no documented default).", "tags": ["display", "monitor", "ddc"] },
+        { "label": "PowerRename", "detail": "No hotkey. Use File Explorer right-click context menu.", "tags": ["rename", "bulk", "context menu"] },
+        { "label": "Registry Preview", "detail": "No global default hotkey documented.", "tags": ["registry", "reg", "preview"] }
+      ]
+    }
+  ]
+}

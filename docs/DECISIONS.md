@@ -606,3 +606,9 @@ The slot legend and text toolbar are also omitted: their functions remain discov
 **Decision:** Template expansion calls the clipboard getter only when an action value, argument, or working directory contains a supported clipboard variable.
 
 **Reason:** Ordinary file, folder, URL, and application targets do not depend on clipboard text. Eager clipboard reads caused unrelated actions—including opening command-surface configuration—to fail when the clipboard held an image or another non-text format.
+
+## 2026-07-17 - Make command-surface left click execute actions
+
+**Decision:** Change command-surface item interaction so ordinary left-click executes the item's primary available action. Keep right-click as the explicit action-selection menu. Preserve configuration access through Shift+click or Ctrl+click on an item label.
+
+**Reason:** The surface is presented as quick action buttons. Requiring right-click for execution made routine use feel non-functional and added avoidable friction. Modifier-assisted configuration retains direct access to JSON editing without sacrificing fast execution.

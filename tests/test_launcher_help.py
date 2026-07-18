@@ -9,7 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from context_palette.launcher import HelpWindow
+from context_palette.launcher import HelpWindow, suggest_url_template
 
 
 class FakeSearchVar:
@@ -103,6 +103,20 @@ class HelpWindowSearchTests(unittest.TestCase):
 
         self.assertEqual(content.calls[-1][0], "search")
         self.assertNotIn("tag_add", [call[0] for call in content.calls])
+
+
+class DraftActionCreatorHelperTests(unittest.TestCase):
+    def test_suggest_url_template_appends_identifier_placeholder_to_base_url(self):
+        self.assertEqual(
+            suggest_url_template("https://domain-product.atlassian.net/browse/"),
+            "https://domain-product.atlassian.net/browse/{id_url}",
+        )
+
+    def test_suggest_url_template_preserves_existing_placeholder(self):
+        self.assertEqual(
+            suggest_url_template("https://domain-product.atlassian.net/browse/{id_url}"),
+            "https://domain-product.atlassian.net/browse/{id_url}",
+        )
 
 
 if __name__ == "__main__":

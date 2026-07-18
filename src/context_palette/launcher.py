@@ -68,6 +68,16 @@ from .window_layouts import (
 )
 
 
+def suggest_url_template(value: str) -> str:
+    current = value.strip()
+    if not current or "{id}" in current or "{id_url}" in current:
+        return current
+    if current.startswith(("http://", "https://")):
+        separator = "" if current.endswith("/") else "/"
+        return current + separator + "{id_url}"
+    return current
+
+
 class PrefixSuffixDialog(simpledialog.Dialog):
     def body(self, master: tk.Misc) -> tk.Widget:
         ttk.Label(master, text="Prefix for every line").grid(row=0, column=0, sticky=tk.W)
@@ -736,12 +746,14 @@ class LauncherApp:
                 )
                 self._tooltip(
                     control,
-                    "Left-click to edit this menu and its actions. Right-click to execute an action.",
+                    "Left-click to execute. Right-click to choose an action. Shift/Ctrl+click to edit menu config.",
                 )
                 control.bind(
                     "<Button-1>",
-                    lambda _event, selected_group=group: self._open_command_configuration(
-                        selected_group
+                    lambda event, selected_group=group, selected_item=item: self._handle_command_item_left_click(
+                        event,
+                        selected_group,
+                        selected_item,
                     ),
                     add="+",
                 )
@@ -750,6 +762,34 @@ class LauncherApp:
                     lambda event, selected_item=item: self._show_item_menu(event, selected_item),
                     add="+",
                 )
+
+    def _handle_command_item_left_click(
+        self,
+        event: tk.Event,
+        group: CommandGroup,
+        item: CommandItem,
+    ) -> str:
+        # Shift/Ctrl click preserves the direct path to menu and action JSON configuration.
+        if event.state & (0x0001 | 0x0004):
+            self._open_command_configuration(group)
+            return "break"
+        action = self._primary_action_for_item(item)
+        if action is None:
+            self.status_var.set(f"No available actions configured for {item.label}.")
+            return "break"
+        self._execute_action(action)
+        return "break"
+
+    def _primary_action_for_item(self, item: CommandItem) -> Action | None:
+        actions_by_id = {action.id: action for action in self.actions}
+        action_ids = list(item.action_ids)
+        if item.primary_action_id and item.primary_action_id not in action_ids:
+            action_ids.insert(0, item.primary_action_id)
+        for action_id in action_ids:
+            action = actions_by_id.get(action_id)
+            if action is not None:
+                return action
+        return None
 
     def _open_command_configuration(self, group: CommandGroup) -> None:
         surface_path, actions_path = command_configuration_paths(
@@ -779,11 +819,8 @@ class LauncherApp:
 
     def _show_item_menu(self, event: tk.Event, item: CommandItem) -> str:
         actions_by_id = {action.id: action for action in self.actions}
-        action_ids = list(item.action_ids)
-        if item.primary_action_id and item.primary_action_id not in action_ids:
-            action_ids.insert(0, item.primary_action_id)
         menu = tk.Menu(self.root, tearoff=False)
-        for action_id in action_ids:
+        for action_id in self._item_action_ids(item):
             action = actions_by_id.get(action_id)
             if action is None:
                 continue
@@ -797,8 +834,13 @@ class LauncherApp:
             menu.tk_popup(event.x_root, event.y_root)
         finally:
             menu.grab_release()
-            menu.destroy()
         return "break"
+
+    def _item_action_ids(self, item: CommandItem) -> list[str]:
+        action_ids = list(item.action_ids)
+        if item.primary_action_id and item.primary_action_id not in action_ids:
+            action_ids.insert(0, item.primary_action_id)
+        return action_ids
 
     def _action_storage_path(self, action: Action) -> Path:
         return self.local_actions_path if action.id in self.local_action_ids else self.actions_path
@@ -1454,7 +1496,7 @@ class InboxWindow:
 class DraftActionCreator:
     ACTION_TYPES = {
         "Copy captured text": "copy_text",
-        "Build URL — copy and open using selection/clipboard": "build_url_selection_open",
+        "Build URL — open from selected or copied ID": "build_url_selection_open",
         "Build URL — copy only and ask for input": "build_url_copy",
         "Build URL — open only and ask for input": "build_url_open",
     }
@@ -1585,15 +1627,15 @@ class DraftActionCreator:
         else:
             self.content_label.configure(text="URL template")
             self.guidance_var.set(
-                "Put {id_url} where the selected/copied text belongs. It is safely URL-encoded. "
-                "Example: http://linkto/archives/{id_url}"
+                "Keep the stable base URL from Inbox and put {id_url} where the runtime ID belongs. "
+                "This action reads the selected text first, then falls back to copied text. "
+                "Example: https://domain-product.atlassian.net/browse/{id_url}"
             )
-            current = self.content.get("1.0", "end-1c").strip()
-            if "{id}" not in current and "{id_url}" not in current:
-                if current.startswith(("http://", "https://")):
-                    separator = "" if current.endswith("/") else "/"
-                    self.content.delete("1.0", tk.END)
-                    self.content.insert("1.0", current + separator + "{id_url}")
+            current = self.content.get("1.0", "end-1c")
+            suggested = suggest_url_template(current)
+            if suggested != current.strip():
+                self.content.delete("1.0", tk.END)
+                self.content.insert("1.0", suggested)
         self._update_example()
 
     def _update_example(self) -> None:
