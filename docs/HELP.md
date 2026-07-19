@@ -84,6 +84,14 @@ Click **Configure** beside the Focus selector for the guided personal-configurat
 
 Configure opens with keyboard focus on the action list. Action, context, and button dialogs focus and select their first editable field, so typing can begin immediately.
 
+In **Actions**, use **Find actions** or press `Ctrl+F` to filter by action name,
+built-in type, context, technology, task, state, or source. Multiple words must
+all match. Press Enter on the selected result to edit it.
+
+The Actions, Contexts, and Right-side buttons tables select their first useful
+row automatically. Use the arrow keys to move, then press Enter to edit the
+selected personal item. Double-click provides the same action with a mouse.
+
 Changes are saved atomically to ignored local files. Shared project examples are shown for reference but cannot be changed in this window. New actions always begin as Drafts and still require testing before they can be marked Trusted.
 
 Context slots and button assignments show human-readable action names and contexts. Internal IDs remain stored for stable references but are not part of the normal editing workflow. Successful saves appear in the Configure footer without interrupting work with a confirmation dialog.
@@ -200,6 +208,54 @@ To keep the launcher fast to scan, result rows show `Command → subject`, for e
 
 The main palette opens at a compact width. Its ten management buttons use two rows of five so every button remains directly available without forcing the result list to occupy unused horizontal screen space.
 
+## Protected Windows credential paste
+
+Choose **Passwords** beside **Find action** to show only protected credential
+actions. The highlighted button remains active while ordinary Find text narrows
+that password list; choose **Passwords** again to return to all actions.
+
+Up to four Trusted credential actions also appear under **Frequent passwords**
+as direct buttons. Selecting one starts its destination confirmation
+immediately. Pinned credential actions appear first in pin order; remaining
+positions use other Trusted credential actions. Draft credentials are never
+shown as direct-paste buttons.
+
+Use **Configure → Built-in action types → Paste a Windows credential** to create
+a personal Draft. The action stores only an exact target from the **Windows
+Credentials** or **Generic Credentials** section of Credential Manager; it
+never stores the username or password.
+
+Set up the credential first:
+
+1. Open **Credential Manager** from Windows.
+2. Open **Windows Credentials** and add either a standard Windows credential or
+   a Generic credential.
+3. Give it a distinctive target such as `oracle-pc17` or
+   `ContextPalette/example-login`.
+4. Enter the username and password there.
+5. In Context Palette, use that exact target name as the action value.
+6. Review the Draft and mark it Trusted.
+
+To paste:
+
+1. Focus the destination password field.
+2. Press `F9` or `Ctrl+Alt+P`.
+3. Run the Trusted credential action.
+4. Verify the credential target and captured destination in the confirmation.
+5. Confirm to return focus and paste.
+
+The password is retrieved only after confirmation. It is placed temporarily on
+a Windows clipboard item marked to stay out of clipboard history and cloud
+sync, then cleared after 15 seconds if no other program replaced the clipboard.
+It is never placed in Input / Output, previews, action files, logs, snapshots,
+or AI prompts. The prior clipboard is not restored.
+
+Credential paste is unavailable after an ordinary launcher/external show
+request because that route has no fresh destination window. Credential actions
+cannot run as Drafts and are not AI-proposable. Windows Credential Manager
+protects storage at rest, but this feature cannot protect against malicious
+software already running as the same Windows user.
+
 ## Window layouts and snapshots
 
 Configured `window_layout` actions can open Explorer folders and position them across detected screens. Relative coordinates allow layouts to adapt to screen resolution.
@@ -244,6 +300,10 @@ The configuration report identifies the owning context, command item, or palette
 ## Safety boundaries
 
 Context Palette uses constrained action types. It does not execute arbitrary shell command strings. Draft actions should be previewed and tested before they are marked Trusted. Browser URLs and application paths remain visible in local files.
+
+Website actions require a complete HTTP or HTTPS address with a clear hostname.
+For privacy and anti-spoofing safety, addresses containing embedded usernames or
+passwords, whitespace in the hostname area, or ambiguous backslashes are rejected.
 
 ## Troubleshooting
 

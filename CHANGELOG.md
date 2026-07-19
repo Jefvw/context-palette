@@ -6,6 +6,10 @@ This project has not published a versioned release. Changes are recorded under *
 
 ### Added
 
+- Four pinned-first Frequent passwords buttons for starting protected paste without intermediate filtering or list selection.
+- Compact Passwords button beside Find for quickly filtering to protected credential actions.
+- Portable multi-machine development recipe with a tracked Python version and a single setup-and-check command.
+- Trusted, confirmed paste of exact generic Windows Credential Manager targets through a no-history/no-cloud clipboard item.
 - Project-aware Python wrapper for reliable targeted tests, benchmarks, and module commands from the repository root, with distinct environment and source-import recovery guidance.
 - Guided configuration for personal actions of every built-in type, focus contexts, context slots, and right-side buttons.
 - Built-in action catalogue with examples and generated documentation.
@@ -17,6 +21,12 @@ This project has not published a versioned release. Changes are recorded under *
 
 ### Changed
 
+- Skipped redundant dependency installation when the tracked requirements declaration has not changed.
+- Released tooltip objects for destroyed quick-action and password buttons whenever the surface is rebuilt.
+- Allowed protected paste to resolve exact targets from both Windows Credentials and Generic Credentials.
+- Unified action-value validation for guided creation and JSON loading, including rejection of invalid list-conversion modes and empty persisted values.
+- Made Configure context and button tables directly operable with keyboard selection and Enter.
+- Added fast, keyboard-accessible filtering to Configure → Actions across user-visible action facets.
 - Preserved last-known-good contexts and right-side buttons when edited configuration files fail validation.
 - Kept Focus and pin state consistent when palette persistence fails, with actionable feedback instead of an uncaught UI error.
 - Added privacy-safe warnings for genuinely slow result refreshes and configuration reloads.
@@ -34,6 +44,8 @@ This project has not published a versioned release. Changes are recorded under *
 
 ### Security
 
+- Kept credential passwords out of action JSON, previews, workspace text, logs, AI prompts, clipboard history, and cloud clipboard synchronization.
+- Rejected credential-bearing and ambiguously parsed HTTP(S) action URLs across creation, loading, generation, and execution.
 - Prevented stalled localhost integration clients from holding the single-instance listener indefinitely.
 - Kept action execution allow-listed and rejected arbitrary shell-command actions.
 - Restricted the external bridge to showing/filtering the palette; it cannot execute actions.

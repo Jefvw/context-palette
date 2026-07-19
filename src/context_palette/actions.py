@@ -56,6 +56,7 @@ class Action:
             "open_file": "Open",
             "open_folder": "Open",
             "launch_app": "Open",
+            "paste_credential": "Paste",
             "build_url_copy": "Copy",
             "build_url_open": "Open",
             "build_url_selection_open": "Open",
@@ -175,9 +176,7 @@ def draft_open_url_action(
     clean_value = value.strip()
     if not clean_title:
         raise ActionError("Action title cannot be empty.")
-    parsed = urlparse(clean_value)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ActionError("Action URL must be a complete http:// or https:// address.")
+    validate_http_url(clean_value, label="Action URL")
     return Action(
         id=f"draft-{uuid4().hex[:12]}",
         title=clean_title,
@@ -238,16 +237,7 @@ def configured_draft_action(
         raise ActionError("Action title cannot be empty.")
     if action_type not in SUPPORTED_ACTION_TYPES:
         raise ActionError(f"Unsupported action type: {action_type}")
-    if not clean_value:
-        raise ActionError("The action value cannot be empty.")
-    if action_type == "open_url":
-        parsed = urlparse(clean_value)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise ActionError("Action URL must be a complete http:// or https:// address.")
-    if action_type in {"build_url_copy", "build_url_open", "build_url_selection_open"}:
-        build_url(clean_value, "example")
-    if action_type == "transform_list_csv" and clean_value not in {"csv", "sql_strings"}:
-        raise ActionError("List conversion must use csv or sql_strings.")
+    validate_action_value(action_type, clean_value)
 
     return Action(
         id=f"draft-{uuid4().hex[:12]}",
@@ -378,8 +368,17 @@ def execute_action(
     output_setter: Callable[[str], None] | None = None,
     window_layout_runner: Callable[[str], str] | None = None,
     window_snapshot_runner: Callable[[str], str] | None = None,
+    credential_paster: Callable[[Action], str] | None = None,
     opener: Callable[[Action], None] | None = None,
 ) -> str:
+    if action.type == "paste_credential":
+        validate_credential_target(action.value)
+        if action.state != "Trusted":
+            raise ActionError("Credential actions must be marked Trusted before use.")
+        if credential_paster is None:
+            raise ActionError("Protected credential paste is unavailable.")
+        return credential_paster(action)
+
     if action.type == "restore_window_snapshot":
         if window_snapshot_runner is None:
             raise ActionError("No window snapshot runner is available.")
@@ -466,10 +465,48 @@ def build_url(template: str, identifier: str) -> str:
 
     result = template.replace("{id_url}", quote(clean_identifier, safe=""))
     result = result.replace("{id}", clean_identifier)
-    parsed = urlparse(result)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ActionError("The built URL must start with http:// or https://.")
+    validate_http_url(result, label="Built URL")
     return result
+
+
+def validate_http_url(value: str, *, label: str = "URL") -> None:
+    parsed = urlparse(value)
+    try:
+        hostname = parsed.hostname
+    except ValueError as exc:
+        raise ActionError(f"{label} has an invalid hostname.") from exc
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or not hostname:
+        raise ActionError(f"{label} must be a complete http:// or https:// address.")
+    if parsed.username is not None or parsed.password is not None:
+        raise ActionError(f"{label} must not include a username or password.")
+    if "\\" in parsed.netloc or any(
+        character.isspace() or ord(character) < 32 for character in parsed.netloc
+    ):
+        raise ActionError(f"{label} has an invalid or ambiguous hostname.")
+
+
+def validate_credential_target(value: str) -> None:
+    if not value.strip():
+        raise ActionError("Windows credential target name cannot be empty.")
+    if len(value) > 32_767:
+        raise ActionError("Windows credential target name is too long.")
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ActionError("Windows credential target name cannot contain control characters.")
+
+
+def validate_action_value(action_type: str, value: str) -> None:
+    """Validate the configured value shared by guided creation and JSON loading."""
+    clean_value = value.strip()
+    if not clean_value:
+        raise ActionError("The action value cannot be empty.")
+    if action_type == "open_url":
+        validate_http_url(clean_value, label="Action URL")
+    elif action_type == "paste_credential":
+        validate_credential_target(clean_value)
+    elif action_type in {"build_url_copy", "build_url_open", "build_url_selection_open"}:
+        build_url(clean_value, "example")
+    elif action_type == "transform_list_csv" and clean_value not in {"csv", "sql_strings"}:
+        raise ActionError("List conversion must use csv or sql_strings.")
 
 
 def list_to_comma_separated(value: str, *, sql_strings: bool = False) -> str:
@@ -652,6 +689,10 @@ def _parse_action(item: object, index: int) -> Action:
     action_type = item["type"]
     if action_type not in SUPPORTED_ACTION_TYPES:
         raise ActionError(f"Action #{index} has unsupported type: {action_type}")
+    try:
+        validate_action_value(action_type, item["value"])
+    except ActionError as exc:
+        raise ActionError(f"Action #{index}: {exc}") from exc
 
     state = item.get("state", "Draft")
     if not isinstance(state, str):
@@ -730,9 +771,7 @@ def _action_to_dict(action: Action) -> dict[str, object]:
 
 
 def _open_url(value: str) -> None:
-    parsed = urlparse(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ActionError(f"URL must start with http:// or https://: {value}")
+    validate_http_url(value)
     webbrowser.open(value)
 
 

@@ -47,13 +47,15 @@ Do not move local user data into tracked examples without explicit user approval
 From the repository root:
 
 ```powershell
-.\setup-context-palette.bat
+.\develop-context-palette.bat
 .\python-context-palette.bat -m unittest discover tests
 .\run-context-palette.bat
 .\stop-context-palette.bat
 ```
 
-Use `.\check-context-palette.bat` for the complete configuration, compilation, and test check.
+The development command creates or repairs the machine-local environment and
+runs the complete check. Use `.\check-context-palette.bat` when setup is already
+known to be current.
 Use `.\python-context-palette.bat` for targeted tests, benchmarks, and other
 project-module commands; it supplies the repository's `src` import path.
 

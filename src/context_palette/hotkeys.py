@@ -12,6 +12,7 @@ MOD_NOREPEAT = 0x4000
 VK_P = 0x50
 VK_F9 = 0x78
 VK_C = 0x43
+VK_V = 0x56
 VK_CONTROL = 0x11
 KEYEVENTF_KEYUP = 0x0002
 WM_HOTKEY = 0x0312
@@ -73,6 +74,30 @@ def send_copy_shortcut() -> None:
     user32.keybd_event(VK_C, 0, 0, 0)
     user32.keybd_event(VK_C, 0, KEYEVENTF_KEYUP, 0)
     user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
+
+
+def send_paste_shortcut() -> None:
+    """Ask the foreground application to paste the protected clipboard item."""
+    user32 = ctypes.windll.user32
+    user32.keybd_event(VK_CONTROL, 0, 0, 0)
+    user32.keybd_event(VK_V, 0, 0, 0)
+    user32.keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0)
+    user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
+
+
+def focus_window(handle: int) -> bool:
+    user32 = ctypes.windll.user32
+    return bool(handle and user32.IsWindow(handle) and user32.SetForegroundWindow(handle))
+
+
+def window_title(handle: int) -> str:
+    if not handle:
+        return ""
+    user32 = ctypes.windll.user32
+    length = int(user32.GetWindowTextLengthW(handle))
+    buffer = ctypes.create_unicode_buffer(length + 1)
+    user32.GetWindowTextW(handle, buffer, len(buffer))
+    return buffer.value.strip()
 
 
 class GlobalHotkey:

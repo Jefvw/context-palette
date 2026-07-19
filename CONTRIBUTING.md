@@ -4,13 +4,16 @@ Context Palette welcomes focused changes that preserve its portable, constrained
 
 ## Set up
 
-Requirements are Windows and Python 3.12 with Tcl/Tk:
+Requirements are Windows and the Python family declared in `.python-version`,
+with Tcl/Tk:
 
 ```powershell
-.\setup-context-palette.bat
+.\develop-context-palette.bat
 ```
 
-The setup script creates a local `.venv`, initializes ignored personal files from tracked examples, verifies Tkinter, and runs the tests.
+The development command creates or repairs the machine-local `.venv`,
+initializes ignored personal files from tracked examples, verifies Tkinter, and
+runs the canonical project check.
 
 ## Before changing code
 

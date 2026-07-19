@@ -33,6 +33,7 @@ ACTION_TYPE_EXAMPLES = {
     "open_file": r"Example: Open %PROJECT_ROOT%\README.md in its associated application.",
     "open_folder": r"Example: Open %PROJECT_ROOT%\docs in File Explorer.",
     "launch_app": r"Example: Start C:\Tools\Example\Example.exe with reviewed arguments.",
+    "paste_credential": "Example: Paste the Windows or generic credential target oracle-pc17.",
     "build_url_copy": "Example: Ask for ABC 123 and copy https://example.com/items/ABC%20123.",
     "build_url_open": "Example: Ask for ABC 123 and open its generated website address.",
     "build_url_selection_open": "Example: Use selected text ABC 123, copy its URL, and open it.",
@@ -40,6 +41,37 @@ ACTION_TYPE_EXAMPLES = {
     "window_layout": "Example: Open and arrange reviewed Explorer folders across monitors.",
     "restore_window_snapshot": "Example: Restore a personally captured writing workspace.",
 }
+
+
+def action_matches_filter(action: Action, query: str, *, personal: bool) -> bool:
+    terms = [term.casefold() for term in query.split() if term.strip()]
+    if not terms:
+        return True
+    searchable = " ".join(
+        (
+            action.title,
+            ACTION_TYPES[action.type].label,
+            action.context,
+            action.technology,
+            action.task,
+            action.state,
+            "Personal" if personal else "Shared read-only",
+        )
+    ).casefold()
+    return all(term in searchable for term in terms)
+
+
+def select_first_tree_item(tree: ttk.Treeview, *, descend: bool = False) -> None:
+    roots = tree.get_children()
+    if not roots:
+        return
+    target = roots[0]
+    if descend:
+        children = tree.get_children(target)
+        if children:
+            target = children[0]
+    tree.selection_set(target)
+    tree.focus(target)
 
 
 class ConfigurationWindow:
@@ -66,6 +98,8 @@ class ConfigurationWindow:
         self.on_change = on_change
         self.contexts: list[ContextDefinition] = []
         self.groups: list[CommandGroup] = []
+        self.action_filter_var = tk.StringVar()
+        self.action_filter_count_var = tk.StringVar()
 
         self.window = tk.Toplevel(parent)
         self.window.title("Configure Context Palette")
@@ -86,6 +120,7 @@ class ConfigurationWindow:
         self._build_types_tab(notebook)
         self._build_contexts_tab(notebook)
         self._build_buttons_tab(notebook)
+        self.window.bind("<Control-f>", self._focus_action_filter)
         footer = ttk.Frame(outer)
         footer.pack(fill=tk.X, pady=(10, 0))
         self.feedback_var = tk.StringVar(
@@ -116,6 +151,19 @@ class ConfigurationWindow:
             text="Every personal action type is editable. Shared actions remain read-only.",
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(0, 6))
+        filter_row = ttk.Frame(tab)
+        filter_row.pack(fill=tk.X, pady=(0, 6))
+        ttk.Label(filter_row, text="Find actions").pack(side=tk.LEFT)
+        self.action_filter_entry = ttk.Entry(
+            filter_row,
+            textvariable=self.action_filter_var,
+        )
+        self.action_filter_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(6, 8))
+        ttk.Label(
+            filter_row,
+            textvariable=self.action_filter_count_var,
+            style="Muted.TLabel",
+        ).pack(side=tk.RIGHT)
         self.action_tree = ttk.Treeview(
             tab,
             columns=("type", "context", "source", "state"),
@@ -133,6 +181,8 @@ class ConfigurationWindow:
             self.action_tree.column(column, width=width, stretch=column in {"#0", "context"})
         self.action_tree.pack(fill=tk.BOTH, expand=True)
         self.action_tree.bind("<Double-1>", lambda _event: self._edit_action())
+        self.action_tree.bind("<Return>", lambda _event: self._edit_action())
+        self.action_filter_var.trace_add("write", lambda *_args: self._render_actions())
         controls = ttk.Frame(tab)
         controls.pack(fill=tk.X, pady=(8, 0))
         ttk.Button(
@@ -192,6 +242,8 @@ class ConfigurationWindow:
         self.context_tree.column("source", width=120, stretch=False)
         self.context_tree.column("actions", width=380)
         self.context_tree.pack(fill=tk.BOTH, expand=True)
+        self.context_tree.bind("<Double-1>", lambda _event: self._edit_context())
+        self.context_tree.bind("<Return>", lambda _event: self._edit_context())
         controls = ttk.Frame(tab)
         controls.pack(fill=tk.X, pady=(8, 0))
         ttk.Button(controls, text="Add personal context", command=self._add_context).pack(side=tk.LEFT)
@@ -215,6 +267,8 @@ class ConfigurationWindow:
         self.button_tree.column("source", width=120, stretch=False)
         self.button_tree.column("actions", width=340)
         self.button_tree.pack(fill=tk.BOTH, expand=True)
+        self.button_tree.bind("<Double-1>", lambda _event: self._edit_button())
+        self.button_tree.bind("<Return>", lambda _event: self._edit_button())
         controls = ttk.Frame(tab)
         controls.pack(fill=tk.X, pady=(8, 0))
         ttk.Button(controls, text="Add personal button", command=self._add_button).pack(side=tk.LEFT)
@@ -253,10 +307,18 @@ class ConfigurationWindow:
         self.actions.append(action)
         self.local_action_ids.add(action.id)
         self.on_change()
-        self._render_actions()
+        if self.action_filter_var.get():
+            self.action_filter_var.set("")
+        else:
+            self._render_actions()
         self.feedback_var.set(f"Created Draft: {action.display_text}")
         self.feedback_label.configure(style="Success.TLabel")
         return True
+
+    def _focus_action_filter(self, _event: tk.Event | None = None) -> str:
+        self.action_filter_entry.focus_set()
+        self.action_filter_entry.selection_range(0, tk.END)
+        return "break"
 
     def _reload(self) -> None:
         self.window.configure(cursor="wait")
@@ -287,6 +349,7 @@ class ConfigurationWindow:
                 tags=("local",) if local else ("shared",),
             )
         self.context_tree.tag_configure("shared", foreground="#666666")
+        select_first_tree_item(self.context_tree)
         self.button_tree.delete(*self.button_tree.get_children())
         for group_index, group in enumerate(self.groups):
             local = bool(
@@ -308,15 +371,21 @@ class ConfigurationWindow:
                     tags=("local",) if local else ("shared",),
                 )
         self.button_tree.tag_configure("shared", foreground="#666666")
+        select_first_tree_item(self.button_tree, descend=True)
 
     def _render_actions(self) -> None:
         self.action_tree.delete(*self.action_tree.get_children())
+        query = self.action_filter_var.get()
+        matching_iids: list[str] = []
         for index, action in enumerate(self.actions):
             local = action.id in self.local_action_ids
+            if not action_matches_filter(action, query, personal=local):
+                continue
+            iid = f"action-{index}"
             self.action_tree.insert(
                 "",
                 tk.END,
-                iid=f"action-{index}",
+                iid=iid,
                 text=action.title,
                 values=(
                     ACTION_TYPES[action.type].label,
@@ -326,7 +395,16 @@ class ConfigurationWindow:
                 ),
                 tags=("local",) if local else ("shared",),
             )
+            matching_iids.append(iid)
         self.action_tree.tag_configure("shared", foreground="#666666")
+        self.action_filter_count_var.set(
+            f"{len(matching_iids)} of {len(self.actions)}"
+            if query.strip()
+            else f"{len(self.actions)} actions"
+        )
+        if matching_iids:
+            self.action_tree.selection_set(matching_iids[0])
+            self.action_tree.focus(matching_iids[0])
 
     def _edit_action(self) -> None:
         selection = self.action_tree.selection()
@@ -358,7 +436,10 @@ class ConfigurationWindow:
             action if existing.id == action.id else existing for existing in self.actions
         ]
         self.on_change()
-        self._render_actions()
+        if self.action_filter_var.get():
+            self.action_filter_var.set("")
+        else:
+            self._render_actions()
         self.feedback_var.set(f"Saved action: {action.display_text}")
         self.feedback_label.configure(style="Success.TLabel")
         return True
@@ -504,6 +585,7 @@ class ActionDraftDialog:
         label = {
             "open_url": "Complete website address", "open_file": "File path",
             "open_folder": "Folder path", "launch_app": "Application .exe path",
+            "paste_credential": "Exact Windows or generic credential target name",
             "transform_list_csv": "Conversion mode: csv or sql_strings",
             "window_layout": "Layout JSON path",
             "restore_window_snapshot": "Snapshot JSON path",

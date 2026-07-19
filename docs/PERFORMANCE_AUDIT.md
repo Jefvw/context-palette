@@ -10,6 +10,33 @@ Measured launcher import time on the development machine was approximately 93 ms
 
 ## Implemented findings
 
+### Unchanged dependencies were installed on every development check
+
+- **Why it mattered:** the single development entry point ran pip before every
+  configuration, compilation, and test check even when `requirements.txt` was
+  unchanged.
+- **Estimated impact:** medium developer-feedback impact. The measured complete
+  command took 4.562 seconds while its 184-test phase took 1.772 seconds.
+- **Improvement:** record the SHA-256 of the last successfully installed
+  requirements inside ignored `.venv`; reinstall only after the declaration
+  changes or the environment is recreated.
+- **Result:** the unchanged complete development command fell from 4.562 to
+  2.023 seconds on the same machine, a 55.7% reduction, while retaining
+  automatic invalidation and failure safety.
+
+### Rebuilt quick surfaces retained obsolete tooltip objects
+
+- **Why it mattered:** pin changes and configuration reloads destroy and recreate
+  quick-action widgets. Keeping their tooltip objects in the stable main-window
+  registry retained references to every obsolete widget.
+- **Estimated impact:** low per rebuild, but unbounded memory growth in a
+  long-running resident process; frequency increased when pinning began
+  reordering the direct password buttons.
+- **Improvement:** dynamic surface tooltips now have a separate lifecycle. They
+  are hidden and released before their owning widgets are destroyed.
+- **Result:** repeated surface renders keep both stable and dynamic tooltip
+  registries at constant size.
+
 ### Recurring tooltip audit retained destroyed widgets
 
 - **Why it mattered:** a 750 ms callback repeatedly walked the complete widget tree. Tooltip objects held strong widget references, allowing closed secondary windows to remain reachable.

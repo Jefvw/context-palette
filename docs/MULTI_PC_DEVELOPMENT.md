@@ -31,13 +31,14 @@ No open-source license has been selected yet. Keep the repository private, or ch
 ## Another Windows computer
 
 1. Install Git.
-2. Install standard 64-bit Python 3.12 from python.org with Tcl/Tk enabled.
+2. Read the tracked `.python-version` file and install that standard 64-bit
+   Python family from python.org with Tcl/Tk enabled.
 3. Clone the repository.
 4. Open a terminal in the cloned folder.
 5. Run:
 
    ```text
-   setup-context-palette.bat
+   develop-context-palette.bat
    ```
 
 6. Start:
@@ -46,7 +47,9 @@ No open-source license has been selected yet. Keep the repository private, or ch
    run-context-palette.bat
    ```
 
-The setup script creates `.venv`, copies safe local-data templates when needed, creates the snapshot directory, verifies Tkinter, and runs tests.
+The development entry point creates or repairs `.venv`, copies safe local-data
+templates when needed, creates the snapshot directory, verifies Tkinter, and
+runs the canonical configuration, compilation, and test checks.
 
 ## Python environments and dependencies across computers
 
@@ -56,9 +59,13 @@ Git transfers source files and dependency declarations; it does not transfer pac
 
 The project uses this contract:
 
+- `.python-version`: tracked declaration of the supported Python family.
 - `.venv`: ignored, disposable, and local to one computer.
 - `requirements.txt`: tracked in Git and shared by every computer.
-- `setup-context-palette.bat`: creates the local environment and installs everything declared in `requirements.txt`.
+- `setup-context-palette.bat`: creates or repairs the local environment and
+  installs everything declared in `requirements.txt`.
+- `develop-context-palette.bat`: performs setup and then runs the complete
+  project check; use this as the normal development entry point.
 - Python and Tcl/Tk: installed separately on each Windows computer and used as the base for its local environment.
 
 Context Palette currently has no third-party dependencies. `requirements.txt` is present as the shared dependency contract and contains comments only.
@@ -86,8 +93,7 @@ After choosing a dependency:
 3. Run setup and the complete tests:
 
    ```powershell
-   .\setup-context-palette.bat
-   .\.venv\Scripts\python.exe -m unittest discover tests
+   .\develop-context-palette.bat
    ```
 
 4. Commit `requirements.txt` together with the code, tests, and documentation that require the library.
@@ -97,14 +103,31 @@ On another computer:
 
 ```powershell
 git pull --ff-only
-.\setup-context-palette.bat
+.\develop-context-palette.bat
 ```
 
-Setup installs the declared dependencies into that computer's own `.venv` and runs the tests. Run setup after any pull that changes `requirements.txt`.
+The development command installs declared dependencies into that computer's
+own `.venv` and runs the complete check. Run it after any pull that changes
+`.python-version`, `requirements.txt`, or the setup scripts.
+
+Setup records the hash of the last successfully installed `requirements.txt`
+inside ignored `.venv`. Unchanged development runs skip redundant package
+installation. Editing `requirements.txt` or recreating `.venv` automatically
+invalidates that marker; delete the marker if a manual package change needs to
+be repaired without rebuilding the environment.
 
 ### Repairing or rebuilding an environment
 
-An environment is disposable. If `.venv` was copied from another computer or points to a missing Python executable, run setup again. Setup detects the unusable environment, preserves it as `.venv-unusable`, and creates a fresh one. If that backup name already exists, rename or remove the old backup before retrying. Local Context Palette data is stored under `data`, not inside `.venv`, so rebuilding the environment does not remove Inbox items, private actions, contexts, buttons, pins, or snapshots.
+An environment is disposable. If `.venv` was copied from another computer,
+belongs to another repository location, uses the wrong declared Python family,
+or points to an unavailable Python installation, run
+`develop-context-palette.bat`. Setup preserves the environment under the next
+available `.venv-unusable*` name and creates a fresh one. Local Context Palette
+data is stored under `data`, not inside `.venv`, so rebuilding the environment
+does not remove Inbox items, private actions, contexts, buttons, pins, or
+snapshots. Setup adopts an existing unmarked environment once, then stores an
+ignored repository-location marker inside `.venv` so subsequent folder copies
+are detected reliably.
 
 ## Shared versus local data
 
@@ -183,13 +206,16 @@ Ask assistants to:
 
 ## GitHub Actions
 
-`.github/workflows/tests.yml` runs the unit suite on Windows with Python 3.12 for pushes and pull requests. This verifies portable code paths but does not replace manual testing of global hotkeys, Tk focus, application launching, window placement, and multi-monitor behavior.
+`.github/workflows/tests.yml` reads `.python-version` and runs the unit suite on
+Windows for pushes and pull requests. This verifies portable code paths but does
+not replace manual testing of global hotkeys, Tk focus, application launching,
+window placement, and multi-monitor behavior.
 
 ## Suggested daily workflow
 
 ```text
 git pull
-setup-context-palette.bat  (first time, after environment loss, or when requirements.txt changes)
+develop-context-palette.bat
 develop and test
 git status
 git add reviewed source/config only

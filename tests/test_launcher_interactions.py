@@ -11,11 +11,12 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from context_palette.actions import Action
+from context_palette.actions import Action, ActionError
 from context_palette.command_surface import CommandItem
 from context_palette.contexts import ContextDefinition, ContextError
-from context_palette.launcher import LauncherApp
+from context_palette.launcher import LauncherApp, frequent_credential_actions
 from context_palette.palette_state import PaletteState
+from context_palette.windows_credentials import CredentialSecret
 
 
 class FakeVariable:
@@ -29,7 +30,197 @@ class FakeVariable:
         return self.value
 
 
+class FakeButton:
+    def __init__(self) -> None:
+        self.options: dict[str, str] = {}
+
+    def configure(self, **options: str) -> None:
+        self.options.update(options)
+
+
+class FakeRoot:
+    def __init__(self) -> None:
+        self.withdraw_calls = 0
+        self.after_callbacks: list[object] = []
+
+    def withdraw(self) -> None:
+        self.withdraw_calls += 1
+
+    def after(self, _delay: int, callback: object) -> None:
+        self.after_callbacks.append(callback)
+
+
 class LauncherInteractionTests(unittest.TestCase):
+    def test_frequent_credentials_prioritize_trusted_pins_and_limit_to_four(self):
+        actions = [
+            Action("one", "One", "General", "paste_credential", "one", "Trusted"),
+            Action("two", "Two", "General", "paste_credential", "two", "Trusted"),
+            Action("draft", "Draft", "General", "paste_credential", "draft", "Draft"),
+            Action("copy", "Copy", "General", "copy_text", "text", "Trusted"),
+            Action("three", "Three", "General", "paste_credential", "three", "Trusted"),
+            Action("four", "Four", "General", "paste_credential", "four", "Trusted"),
+            Action("five", "Five", "General", "paste_credential", "five", "Trusted"),
+        ]
+
+        selected = frequent_credential_actions(actions, ("three", "two", "draft"))
+
+        self.assertEqual([action.id for action in selected], ["three", "two", "one", "four"])
+
+    def test_password_button_toggles_exact_credential_action_filter(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.action_type_filter = None
+        app.passwords_button = FakeButton()
+        app.status_var = FakeVariable()
+        refreshes: list[bool] = []
+        app._refresh_results = lambda: refreshes.append(True)
+
+        app._toggle_password_actions()
+
+        self.assertEqual(app.action_type_filter, "paste_credential")
+        self.assertEqual(app.passwords_button.options["style"], "Accent.TButton")
+
+        app._toggle_password_actions()
+
+        self.assertIsNone(app.action_type_filter)
+        self.assertEqual(app.passwords_button.options["style"], "Compact.TButton")
+        self.assertEqual(refreshes, [True, True])
+
+    def test_protected_clipboard_is_never_synchronized_into_workspace(self):
+        app = LauncherApp.__new__(LauncherApp)
+        synchronizations: list[bool] = []
+        app._sync_workspace_from_clipboard = lambda: synchronizations.append(True)
+        app.protected_clipboard_sequence = 42
+
+        app._sync_workspace_from_clipboard_if_safe()
+        self.assertEqual(synchronizations, [])
+
+        app.protected_clipboard_sequence = None
+        app._sync_workspace_from_clipboard_if_safe()
+        self.assertEqual(synchronizations, [True])
+
+    def test_external_show_invalidates_captured_credential_destination(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.source_foreground_handle = 123
+        app.show_window = lambda: None
+
+        app._handle_external_request({"command": "show"})
+
+        self.assertIsNone(app.source_foreground_handle)
+
+    def test_credential_paste_confirms_destination_and_clears_conditionally(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = FakeRoot()
+        app.source_foreground_handle = 123
+        app.protected_clipboard_sequence = None
+        action = Action(
+            "credential",
+            "Paste login",
+            "General",
+            "paste_credential",
+            "ContextPalette/example-login",
+            "Trusted",
+        )
+
+        with (
+            patch("context_palette.launcher.window_title", return_value="Sign in") as title,
+            patch("context_palette.launcher.messagebox.askyesno", return_value=True) as confirm,
+            patch(
+                "context_palette.launcher.read_windows_credential",
+                return_value=CredentialSecret("user", "do-not-show"),
+            ),
+            patch("context_palette.launcher.set_protected_clipboard_text", return_value=42),
+            patch("context_palette.launcher.focus_window", return_value=True),
+            patch("context_palette.launcher.send_paste_shortcut") as paste,
+            patch(
+                "context_palette.launcher.clear_clipboard_if_unchanged",
+                return_value=True,
+            ) as clear,
+        ):
+            result = app._paste_credential_action(action)
+            first_callback = app.root.after_callbacks.pop(0)
+            first_callback()
+            clear_callback = app.root.after_callbacks.pop(0)
+            clear_callback()
+
+        title.assert_called_once_with(123)
+        self.assertNotIn("do-not-show", confirm.call_args.args[1])
+        self.assertIn("Sign in", confirm.call_args.args[1])
+        self.assertEqual(app.root.withdraw_calls, 1)
+        self.assertIsNone(app.source_foreground_handle)
+        paste.assert_called_once()
+        clear.assert_called_once_with(42)
+        self.assertIsNone(app.protected_clipboard_sequence)
+        self.assertIn("approved", result)
+
+    def test_credential_paste_requires_fresh_hotkey_destination(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.source_foreground_handle = None
+        action = Action(
+            "credential",
+            "Paste login",
+            "General",
+            "paste_credential",
+            "ContextPalette/example-login",
+            "Trusted",
+        )
+
+        with self.assertRaisesRegex(ActionError, "F9"):
+            app._paste_credential_action(action)
+
+    def test_successful_focus_change_persists_before_applying_and_refreshes(self):
+        previous = PaletteState(("existing",), "General", {})
+        app = LauncherApp.__new__(LauncherApp)
+        app.palette_state = previous
+        app.context_var = FakeVariable()
+        app.context_var.set("Developing")
+        app.context_definitions = []
+        app.status_var = FakeVariable()
+        app.palette_path = Path("palette.json")
+        app._configuration_signature = lambda: (("palette.json", 1, 1),)
+        refreshes: list[bool] = []
+        app._refresh_results = lambda: refreshes.append(True)
+        saved_states: list[PaletteState] = []
+
+        def save(_path: Path, state: PaletteState) -> None:
+            self.assertIs(app.palette_state, previous)
+            saved_states.append(state)
+
+        with patch("context_palette.launcher.save_palette_state", side_effect=save):
+            app._change_focus_context()
+
+        self.assertEqual(saved_states[0].focus_context, "Developing")
+        self.assertIs(app.palette_state, saved_states[0])
+        self.assertEqual(refreshes, [True])
+        self.assertEqual(app.status_var.value, "Focus context: Developing")
+
+    def test_successful_pin_change_persists_before_applying_and_refreshes(self):
+        previous = PaletteState(("existing",), "General", {})
+        action = Action("new", "New action", "General", "copy_text", "Hello")
+        app = LauncherApp.__new__(LauncherApp)
+        app.palette_state = previous
+        app.status_var = FakeVariable()
+        app.palette_path = Path("palette.json")
+        app._selected_action = lambda: action
+        app._configuration_signature = lambda: (("palette.json", 1, 1),)
+        refreshes: list[bool] = []
+        surface_refreshes: list[bool] = []
+        app._refresh_results = lambda: refreshes.append(True)
+        app._render_command_surface = lambda: surface_refreshes.append(True)
+        saved_states: list[PaletteState] = []
+
+        def save(_path: Path, state: PaletteState) -> None:
+            self.assertIs(app.palette_state, previous)
+            saved_states.append(state)
+
+        with patch("context_palette.launcher.save_palette_state", side_effect=save):
+            app._toggle_selected_pin()
+
+        self.assertEqual(saved_states[0].pinned_action_ids, ("existing", "new"))
+        self.assertIs(app.palette_state, saved_states[0])
+        self.assertEqual(refreshes, [True])
+        self.assertEqual(surface_refreshes, [True])
+        self.assertIn("Pinned:", app.status_var.value)
+
     def test_failed_context_reload_preserves_last_known_good_contexts(self):
         app = LauncherApp.__new__(LauncherApp)
         existing = ContextDefinition("General", "Existing context")

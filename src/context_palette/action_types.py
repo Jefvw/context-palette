@@ -111,6 +111,15 @@ ACTION_TYPES = {
             "Usually machine-local; requires an installed executable.",
         ),
         _definition(
+            "paste_credential",
+            "Paste a Windows credential",
+            "Protected credential",
+            "Retrieve one exact generic or standard Windows credential from Credential Manager and paste it into the captured destination field.",
+            "Requires a Trusted action and a fresh F9 or Ctrl+Alt+P invocation from the destination field.",
+            "Confirms the destination, pastes through a no-history/no-cloud clipboard item, then clears it conditionally.",
+            "Windows-only and machine-local; the action stores only the credential target name.",
+        ),
+        _definition(
             "build_url_copy",
             "Build and copy a URL",
             "URL builder",

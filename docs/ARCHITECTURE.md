@@ -79,7 +79,8 @@ Action domain model, persistence, validation, search, transformation, and dispat
 Important principles:
 
 - Each action type is explicitly allow-listed.
-- JSON is validated when loaded.
+- Guided creation and JSON loading share the same action-value validation, while
+  execution retains safety checks around platform effects.
 - Arbitrary shell commands are rejected.
 - Pure transformations are separated from UI callbacks.
 - Platform effects are injected through callbacks where practical, enabling tests without opening applications.
@@ -190,6 +191,19 @@ Structured local reference material.
 - Searches sections, labels, details, and tags.
 - Promotes an individual sheet entry to a Draft action.
 
+### `windows_credentials.py`
+
+Native standard Windows/generic-credential and protected-clipboard boundary using
+standard-library `ctypes`.
+
+- Reads one exact `CRED_TYPE_GENERIC` target from the current Windows logon session.
+- Frees the native credential buffer immediately after decoding it.
+- Writes the password with Windows clipboard-history and cloud-upload exclusion formats.
+- Returns a clipboard sequence number so delayed clearing occurs only if another
+  application has not replaced the clipboard.
+- Never enumerates credentials, writes credentials, logs passwords, or exposes
+  passwords to action JSON, Input / Output, preview, search, or AI guidance.
+
 ### `window_layouts.py`
 
 Native Windows monitor, window-layout, and snapshot support using `ctypes`.
@@ -257,6 +271,7 @@ The current allow-list includes:
 - `open_file`
 - `open_folder`
 - `launch_app`
+- `paste_credential`
 - `build_url_copy`
 - `build_url_open`
 - `build_url_selection_open`
@@ -265,7 +280,12 @@ The current allow-list includes:
 - `window_layout`
 - `restore_window_snapshot`
 
-Action types that cause external effects use constrained implementations. `launch_app`, for example, accepts an existing absolute `.exe`, fixed argument list, and optional validated working directory.
+Action types that cause external effects use constrained implementations.
+`launch_app`, for example, accepts an existing absolute `.exe`, fixed argument
+list, and optional validated working directory. `paste_credential` accepts only
+an exact standard Windows or generic credential target, requires Trusted state and a fresh
+hotkey-captured destination, confirms the target window, and never accepts a
+password in configuration.
 
 ## Input and output flow
 
@@ -282,6 +302,8 @@ Input / Output workspace <---- Paste / manual edit
         +-- transformation -> replace workspace + copy result
         +-- URL builder -> consume workspace -> copy/open URL
         `-- copy-only action -> clipboard, workspace unchanged
+
+Windows Credential Manager -- exact target --> protected clipboard --> captured destination
 ```
 
 Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `launcher.py` owns selection ranges, one-step Undo grouping, clipboard updates, and menus. Action explanations and application status share a slim bottom communication line.
@@ -426,10 +448,14 @@ Detailed help is stored once in `docs/HELP.md` and displayed by the in-app searc
 
 - Treat loaded actions and captured text as untrusted data.
 - Only allow known action types.
-- Validate URLs to `http` or `https`.
+- Validate URLs to complete `http` or `https` addresses with an unambiguous
+  hostname. Reject embedded usernames/passwords, whitespace/control characters
+  in the authority, and backslash-based authority ambiguity.
 - Validate files, folders, executables, and working directories before opening.
 - Do not execute arbitrary shell command strings.
 - Keep API keys out of version-controlled files.
+- Never enumerate or write Windows credentials. Credential actions store only
+  exact target names and are unavailable to AI proposal and external execution paths.
 - Require explicit user action for launches, window restoration, trust promotion, and browser URL metadata.
 - Treat captured text and AI responses as untrusted data. AI requests are previewed and copied manually; responses must pass the versioned proposal schema and existing action validation before selected proposals become local Drafts.
 

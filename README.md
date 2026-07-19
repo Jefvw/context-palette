@@ -9,7 +9,8 @@ The application is under active development. It already supports the complete Ca
 - Opens instantly from a resident process with `F9` or `Ctrl+Alt+P`.
 - Searches actions by name, technology, task, context, type, state, and content.
 - Keeps five global pinned slots and four slots for the selected focus context.
-- Runs twelve constrained action types without an arbitrary shell-command action.
+- Runs thirteen constrained action types without an arbitrary shell-command action.
+- Pastes Trusted Windows or generic credentials without storing passwords in action JSON.
 - Provides compact, configurable right-side buttons for repeated actions.
 - Configures personal actions, contexts, and buttons through a guided window.
 - Captures clipboard material into an Inbox and converts it into Draft actions.
@@ -31,11 +32,38 @@ The application uses the Python standard library. `requirements.txt` intentional
 From the repository root:
 
 ```powershell
-.\setup-context-palette.bat
+.\develop-context-palette.bat
 .\run-context-palette.bat
 ```
 
-Setup creates `.venv`, initializes missing personal data files from safe examples, verifies Tkinter, and runs the test suite. If a folder or Python move leaves `.venv` unusable, setup preserves it as `.venv-unusable` and creates a fresh environment.
+`develop-context-palette.bat` is the single development entry point. It creates
+or repairs this computer's `.venv`, installs declared dependencies, initializes
+missing personal data from safe examples, and runs the complete project check.
+
+## Developing on multiple computers
+
+Commit and synchronize the repository, but never copy or synchronize `.venv`.
+Both virtualenv and Conda environments contain machine-specific executables and
+paths. Each computer should install the Python family declared in
+[`.python-version`](.python-version), then run:
+
+```powershell
+git pull
+.\develop-context-palette.bat
+```
+
+The tracked `.python-version`, `requirements.txt`, and setup scripts are the
+portable environment recipe. The ignored `.venv` is a disposable local result.
+Setup detects an environment from another repository location, an unavailable
+base installation, or the wrong Python family; it preserves that environment as
+`.venv-unusable*` and recreates it. Personal Context Palette data lives outside
+`.venv` and is not removed during repair. Existing environments are adopted by
+writing an ignored repository-location marker on their first successful setup.
+See
+[Multi-PC development](docs/MULTI_PC_DEVELOPMENT.md) for the complete workflow.
+
+For first-time application-only setup, `setup-context-palette.bat` remains
+available and includes the test suite.
 
 For project-aware Python commands, use `.\python-context-palette.bat` instead
 of invoking `.venv\Scripts\python.exe` directly. The wrapper makes the

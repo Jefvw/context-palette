@@ -46,7 +46,15 @@ from .command_surface import (
     load_combined_command_groups,
 )
 from .configuration_window import ConfigurationWindow
-from .hotkeys import GlobalHotkey, cursor_location, send_copy_shortcut, window_position_near_cursor
+from .hotkeys import (
+    GlobalHotkey,
+    cursor_location,
+    focus_window,
+    send_copy_shortcut,
+    send_paste_shortcut,
+    window_position_near_cursor,
+    window_title,
+)
 from .help_window import HelpWindow
 from .contexts import ContextDefinition, ContextError, load_combined_contexts
 from .inbox import InboxError, InboxItem, append_inbox_item, create_clipboard_item, load_inbox_items
@@ -71,12 +79,44 @@ from .window_layouts import (
     restore_window_snapshot,
     set_snapshot_launch_target,
 )
+from .windows_credentials import (
+    CredentialAccessError,
+    clear_clipboard_if_unchanged,
+    read_windows_credential,
+    set_protected_clipboard_text,
+)
 
 LOGGER = logging.getLogger("context_palette.launcher")
 LOGGER.addHandler(logging.NullHandler())
 
 SLOW_RESULT_REFRESH_SECONDS = 0.100
 SLOW_CONFIGURATION_RELOAD_SECONDS = 0.500
+
+
+def frequent_credential_actions(
+    actions: list[Action],
+    pinned_action_ids: tuple[str, ...],
+    *,
+    limit: int = 4,
+) -> list[Action]:
+    """Return direct-paste credentials, prioritizing the user's global pin order."""
+    eligible = {
+        action.id: action
+        for action in actions
+        if action.type == "paste_credential" and action.state == "Trusted"
+    }
+    selected = [
+        eligible[action_id]
+        for action_id in pinned_action_ids
+        if action_id in eligible
+    ]
+    selected_ids = {action.id for action in selected}
+    selected.extend(
+        action
+        for action in actions
+        if action.id in eligible and action.id not in selected_ids
+    )
+    return selected[:limit]
 
 
 def _warn_if_slow(
@@ -165,10 +205,13 @@ class LauncherApp:
         self.hotkey = GlobalHotkey(self._queue_hotkey_request)
         self.captured_selection: str | None = None
         self.source_foreground_handle: int | None = None
+        self.protected_clipboard_sequence: int | None = None
         self.hotkey_available = False
         self.hide_after_id: str | None = None
         self.search_entry: ttk.Entry | None = None
         self.search_refresh_after_id: str | None = None
+        self.action_type_filter: str | None = None
+        self.passwords_button: ttk.Button | None = None
         self.window_action_in_progress = False
         self.configuration_signature_cache: tuple[tuple[str, int, int], ...] = ()
         self.search_var = tk.StringVar()
@@ -176,6 +219,7 @@ class LauncherApp:
         self.results_count_var = tk.StringVar(value="0 actions")
         self.surface_count_var = tk.StringVar(value="0 buttons")
         self.widget_tooltips: list[WidgetTooltip] = []
+        self.command_surface_tooltips: list[WidgetTooltip] = []
         self.action_info_full = "Select an action to see what it reads and what it will do."
         self.status_var = tk.StringVar(value="Ready")
         self.search_var.trace_add("write", lambda *_args: self._schedule_refresh_results())
@@ -268,6 +312,18 @@ class LauncherApp:
         search.bind("<KeyPress>", self._handle_keypress)
         search.bind("<Return>", lambda _event: self._execute_selected())
 
+        self.passwords_button = ttk.Button(
+            search_row,
+            text="Passwords",
+            command=self._toggle_password_actions,
+            style="Compact.TButton",
+        )
+        self.passwords_button.pack(side=tk.LEFT, padx=(0, 6))
+        self._tooltip(
+            self.passwords_button,
+            "Show only protected Windows Credential Manager actions. Activate again to show all actions.",
+        )
+
         run_button = ttk.Button(
             search_row,
             text="Run",
@@ -288,6 +344,20 @@ class LauncherApp:
             search_help,
             "Search globally across technology, task, context, action name, type, and content.",
         )
+
+    def _toggle_password_actions(self) -> None:
+        self.action_type_filter = (
+            None if self.action_type_filter == "paste_credential" else "paste_credential"
+        )
+        if self.passwords_button is not None:
+            self.passwords_button.configure(
+                style=(
+                    "Accent.TButton"
+                    if self.action_type_filter == "paste_credential"
+                    else "Compact.TButton"
+                )
+            )
+        self._refresh_results()
 
     def _build_results_area(self, outer: ttk.Frame) -> None:
 
@@ -513,6 +583,13 @@ class LauncherApp:
     def _tooltip(self, widget: tk.Widget, text: str | Callable[[], str]) -> None:
         self.widget_tooltips.append(WidgetTooltip(widget, text))
 
+    def _command_surface_tooltip(
+        self,
+        widget: tk.Widget,
+        text: str | Callable[[], str],
+    ) -> None:
+        self.command_surface_tooltips.append(WidgetTooltip(widget, text))
+
     def _result_tooltip_text(self, index: int) -> str:
         if index < 0 or index >= len(self.displayed_actions):
             return ""
@@ -676,7 +753,7 @@ class LauncherApp:
         self.root.focus_force()
         self.search_var.set("")
         self._reload_if_changed()
-        self._sync_workspace_from_clipboard()
+        self._sync_workspace_from_clipboard_if_safe()
         self.root.after(80, self.focus_search)
 
     def hide_window(self) -> None:
@@ -688,6 +765,7 @@ class LauncherApp:
         self.root.withdraw()
 
     def quit_app(self) -> None:
+        self._clear_protected_clipboard()
         self.hotkey.stop()
         self.instance_server.stop()
         self.root.destroy()
@@ -747,6 +825,7 @@ class LauncherApp:
                 )
 
     def _handle_external_request(self, request: dict[str, str]) -> None:
+        self.source_foreground_handle = None
         self.show_window()
         requested_context = request.get("context", "").strip()
         if requested_context:
@@ -763,6 +842,7 @@ class LauncherApp:
             self.root.after(80, self.focus_search)
 
     def _capture_selection(self, request: dict[str, str]) -> None:
+        self._clear_protected_clipboard()
         self.source_foreground_handle = int(ctypes.windll.user32.GetForegroundWindow())
         send_copy_shortcut()
         self.root.after(120, lambda: self._finish_selection_capture(request))
@@ -834,13 +914,22 @@ class LauncherApp:
         self._render_command_surface()
 
     def _render_command_surface(self) -> None:
+        for tooltip in self.command_surface_tooltips:
+            tooltip.hide()
+        self.command_surface_tooltips.clear()
         for child in self.command_tiles_frame.winfo_children():
             child.destroy()
-        button_count = sum(len(group.items) for group in self.command_groups)
+        credential_actions = frequent_credential_actions(
+            self.actions,
+            self.palette_state.pinned_action_ids,
+        )
+        button_count = len(credential_actions) + sum(
+            len(group.items) for group in self.command_groups
+        )
         self.surface_count_var.set(
             f"{button_count} button" if button_count == 1 else f"{button_count} buttons"
         )
-        if not self.command_groups:
+        if not self.command_groups and not credential_actions:
             empty = ttk.Label(
                 self.command_tiles_frame,
                 text="No quick actions yet.\nUse Configure → Right-side buttons to add one.",
@@ -849,13 +938,53 @@ class LauncherApp:
                 justify=tk.LEFT,
             )
             empty.pack(fill=tk.X, padx=8, pady=12)
-            self._tooltip(empty, "Create a personal quick-action button from Configure.")
+            self._command_surface_tooltip(
+                empty,
+                "Create a personal quick-action button from Configure.",
+            )
             return
 
         for column in range(2):
             self.command_tiles_frame.columnconfigure(column, weight=1, uniform="surface")
+        group_row_offset = 0
+        if credential_actions:
+            password_area = ttk.LabelFrame(
+                self.command_tiles_frame,
+                text="Frequent passwords",
+                padding=4,
+            )
+            password_area.grid(
+                row=0,
+                column=0,
+                columnspan=2,
+                sticky=tk.NSEW,
+                padx=2,
+                pady=2,
+            )
+            for column in range(4):
+                password_area.columnconfigure(column, weight=1, uniform="passwords")
+            for column, action in enumerate(credential_actions):
+                control = ttk.Button(
+                    password_area,
+                    text=action.title,
+                    command=lambda selected_action=action: self._execute_action(selected_action),
+                    style="Compact.TButton",
+                )
+                control.grid(
+                    row=0,
+                    column=column,
+                    sticky=tk.EW,
+                    padx=1,
+                    pady=1,
+                )
+                self._command_surface_tooltip(
+                    control,
+                    "Paste this credential directly. The destination confirmation remains required.",
+                )
+            group_row_offset = 1
         for index, group in enumerate(self.command_groups):
             row, column = divmod(index, 2)
+            row += group_row_offset
             area = ttk.LabelFrame(self.command_tiles_frame, text=group.label, padding=4)
             area.grid(row=row, column=column, sticky=tk.NSEW, padx=2, pady=2)
             for button_column in range(3):
@@ -879,7 +1008,7 @@ class LauncherApp:
                     padx=1,
                     pady=1,
                 )
-                self._tooltip(
+                self._command_surface_tooltip(
                     control,
                     "Left-click or Enter runs the primary action. Right-click chooses an action. Shift/Ctrl+click edits configuration.",
                 )
@@ -1036,6 +1165,7 @@ class LauncherApp:
             )
         self.context_picker["values"] = contexts
         self.context_var.set(self.palette_state.focus_context)
+        self._render_command_surface()
 
     def _change_focus_context(self) -> None:
         context = self.context_var.get().strip() or "General"
@@ -1076,6 +1206,12 @@ class LauncherApp:
             self.search_refresh_after_id = None
         self.results_tooltip.hide()
         self.filtered_actions = search_actions(self.actions, self.search_var.get())
+        if self.action_type_filter is not None:
+            self.filtered_actions = [
+                action
+                for action in self.filtered_actions
+                if action.type == self.action_type_filter
+            ]
         self.slot_actions = action_slots(self.actions, self.palette_state)
         matching_ids = {action.id for action in self.filtered_actions}
         slot_rows = [
@@ -1112,22 +1248,36 @@ class LauncherApp:
         self.results_count_var.set(f"{count} action" if count == 1 else f"{count} actions")
         if not self.displayed_actions:
             query = self.search_var.get().strip()
-            empty_message = (
-                f'No actions match “{query}”.\nClear Find or use Configure to create one.'
-                if query
-                else "No actions are available.\nUse Configure to create your first personal action."
-            )
+            if self.action_type_filter == "paste_credential":
+                empty_message = (
+                    f'No password actions match “{query}”.\nClear Find or create one in Configure.'
+                    if query
+                    else "No password actions yet.\nUse Configure to create one."
+                )
+            else:
+                empty_message = (
+                    f'No actions match “{query}”.\nClear Find or use Configure to create one.'
+                    if query
+                    else "No actions are available.\nUse Configure to create your first personal action."
+                )
             self.results.insert(tk.END, empty_message)
             self.results.itemconfigure(
                 0,
                 foreground=COLORS["muted_text"],
                 background=COLORS["surface"],
             )
-            self.status_var.set("No matching action. Clear Find or create one in Configure.")
+            if self.action_type_filter == "paste_credential":
+                self.status_var.set("No matching password action. Clear Find or create one.")
+            else:
+                self.status_var.set("No matching action. Clear Find or create one in Configure.")
         else:
-            self.status_var.set(
-                f"{count} matches · slots 1–5 pinned · slots 6–9 {self.palette_state.focus_context}"
-            )
+            if self.action_type_filter == "paste_credential":
+                label = "password action" if count == 1 else "password actions"
+                self.status_var.set(f"{count} {label}")
+            else:
+                self.status_var.set(
+                    f"{count} matches · slots 1–5 pinned · slots 6–9 {self.palette_state.focus_context}"
+                )
         self._update_preview()
         _warn_if_slow(
             "result refresh",
@@ -1213,6 +1363,7 @@ class LauncherApp:
         self.palette_state = updated_state
         self.configuration_signature_cache = self._configuration_signature()
         self._refresh_results()
+        self._render_command_surface()
         verb = "Pinned" if action.id in self.palette_state.pinned_action_ids else "Unpinned"
         self.status_var.set(f"{verb}: {action.display_text}")
 
@@ -1239,12 +1390,59 @@ class LauncherApp:
                 output_setter=self._set_workspace_text,
                 window_layout_runner=self._run_window_layout,
                 window_snapshot_runner=self._run_window_snapshot,
+                credential_paster=self._paste_credential_action,
             )
             self.status_var.set(message)
         except ActionError as exc:
             self.status_var.set("Action failed")
             messagebox.showerror("Context Palette", str(exc))
             LOGGER.exception("Action failed: id=%s type=%s", action.id, action.type)
+
+    def _paste_credential_action(self, action: Action) -> str:
+        destination = self.source_foreground_handle
+        if destination is None:
+            raise ActionError(
+                "Open Context Palette with F9 or Ctrl+Alt+P from the destination password field."
+            )
+        destination_title = " ".join(window_title(destination).split())
+        destination_title = destination_title[:160] or "the captured application"
+        if not messagebox.askyesno(
+            "Paste protected credential",
+            (
+                f"Paste credential target:\n{action.value}\n\n"
+                f"Destination:\n{destination_title}\n\n"
+                "The password will not be shown or added to clipboard history."
+            ),
+            parent=self.root,
+        ):
+            return "Credential paste cancelled."
+        try:
+            secret = read_windows_credential(action.value)
+            sequence = set_protected_clipboard_text(secret.password)
+        except CredentialAccessError as exc:
+            raise ActionError(str(exc)) from exc
+        self.source_foreground_handle = None
+        self.protected_clipboard_sequence = sequence
+        self.root.withdraw()
+
+        def paste_into_destination() -> None:
+            if not focus_window(destination):
+                self._clear_protected_clipboard(sequence)
+                self.show_window()
+                messagebox.showerror(
+                    "Credential paste cancelled",
+                    "The captured destination window is no longer available.",
+                    parent=self.root,
+                )
+                return
+            send_paste_shortcut()
+            self.root.after(
+                15_000,
+                lambda: self._clear_protected_clipboard(sequence),
+            )
+
+        self.root.after(120, paste_into_destination)
+        return "Protected credential paste approved; returning to the destination."
 
     def _execute_window_action_async(self, action: Action) -> None:
         if self.window_action_in_progress:
@@ -1389,6 +1587,12 @@ class LauncherApp:
             if action.working_directory:
                 lines.append(f"Working folder:\n{action.working_directory}")
             return "\n".join(lines)
+        if action.type == "paste_credential":
+            return (
+                "Paste a protected Windows credential.\n"
+                f"Credential target: {action.value}\n"
+                "Requires Trusted state and a fresh hotkey invocation from the destination field."
+            )
         if action.type == "build_url_copy":
             return f"Ask for an ID, then copy this URL:\n{action.value}"
         if action.type == "build_url_open":
@@ -1497,6 +1701,10 @@ class LauncherApp:
             return
         self._set_workspace_text(value)
 
+    def _sync_workspace_from_clipboard_if_safe(self) -> None:
+        if self.protected_clipboard_sequence is None:
+            self._sync_workspace_from_clipboard()
+
     def _copy_workspace_to_clipboard(self) -> None:
         value = self._workspace_text()
         if not value:
@@ -1506,9 +1714,19 @@ class LauncherApp:
         self.status_var.set("Copied Input / Output to the clipboard.")
 
     def _set_clipboard(self, value: str) -> None:
+        self.protected_clipboard_sequence = None
         self.root.clipboard_clear()
         self.root.clipboard_append(value)
         self.root.update()
+
+    def _clear_protected_clipboard(self, sequence: int | None = None) -> None:
+        current = self.protected_clipboard_sequence
+        target = sequence if sequence is not None else current
+        if target is None:
+            return
+        clear_clipboard_if_unchanged(target)
+        if self.protected_clipboard_sequence == target:
+            self.protected_clipboard_sequence = None
 
     def _get_clipboard_text(self) -> str:
         try:

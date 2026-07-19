@@ -64,11 +64,11 @@
       "id": "colruyt-open-product",
       "title": "Open Colruyt product ID",
       "context": "Product lookup",
-      "technology": "Browser / Colruyt",
-      "task": "Commercial product ID",
       "type": "build_url_selection_open",
       "value": "https://www.colruyt.be/nl/producten/{id_url}",
-      "state": "Draft"
+      "state": "Trusted",
+      "technology": "Browser / Colruyt",
+      "task": "Commercial product ID"
     },
     {
       "id": "product-lookup-bioplanet",

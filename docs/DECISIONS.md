@@ -1,8 +1,66 @@
 # Decisions
 
+## 2026-07-19 - Track the Python family, not the virtual environment
+
+**Decision:** Declare the supported Python family in `.python-version`, keep
+`.venv` ignored and machine-local, validate its Python version and repository
+location during setup, and provide `develop-context-palette.bat` as the
+setup-and-check entry point.
+
+**Reason:** Virtualenv and Conda environments contain machine-specific paths and
+executables. Synchronizing the environment itself is unreliable, while a
+tracked version and dependency recipe can be reproduced consistently on every
+development computer.
+
+**Consequences:** Each computer needs a compatible Python installation with
+Tcl/Tk and creates its own disposable `.venv`. Changing the supported Python
+family is now an explicit reviewed repository change. Unusable or mismatched
+environments are preserved under numbered `.venv-unusable*` names before
+replacement.
+
 Record durable product and technical decisions here.
 
 Decision entries are historical and append-only. Their consequences describe the system at the time; use `ARCHITECTURE.md`, `HELP.md`, and `MVP.md` for current behavior.
+
+## 2026-07-19 - Support both visible Windows credential categories
+
+**Decision:** Resolve a protected-paste target first as a Generic Credential and
+then as a standard Windows/domain-password credential using the same exact
+target and native `CredReadW` boundary.
+
+**Reason:** Credential Manager presents these as separate visible categories.
+Restricting lookup to Generic Credentials rejects valid targets such as
+`oracle-pc17` stored in the Windows Credentials section, despite the user
+supplying the correct exact name.
+
+**Consequences:** No enumeration or fuzzy matching is introduced. Generic
+credentials remain deterministic when duplicate target names exist. Both
+supported categories use the existing Trusted-state, fresh-destination,
+confirmation, protected-clipboard, and conditional-clear safeguards.
+
+## 2026-07-19 - Keep credential paste native, exact, attended, and ephemeral
+
+**Decision:** Add a `paste_credential` action that stores only an exact generic
+Windows Credential Manager target. Retrieve it with native `CredReadW` through
+standard-library `ctypes`; require Trusted state, a fresh hotkey-captured
+destination, and confirmation. Paste through a clipboard item excluded from
+history and cloud synchronization, then clear it conditionally.
+
+**Reason:** Repeated password entry is valuable to accelerate, but treating a
+password as saved text or a template variable would expose it to JSON, search,
+previews, clipboard history, logs, or AI workflows. Native Windows access avoids
+a new dependency and works directly with generic Credential Manager targets.
+
+**Alternatives considered:** Python `keyring` adds a third-party backend and
+service/username mapping layer that is unnecessary for this Windows-only
+application. Direct simulated typing avoids the clipboard but is less reliable
+across password fields and remains observable to keyboard hooks. Unconfirmed or
+externally invoked pastes would make destination mistakes too easy.
+
+**Consequences:** Credential enumeration and creation remain outside Context
+Palette. Drafts cannot paste, external show requests cannot establish a
+destination, prior clipboard contents are not restored, and same-user malware
+remains outside the application's threat boundary.
 
 ## 2026-07-19 - Bound localhost integration client time
 

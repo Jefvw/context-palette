@@ -70,6 +70,17 @@ class LauncherSmokeTests(unittest.TestCase):
                     start_server.assert_called_once_with()
                     start_hotkey.assert_called_once_with()
 
+                    stable_tooltip_count = len(app.widget_tooltips)
+                    surface_tooltip_count = len(app.command_surface_tooltips)
+                    for _index in range(5):
+                        app._render_command_surface()
+                    root.update_idletasks()
+                    self.assertEqual(len(app.widget_tooltips), stable_tooltip_count)
+                    self.assertEqual(
+                        len(app.command_surface_tooltips),
+                        surface_tooltip_count,
+                    )
+
                     app._show_configuration()
                     root.update_idletasks()
                     configuration_windows = [

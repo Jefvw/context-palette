@@ -20,20 +20,64 @@ from context_palette.actions import (
     edited_configured_action,
     draft_build_url_action,
     draft_copy_text_action,
+    draft_open_url_action,
     edited_copy_text_action,
     execute_action,
     expand_template,
     load_actions,
     list_to_comma_separated,
     load_combined_actions,
+    open_action_target,
     search_actions,
     transform_text,
     trusted_action,
     update_action,
+    validate_credential_target,
+    validate_http_url,
 )
 
 
 class ActionTests(unittest.TestCase):
+    def test_credential_action_requires_trust_and_dedicated_paster(self):
+        draft = Action(
+            "credential",
+            "Paste login",
+            "General",
+            "paste_credential",
+            "ContextPalette/example-login",
+            "Draft",
+        )
+        with self.assertRaises(ActionError):
+            execute_action(draft, credential_paster=lambda _action: "pasted")
+
+        trusted = Action(
+            draft.id,
+            draft.title,
+            draft.context,
+            draft.type,
+            draft.value,
+            "Trusted",
+        )
+        self.assertEqual(
+            execute_action(trusted, credential_paster=lambda _action: "pasted"),
+            "pasted",
+        )
+
+    def test_credential_target_rejects_confirmation_control_characters(self):
+        with self.assertRaises(ActionError):
+            validate_credential_target("ContextPalette/login\nDestination: attacker")
+
+        action = Action(
+            "credential",
+            "Paste login",
+            "General",
+            "paste_credential",
+            "ContextPalette/login\nDestination: attacker",
+            "Trusted",
+        )
+        with self.assertRaises(ActionError):
+            execute_action(action, credential_paster=lambda _action: "pasted")
+
     def test_configured_draft_action_uses_built_in_type_and_validates_value(self):
         action = configured_draft_action(
             title="Open documentation",
@@ -54,6 +98,45 @@ class ActionTests(unittest.TestCase):
                 action_type="open_url",
                 value="not-a-url",
             )
+
+    def test_guided_creation_and_json_loading_reject_invalid_list_conversion_mode(self):
+        with self.assertRaisesRegex(ActionError, "csv or sql_strings"):
+            configured_draft_action(
+                title="Broken conversion",
+                context="General",
+                action_type="transform_list_csv",
+                value="spreadsheet",
+            )
+
+        path = self._write_actions(
+            [
+                {
+                    "id": "broken-conversion",
+                    "title": "Broken conversion",
+                    "context": "General",
+                    "type": "transform_list_csv",
+                    "value": "spreadsheet",
+                }
+            ]
+        )
+        with self.assertRaisesRegex(ActionError, r"Action #1: .*csv or sql_strings"):
+            load_actions(path)
+
+    def test_json_loading_rejects_empty_action_value(self):
+        path = self._write_actions(
+            [
+                {
+                    "id": "empty-copy",
+                    "title": "Empty copy",
+                    "context": "General",
+                    "type": "copy_text",
+                    "value": "   ",
+                }
+            ]
+        )
+
+        with self.assertRaisesRegex(ActionError, r"Action #1: .*cannot be empty"):
+            load_actions(path)
 
     def test_edited_configured_action_preserves_identity_and_maturity(self):
         original = Action(
@@ -356,6 +439,51 @@ class ActionTests(unittest.TestCase):
         with self.assertRaises(ActionError):
             build_url("https://example.com/items", "123")
 
+    def test_http_url_validation_rejects_credentials_and_ambiguous_authorities(self):
+        unsafe_urls = (
+            "https://user:secret@example.com/private",
+            "https://trusted.example\\@attacker.example/path",
+            "https://example .com/path",
+            "https:///missing-host",
+        )
+
+        for value in unsafe_urls:
+            with self.subTest(value=value), self.assertRaises(ActionError):
+                validate_http_url(value)
+
+    def test_all_url_action_creation_paths_reject_embedded_credentials(self):
+        value = "https://user:secret@example.com/private"
+
+        with self.assertRaises(ActionError):
+            draft_open_url_action(title="Unsafe", context="General", value=value)
+        with self.assertRaises(ActionError):
+            configured_draft_action(
+                title="Unsafe",
+                context="General",
+                action_type="open_url",
+                value=value,
+            )
+        with self.assertRaises(ActionError):
+            build_url(value + "/{id_url}", "example")
+
+    def test_url_execution_rejects_credentials_without_echoing_secret(self):
+        action = Action(
+            "unsafe",
+            "Unsafe URL",
+            "General",
+            "open_url",
+            "https://user:secret@example.com/private",
+        )
+
+        with (
+            patch("context_palette.actions.webbrowser.open") as browser_open,
+            self.assertRaises(ActionError) as raised,
+        ):
+            open_action_target(action)
+
+        browser_open.assert_not_called()
+        self.assertNotIn("secret", str(raised.exception))
+
     def test_execute_build_url_can_copy_or_open(self):
         copied = []
         opened = []
@@ -612,6 +740,23 @@ class ActionTests(unittest.TestCase):
         )
 
         self.assertEqual(load_actions(path)[0].type, "build_url_open")
+
+    def test_load_actions_rejects_credential_bearing_url(self):
+        path = self._write_actions(
+            [
+                {
+                    "id": "unsafe-url",
+                    "title": "Unsafe URL",
+                    "context": "General",
+                    "type": "open_url",
+                    "value": "https://user:secret@example.com/private",
+                    "state": "Draft",
+                }
+            ]
+        )
+
+        with self.assertRaises(ActionError):
+            load_actions(path)
 
     def test_unsupported_action_type_is_rejected_when_loading(self):
         path = self._write_actions(

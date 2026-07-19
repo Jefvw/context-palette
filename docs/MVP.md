@@ -15,7 +15,8 @@ Context Palette helps a Windows user capture useful material, turn it into a con
 | Global pins and focus-context slots | Implemented | Pins 1–5, context slots 6–9 |
 | Guided personal configuration | Implemented | All built-in action types; shared records read-only |
 | Capture → Draft → Test → Refine → Trusted | Implemented | Trust is explicit; archiving is represented in data but has limited UI |
-| Constrained action execution | Implemented | Twelve allow-listed types; no arbitrary shell action |
+| Constrained action execution | Implemented | Thirteen allow-listed types; no arbitrary shell action |
+| Protected credential paste | Implemented with limitations | Exact standard Windows or generic credential target; Trusted, confirmed, hotkey-originated paste only |
 | Input / Output transformations | Implemented | Selection or full field; result copied |
 | Cheat sheets and promotion | Implemented | Structured local JSON sheets |
 | Window layouts and snapshots | Implemented with limitations | Best-effort process/window matching; no generic document/tab recovery |
@@ -51,6 +52,7 @@ The MVP:
 - keeps the integration bridge attended;
 - treats captured material and AI responses as untrusted;
 - stores personal data locally in ignored files.
+- stores only credential target references in actions; passwords remain in Windows Credential Manager.
 
 ## Not required for the MVP
 
