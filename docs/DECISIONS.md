@@ -1,5 +1,83 @@
 # Decisions
 
+## 2026-07-19 - Keep Focus browsing explicit and global search global
+
+**Decision:** Replace the wide Focus combobox with a compact explicit menu,
+add a Focus Actions tree in the existing Actions region, and switch back to the
+unchanged global flat results whenever Find contains text or a type filter is
+active. The tree includes only visible actions whose explicit context matches
+the active Focus and groups them by Technology and Task.
+
+**Rationale:** Focus should make repeated work easier to browse without silently
+changing what global search means. Reusing action leaves and the existing
+dispatcher preserves lifecycle and execution safety.
+
+**Decision:** Move Sheets from the footer into a Knowledge Quick action through
+a closed `open_sheets` built-in-command allow-list.
+
+**Rationale:** Sheets is knowledge retrieval rather than an action lifecycle
+command. A one-command allow-list provides the requested placement without
+turning Quick-action configuration into arbitrary method or shell execution.
+
+## 2026-07-19 - Group action controls into an Actions workspace
+
+**Decision:** Remove the separate full-width Find row and place the unchanged
+Find entry directly above the Actions list. Place the existing Passwords,
+Types, Run, and action-Help controls in an 88-pixel vertical rail beside the
+list. Start the dashboard at approximately 44% Actions workspace and 56% Quick
+actions.
+
+**Reason:** Search, filtering, execution, and action-specific Help operate on
+the numbered Actions list. Grouping them communicates that relationship,
+removes an unrelated full-width control row, and retains enough list width
+without making the Quick-action menu launchers unreadable.
+
+**Consequences:** Widget types, labels, callbacks, menus, tooltips, creation
+order, focus traversal, and enabled states do not change. Global Help remains
+in the Focus header. The existing bounded and user-adjustable dashboard
+divider remains in effect.
+
+## 2026-07-19 - Present Quick actions as subject menus
+
+**Decision:** Render each configured Quick-action subject as one full-width
+vertical row with a native right-side menu indicator. Keep groups in their
+canonical row-major two-column order and start the action console at
+approximately 33% Actions and 67% Quick actions.
+
+**Reason:** A Quick-action subject can expose several existing operations.
+Three small labels across a row made subjects resemble unrelated one-shot
+buttons and truncated useful names. Vertical menu-launcher rows communicate
+the subject/menu relationship and provide more label width without widening
+the application.
+
+**Consequences:** The indicator is presentation-only. Left click, Enter, and
+Space still execute the primary-first available action; right click opens the
+same ordered action menu; Shift/Ctrl+click opens the same configuration files.
+Configuration records, titles, callbacks, menu contents, enabled states, and
+execution rules do not change. Both main splitters use bounded positions so
+neither side can be accidentally collapsed; undersized displays divide space
+proportionally.
+
+## 2026-07-19 - Unify action discovery and text transformation
+
+**Decision:** Keep the main window at `780` pixels wide, use available monitor
+height up to `1000` pixels, and place the existing action-discovery area and
+Input / Output workspace in a user-adjustable vertical split weighted 52/48.
+Preserve the user's adjusted ratio during later resizing in the same session.
+Keep command buttons and status outside that split.
+
+**Reason:** Context Palette is an action launcher with an integrated
+text-transformation workspace. Action discovery and recurring transformations
+are successive parts of one workflow, so neither should visually overwhelm the
+other. Extra vertical space improves both without reducing width or introducing
+navigation, tabs, or conventional document-editor features.
+
+**Consequences:** Secondary windows retain their standardized `780x600` size.
+The main window reduces on smaller displays and, when invoked by hotkey,
+shrinks only when required to fit the cursor monitor before using the existing
+on-screen positioning clamp. All existing widgets, callbacks, bindings, data,
+and execution behavior remain unchanged.
+
 ## 2026-07-19 - Remove window restoration and PowerToys integration
 
 **Decision:** Remove `window_layout` and `restore_window_snapshot` actions,

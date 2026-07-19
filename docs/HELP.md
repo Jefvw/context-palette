@@ -32,7 +32,7 @@ This does not execute the highlighted action. Avoid passing secrets or selected 
 
 ## Focus context
 
-Click **Configure** beside the Focus selector to create or edit personal contexts and choose up to four preferred actions for slots 6 through 9. Shared definitions remain visible but read-only. Shared definitions live in `data/contexts.json`; private or work-specific definitions live in ignored `data/local_contexts.json`. The complete format and QTP-style recipes are in `docs/CONTEXT_CONFIGURATION.md`.
+Use the compact active-Focus menu to switch context explicitly. Choose **Manage focus → Manage focuses…** to open the existing Context configuration area, create or edit personal contexts, and choose up to four preferred actions for slots 6 through 9. Shared definitions remain visible but read-only. Shared definitions live in `data/contexts.json`; private or work-specific definitions live in ignored `data/local_contexts.json`. The complete format and QTP-style recipes are in `docs/CONTEXT_CONFIGURATION.md`.
 
 The Focus context tells Context Palette what kind of work is currently most important. It changes slots 6 through 9 and influences which actions appear first.
 
@@ -46,11 +46,32 @@ Focus and pin changes are saved before they take effect. If the local palette
 file cannot be written, Context Palette keeps the previous selection and
 explains the problem instead of showing an unsaved change.
 
+Choose **Focus actions** to browse actions explicitly assigned to the active
+Focus. The tree groups them by Technology, then Task. Expand or collapse
+branches with the mouse or normal arrow keys; select a leaf and use Run, Enter,
+or double-click as usual. Branches cannot run. Missing Technology or Task is
+shown as **Other**. Activating **Focus actions** moves keyboard focus directly
+into the tree so arrow-key navigation can begin immediately. Returning to a
+Focus restores its expanded and collapsed branches; Run never targets an action
+hidden beneath a collapsed branch.
+
+Find remains global. Typing while Focus Actions is active temporarily shows the
+existing flat global results; it does not limit search to the Focus. Clearing
+Find returns to the Focus tree. Changing Focus refreshes the tree only while
+that tree is visible with Find empty.
+
 ## Find and run actions
+
+The left side of the action dashboard is one Actions workspace. Find action
+sits directly above the numbered list it filters. Passwords, Types, Run, and
+the action-search Help control form the narrow rail beside that list.
 
 Search matches Technology, Task, Context, Action name, type, and content.
 
 - Type to filter actions.
+- Click **Passwords** for the protected-credential shortcut, or open **Types**
+  to filter by any built-in action type. Choose **All types** to clear the type
+  filter. Find text and type filters work together.
 - Use Up/Down, Page Up/Page Down, Home, and End to navigate.
 - Press Enter, double-click, or click **Run**.
 - Numpad 1 through 9 executes the corresponding fixed slot.
@@ -63,7 +84,11 @@ Blue rows are pinned slots 1–5. Green rows are focus-context slots 6–9. Neut
 
 ## Quick-action surface
 
-The right half contains global configurable subareas. Each subarea contains multiple compact action labels/buttons and stays visible when Focus changes.
+The wider right side of the action console contains global configurable
+subareas and stays visible when Focus changes. Each group presents one
+full-width subject per row. The right-side `▾` indicates that right-click opens
+the subject's existing multi-action menu; it does not change left-click
+behavior.
 
 - Left-click a label to execute its primary configured action.
 - Right-click that label to open its individually assigned executable action menu.
@@ -72,11 +97,13 @@ The right half contains global configurable subareas. Each subarea contains mult
 - Every item uses the same selected text, Input / Output, clipboard, and safe action executor as the search list.
 - Configure shared groups in `data/command_surface.json` and private groups in `data/local_command_surface.json`.
 - Use **Configure > Right-side buttons** to add or edit personal groups and buttons without editing JSON. Choose existing actions from lists; stable IDs are generated from the visible names when left blank.
-- Quick-action groups use three compact button columns with reduced padding so more actions fit without enlarging the palette.
+- Groups remain in configured order across two columns. Subjects remain in
+  configured order from top to bottom inside each group.
 
 ## Configure
 
-Click **Configure** beside the Focus selector for the guided personal-configuration workspace:
+Choose **Manage focus** for Focus configuration, or use the configuration
+shortcut (`Ctrl+,`) for the complete guided personal-configuration workspace:
 
 - **Actions:** edit every kind of personal action, including URLs, files,
   folders, applications, credentials, URL builders, and transformations.
@@ -105,7 +132,22 @@ The complete JSON format is documented in `docs/COMMAND_SURFACE_CONFIGURATION.md
 
 ## Input / Output workspace
 
-Input / Output is a permanent editable working text box, not an action preview. A fresh application start leaves it empty. Reopening the resident palette can show the current clipboard or captured selection. Actions can read or replace it. Its compact heading explains the field without adding a separate toolbar.
+Input / Output is the text-transformation workspace integrated with the action
+launcher, not merely a passive scratchpad or action preview. Use it for quick
+manual inspection and editing, and for repeatedly applying constrained actions
+to selected text or the complete field. The normal workflow is: capture or
+enter text, find and apply an action, inspect or refine the result, then copy
+or reuse it.
+
+The main window uses available monitor height without becoming wider. Actions
+and Quick actions receive roughly 52% of the responsive content area and Input
+/ Output receives roughly 48%, keeping both parts of the workflow immediately
+useful. Drag the horizontal divider to adjust that balance. On smaller screens
+the same areas shrink and retain their existing scrolling. Divider movement is
+bounded so neither side can be accidentally collapsed. A fresh application
+start leaves the workspace empty. Reopening the resident palette can show the
+current clipboard or captured selection. Actions can read or replace it. Its
+compact heading explains the field without adding a separate toolbar.
 
 Numbered action triggering is deliberately active only while Find has focus. In every other control—including Clipboard / Input / Output, the result list, context selector, and buttons—`1` through `9` do not execute actions. This makes Find the explicit keyboard command mode. Standard text editing remains available in the workspace.
 
@@ -126,6 +168,21 @@ The bottom communication line always stays one row high. Hover over it for the c
 Example: in the Database context, `Convert lines to SQL string list` turns separate lines into quoted, comma-separated SQL values and copies the result.
 
 ## Main buttons
+
+The bottom row uses compact symbols so the workspace can be larger without
+increasing the screen size. Hover over or keyboard-focus a button to see its
+name first, followed by the complete existing explanation.
+
+| Symbol | Action |
+| --- | --- |
+| `+` | Capture |
+| `▣` | Inbox |
+| `✎` | Edit |
+| `⌖` | Pin |
+| `✓` | Trust |
+| `?` | Help |
+| `−` | Hide |
+| `×` | Quit |
 
 ### Run
 
@@ -163,7 +220,11 @@ If the Inbox item already contains only the stable base URL, such as `https://do
 
 ### Sheets
 
-Opens searchable local cheat sheets. Individual cheat-sheet entries can be promoted to Draft actions.
+Open **Quick actions → Knowledge → Sheets** to open searchable local cheat
+sheets. Knowledge stays directly below Frequent passwords so Sheets remains
+visible before the configurable groups; those groups retain their configured
+order and continue scrolling when needed. Individual cheat-sheet entries can
+be promoted to Draft actions.
 
 ### Edit
 
@@ -205,13 +266,16 @@ Browser / Colruyt > Commercial product ID > Product lookup > Open Colruyt produc
 
 To keep the launcher fast to scan, result rows show `Command → subject`, for example `Open → Colruyt product ID`. Context, Technology, and Task remain fully searchable and appear in the row's hover tooltip and the bottom communication line.
 
-The main palette opens at a compact width. Its ten management buttons use two rows of five so every button remains directly available without forcing the result list to occupy unused horizontal screen space.
+The main palette keeps its compact width. Its nine management commands use the
+single character strip documented above, keeping every command directly
+available without reducing the action console or transformation workspace.
 
 ## Protected Windows credential paste
 
-Choose **Passwords** beside **Find action** to show only protected credential
-actions. The highlighted button remains active while ordinary Find text narrows
-that password list; choose **Passwords** again to return to all actions.
+Choose **Passwords** in the Actions tool rail to show only protected credential
+actions. The highlighted button remains active while ordinary Find text
+narrows that password list; choose **Passwords** again to return to all
+actions.
 
 Up to four Trusted credential actions also appear under **Frequent passwords**
 as direct buttons. Selecting one starts its destination confirmation

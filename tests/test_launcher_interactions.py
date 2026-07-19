@@ -14,7 +14,11 @@ sys.path.insert(0, str(ROOT / "src"))
 from context_palette.actions import Action, ActionError
 from context_palette.command_surface import CommandItem
 from context_palette.contexts import ContextDefinition, ContextError
-from context_palette.launcher import LauncherApp, frequent_credential_actions
+from context_palette.launcher import (
+    LauncherApp,
+    bounded_sash_position,
+    frequent_credential_actions,
+)
 from context_palette.palette_state import PaletteState
 from context_palette.windows_credentials import CredentialSecret
 
@@ -51,6 +55,14 @@ class FakeRoot:
 
 
 class LauncherInteractionTests(unittest.TestCase):
+    def test_sash_position_protects_both_panes_from_extreme_ratios(self):
+        self.assertEqual(bounded_sash_position(800, 0.0, 220, 320), 220)
+        self.assertEqual(bounded_sash_position(800, 1.0, 220, 320), 480)
+        self.assertEqual(bounded_sash_position(800, 0.33, 220, 320), 264)
+
+    def test_sash_position_scales_minimums_when_window_is_too_small(self):
+        self.assertEqual(bounded_sash_position(200, 0.9, 140, 140), 100)
+
     def test_frequent_credentials_prioritize_trusted_pins_and_limit_to_four(self):
         actions = [
             Action("one", "One", "General", "paste_credential", "one", "Trusted"),
@@ -70,6 +82,7 @@ class LauncherInteractionTests(unittest.TestCase):
         app = LauncherApp.__new__(LauncherApp)
         app.action_type_filter = None
         app.passwords_button = FakeButton()
+        app.action_type_filter_var = FakeVariable()
         app.status_var = FakeVariable()
         refreshes: list[bool] = []
         app._refresh_results = lambda: refreshes.append(True)
@@ -77,13 +90,30 @@ class LauncherInteractionTests(unittest.TestCase):
         app._toggle_password_actions()
 
         self.assertEqual(app.action_type_filter, "paste_credential")
+        self.assertEqual(app.action_type_filter_var.value, "Paste a Windows credential")
         self.assertEqual(app.passwords_button.options["style"], "Accent.TButton")
 
         app._toggle_password_actions()
 
         self.assertIsNone(app.action_type_filter)
+        self.assertEqual(app.action_type_filter_var.value, "All types")
         self.assertEqual(app.passwords_button.options["style"], "Compact.TButton")
         self.assertEqual(refreshes, [True, True])
+
+    def test_any_action_type_can_be_selected_as_a_filter(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.action_type_filter = None
+        app.passwords_button = FakeButton()
+        app.action_type_filter_var = FakeVariable()
+        refreshes: list[bool] = []
+        app._refresh_results = lambda: refreshes.append(True)
+
+        app._select_action_type_filter("open_url")
+
+        self.assertEqual(app.action_type_filter, "open_url")
+        self.assertEqual(app.action_type_filter_var.value, "Open a website")
+        self.assertEqual(app.passwords_button.options["style"], "Compact.TButton")
+        self.assertEqual(refreshes, [True])
 
     def test_protected_clipboard_is_never_synchronized_into_workspace(self):
         app = LauncherApp.__new__(LauncherApp)

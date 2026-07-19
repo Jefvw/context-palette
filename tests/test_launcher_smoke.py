@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import tkinter as tk
+from tkinter import ttk
 import unittest
 from unittest.mock import patch
 
@@ -12,7 +13,13 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from context_palette.launcher import LauncherApp
+from context_palette.launcher import (
+    MINIMUM_ACTION_CONSOLE_HEIGHT,
+    MINIMUM_ACTIONS_WIDTH,
+    MINIMUM_QUICK_ACTIONS_WIDTH,
+    MINIMUM_WORKSPACE_HEIGHT,
+    LauncherApp,
+)
 
 
 @unittest.skipUnless(sys.platform == "win32", "The launcher smoke test requires Windows Tk.")
@@ -20,7 +27,43 @@ class LauncherSmokeTests(unittest.TestCase):
     def test_complete_launcher_constructs_and_closes(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             data = Path(temporary_directory)
-            actions_path = self._write_json(data / "actions.json", {"actions": []})
+            actions_path = self._write_json(
+                data / "actions.json",
+                {
+                    "actions": [
+                        {
+                            "id": "general-first",
+                            "title": "General first",
+                            "context": "General",
+                            "technology": "Text",
+                            "task": "Reusable text",
+                            "type": "copy_text",
+                            "value": "First",
+                            "state": "Trusted",
+                        },
+                        {
+                            "id": "database-only",
+                            "title": "Database only",
+                            "context": "Database",
+                            "technology": "Database",
+                            "task": "Lookup",
+                            "type": "copy_text",
+                            "value": "Database",
+                            "state": "Trusted",
+                        },
+                        {
+                            "id": "general-second",
+                            "title": "General second",
+                            "context": "General",
+                            "technology": "",
+                            "task": "",
+                            "type": "copy_text",
+                            "value": "Second",
+                            "state": "Draft",
+                        },
+                    ]
+                },
+            )
             contexts_path = self._write_json(data / "contexts.json", {"contexts": []})
             command_surface_path = self._write_json(
                 data / "command_surface.json",
@@ -62,13 +105,265 @@ class LauncherSmokeTests(unittest.TestCase):
                         instance_port=0,
                     )
 
+                    root.update()
+                    app._set_initial_main_split()
                     root.update_idletasks()
 
                     self.assertEqual(root.title(), "Context Palette")
                     self.assertTrue(root.winfo_exists())
                     self.assertIsNotNone(app.search_entry)
+                    self.assertEqual(root.winfo_width(), 780)
+                    self._assert_balanced_panes(app)
+                    self.assertIs(app.passwords_button.master, app.actions_tool_rail)
+                    self.assertIs(app.type_filter.master, app.actions_tool_rail)
+                    self.assertIs(app.run_button.master, app.actions_tool_rail)
+                    self.assertIs(app.action_help_button.master, app.actions_tool_rail)
+                    self.assertEqual(app.actions_tool_rail.winfo_width(), 88)
+                    self.assertGreaterEqual(app.results.winfo_width(), 220)
+                    self.assertEqual(app.passwords_button.cget("text"), "Passwords")
+                    self.assertEqual(app.type_filter.cget("text"), "Types ▾")
+                    self.assertEqual(app.run_button.cget("text"), "Run")
+                    self.assertEqual(app.action_help_button.cget("text"), "?")
+                    self.assertIs(app.search_entry.tk_focusNext(), app.passwords_button)
+                    self.assertIs(app.passwords_button.tk_focusNext(), app.type_filter)
+                    self.assertIs(app.type_filter.tk_focusNext(), app.run_button)
+                    self.assertIs(app.run_button.tk_focusNext(), app.action_help_button)
+                    self.assertIs(app.action_help_button.tk_focusNext(), app.results)
+                    app._activate_focus_actions()
+                    root.update()
+                    self.assertEqual(app.results_view, "focus")
+                    self.assertIs(root.focus_get(), app.focus_tree)
+                    self.assertEqual(
+                        {action.id for action in app.focus_tree_actions.values()},
+                        {"general-first", "general-second"},
+                    )
+                    app._show_flat_results()
+                    app.focus_tree_expansion["general"] = {
+                        ("Other",),
+                        ("Other", "Other"),
+                    }
+                    app._render_focus_actions()
+                    self.assertEqual(app._selected_action().id, "general-second")
+                    app._show_flat_results()
+                    app.focus_tree_expansion["general"] = set()
+                    app._render_focus_actions()
+                    self.assertIsNone(app._selected_action())
+                    self.assertFalse(
+                        any(
+                            app.focus_tree.item(item_id, "open")
+                            for item_id in app.focus_tree.get_children()
+                        )
+                    )
+                    app.focus_tree_expansion["database"] = {("Database",)}
+                    app.context_var.set("Database")
+                    app._change_focus_context()
+                    self.assertEqual(
+                        app.focus_tree_expansion["database"],
+                        {("Database",)},
+                    )
+                    app.context_var.set("General")
+                    app._change_focus_context()
+
+                    app.search_var.set("Database only")
+                    self._wait_for_search_refresh(root)
+                    self.assertEqual(app.results_view, "flat")
+                    self.assertEqual(
+                        [action.id for action in app.displayed_actions],
+                        ["database-only"],
+                    )
+
+                    app.context_var.set("Database")
+                    app._change_focus_context()
+                    self.assertEqual(app.results_view, "flat")
+                    self.assertEqual(
+                        [action.id for action in app.displayed_actions],
+                        ["database-only"],
+                    )
+
+                    app.search_var.set("")
+                    self._wait_for_search_refresh(root)
+                    self.assertEqual(app.results_view, "focus")
+                    self.assertEqual(
+                        {action.id for action in app.focus_tree_actions.values()},
+                        {"database-only"},
+                    )
+
+                    app.focus_actions_mode = False
+                    app._refresh_results()
+                    action_share = (
+                        app.actions_panel.winfo_width()
+                        / app.action_console.winfo_width()
+                    )
+                    self.assertGreaterEqual(action_share, 0.42)
+                    self.assertLessEqual(action_share, 0.46)
+
+                    group_areas = [
+                        child
+                        for child in app.command_tiles_frame.winfo_children()
+                        if isinstance(child, ttk.LabelFrame)
+                        and child.cget("text") != "Frequent passwords"
+                    ]
+                    self.assertEqual(
+                        [area.cget("text") for area in group_areas],
+                        ["Knowledge"] + [group.label for group in app.command_groups],
+                    )
+                    password_row_count = 1 if any(
+                        isinstance(child, ttk.LabelFrame)
+                        and child.cget("text") == "Frequent passwords"
+                        for child in app.command_tiles_frame.winfo_children()
+                    ) else 0
+                    knowledge_area = group_areas[0]
+                    self.assertEqual(int(knowledge_area.grid_info()["row"]), password_row_count)
+                    self.assertEqual(int(knowledge_area.grid_info()["column"]), 0)
+                    self.assertEqual(int(knowledge_area.grid_info()["columnspan"]), 2)
+                    group_row_offset = password_row_count + 1
+                    for index, (area, group) in enumerate(
+                        zip(group_areas[1:], app.command_groups)
+                    ):
+                        expected_row, expected_column = divmod(index, 2)
+                        self.assertEqual(
+                            int(area.grid_info()["row"]),
+                            expected_row + group_row_offset,
+                        )
+                        self.assertEqual(
+                            int(area.grid_info()["column"]),
+                            expected_column,
+                        )
+                        menu_launchers = [
+                            child
+                            for child in area.winfo_children()
+                            if isinstance(child, ttk.Label)
+                            and child.cget("style") == "SurfaceMenu.TLabel"
+                        ]
+                        self.assertEqual(
+                            [control.cget("text") for control in menu_launchers],
+                            [item.label for item in group.items],
+                        )
+                        for row, control in enumerate(menu_launchers):
+                            self.assertEqual(int(control.grid_info()["row"]), row)
+                            self.assertEqual(int(control.grid_info()["column"]), 0)
+                            self.assertEqual(control.cget("anchor"), "w")
+                            self.assertTrue(control.cget("takefocus"))
+                            for sequence in (
+                                "<Button-1>",
+                                "<Button-3>",
+                                "<Return>",
+                                "<space>",
+                            ):
+                                self.assertTrue(control.bind(sequence))
                     start_server.assert_called_once_with()
                     start_hotkey.assert_called_once_with()
+
+                    root.geometry("780x600")
+                    root.update()
+                    self._assert_balanced_panes(app)
+                    self.assertGreater(app.results_container.winfo_height(), 150)
+                    self.assertGreater(app.workspace_container.winfo_height(), 130)
+                    root_bottom = root.winfo_rooty() + root.winfo_height()
+                    visible_buttons = [
+                        widget
+                        for widget in self._descendants(root)
+                        if isinstance(widget, ttk.Button) and widget.winfo_ismapped()
+                    ]
+                    self.assertTrue(visible_buttons)
+                    for button in visible_buttons:
+                        self.assertLessEqual(
+                            button.winfo_rooty() + button.winfo_height(),
+                            root_bottom,
+                            f"{button}: {button.cget('text')}",
+                        )
+                    icon_buttons = [
+                        button
+                        for button in visible_buttons
+                        if button.cget("style") == "Icon.TButton"
+                    ]
+                    self.assertEqual(
+                        [button.cget("text") for button in icon_buttons],
+                        ["+", "▣", "✎", "⌖", "✓", "?", "−", "×"],
+                    )
+                    tooltips = {
+                        tooltip.widget: tooltip.text
+                        for tooltip in app.widget_tooltips
+                        if isinstance(tooltip.text, str)
+                    }
+                    expected_names = (
+                        "Capture",
+                        "Inbox",
+                        "Edit",
+                        "Pin",
+                        "Trust",
+                        "Help",
+                        "Hide",
+                        "Quit",
+                    )
+                    for button, name in zip(icon_buttons, expected_names):
+                        self.assertTrue(tooltips[button].startswith(f"{name} —"))
+
+                    copied: list[str] = []
+                    app._set_workspace_text("One TWO\nThree")
+                    app.workspace.tag_add(tk.SEL, "1.4", "1.7")
+                    with patch.object(app, "_set_clipboard", copied.append):
+                        app._transform_workspace("lowercase", "lowercase")
+                    self.assertEqual(app._workspace_text(), "One two\nThree")
+                    self.assertEqual(copied, ["two"])
+                    self.assertIn("selection", app.status_var.get())
+
+                    app.workspace.tag_remove(tk.SEL, "1.0", tk.END)
+                    with patch.object(app, "_set_clipboard", copied.append):
+                        app._transform_workspace("uppercase", "UPPERCASE")
+                    self.assertEqual(app._workspace_text(), "ONE TWO\nTHREE")
+                    self.assertEqual(copied[-1], "ONE TWO\nTHREE")
+                    self.assertIn("complete field", app.status_var.get())
+
+                    with (
+                        patch.object(root, "clipboard_get", return_value="Captured selection"),
+                        patch.object(app, "show_window"),
+                    ):
+                        app._finish_selection_capture({})
+                    self.assertEqual(app.captured_selection, "Captured selection")
+                    self.assertEqual(app._workspace_text(), "Captured selection")
+
+                    root.geometry("780x1000")
+                    root.update()
+                    self._assert_balanced_panes(app)
+
+                    pane_height = app.main_content.winfo_height()
+                    app.main_content.sashpos(0, int(pane_height * 0.60))
+                    app._remember_main_split(None)  # type: ignore[arg-type]
+                    self.assertAlmostEqual(app.main_split_ratio, 0.60, places=2)
+                    app.main_content.sashpos(0, int(pane_height * 0.45))
+                    app._remember_main_split(None)  # type: ignore[arg-type]
+                    self.assertAlmostEqual(app.main_split_ratio, 0.45, places=2)
+                    app.main_content.sashpos(0, 0)
+                    app._remember_main_split(None)  # type: ignore[arg-type]
+                    self.assertGreaterEqual(
+                        app.results_container.winfo_height(),
+                        MINIMUM_ACTION_CONSOLE_HEIGHT,
+                    )
+                    app.main_content.sashpos(0, pane_height)
+                    app._remember_main_split(None)  # type: ignore[arg-type]
+                    self.assertGreaterEqual(
+                        app.workspace_container.winfo_height(),
+                        MINIMUM_WORKSPACE_HEIGHT,
+                    )
+                    app.main_split_ratio = 0.52
+                    app._set_initial_main_split()
+
+                    console_width = app.action_console.winfo_width()
+                    app.action_console.sashpos(0, 0)
+                    app._remember_action_console_split(None)  # type: ignore[arg-type]
+                    self.assertGreaterEqual(
+                        app.actions_panel.winfo_width(),
+                        MINIMUM_ACTIONS_WIDTH,
+                    )
+                    app.action_console.sashpos(0, console_width)
+                    app._remember_action_console_split(None)  # type: ignore[arg-type]
+                    self.assertGreaterEqual(
+                        app.command_surface_panel.winfo_width(),
+                        MINIMUM_QUICK_ACTIONS_WIDTH,
+                    )
+                    app.action_console_ratio = 0.44
+                    app._set_initial_action_console_split()
 
                     stable_tooltip_count = len(app.widget_tooltips)
                     surface_tooltip_count = len(app.command_surface_tooltips)
@@ -80,6 +375,22 @@ class LauncherSmokeTests(unittest.TestCase):
                         len(app.command_surface_tooltips),
                         surface_tooltip_count,
                     )
+
+                    for help_button in (
+                        app.global_help_button,
+                        app.action_help_button,
+                    ):
+                        help_button.invoke()
+                        root.update()
+                        help_windows = [
+                            child
+                            for child in root.winfo_children()
+                            if isinstance(child, tk.Toplevel)
+                            and child.title() == "Context Palette Help"
+                        ]
+                        self.assertEqual(len(help_windows), 1)
+                        help_windows[0].destroy()
+                        root.update()
 
                     app._show_configuration()
                     root.update_idletasks()
@@ -104,6 +415,24 @@ class LauncherSmokeTests(unittest.TestCase):
     def _write_json(self, path: Path, value: object) -> Path:
         path.write_text(json.dumps(value), encoding="utf-8")
         return path
+
+    def _wait_for_search_refresh(self, root: tk.Tk) -> None:
+        root.after(60, root.quit)
+        root.mainloop()
+
+    def _descendants(self, widget: tk.Misc) -> list[tk.Misc]:
+        descendants: list[tk.Misc] = []
+        for child in widget.winfo_children():
+            descendants.append(child)
+            descendants.extend(self._descendants(child))
+        return descendants
+
+    def _assert_balanced_panes(self, app: LauncherApp) -> None:
+        action_height = app.results_container.winfo_height()
+        workspace_height = app.workspace_container.winfo_height()
+        action_share = action_height / (action_height + workspace_height)
+        self.assertGreaterEqual(action_share, 0.50)
+        self.assertLessEqual(action_share, 0.55)
 
 
 if __name__ == "__main__":

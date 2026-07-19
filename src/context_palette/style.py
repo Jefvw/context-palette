@@ -111,6 +111,20 @@ def configure_theme(root: tk.Misc, style: ttk.Style | None = None) -> ttk.Style:
         bordercolor=[("focus", COLORS["focus"])],
     )
     style.configure(
+        "Icon.TButton",
+        background=COLORS["topic_header"],
+        foreground=COLORS["text"],
+        bordercolor=COLORS["border"],
+        padding=(4, 3),
+        font=("Segoe UI Symbol", 12),
+    )
+    style.map(
+        "Icon.TButton",
+        background=[("active", COLORS["row_aqua"]), ("pressed", COLORS["accent"])],
+        foreground=[("pressed", COLORS["white"])],
+        bordercolor=[("focus", COLORS["focus"])],
+    )
+    style.configure(
         "Accent.TButton",
         background=COLORS["accent"],
         foreground=COLORS["white"],
@@ -162,6 +176,44 @@ def configure_theme(root: tk.Misc, style: ttk.Style | None = None) -> ttk.Style:
     )
     style.map(
         "Surface.TLabel",
+        background=[("active", COLORS["row_aqua"]), ("focus", COLORS["row_aqua"])],
+        bordercolor=[("focus", COLORS["focus"])],
+    )
+    style.layout(
+        "SurfaceMenu.TLabel",
+        [
+            (
+                "Label.border",
+                {
+                    "sticky": tk.NSEW,
+                    "children": [
+                        (
+                            "Label.padding",
+                            {
+                                "sticky": tk.NSEW,
+                                "children": [
+                                    ("Label.label", {"side": tk.LEFT, "sticky": tk.W}),
+                                    (
+                                        "Menubutton.indicator",
+                                        {"side": tk.RIGHT, "sticky": tk.E},
+                                    ),
+                                ],
+                            },
+                        )
+                    ],
+                },
+            )
+        ],
+    )
+    style.configure(
+        "SurfaceMenu.TLabel",
+        background=COLORS["surface"],
+        foreground=COLORS["text"],
+        bordercolor=COLORS["border"],
+        padding=(7, 4),
+    )
+    style.map(
+        "SurfaceMenu.TLabel",
         background=[("active", COLORS["row_aqua"]), ("focus", COLORS["row_aqua"])],
         bordercolor=[("focus", COLORS["focus"])],
     )

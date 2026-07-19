@@ -11,7 +11,12 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.actions import Action
 from context_palette.command_surface import CommandGroup, CommandItem, CommandSurfaceError
-from context_palette.launcher import LauncherApp
+from context_palette.launcher import (
+    BUILTIN_QUICK_COMMAND_OPEN_SHEETS,
+    LauncherApp,
+    execute_builtin_quick_command,
+    focus_action_hierarchy,
+)
 
 
 class FakeStatusVar:
@@ -36,6 +41,7 @@ class FakeMenu:
         self.tearoff = tearoff
         self.labels: list[str] = []
         self.commands: list[object] = []
+        self.states: list[str | None] = []
         self.popup_calls: list[tuple[int, int]] = []
         self.grab_release_calls = 0
         FakeMenu.last_instance = self
@@ -43,6 +49,7 @@ class FakeMenu:
     def add_command(self, label: str, command: object | None = None, state: str | None = None) -> None:
         self.labels.append(label)
         self.commands.append(command)
+        self.states.append(state)
 
     def index(self, _marker: object) -> int | None:
         return None if not self.labels else len(self.labels) - 1
@@ -55,6 +62,37 @@ class FakeMenu:
 
 
 class LauncherCommandSurfaceTests(unittest.TestCase):
+    def test_focus_hierarchy_uses_explicit_context_and_canonical_order(self):
+        actions = [
+            Action("one", "First", "General", "copy_text", "1", technology="Text", task="Copy"),
+            Action("two", "Second", "Other", "copy_text", "2", technology="Text", task="Copy"),
+            Action("three", "Third", "general", "copy_text", "3", technology="", task=""),
+            Action("four", "Archived", "General", "copy_text", "4", state="Archived"),
+            Action("five", "First", "General", "copy_text", "5", technology="Text", task="Copy"),
+        ]
+
+        hierarchy = focus_action_hierarchy(actions, "GENERAL")
+
+        self.assertEqual([technology for technology, _tasks in hierarchy], ["Text", "Other"])
+        self.assertEqual(
+            [action.id for action in hierarchy[0][1][0][1]],
+            ["one", "five"],
+        )
+        self.assertEqual(hierarchy[1][1][0][0], "Other")
+        self.assertEqual(hierarchy[1][1][0][1][0].id, "three")
+
+    def test_builtin_quick_command_allow_list_opens_only_sheets(self):
+        calls: list[str] = []
+
+        execute_builtin_quick_command(
+            BUILTIN_QUICK_COMMAND_OPEN_SHEETS,
+            open_sheets=lambda: calls.append("sheets"),
+        )
+
+        self.assertEqual(calls, ["sheets"])
+        with self.assertRaisesRegex(ValueError, "Unknown built-in"):
+            execute_builtin_quick_command("arbitrary_method", open_sheets=lambda: None)
+
     def test_failed_reload_preserves_last_known_good_buttons(self):
         app = self._app()
         existing = CommandGroup(
@@ -180,10 +218,28 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
         self.assertEqual(menu.popup_calls, [(10, 20)])
         self.assertEqual(menu.grab_release_calls, 1)
         self.assertGreaterEqual(len(menu.commands), 2)
+        self.assertEqual(menu.labels, ["Open → Primary", "Open → Secondary"])
         first_callback = menu.commands[0]
         self.assertTrue(callable(first_callback))
         first_callback()
         self.assertEqual(app._execute_action_calls, ["primary"])
+
+    def test_item_menu_keeps_disabled_fallback_when_no_action_is_available(self):
+        app = self._app()
+        item = CommandItem(
+            id="missing",
+            label="Missing",
+            primary_action_id="not-found",
+        )
+
+        with patch("context_palette.launcher.tk.Menu", FakeMenu):
+            result = app._show_item_menu(FakeEvent(), item)
+
+        self.assertEqual(result, "break")
+        menu = FakeMenu.last_instance
+        self.assertIsNotNone(menu)
+        self.assertEqual(menu.labels, ["No available actions"])
+        self.assertEqual(menu.states, ["disabled"])
 
 
 if __name__ == "__main__":

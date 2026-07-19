@@ -4,6 +4,18 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Replaced the wide Focus selector with a compact explicit menu, added direct
+  Focus management, and introduced a Technology → Task → action Focus browser
+  that leaves ordinary Find results global. Keyboard focus now moves directly
+  into the tree when that browser is explicitly activated. Fixed session
+  expansion state leaking from the previously rendered Focus into a newly
+  selected Focus, preserved an all-collapsed state, and prevented Run from
+  targeting a hidden leaf after expansion restoration.
+- Moved Sheets from the compact footer into a keyboard-accessible Knowledge
+  Quick action backed by a single explicit built-in command allow-list.
+  Knowledge now stays visible directly below Frequent passwords instead of
+  falling below the normal Quick-actions viewport.
+
 ### Added
 
 - Four pinned-first Frequent passwords buttons for starting protected paste without intermediate filtering or list selection.
@@ -21,6 +33,23 @@ This project has not published a versioned release. Changes are recorded under *
 
 ### Changed
 
+- Replaced the full-width action-search row with a focused Actions workspace:
+  Find sits above the list and Passwords, Types, Run, and Help use a compact
+  vertical tool rail.
+- Prevented either adjustable main-window divider from collapsing Actions,
+  Quick actions, or Input / Output into an unusable pane.
+- Presented Quick-action subjects as full-width vertical menu-launcher rows
+  with native indicators, while preserving primary execution and existing menus.
+- Balanced the upper action console at approximately 44% Actions and 56% Quick
+  actions, with responsive user-adjustable sizing.
+- Unified action discovery and text transformation in an unchanged-width,
+  responsive-height main window with a balanced 52/48 adjustable split.
+- Doubled the Input / Output workspace height while consolidating the bottom
+  actions into one icon row with name-first explanatory tooltips.
+- Added a compact all-action-type filter while retaining the direct Passwords
+  filter shortcut.
+- Standardized full application screens to the main window size, with
+  screen-aware reduction and protected bottom action rows on smaller displays.
 - Removed window-layout/snapshot actions and PowerToys-specific integration assets; retained the attended Power Automate bridge.
 - Added automatic backed-up cleanup of retired layout actions and local references on every machine.
 - Aligned Windows CI dependency installation, configuration validation, compilation, and tests with the complete local development workflow.

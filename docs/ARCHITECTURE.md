@@ -61,9 +61,11 @@ Application entry point.
 Presentation and application orchestration.
 
 - Builds the Tkinter interface.
-- Maintains the active focus context.
-- Renders numbered slots and search results.
-- Renders a global JSON-configured quick-action surface beside search results.
+- Maintains the explicitly selected focus context through a compact menu launcher.
+- Renders numbered slots, global flat search results, or an explicitly activated
+  Focus Actions tree grouped by the action's Technology and Task facets.
+- Renders a global JSON-configured quick-action surface beside search results,
+  plus an explicit allow-listed `open_sheets` application command.
 - Owns Input / Output, the communication line, systematic widget tooltips, Inbox, sheets, Help, and action editors.
 - Connects platform-independent action execution to Windows-specific callbacks.
 - Ensures Tk operations stay on the Tk main thread.
@@ -254,13 +256,36 @@ Search indexes title, technology, task, context, type, value, and maturity state
 
 This separation allows visual simplification without losing retrieval power.
 
-The main window defaults to `780x600` with a `700x480` minimum. A responsive
-horizontal paned area gives the left half to command-first search results and
-the right half to the global quick-action surface. Both panes expose headings
-and live counts. Management buttons use a compact grid so every function
-remains visible.
+Secondary application screens share a `780x600` default and `700x480` minimum
+through `window_geometry.py`. The main window keeps the same `780` width but
+uses available monitor height up to `1000` pixels, while retaining a compact
+screen-aware minimum. Hotkey placement reduces an oversized window before
+clamping it into the cursor monitor's work area.
 
-Each group renders as a subarea containing multiple compact labels. Left-click opens the owning command-surface JSON plus the corresponding shared/local action JSON. Right-click exposes the item's action-ID list through the same `_execute_action` path used by selected and numbered actions.
+The main content is a user-adjustable vertical split: approximately 52% for
+action discovery and 48% for Input / Output. The ratio scales with window
+height; after the user moves the divider, their chosen ratio is used for later
+resizing in that session. Sash positions are bounded to keep both panes usable;
+when a display cannot fit both preferred minimums, the available space is
+divided proportionally. Inside the upper area, a responsive horizontal pane
+starts at approximately 44% for the Actions workspace and 56% for the global
+quick-action surface. The Actions workspace owns its heading/count, Find entry,
+numbered scrolling list, and an 88-pixel rail containing the existing
+Passwords, Types, Run, and action-Help controls. The Quick-action side retains
+its vertical menu launchers and independent scrolling. The horizontal pane
+retains a user-adjusted ratio during later resizing and applies the same
+bounded-sash behavior. Fixed bottom action and
+status rows remain outside the vertical split, preventing them from being
+displaced. Management buttons use a single compact symbol row with name-first
+tooltips.
+Search text can be combined with one shared built-in action-type filter;
+Passwords is a direct shortcut into that same filter state.
+
+Each group renders in stable row-major order within a two-column grid. Its
+subjects are full-width vertical menu-launcher rows with a native `▾`
+affordance. The affordance is style-only: left-click runs the primary-first
+available action, right-click exposes the same canonical action-ID menu, and
+Shift/Ctrl+click opens the owning menu and action configuration files.
 
 Quick-action labels participate in keyboard focus. Enter or Space executes the first available primary action. Empty search, Inbox, cheat-sheet, and command-surface states contain recovery guidance rather than blank widgets. Reloads use a short busy cursor/status state; local loading is intentionally not animated.
 
@@ -323,6 +348,26 @@ other rows  ordinary search matches
 ```
 
 Changing the focus context changes slots 6–9 only. Search always remains global.
+
+The **Focus actions** control is a separate presentation mode. With Find empty,
+it shows only visible actions whose explicit `context` matches the active Focus,
+grouped as Technology → Task → action in canonical action order. Missing facets
+are presented as `Other`; no folder data is persisted. Typing in Find swaps the
+tree for the existing global flat results, and clearing Find restores the tree
+only when Focus Actions mode was explicitly activated. Branches are never
+executable; leaves map back to the existing action dispatcher. Session-only
+expansion state is keyed by the Focus that actually rendered the tree, rather
+than by a newly selected Focus, so direct Focus changes cannot transfer branch
+state between contexts. Initial selection is limited to an action leaf visible
+through expanded branches. If every branch is collapsed, the first visible
+branch is selected and the existing dispatcher receives no action.
+
+Quick actions remain action-ID configuration. Built-in application commands are
+not configurable strings or method names: the launcher contains a closed,
+testable allow-list whose sole member is `open_sheets`, which invokes the
+existing Sheets window. Its compact Knowledge group is rendered as a stable
+full-width built-in row before the configurable two-column groups, whose
+relative order remains unchanged.
 
 Focus and pin changes are applied in memory only after the updated palette state
 has been persisted successfully. A write failure keeps the prior state visible

@@ -24,6 +24,7 @@ from .command_surface import (
 )
 from .configuration_data import save_local_command_item, save_local_context
 from .contexts import ContextDefinition, ContextError, load_combined_contexts, load_contexts
+from .window_geometry import configure_standard_window
 
 
 ACTION_TYPE_EXAMPLES = {
@@ -85,6 +86,7 @@ class ConfigurationWindow:
         command_surface_path: Path,
         local_command_surface_path: Path,
         on_change: Callable[[], None],
+        initial_tab: str = "actions",
     ) -> None:
         self.actions = actions
         self.local_action_ids = local_action_ids
@@ -98,29 +100,16 @@ class ConfigurationWindow:
         self.groups: list[CommandGroup] = []
         self.action_filter_var = tk.StringVar()
         self.action_filter_count_var = tk.StringVar()
+        self.initial_tab = initial_tab
 
         self.window = tk.Toplevel(parent)
         self.window.title("Configure Context Palette")
-        self.window.geometry("860x620")
-        self.window.minsize(700, 500)
+        configure_standard_window(self.window)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(outer, text="Configure Context Palette", style="Title.TLabel").pack(anchor=tk.W)
-        ttk.Label(
-            outer,
-            text="Create repeated actions, organize them by context, then place them in slots or quick-action buttons.",
-            style="Muted.TLabel",
-        ).pack(anchor=tk.W, pady=(2, 10))
-        notebook = ttk.Notebook(outer)
-        notebook.pack(fill=tk.BOTH, expand=True)
-        self._build_actions_tab(notebook)
-        self._build_types_tab(notebook)
-        self._build_contexts_tab(notebook)
-        self._build_buttons_tab(notebook)
-        self.window.bind("<Control-f>", self._focus_action_filter)
         footer = ttk.Frame(outer)
-        footer.pack(fill=tk.X, pady=(10, 0))
+        footer.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
         self.feedback_var = tk.StringVar(
             value="Shared project examples are visible but read-only."
         )
@@ -136,10 +125,28 @@ class ConfigurationWindow:
             command=self.window.destroy,
             style="Compact.TButton",
         ).pack(side=tk.RIGHT)
+        ttk.Label(outer, text="Configure Context Palette", style="Title.TLabel").pack(anchor=tk.W)
+        ttk.Label(
+            outer,
+            text="Create repeated actions, organize them by context, then place them in slots or quick-action buttons.",
+            style="Muted.TLabel",
+        ).pack(anchor=tk.W, pady=(2, 10))
+        notebook = ttk.Notebook(outer)
+        notebook.pack(fill=tk.BOTH, expand=True)
+        self._build_actions_tab(notebook)
+        self._build_types_tab(notebook)
+        self._build_contexts_tab(notebook)
+        self._build_buttons_tab(notebook)
+        tab_indexes = {"actions": 0, "types": 1, "contexts": 2, "buttons": 3}
+        notebook.select(tab_indexes.get(self.initial_tab, 0))
+        self.window.bind("<Control-f>", self._focus_action_filter)
         self._reload()
         self.window.transient(parent)
         self.window.lift()
-        self.window.after_idle(self.action_tree.focus_set)
+        if self.initial_tab == "contexts":
+            self.window.after_idle(self.context_tree.focus_set)
+        else:
+            self.window.after_idle(self.action_tree.focus_set)
 
     def _build_actions_tab(self, notebook: ttk.Notebook) -> None:
         tab = ttk.Frame(notebook, padding=10)
@@ -182,7 +189,7 @@ class ConfigurationWindow:
         self.action_tree.bind("<Return>", lambda _event: self._edit_action())
         self.action_filter_var.trace_add("write", lambda *_args: self._render_actions())
         controls = ttk.Frame(tab)
-        controls.pack(fill=tk.X, pady=(8, 0))
+        controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0), before=self.action_tree)
         ttk.Button(
             controls,
             text="Create from built-in type",
@@ -212,12 +219,13 @@ class ConfigurationWindow:
         self.type_detail = tk.Text(detail, wrap=tk.WORD, height=14)
         self.type_detail.pack(fill=tk.BOTH, expand=True)
         self.type_detail.configure(state=tk.DISABLED)
-        ttk.Button(
+        create_button = ttk.Button(
             detail,
             text="Create personal Draft from this type",
             command=self._create_action,
             style="Accent.TButton",
-        ).pack(anchor=tk.E, pady=(8, 0))
+        )
+        create_button.pack(side=tk.BOTTOM, anchor=tk.E, pady=(8, 0), before=self.type_detail)
         self.type_list.bind("<<ListboxSelect>>", lambda _event: self._show_type())
         self.type_list.selection_set(0)
         self._show_type()
@@ -243,7 +251,7 @@ class ConfigurationWindow:
         self.context_tree.bind("<Double-1>", lambda _event: self._edit_context())
         self.context_tree.bind("<Return>", lambda _event: self._edit_context())
         controls = ttk.Frame(tab)
-        controls.pack(fill=tk.X, pady=(8, 0))
+        controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0), before=self.context_tree)
         ttk.Button(controls, text="Add personal context", command=self._add_context).pack(side=tk.LEFT)
         ttk.Button(controls, text="Edit selected", command=self._edit_context).pack(side=tk.LEFT, padx=(6, 0))
 
@@ -268,7 +276,7 @@ class ConfigurationWindow:
         self.button_tree.bind("<Double-1>", lambda _event: self._edit_button())
         self.button_tree.bind("<Return>", lambda _event: self._edit_button())
         controls = ttk.Frame(tab)
-        controls.pack(fill=tk.X, pady=(8, 0))
+        controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0), before=self.button_tree)
         ttk.Button(controls, text="Add personal button", command=self._add_button).pack(side=tk.LEFT)
         ttk.Button(controls, text="Edit selected", command=self._edit_button).pack(side=tk.LEFT, padx=(6, 0))
 
@@ -545,9 +553,18 @@ class ActionDraftDialog:
         self.window.title(
             f"Edit action · {definition.label}" if action else f"Create Draft · {definition.label}"
         )
-        self.window.geometry("650x590")
+        configure_standard_window(self.window)
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
+        controls = ttk.Frame(outer)
+        controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
+        ttk.Button(
+            controls,
+            text="Save action" if action else "Create Draft",
+            command=self._save,
+            style="Accent.TButton",
+        ).pack(side=tk.LEFT)
+        ttk.Button(controls, text="Cancel", command=self.window.destroy).pack(side=tk.RIGHT)
         ttk.Label(outer, text=definition.label, style="Heading.TLabel").pack(anchor=tk.W)
         ttk.Label(
             outer,
@@ -598,15 +615,6 @@ class ActionDraftDialog:
         if action_type == "launch_app":
             _entry(outer, "Arguments, one per line (optional)", self.arguments_var)
             _entry(outer, "Working folder (optional)", self.working_directory_var)
-        controls = ttk.Frame(outer)
-        controls.pack(fill=tk.X, pady=(10, 0))
-        ttk.Button(
-            controls,
-            text="Save action" if action else "Create Draft",
-            command=self._save,
-            style="Accent.TButton",
-        ).pack(side=tk.LEFT)
-        ttk.Button(controls, text="Cancel", command=self.window.destroy).pack(side=tk.RIGHT)
         self.window.transient(parent)
         self.window.grab_set()
         _focus_entry(self.window, title_entry)
@@ -642,9 +650,10 @@ class ContextDialog:
         self.window = tk.Toplevel(parent)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
         self.window.title("Edit personal context" if context else "Add personal context")
-        self.window.geometry("620x510")
+        configure_standard_window(self.window)
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
+        _dialog_buttons(outer, self._save, self.window.destroy)
         self.name = tk.StringVar(value=context.name if context else "")
         self.description = tk.StringVar(value=context.description if context else "")
         self.technology = tk.StringVar(value=context.technology if context else "")
@@ -673,7 +682,6 @@ class ContextDialog:
             ttk.Combobox(row, textvariable=variable, values=values, state="readonly").pack(
                 side=tk.LEFT, fill=tk.X, expand=True
             )
-        _dialog_buttons(outer, self._save, self.window.destroy)
         self.window.transient(parent)
         self.window.grab_set()
         _focus_entry(self.window, name_entry)
@@ -713,9 +721,10 @@ class ButtonDialog:
         self.window = tk.Toplevel(parent)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
         self.window.title("Edit personal button" if item else "Add personal button")
-        self.window.geometry("620x500")
+        configure_standard_window(self.window)
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
+        _dialog_buttons(outer, self._save, self.window.destroy)
         self.group_id = tk.StringVar(value=group.id if group else "")
         self.group_label = tk.StringVar(value=group.label if group else "")
         self.item_id = tk.StringVar(value=item.id if item else "")
@@ -738,7 +747,6 @@ class ButtonDialog:
             ttk.Combobox(row, textvariable=variable, values=values, state="readonly").pack(
                 side=tk.LEFT, fill=tk.X, expand=True
             )
-        _dialog_buttons(outer, self._save, self.window.destroy)
         self.window.transient(parent)
         self.window.grab_set()
         _focus_entry(self.window, group_entry)
@@ -798,6 +806,6 @@ def _dialog_buttons(
     parent: ttk.Frame, save: Callable[[], None], cancel: Callable[[], None]
 ) -> None:
     controls = ttk.Frame(parent)
-    controls.pack(fill=tk.X, pady=(10, 0))
+    controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
     ttk.Button(controls, text="Save", command=save, style="Accent.TButton").pack(side=tk.LEFT)
     ttk.Button(controls, text="Cancel", command=cancel).pack(side=tk.RIGHT)

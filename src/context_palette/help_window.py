@@ -4,19 +4,34 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 
+from .window_geometry import configure_standard_window
+
 
 class HelpWindow:
     def __init__(self, parent: tk.Tk, help_path: Path) -> None:
         self.window = tk.Toplevel(parent)
         self.window.title("Context Palette Help")
-        self.window.geometry("760x680")
-        self.window.minsize(520, 420)
+        configure_standard_window(self.window)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
         self.search_var = tk.StringVar()
         self.search_status_var = tk.StringVar(value="Ctrl+F focuses search · Enter finds next")
 
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
+
+        footer = ttk.Frame(outer)
+        footer.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
+        ttk.Label(
+            footer,
+            textvariable=self.search_status_var,
+            style="Status.TLabel",
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            footer,
+            text="Close",
+            command=self.window.destroy,
+            style="Compact.TButton",
+        ).pack(side=tk.RIGHT)
 
         header = ttk.Frame(outer)
         header.pack(fill=tk.X, pady=(0, 8))
@@ -50,19 +65,6 @@ class HelpWindow:
         self.content.insert("1.0", text)
         self.content.configure(state=tk.DISABLED)
 
-        footer = ttk.Frame(outer)
-        footer.pack(fill=tk.X, pady=(8, 0))
-        ttk.Label(
-            footer,
-            textvariable=self.search_status_var,
-            style="Status.TLabel",
-        ).pack(side=tk.LEFT)
-        ttk.Button(
-            footer,
-            text="Close",
-            command=self.window.destroy,
-            style="Compact.TButton",
-        ).pack(side=tk.RIGHT)
         self.window.transient(parent)
         self.window.lift()
         search.focus_set()

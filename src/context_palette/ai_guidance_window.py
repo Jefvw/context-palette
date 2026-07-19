@@ -15,6 +15,7 @@ from .ai_guidance import (
     review_ai_proposals,
 )
 from .inbox import InboxItem
+from .window_geometry import configure_standard_window
 
 
 class AIGuidanceWindow:
@@ -32,12 +33,23 @@ class AIGuidanceWindow:
 
         self.window = tk.Toplevel(parent)
         self.window.title("Ask AI for Draft Action Proposals")
-        self.window.geometry("780x700")
-        self.window.minsize(620, 520)
+        configure_standard_window(self.window)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
 
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
+
+        footer = ttk.Frame(outer)
+        footer.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
+        self.create_button = ttk.Button(
+            footer,
+            text="Create selected Drafts",
+            command=self._create_selected,
+            state=tk.DISABLED,
+            style="Accent.TButton",
+        )
+        self.create_button.pack(side=tk.LEFT)
+        ttk.Button(footer, text="Close", command=self.window.destroy).pack(side=tk.RIGHT)
 
         ttk.Label(outer, text=f"Captured item: {item.title}", style="Heading.TLabel").pack(
             fill=tk.X
@@ -57,7 +69,7 @@ class AIGuidanceWindow:
         self.variation_box.bind("<<ComboboxSelected>>", lambda _event: self._update_request())
 
         ttk.Label(outer, text="Request to send to your AI").pack(anchor=tk.W)
-        self.request = tk.Text(outer, height=13, wrap=tk.WORD)
+        self.request = tk.Text(outer, height=5, wrap=tk.WORD)
         self.request.pack(fill=tk.BOTH, expand=True, pady=(3, 6))
 
         request_controls = ttk.Frame(outer)
@@ -72,7 +84,7 @@ class AIGuidanceWindow:
         ).pack(side=tk.LEFT, padx=(10, 0))
 
         ttk.Label(outer, text="AI JSON response").pack(anchor=tk.W, pady=(10, 0))
-        self.response = tk.Text(outer, height=9, wrap=tk.NONE)
+        self.response = tk.Text(outer, height=4, wrap=tk.NONE)
         self.response.pack(fill=tk.BOTH, expand=True, pady=(3, 6))
 
         response_controls = ttk.Frame(outer)
@@ -102,27 +114,15 @@ class AIGuidanceWindow:
         proposal_area.pack(fill=tk.BOTH, expand=True, pady=(3, 0))
         self.proposal_list = tk.Listbox(
             proposal_area,
-            height=5,
+            height=3,
             selectmode=tk.EXTENDED,
             exportselection=False,
         )
         self.proposal_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.proposal_list.bind("<<ListboxSelect>>", lambda _event: self._update_preview())
-        self.preview = tk.Text(proposal_area, height=5, width=42, wrap=tk.WORD)
+        self.preview = tk.Text(proposal_area, height=3, width=42, wrap=tk.WORD)
         self.preview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(8, 0))
         self.preview.configure(state=tk.DISABLED)
-
-        footer = ttk.Frame(outer)
-        footer.pack(fill=tk.X, pady=(10, 0))
-        self.create_button = ttk.Button(
-            footer,
-            text="Create selected Drafts",
-            command=self._create_selected,
-            state=tk.DISABLED,
-            style="Accent.TButton",
-        )
-        self.create_button.pack(side=tk.LEFT)
-        ttk.Button(footer, text="Close", command=self.window.destroy).pack(side=tk.RIGHT)
 
         self._update_request()
         self.window.transient(parent)

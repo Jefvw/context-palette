@@ -26,6 +26,7 @@ class FakeStyle:
         self.used_theme = None
         self.configurations = {}
         self.maps = {}
+        self.layouts = {}
 
     def theme_names(self):
         return ("vista", "clam")
@@ -39,6 +40,9 @@ class FakeStyle:
 
     def map(self, style_name, **options):
         self.maps[style_name] = options
+
+    def layout(self, style_name, specification):
+        self.layouts[style_name] = specification
 
 
 class StyleTests(unittest.TestCase):
@@ -62,6 +66,11 @@ class StyleTests(unittest.TestCase):
         self.assertEqual(style.configurations["Heading.TLabel"]["font"], ("Segoe UI Semibold", 11))
         self.assertEqual(style.configurations["Accent.TButton"]["background"], COLORS["accent"])
         self.assertEqual(style.configurations["Surface.TLabel"]["background"], COLORS["surface"])
+        self.assertEqual(
+            style.configurations["SurfaceMenu.TLabel"]["background"],
+            COLORS["surface"],
+        )
+        self.assertIn("SurfaceMenu.TLabel", style.layouts)
         self.assertEqual(style.configurations["Treeview"]["rowheight"], 25)
         self.assertIn("background", style.maps["TButton"])
         self.assertIn("bordercolor", style.maps["TEntry"])

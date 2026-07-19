@@ -50,15 +50,24 @@ import error (investigate with the complete check).
 
 Do not document a fixed test count; it changes as coverage grows.
 
+`tests.test_launcher_smoke` exercises the real Tk view transition between
+explicit Focus Actions and flat global search results. Its temporary fixture
+proves that only explicit context matches enter the hierarchy, search remains
+global, a Focus change does not silently filter visible global results, and
+clearing Find restores the hierarchy when Focus Actions mode remains active.
+
 ## Manual Windows smoke test
 
-Run this when launcher behavior, styling, hotkeys, clipboard handling, configuration windows, or window restoration changes:
+Run this when launcher behavior, styling, hotkeys, clipboard handling, or configuration windows change:
 
 1. Start with `run-context-palette.bat`; verify only one resident instance is created.
 2. Press `F9`, then `Ctrl+Alt+P`; verify the palette appears and selected text is captured where the source application permits simulated copy.
 3. Verify `Esc` hides, `Ctrl+L` focuses Find, `Ctrl+,` opens Configure, and `F1` opens Help.
 4. Search, navigate with the keyboard, run a safe copy action, and verify number-row shortcuts run only while Find has focus.
-5. Change Focus and verify only slots 6–9 change; verify pins 1–5 remain stable.
+5. Activate Focus Actions and verify keyboard focus enters its tree. Search for
+   an action from another Focus, verify the flat results remain global, change
+   Focus while Find is non-empty, then clear Find and verify the new Focus tree
+   returns. Confirm only slots 6–9 change and pins 1–5 remain stable.
 6. Tab to a right-side button and run its primary action with Enter or Space.
 7. Create and edit a disposable personal Draft, context, and button; reload and confirm persistence. Remove the disposable records afterward.
 8. Trigger a validation error and confirm the message identifies the field without losing the form contents.
@@ -72,11 +81,9 @@ Perform only when relevant:
 - Open a reviewed HTTP/HTTPS URL.
 - Open an existing file and folder.
 - Launch an explicitly configured executable with fixed arguments.
-- Verify the UI remains responsive during restore and rejects a concurrent restore.
 - Exercise `integrations\Invoke-ContextPalette.ps1` with valid and unknown
   contexts when testing the optional Power Automate bridge.
 
-Window restoration is best-effort. Do not use unsaved work as test material.
 
 ## Final repository checks
 
