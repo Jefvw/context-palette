@@ -22,7 +22,7 @@
     },
     {
       "id": "archives-open-selected-item",
-      "title": "http://linkto/archives/",
+      "title": "Open selected archive item",
       "context": "Archives",
       "technology": "Browser",
       "task": "Archive lookup",
@@ -55,14 +55,14 @@
       "title": "Open Python documentation",
       "context": "General",
       "technology": "Browser / Python",
-      "task": "Reference",
+      "task": "Technical reference",
       "type": "open_url",
       "value": "https://docs.python.org/3/",
       "state": "Draft"
     },
     {
       "id": "colruyt-open-product",
-      "title": "www.colruyt.be-tart",
+      "title": "Open Colruyt product ID",
       "context": "Product lookup",
       "technology": "Browser / Colruyt",
       "task": "Commercial product ID",

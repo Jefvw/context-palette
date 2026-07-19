@@ -86,3 +86,87 @@ Before handing off:
 - If a file-edit operation takes more than 10 seconds, report its elapsed time
   and do not retry the identical edit unless it failed.
 - Distinguish Codex tool latency from measured Windows filesystem latency.
+
+## Application improvement iterations
+
+The user is a non-developer and may request an autonomous maintenance iteration
+with a short command such as `Improve: reliability`. Treat these commands as a
+request to investigate, implement, verify, and report one focused improvement;
+do not stop after producing a plan unless a decision only the user can make
+genuinely blocks progress.
+
+### Shared operating contract
+
+When asked to run an application improvement iteration:
+
+1. Act as the senior engineer responsible for this application.
+2. Inspect the repository, relevant documentation and configuration, current
+   working-tree changes, recent relevant work, and available tests. Build enough
+   understanding for an evidence-based decision; do not assume every file needs
+   equal analysis.
+3. Select the single highest-value safe improvement within the requested mode.
+   Preserve intended functionality and product scope. Keep the change focused,
+   incremental, and consistent with the existing architecture.
+4. Before editing:
+   - state the selected improvement and cite concrete evidence;
+   - explain why it has the best return on effort in this mode;
+   - name the strongest alternatives considered and why they were deferred;
+   - state how the change will be verified.
+5. During implementation:
+   - preserve unrelated and uncommitted user changes;
+   - do not invent product requirements;
+   - avoid speculative cleanup, broad rewrites, breaking changes, migrations,
+     and new dependencies unless clearly necessary;
+   - add or update tests when appropriate.
+6. Verify with the most relevant available tests, checks, builds, and focused
+   manual inspection. Fix regressions caused by the change. Clearly distinguish
+   automated verification, manual verification, and anything still uncertain.
+7. If the selected change proves unsafe, unnecessary, or unverifiable, do not
+   force it. Select the next-best safe improvement in the same mode.
+8. At completion, report:
+   - what changed and why it matters;
+   - files affected;
+   - verification performed and results;
+   - remaining limitations or risks;
+   - the next highest-value improvement in the same mode.
+
+### Short improvement modes
+
+The following commands select the improvement mode:
+
+- `Improve: reliability` — fix the most consequential evidence-backed bug,
+  failure mode, data-integrity risk, or error-handling weakness. Prefer a
+  reproducible issue or failing test. Do not add features.
+- `Improve: UX` — improve the highest-friction existing user journey without
+  adding a product feature. Prioritize confusing states, poor feedback,
+  preventable errors, responsiveness, and accessibility.
+- `Improve: testing` — protect the most critical behavior lacking meaningful
+  automated coverage. Add the smallest robust regression test; change
+  production code only when the test exposes a real defect.
+- `Improve: security` — remediate the highest-confidence security or privacy
+  weakness supported by repository evidence. Do not perform destructive or
+  external security testing.
+- `Improve: accessibility` — fix the highest-impact barrier in a critical
+  journey, prioritizing keyboard access, focus, labels, contrast, motion, and
+  error communication.
+- `Improve: performance` — improve a demonstrated bottleneck in a critical
+  path, with a baseline and comparison. If no meaningful bottleneck is
+  measurable, improve performance observability instead of guessing.
+- `Improve: maintainability` — reduce the most costly complexity, duplication,
+  brittleness, or unclear ownership in a frequently changed or critical area,
+  while demonstrating preserved behavior.
+- `Improve: developer experience` — remove the largest evidenced obstacle to
+  safely understanding, setting up, running, testing, debugging, or modifying
+  the application.
+- `Improve: regression review` — inspect the latest relevant implementation or
+  working-tree changes and fix the highest-risk defect, missing edge case, or
+  verification gap without expanding scope.
+- `Improve: general` — select the single highest-value safe improvement across
+  reliability, UX, maintainability, performance, testing, accessibility,
+  security, documentation, and developer experience.
+
+`Run the next sensible improvement mode` means inspect recent work, avoid
+repeating its focus when another mode has stronger value, choose the next mode,
+and follow the same operating contract. A suggested rotation is Reliability,
+UX, Testing, Accessibility, Security, Maintainability, Performance, Developer
+Experience, Regression Review, then General.

@@ -139,6 +139,22 @@ class ActionTests(unittest.TestCase):
             self.assertEqual(action.type, "build_url_selection_open")
             self.assertEqual(build_url(action.value, "5331"), expected_url)
 
+    def test_shared_action_metadata_remains_descriptive_and_searchable(self):
+        actions = {action.id: action for action in load_actions(ROOT / "data" / "actions.json")}
+
+        self.assertEqual(
+            actions["archives-open-selected-item"].title,
+            "Open selected archive item",
+        )
+        self.assertEqual(
+            actions["colruyt-open-product"].title,
+            "Open Colruyt product ID",
+        )
+        self.assertEqual(
+            actions["general-open-python-docs"].task,
+            "Technical reference",
+        )
+
     def test_draft_build_url_action_validates_and_preserves_metadata(self):
         action = draft_build_url_action(
             title="Open archive",

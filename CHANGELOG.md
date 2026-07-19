@@ -16,6 +16,7 @@ This project has not published a versioned release. Changes are recorded under *
 
 ### Changed
 
+- Restored descriptive launcher metadata for shared Archive, Colruyt, and Python documentation actions after an accidental configuration regression.
 - Made setup recover from a stale virtual environment after the project or Python installation moves, and made launch failures explain how to repair the environment.
 - Refined the interface for compact buttons, consistent spacing, native focus indication, useful empty states, and non-blocking save feedback.
 - Moved long-running window restore work off the Tk main thread.
