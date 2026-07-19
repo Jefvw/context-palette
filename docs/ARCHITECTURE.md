@@ -214,6 +214,9 @@ standard-library `ctypes`.
 - Writes the password with Windows clipboard-history and cloud-upload exclusion formats.
 - Returns a clipboard sequence number so delayed clearing occurs only if another
   application has not replaced the clipboard.
+- Retains protected-clipboard tracking until an ordinary clipboard replacement
+  completes, so a failed write cannot make the secret eligible for workspace
+  synchronization.
 - Never enumerates credentials, writes credentials, logs passwords, or exposes
   passwords to action JSON, Input / Output, preview, search, or AI guidance.
 
@@ -288,6 +291,11 @@ available action, right-click exposes the same canonical action-ID menu, and
 Shift/Ctrl+click opens the owning menu and action configuration files.
 
 Quick-action labels participate in keyboard focus. Enter or Space executes the first available primary action. Empty search, Inbox, cheat-sheet, and command-surface states contain recovery guidance rather than blank widgets. Reloads use a short busy cursor/status state; local loading is intentionally not animated.
+
+Configured Quick-action subjects and allow-listed built-in subjects share one
+mouse/keyboard binding contract for left click, right click, Enter, and Space.
+Their dispatch callbacks remain separate, so consolidating interaction wiring
+does not broaden the built-in command allow-list or action execution model.
 
 ## Supported action types
 

@@ -313,6 +313,10 @@ sync, then cleared after 15 seconds if no other program replaced the clipboard.
 It is never placed in Input / Output, previews, action files, or logs,
 or AI prompts. The prior clipboard is not restored.
 
+If an ordinary clipboard write fails while a protected credential is still
+tracked, Context Palette keeps treating the clipboard as protected and will
+not synchronize its content into Input / Output.
+
 Credential paste is unavailable after an ordinary launcher/external show
 request because that route has no fresh destination window. Credential actions
 cannot run as Drafts and are not AI-proposable. Windows Credential Manager

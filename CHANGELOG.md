@@ -76,6 +76,9 @@ This project has not published a versioned release. Changes are recorded under *
 
 ### Security
 
+- Preserved protected-clipboard tracking when an ordinary clipboard
+  replacement fails, preventing credential content from becoming eligible for
+  automatic Input / Output synchronization.
 - Kept credential passwords out of action JSON, previews, workspace text, logs, AI prompts, clipboard history, and cloud clipboard synchronization.
 - Rejected credential-bearing and ambiguously parsed HTTP(S) action URLs across creation, loading, generation, and execution.
 - Prevented stalled localhost integration clients from holding the single-instance listener indefinitely.

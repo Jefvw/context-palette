@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -127,6 +127,18 @@ class LauncherInteractionTests(unittest.TestCase):
         app.protected_clipboard_sequence = None
         app._sync_workspace_from_clipboard_if_safe()
         self.assertEqual(synchronizations, [True])
+
+    def test_failed_ordinary_clipboard_write_keeps_protected_marker(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.protected_clipboard_sequence = 42
+        root = Mock()
+        root.clipboard_clear.side_effect = RuntimeError("clipboard busy")
+        app.root = root
+
+        with self.assertRaisesRegex(RuntimeError, "clipboard busy"):
+            app._set_clipboard("ordinary text")
+
+        self.assertEqual(app.protected_clipboard_sequence, 42)
 
     def test_external_show_invalidates_captured_credential_destination(self):
         app = LauncherApp.__new__(LauncherApp)

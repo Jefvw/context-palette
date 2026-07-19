@@ -823,6 +823,20 @@ class LauncherApp:
     ) -> None:
         self.command_surface_tooltips.append(WidgetTooltip(widget, text))
 
+    def _bind_surface_menu_control(
+        self,
+        control: tk.Widget,
+        *,
+        on_click: Callable[[tk.Event], object],
+        on_menu: Callable[[tk.Event], object],
+        on_keyboard: Callable[[tk.Event], object],
+    ) -> None:
+        """Apply the shared mouse and keyboard contract for Quick-action menus."""
+        control.bind("<Button-1>", on_click, add="+")
+        control.bind("<Button-3>", on_menu, add="+")
+        control.bind("<Return>", on_keyboard, add="+")
+        control.bind("<space>", on_keyboard, add="+")
+
     def _result_tooltip_text(self, index: int) -> str:
         if index < 0 or index >= len(self.displayed_actions):
             return ""
@@ -1227,29 +1241,19 @@ class LauncherApp:
                     control,
                     "Left-click or Enter runs the primary action. Right-click chooses an action. Shift/Ctrl+click edits configuration.",
                 )
-                control.bind(
-                    "<Button-1>",
-                    lambda event, selected_group=group, selected_item=item: self._handle_command_item_left_click(
+                self._bind_surface_menu_control(
+                    control,
+                    on_click=lambda event, selected_group=group, selected_item=item: self._handle_command_item_left_click(
                         event,
                         selected_group,
                         selected_item,
                     ),
-                    add="+",
-                )
-                control.bind(
-                    "<Button-3>",
-                    lambda event, selected_item=item: self._show_item_menu(event, selected_item),
-                    add="+",
-                )
-                control.bind(
-                    "<Return>",
-                    lambda _event, selected_item=item: self._execute_item_primary(selected_item),
-                    add="+",
-                )
-                control.bind(
-                    "<space>",
-                    lambda _event, selected_item=item: self._execute_item_primary(selected_item),
-                    add="+",
+                    on_menu=lambda event, selected_item=item: self._show_item_menu(
+                        event, selected_item
+                    ),
+                    on_keyboard=lambda _event, selected_item=item: self._execute_item_primary(
+                        selected_item
+                    ),
                 )
 
     def _render_knowledge_quick_action(self, row: int) -> None:
@@ -1281,29 +1285,17 @@ class LauncherApp:
             sheets_control,
             "Sheets — Open searchable local cheat sheets. Right-click for the available command.",
         )
-        sheets_control.bind(
-            "<Button-1>",
-            lambda _event: self._execute_builtin_quick_command(
+        self._bind_surface_menu_control(
+            sheets_control,
+            on_click=lambda _event: self._execute_builtin_quick_command(
                 BUILTIN_QUICK_COMMAND_OPEN_SHEETS
             ),
-        )
-        sheets_control.bind(
-            "<Return>",
-            lambda _event: self._execute_builtin_quick_command(
-                BUILTIN_QUICK_COMMAND_OPEN_SHEETS
-            ),
-        )
-        sheets_control.bind(
-            "<space>",
-            lambda _event: self._execute_builtin_quick_command(
-                BUILTIN_QUICK_COMMAND_OPEN_SHEETS
-            ),
-        )
-        sheets_control.bind(
-            "<Button-3>",
-            lambda event: self._show_builtin_quick_menu(
+            on_menu=lambda event: self._show_builtin_quick_menu(
                 event,
                 BUILTIN_QUICK_COMMAND_OPEN_SHEETS,
+            ),
+            on_keyboard=lambda _event: self._execute_builtin_quick_command(
+                BUILTIN_QUICK_COMMAND_OPEN_SHEETS
             ),
         )
 
@@ -2074,10 +2066,10 @@ class LauncherApp:
         self.status_var.set("Copied Input / Output to the clipboard.")
 
     def _set_clipboard(self, value: str) -> None:
-        self.protected_clipboard_sequence = None
         self.root.clipboard_clear()
         self.root.clipboard_append(value)
         self.root.update()
+        self.protected_clipboard_sequence = None
 
     def _clear_protected_clipboard(self, sequence: int | None = None) -> None:
         current = self.protected_clipboard_sequence
