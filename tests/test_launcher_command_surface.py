@@ -104,6 +104,27 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
         self.assertEqual(result, "break")
         self.assertEqual(app._execute_action_calls, ["primary"])
 
+    def test_primary_action_wins_when_listed_after_another_action(self):
+        app = self._app()
+        item = CommandItem(
+            id="test",
+            label="Test",
+            primary_action_id="primary",
+            action_ids=("secondary", "primary"),
+        )
+
+        left_click_result = app._handle_command_item_left_click(
+            FakeEvent(state=0),
+            CommandGroup("g", "Group"),
+            item,
+        )
+        keyboard_result = app._execute_item_primary(item)
+
+        self.assertEqual(left_click_result, "break")
+        self.assertEqual(keyboard_result, "break")
+        self.assertEqual(app._execute_action_calls, ["primary", "primary"])
+        self.assertEqual(app._item_action_ids(item), ["primary", "secondary"])
+
     def test_shift_or_ctrl_left_click_opens_configuration(self):
         app = self._app()
         item = CommandItem(id="test", label="Test", primary_action_id="primary")

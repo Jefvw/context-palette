@@ -55,6 +55,22 @@ From the repository root:
 
 Use `.\check-context-palette.bat` for the complete configuration, compilation, and test check.
 
+### Codex sandbox and Python
+
+The project virtual environment ultimately launches the user-profile Python
+installation outside the repository. A restricted Codex workspace sandbox may
+therefore report `Access is denied`, `Unable to create process`, or no installed
+Python even when Python and `.venv` work normally in Windows.
+
+Before diagnosing or repairing the environment:
+
+1. Treat an access-denied or base-interpreter launch failure as potentially
+   caused by sandbox restrictions.
+2. Retry the same read-only Python or `check-context-palette.bat` command with
+   authorized normal Windows access.
+3. Declare `.venv` broken only when the authorized check also fails.
+4. Do not rename, remove, or rebuild `.venv` based only on a sandboxed failure.
+
 ## Change rules
 
 - Inspect existing changes before editing; they may be user-owned.

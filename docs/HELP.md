@@ -82,6 +82,8 @@ Changes are saved atomically to ignored local files. Shared project examples are
 
 Context slots and button assignments show human-readable action names and contexts. Internal IDs remain stored for stable references but are not part of the normal editing workflow. Successful saves appear in the Configure footer without interrupting work with a confirmation dialog.
 
+If validation or file saving fails, the edit dialog stays open so the entered values can be corrected without starting over.
+
 The complete JSON format is documented in `docs/COMMAND_SURFACE_CONFIGURATION.md`.
 
 ## Input / Output workspace
@@ -239,7 +241,7 @@ Context Palette uses constrained action types. It does not execute arbitrary she
 
 ## Troubleshooting
 
-Configuration reloads show a brief busy cursor and status message. Because all configuration is local and normally loads in under a second, Context Palette does not show a spinner that would flicker during ordinary use. Errors identify the affected area and preserve the rest of the launcher where possible.
+Configuration reloads show a brief busy cursor and status message. Because all configuration is local and normally loads in under a second, Context Palette does not show a spinner that would flicker during ordinary use. Errors identify the affected area and preserve the rest of the launcher where possible. If an edited action file is invalid, the last successfully loaded actions remain available while the file is corrected.
 
 For an intermittent startup, configuration, or window-restore problem, inspect `data/context-palette.log`. The local log is ignored by Git, rotates automatically, and does not deliberately record clipboard or Input / Output contents.
 

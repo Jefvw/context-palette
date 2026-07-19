@@ -782,8 +782,9 @@ class LauncherApp:
             )
             self.status_var.set(f"Loaded {len(self.actions)} actions")
         except ActionError as exc:
-            self.actions = []
-            self.status_var.set("Actions could not be loaded. Open Configure after fixing the file.")
+            self.status_var.set(
+                f"Actions could not be loaded; kept {len(self.actions)} previous action(s)."
+            )
             messagebox.showerror(
                 "Actions could not be loaded",
                 f"{exc}\n\nNo actions were changed. Correct the action file and choose Configure or restart.",
@@ -883,12 +884,7 @@ class LauncherApp:
                 )
 
     def _execute_item_primary(self, item: CommandItem) -> str:
-        actions_by_id = {action.id: action for action in self.actions}
-        candidate_ids = [item.primary_action_id, *item.action_ids]
-        action = next(
-            (actions_by_id[action_id] for action_id in candidate_ids if action_id in actions_by_id),
-            None,
-        )
+        action = self._primary_action_for_item(item)
         if action is None:
             self.status_var.set(f"{item.label} has no available action. Open Configure to assign one.")
             return "break"
@@ -914,10 +910,7 @@ class LauncherApp:
 
     def _primary_action_for_item(self, item: CommandItem) -> Action | None:
         actions_by_id = {action.id: action for action in self.actions}
-        action_ids = list(item.action_ids)
-        if item.primary_action_id and item.primary_action_id not in action_ids:
-            action_ids.insert(0, item.primary_action_id)
-        for action_id in action_ids:
+        for action_id in self._item_action_ids(item):
             action = actions_by_id.get(action_id)
             if action is not None:
                 return action
@@ -969,10 +962,13 @@ class LauncherApp:
         return "break"
 
     def _item_action_ids(self, item: CommandItem) -> list[str]:
-        action_ids = list(item.action_ids)
-        if item.primary_action_id and item.primary_action_id not in action_ids:
-            action_ids.insert(0, item.primary_action_id)
-        return action_ids
+        return list(
+            dict.fromkeys(
+                action_id
+                for action_id in (item.primary_action_id, *item.action_ids)
+                if action_id
+            )
+        )
 
     def _action_storage_path(self, action: Action) -> Path:
         return self.local_actions_path if action.id in self.local_action_ids else self.actions_path

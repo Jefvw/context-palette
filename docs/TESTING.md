@@ -18,6 +18,17 @@ This command:
 
 It is read-only except for Python bytecode caches.
 
+### Python access from Codex
+
+The project-local `.venv` uses a Python installation under the Windows user
+profile. A restricted Codex workspace sandbox can block that external
+interpreter and produce `Access is denied` or `Unable to create process`, even
+when Python works normally.
+
+If that happens, rerun the same read-only check with authorized normal Windows
+access before concluding that `.venv` needs repair. Rebuild the environment only
+when the normal Windows check also fails.
+
 ## Targeted tests
 
 Run one module while developing:

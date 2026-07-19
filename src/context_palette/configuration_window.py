@@ -237,18 +237,19 @@ class ConfigurationWindow:
                 self.window, self.type_ids[selected[0]], self.actions, self._save_action
             )
 
-    def _save_action(self, action: Action) -> None:
+    def _save_action(self, action: Action) -> bool:
         try:
             append_action(self.local_actions_path, action)
         except ActionError as exc:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
-            return
+            return False
         self.actions.append(action)
         self.local_action_ids.add(action.id)
         self.on_change()
         self._render_actions()
         self.feedback_var.set(f"Created Draft: {action.display_text}")
         self.feedback_label.configure(style="Success.TLabel")
+        return True
 
     def _reload(self) -> None:
         self.window.configure(cursor="wait")
@@ -342,12 +343,12 @@ class ConfigurationWindow:
             action=action,
         )
 
-    def _save_edited_action(self, action: Action) -> None:
+    def _save_edited_action(self, action: Action) -> bool:
         try:
             update_action(self.local_actions_path, action)
         except ActionError as exc:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
-            return
+            return False
         self.actions[:] = [
             action if existing.id == action.id else existing for existing in self.actions
         ]
@@ -355,6 +356,7 @@ class ConfigurationWindow:
         self._render_actions()
         self.feedback_var.set(f"Saved action: {action.display_text}")
         self.feedback_label.configure(style="Success.TLabel")
+        return True
 
     def _add_context(self) -> None:
         ContextDialog(self.window, None, self.actions, self._save_context)
@@ -372,22 +374,23 @@ class ConfigurationWindow:
         context = self.contexts[int(selection[0].split("-")[1])]
         ContextDialog(self.window, context, self.actions, self._save_context)
 
-    def _save_context(self, context: ContextDefinition, original_name: str) -> None:
+    def _save_context(self, context: ContextDefinition, original_name: str) -> bool:
         shared_names = {item.name.casefold() for item in load_contexts(self.contexts_path)}
         if context.name.casefold() in shared_names:
             messagebox.showerror(
                 "Context Palette", "A shared context already uses that name.", parent=self.window
             )
-            return
+            return False
         try:
             save_local_context(self.local_contexts_path, context, original_name=original_name)
         except ContextError as exc:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
-            return
+            return False
         self.on_change()
         self._reload()
         self.feedback_var.set(f"Saved context: {context.name}")
         self.feedback_label.configure(style="Success.TLabel")
+        return True
 
     def _add_button(self) -> None:
         ButtonDialog(self.window, None, None, self.actions, self._save_button)
@@ -412,7 +415,7 @@ class ConfigurationWindow:
     def _save_button(
         self, group_id: str, group_label: str, item: CommandItem,
         original_group_id: str, original_item_id: str,
-    ) -> None:
+    ) -> bool:
         shared_group_ids = {
             group.id.casefold()
             for group in load_combined_command_groups(
@@ -425,7 +428,7 @@ class ConfigurationWindow:
                 "A shared button group already uses that stable ID.",
                 parent=self.window,
             )
-            return
+            return False
         try:
             save_local_command_item(
                 self.local_command_surface_path,
@@ -434,17 +437,18 @@ class ConfigurationWindow:
             )
         except CommandSurfaceError as exc:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
-            return
+            return False
         self.on_change()
         self._reload()
         self.feedback_var.set(f"Saved quick-action button: {item.label}")
         self.feedback_label.configure(style="Success.TLabel")
+        return True
 
 
 class ActionDraftDialog:
     def __init__(
         self, parent: tk.Toplevel, action_type: str, actions: list[Action],
-        on_save: Callable[[Action], None],
+        on_save: Callable[[Action], bool],
         *,
         action: Action | None = None,
     ) -> None:
@@ -540,14 +544,14 @@ class ActionDraftDialog:
         except ActionError as exc:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
             return
-        self.on_save(action)
-        self.window.destroy()
+        if self.on_save(action):
+            self.window.destroy()
 
 
 class ContextDialog:
     def __init__(
         self, parent: tk.Toplevel, context: ContextDefinition | None,
-        actions: list[Action], on_save: Callable[[ContextDefinition, str], None],
+        actions: list[Action], on_save: Callable[[ContextDefinition, str], bool],
     ) -> None:
         self.original_name = context.name if context else ""
         self.on_save = on_save
@@ -594,7 +598,7 @@ class ContextDialog:
         if not name:
             messagebox.showerror("Context Palette", "Context name cannot be empty.", parent=self.window)
             return
-        self.on_save(
+        saved = self.on_save(
             ContextDefinition(
                 name=name, description=self.description.get().strip(),
                 technology=self.technology.get().strip(), task=self.task.get().strip(),
@@ -608,14 +612,15 @@ class ContextDialog:
             ),
             self.original_name,
         )
-        self.window.destroy()
+        if saved:
+            self.window.destroy()
 
 
 class ButtonDialog:
     def __init__(
         self, parent: tk.Toplevel, group: CommandGroup | None, item: CommandItem | None,
         actions: list[Action],
-        on_save: Callable[[str, str, CommandItem, str, str], None],
+        on_save: Callable[[str, str, CommandItem, str, str], bool],
     ) -> None:
         self.original_group_id = group.id if group else ""
         self.original_item_id = item.id if item else ""
@@ -664,7 +669,7 @@ class ButtonDialog:
         )
         group_id = self.group_id.get().strip() or _stable_id(self.group_label.get())
         item_id = self.item_id.get().strip() or _stable_id(self.item_label.get())
-        self.on_save(
+        saved = self.on_save(
             group_id, self.group_label.get(),
             CommandItem(
                 id=item_id, label=self.item_label.get().strip(),
@@ -672,7 +677,8 @@ class ButtonDialog:
             ),
             self.original_group_id, self.original_item_id,
         )
-        self.window.destroy()
+        if saved:
+            self.window.destroy()
 
 
 def _entry(parent: ttk.Frame, label: str, variable: tk.StringVar) -> None:

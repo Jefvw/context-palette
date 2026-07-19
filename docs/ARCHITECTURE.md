@@ -393,6 +393,8 @@ Tkinter widgets are only accessed from the main thread.
 
 Configuration reloads are skipped when active file existence, modification time, and size are unchanged. Typed search changes are coalesced over 40 ms before recalculating slots and rows.
 
+Action reload is transactional in memory: combined shared/local actions replace the active list only after complete validation succeeds. A failed external edit reports the error and retains the last successfully loaded actions.
+
 Window layout restore may wait briefly for launched windows to appear, but this no longer blocks Tk rendering or input. Only one window action runs at a time.
 
 ## Diagnostics
