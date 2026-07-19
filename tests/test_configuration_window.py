@@ -12,6 +12,7 @@ from context_palette.configuration_window import (
     ActionDraftDialog,
     ButtonDialog,
     ContextDialog,
+    _focus_entry,
 )
 
 
@@ -39,7 +40,40 @@ class FakeWindow:
         self.destroy_calls += 1
 
 
+class FakeFocusWindow:
+    def __init__(self) -> None:
+        self.callbacks: list[object] = []
+
+    def after_idle(self, callback: object) -> None:
+        self.callbacks.append(callback)
+
+
+class FakeEntry:
+    def __init__(self) -> None:
+        self.focus_calls = 0
+        self.selection: tuple[object, object] | None = None
+
+    def focus_set(self) -> None:
+        self.focus_calls += 1
+
+    def selection_range(self, start: object, end: object) -> None:
+        self.selection = (start, end)
+
+
 class ConfigurationDialogTests(unittest.TestCase):
+    def test_focus_entry_schedules_focus_and_selects_existing_text(self) -> None:
+        window = FakeFocusWindow()
+        entry = FakeEntry()
+
+        _focus_entry(window, entry)
+
+        self.assertEqual(len(window.callbacks), 1)
+        callback = window.callbacks[0]
+        self.assertTrue(callable(callback))
+        callback()
+        self.assertEqual(entry.focus_calls, 1)
+        self.assertEqual(entry.selection, (0, "end"))
+
     def test_action_dialog_stays_open_when_save_callback_fails(self) -> None:
         dialog = ActionDraftDialog.__new__(ActionDraftDialog)
         dialog.action_type = "copy_text"

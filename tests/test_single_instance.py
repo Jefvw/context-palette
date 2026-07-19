@@ -9,14 +9,50 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.main import integration_request, project_port
 from context_palette.single_instance import (
+    CLIENT_RECEIVE_TIMEOUT_SECONDS,
     MESSAGE_SHOW,
     decode_request,
     encode_request,
     notify_existing_instance,
+    receive_request,
 )
 
 
 class SingleInstanceTests(unittest.TestCase):
+    def test_receive_request_times_out_stalled_client(self):
+        class StalledClient:
+            def __init__(self):
+                self.timeout = None
+
+            def settimeout(self, value):
+                self.timeout = value
+
+            def recv(self, _size):
+                raise TimeoutError
+
+        client = StalledClient()
+
+        self.assertIsNone(receive_request(client))
+        self.assertEqual(client.timeout, CLIENT_RECEIVE_TIMEOUT_SECONDS)
+
+    def test_receive_request_decodes_valid_bounded_message(self):
+        class FakeClient:
+            def __init__(self, message):
+                self.message = message
+                self.timeout = None
+
+            def settimeout(self, value):
+                self.timeout = value
+
+            def recv(self, size):
+                return self.message[:size]
+
+        request = {"command": "show", "search": "SQL"}
+        client = FakeClient(encode_request(request))
+
+        self.assertEqual(receive_request(client), request)
+        self.assertEqual(client.timeout, CLIENT_RECEIVE_TIMEOUT_SECONDS)
+
     def test_notify_existing_instance_returns_false_when_connection_fails(self):
         with patch("context_palette.single_instance.socket.create_connection", side_effect=OSError):
             self.assertFalse(notify_existing_instance())

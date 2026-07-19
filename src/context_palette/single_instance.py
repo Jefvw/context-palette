@@ -10,6 +10,7 @@ HOST = "127.0.0.1"
 DEFAULT_PORT = 49371
 MESSAGE_SHOW = b"show"
 MAX_MESSAGE_SIZE = 8192
+CLIENT_RECEIVE_TIMEOUT_SECONDS = 0.5
 
 
 def encode_request(request: dict[str, str]) -> bytes:
@@ -36,6 +37,18 @@ def decode_request(message: bytes) -> dict[str, str] | None:
     if not all(isinstance(item, str) for item in value.values()):
         return None
     return value
+
+
+def receive_request(client: socket.socket) -> dict[str, str] | None:
+    """Read one bounded request without allowing a client to hold the listener."""
+    client.settimeout(CLIENT_RECEIVE_TIMEOUT_SECONDS)
+    try:
+        message = client.recv(MAX_MESSAGE_SIZE + 1)
+    except OSError:
+        return None
+    if len(message) > MAX_MESSAGE_SIZE:
+        return None
+    return decode_request(message)
 
 
 def notify_existing_instance(
@@ -88,11 +101,6 @@ class SingleInstanceServer:
                 continue
 
             with client:
-                try:
-                    message = client.recv(MAX_MESSAGE_SIZE + 1)
-                except OSError:
-                    continue
-            if len(message) <= MAX_MESSAGE_SIZE:
-                request = decode_request(message)
-                if request is not None:
-                    self.on_request(request)
+                request = receive_request(client)
+            if request is not None:
+                self.on_request(request)

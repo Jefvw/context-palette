@@ -118,6 +118,8 @@ Stores and calculates launcher organization.
 
 Loads and validates global quick-action groups and their compact items from shared and local JSON. Each item has an individual action menu and retains its source configuration path. Groups reference existing action IDs; they do not define a second execution language. Duplicate group IDs and duplicate item IDs within a group are rejected case-insensitively.
 
+The module also owns the canonical primary-first, duplicate-free action ordering used by execution, menus, Configure, and configuration validation.
+
 ### `tooltips.py`
 
 Owns delayed tooltip behaviour for ordinary widgets and individual listbox rows. Keeping these presentation helpers outside `launcher.py` prevents the main application orchestrator from also owning reusable hover-window mechanics.
@@ -151,6 +153,7 @@ Resident-process coordination through a localhost socket.
 - Only the first process owns the port.
 - Later processes send a show request and terminate.
 - Requests may carry only `command`, `context`, and `search` string fields in size-limited JSON.
+- Each accepted client has a short receive timeout so a stalled local connection cannot hold the listener thread indefinitely.
 - Invalid commands and fields are ignored; the bridge cannot execute actions or shell commands.
 - The port is derived from the project path to reduce collisions between workspaces.
 

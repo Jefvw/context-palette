@@ -123,7 +123,6 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
         self.assertEqual(left_click_result, "break")
         self.assertEqual(keyboard_result, "break")
         self.assertEqual(app._execute_action_calls, ["primary", "primary"])
-        self.assertEqual(app._item_action_ids(item), ["primary", "secondary"])
 
     def test_shift_or_ctrl_left_click_opens_configuration(self):
         app = self._app()

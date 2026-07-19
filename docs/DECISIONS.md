@@ -4,6 +4,14 @@ Record durable product and technical decisions here.
 
 Decision entries are historical and append-only. Their consequences describe the system at the time; use `ARCHITECTURE.md`, `HELP.md`, and `MVP.md` for current behavior.
 
+## 2026-07-19 - Bound localhost integration client time
+
+**Decision:** Apply a short receive timeout to every client accepted by the single-instance localhost bridge.
+
+**Reason:** The bridge handles untrusted local connections on one listener thread. A client that connected without sending data could otherwise block that thread indefinitely and prevent later launcher or attended integration requests.
+
+**Consequences:** Stalled and malformed clients are discarded without affecting the resident application. The accepted request schema and attended show/context/search behavior remain unchanged.
+
 ## 2026-07-18 - Repair stale local environments during setup
 
 **Decision:** Test the existing virtual environment by running its interpreter rather than trusting that `python.exe` exists. Preserve an unusable environment as `.venv-unusable`, select the first genuinely runnable Python 3.12 interpreter, and recreate `.venv`. Make the launcher reject missing or unusable environments with a setup instruction.

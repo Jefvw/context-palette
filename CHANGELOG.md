@@ -16,6 +16,8 @@ This project has not published a versioned release. Changes are recorded under *
 
 ### Changed
 
+- Centralized quick-action primary/fallback ordering so execution, configuration, and validation cannot drift.
+- Added predictable initial keyboard focus to Configure and its action, context, and button dialogs.
 - Preserved last-known-good actions when an edited action file fails to reload.
 - Kept Configure edit dialogs open after validation or persistence errors so entered values are not lost.
 - Made quick-action mouse, keyboard, and menu routes consistently honor the configured primary action.
@@ -28,6 +30,7 @@ This project has not published a versioned release. Changes are recorded under *
 
 ### Security
 
+- Prevented stalled localhost integration clients from holding the single-instance listener indefinitely.
 - Kept action execution allow-listed and rejected arbitrary shell-command actions.
 - Restricted the external bridge to showing/filtering the palette; it cannot execute actions.
 - Validated AI responses through a versioned schema and existing Draft constructors.

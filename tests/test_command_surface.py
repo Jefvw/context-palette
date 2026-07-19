@@ -10,7 +10,9 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.command_surface import (
     CommandGroup,
+    CommandItem,
     CommandSurfaceError,
+    command_item_action_ids,
     command_configuration_paths,
     load_combined_command_groups,
     load_command_groups,
@@ -18,6 +20,19 @@ from context_palette.command_surface import (
 
 
 class CommandSurfaceTests(unittest.TestCase):
+    def test_item_action_ids_are_primary_first_and_unique(self):
+        item = CommandItem(
+            id="lookup",
+            label="Lookup",
+            primary_action_id="primary",
+            action_ids=("secondary", "primary", "secondary"),
+        )
+
+        self.assertEqual(
+            command_item_action_ids(item),
+            ("primary", "secondary"),
+        )
+
     def test_configuration_paths_follow_group_source(self):
         shared_surface = Path("shared-surface.json")
         local_surface = Path("local-surface.json")

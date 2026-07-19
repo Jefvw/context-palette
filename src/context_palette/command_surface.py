@@ -25,6 +25,17 @@ class CommandGroup:
     source_path: Path | None = None
 
 
+def command_item_action_ids(item: CommandItem) -> tuple[str, ...]:
+    """Return one primary-first, duplicate-free action order for an item."""
+    return tuple(
+        dict.fromkeys(
+            action_id
+            for action_id in (item.primary_action_id, *item.action_ids)
+            if action_id
+        )
+    )
+
+
 def load_command_groups(path: Path) -> list[CommandGroup]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))

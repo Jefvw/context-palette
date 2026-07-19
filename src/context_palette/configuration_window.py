@@ -15,7 +15,13 @@ from .actions import (
     update_action,
 )
 from .action_types import ACTION_TYPES
-from .command_surface import CommandGroup, CommandItem, CommandSurfaceError, load_combined_command_groups
+from .command_surface import (
+    CommandGroup,
+    CommandItem,
+    CommandSurfaceError,
+    command_item_action_ids,
+    load_combined_command_groups,
+)
 from .configuration_data import save_local_command_item, save_local_context
 from .contexts import ContextDefinition, ContextError, load_combined_contexts, load_contexts
 
@@ -100,6 +106,7 @@ class ConfigurationWindow:
         self._reload()
         self.window.transient(parent)
         self.window.lift()
+        self.window.after_idle(self.action_tree.focus_set)
 
     def _build_actions_tab(self, notebook: ttk.Notebook) -> None:
         tab = ttk.Frame(notebook, padding=10)
@@ -293,9 +300,7 @@ class ConfigurationWindow:
                 tags=("local",) if local else ("shared",), open=True,
             )
             for item_index, item in enumerate(group.items):
-                ids = list(item.action_ids)
-                if item.primary_action_id and item.primary_action_id not in ids:
-                    ids.insert(0, item.primary_action_id)
+                ids = command_item_action_ids(item)
                 self.button_tree.insert(
                     group_iid, tk.END, iid=f"button-{group_index}-{item_index}",
                     text=item.label,
@@ -483,7 +488,7 @@ class ActionDraftDialog:
         self.working_directory_var = tk.StringVar(
             value=action.working_directory or "" if action else ""
         )
-        _entry(outer, "Action name", self.title_var)
+        title_entry = _entry(outer, "Action name", self.title_var)
         ttk.Label(outer, text="Context").pack(anchor=tk.W, pady=(7, 0))
         ttk.Combobox(
             outer, textvariable=self.context_var,
@@ -526,6 +531,7 @@ class ActionDraftDialog:
         ttk.Button(controls, text="Cancel", command=self.window.destroy).pack(side=tk.RIGHT)
         self.window.transient(parent)
         self.window.grab_set()
+        _focus_entry(self.window, title_entry)
 
     def _save(self) -> None:
         try:
@@ -565,7 +571,7 @@ class ContextDialog:
         self.description = tk.StringVar(value=context.description if context else "")
         self.technology = tk.StringVar(value=context.technology if context else "")
         self.task = tk.StringVar(value=context.task if context else "")
-        _entry(outer, "Context name", self.name)
+        name_entry = _entry(outer, "Context name", self.name)
         _entry(outer, "Description", self.description)
         _entry(outer, "Technology (optional)", self.technology)
         _entry(outer, "Task (optional)", self.task)
@@ -592,6 +598,7 @@ class ContextDialog:
         _dialog_buttons(outer, self._save, self.window.destroy)
         self.window.transient(parent)
         self.window.grab_set()
+        _focus_entry(self.window, name_entry)
 
     def _save(self) -> None:
         name = self.name.get().strip()
@@ -635,11 +642,9 @@ class ButtonDialog:
         self.group_label = tk.StringVar(value=group.label if group else "")
         self.item_id = tk.StringVar(value=item.id if item else "")
         self.item_label = tk.StringVar(value=item.label if item else "")
-        _entry(outer, "Group heading", self.group_label)
+        group_entry = _entry(outer, "Group heading", self.group_label)
         _entry(outer, "Button label", self.item_label)
-        ids = list(item.action_ids) if item else []
-        if item and item.primary_action_id and item.primary_action_id not in ids:
-            ids.insert(0, item.primary_action_id)
+        ids = command_item_action_ids(item) if item else ()
         self.action_choices = _action_choices(actions)
         labels_by_id = {action_id: label for label, action_id in self.action_choices.items()}
         self.action_ids = [
@@ -658,6 +663,7 @@ class ButtonDialog:
         _dialog_buttons(outer, self._save, self.window.destroy)
         self.window.transient(parent)
         self.window.grab_set()
+        _focus_entry(self.window, group_entry)
 
     def _save(self) -> None:
         ids = tuple(
@@ -681,9 +687,19 @@ class ButtonDialog:
             self.window.destroy()
 
 
-def _entry(parent: ttk.Frame, label: str, variable: tk.StringVar) -> None:
+def _entry(parent: ttk.Frame, label: str, variable: tk.StringVar) -> ttk.Entry:
     ttk.Label(parent, text=label).pack(anchor=tk.W, pady=(7, 0))
-    ttk.Entry(parent, textvariable=variable).pack(fill=tk.X, pady=(2, 0))
+    entry = ttk.Entry(parent, textvariable=variable)
+    entry.pack(fill=tk.X, pady=(2, 0))
+    return entry
+
+
+def _focus_entry(window: tk.Toplevel, entry: ttk.Entry) -> None:
+    def apply_focus() -> None:
+        entry.focus_set()
+        entry.selection_range(0, tk.END)
+
+    window.after_idle(apply_focus)
 
 
 def _stable_id(label: str) -> str:

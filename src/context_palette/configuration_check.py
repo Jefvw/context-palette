@@ -6,7 +6,12 @@ import sys
 
 from .actions import Action, ActionError, load_combined_actions
 from .cheatsheets import CheatSheetError, load_cheatsheets
-from .command_surface import CommandGroup, CommandSurfaceError, load_combined_command_groups
+from .command_surface import (
+    CommandGroup,
+    CommandSurfaceError,
+    command_item_action_ids,
+    load_combined_command_groups,
+)
 from .contexts import ContextDefinition, ContextError, load_combined_contexts
 from .inbox import InboxError, load_inbox_items
 from .palette_state import PaletteState, load_palette_state
@@ -108,10 +113,7 @@ def _validate_action_references(
                 )
     for group in groups:
         for item in group.items:
-            references = ([item.primary_action_id] if item.primary_action_id else []) + list(
-                item.action_ids
-            )
-            for action_id in dict.fromkeys(references):
+            for action_id in command_item_action_ids(item):
                 if action_id not in action_ids:
                     errors.append(
                         f"Command item '{group.label} / {item.label}' references missing action: "

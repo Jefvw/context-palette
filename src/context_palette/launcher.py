@@ -41,6 +41,7 @@ from .command_surface import (
     CommandItem,
     CommandSurfaceError,
     command_configuration_paths,
+    command_item_action_ids,
     load_combined_command_groups,
 )
 from .configuration_window import ConfigurationWindow
@@ -910,7 +911,7 @@ class LauncherApp:
 
     def _primary_action_for_item(self, item: CommandItem) -> Action | None:
         actions_by_id = {action.id: action for action in self.actions}
-        for action_id in self._item_action_ids(item):
+        for action_id in command_item_action_ids(item):
             action = actions_by_id.get(action_id)
             if action is not None:
                 return action
@@ -945,7 +946,7 @@ class LauncherApp:
     def _show_item_menu(self, event: tk.Event, item: CommandItem) -> str:
         actions_by_id = {action.id: action for action in self.actions}
         menu = tk.Menu(self.root, tearoff=False)
-        for action_id in self._item_action_ids(item):
+        for action_id in command_item_action_ids(item):
             action = actions_by_id.get(action_id)
             if action is None:
                 continue
@@ -960,15 +961,6 @@ class LauncherApp:
         finally:
             menu.grab_release()
         return "break"
-
-    def _item_action_ids(self, item: CommandItem) -> list[str]:
-        return list(
-            dict.fromkeys(
-                action_id
-                for action_id in (item.primary_action_id, *item.action_ids)
-                if action_id
-            )
-        )
 
     def _action_storage_path(self, action: Action) -> Path:
         return self.local_actions_path if action.id in self.local_action_ids else self.actions_path
