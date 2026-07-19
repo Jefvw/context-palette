@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.actions import Action
 from context_palette.diagnostics import configure_logging
-from context_palette.launcher import LauncherApp
+from context_palette.launcher import LauncherApp, _warn_if_slow
 
 
 class FakeRoot:
@@ -53,6 +53,27 @@ class ImmediateThread:
 
 
 class PerformanceLifecycleTests(unittest.TestCase):
+    def test_slow_operation_warning_contains_only_safe_metrics(self):
+        with (
+            patch("context_palette.launcher.time.perf_counter", return_value=1.2),
+            patch("context_palette.launcher.LOGGER.warning") as warning,
+        ):
+            _warn_if_slow("result refresh", 1.0, 0.1, action_count=31)
+
+        warning.assert_called_once()
+        self.assertEqual(warning.call_args.args[1], "result refresh")
+        self.assertAlmostEqual(warning.call_args.args[2], 200.0)
+        self.assertEqual(warning.call_args.args[3], 31)
+
+    def test_fast_operation_does_not_write_performance_warning(self):
+        with (
+            patch("context_palette.launcher.time.perf_counter", return_value=1.05),
+            patch("context_palette.launcher.LOGGER.warning") as warning,
+        ):
+            _warn_if_slow("result refresh", 1.0, 0.1, action_count=31)
+
+        warning.assert_not_called()
+
     def test_unchanged_configuration_skips_full_reload(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

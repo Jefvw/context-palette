@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.actions import Action
-from context_palette.command_surface import CommandGroup, CommandItem
+from context_palette.command_surface import CommandGroup, CommandItem, CommandSurfaceError
 from context_palette.launcher import LauncherApp
 
 
@@ -55,6 +55,33 @@ class FakeMenu:
 
 
 class LauncherCommandSurfaceTests(unittest.TestCase):
+    def test_failed_reload_preserves_last_known_good_buttons(self):
+        app = self._app()
+        existing = CommandGroup(
+            "existing",
+            "Existing",
+            (CommandItem("button", "Button", primary_action_id="primary"),),
+        )
+        app.command_groups = [existing]
+        app.command_surface_path = Path("command_surface.json")
+        app.local_command_surface_path = Path("local_command_surface.json")
+        renders: list[bool] = []
+        app._render_command_surface = lambda: renders.append(True)
+
+        with (
+            patch(
+                "context_palette.launcher.load_combined_command_groups",
+                side_effect=CommandSurfaceError("invalid button file"),
+            ),
+            patch("context_palette.launcher.messagebox.showerror") as showerror,
+        ):
+            app._load_command_surface()
+
+        self.assertEqual(app.command_groups, [existing])
+        self.assertIn("kept 1 previous button", app.status_var.value)
+        self.assertEqual(renders, [True])
+        showerror.assert_called_once()
+
     def _app(self) -> LauncherApp:
         app = LauncherApp.__new__(LauncherApp)
         app.root = object()

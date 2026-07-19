@@ -52,6 +52,14 @@ Measured launcher import time on the development machine was approximately 93 ms
 - **Improvement:** require a complete HTTP(S) URL with a hostname and a valid snapshot-window object.
 - **Result:** snapshot launch metadata now matches ordinary URL safety expectations.
 
+### Real slowdowns were invisible
+
+- **Why it mattered:** the current search and slot calculation is fast, but future growth or machine-specific Tk rendering delays could not be distinguished from startup, configuration, or Windows integration problems.
+- **Estimated impact:** low runtime impact today; medium diagnostic value if responsiveness regresses.
+- **Measurement:** combined search and slot calculation took approximately 0.74 ms per iteration with 1,000 generated actions on the development machine, so no speculative data-path optimization was justified.
+- **Improvement:** warn in the bounded local diagnostic log when a complete result refresh exceeds 100 ms or a configuration reload exceeds 500 ms.
+- **Result:** genuine user-visible delays leave evidence with elapsed time and action count. Search text, action values, clipboard content, and other personal context are not logged.
+
 ## Reviewed and intentionally unchanged
 
 - **Database queries:** no database exists.
@@ -65,4 +73,4 @@ Measured launcher import time on the development machine was approximately 93 ms
 
 ## Verification
 
-Automated tests cover signature invalidation, search coalescing, background result queuing, bounded log rotation, URL validation, full launcher construction/close, and existing domain behavior. Manual Windows verification remains appropriate for responsiveness during a restore that must launch missing applications.
+Automated tests cover signature invalidation, search coalescing, slow-operation warning thresholds, background result queuing, bounded log rotation, URL validation, full launcher construction/close, and existing domain behavior. Manual Windows verification remains appropriate for responsiveness during a restore that must launch missing applications.

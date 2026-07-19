@@ -40,6 +40,23 @@ class WindowsScriptTests(unittest.TestCase):
         )
         self.assertIn("Run setup-context-palette.bat to repair it.", script)
 
+    def test_project_python_wrapper_sets_source_path_and_checks_environment(self) -> None:
+        script = (ROOT / "python-context-palette.bat").read_text(encoding="utf-8")
+
+        self.assertIn('cd /d "%~dp0"', script)
+        self.assertIn('set "PYTHONPATH=%CD%\\src;%PYTHONPATH%"', script)
+        environment_check = '".venv\\Scripts\\python.exe" -c "import sys, tkinter"'
+        project_check = '".venv\\Scripts\\python.exe" -c "import context_palette"'
+        self.assertIn(environment_check, script)
+        self.assertIn(project_check, script)
+        self.assertLess(script.index(environment_check), script.index(project_check))
+        self.assertIn("Run setup-context-palette.bat to repair it.", script)
+        self.assertIn(
+            "Run check-context-palette.bat and review the error above.", script
+        )
+        self.assertIn('".venv\\Scripts\\python.exe" %*', script)
+        self.assertIn("exit /b %errorlevel%", script)
+
 
 if __name__ == "__main__":
     unittest.main()

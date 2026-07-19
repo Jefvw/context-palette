@@ -37,6 +37,14 @@ From the repository root:
 
 Setup creates `.venv`, initializes missing personal data files from safe examples, verifies Tkinter, and runs the test suite. If a folder or Python move leaves `.venv` unusable, setup preserves it as `.venv-unusable` and creates a fresh environment.
 
+For project-aware Python commands, use `.\python-context-palette.bat` instead
+of invoking `.venv\Scripts\python.exe` directly. The wrapper makes the
+`src\context_palette` package available automatically; for example:
+
+```powershell
+.\python-context-palette.bat -m unittest tests.test_actions
+```
+
 After the application starts:
 
 1. Press `F9` to capture selected text and show the palette. Use `Ctrl+Alt+P` as the fallback shortcut.

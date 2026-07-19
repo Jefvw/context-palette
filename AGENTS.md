@@ -48,12 +48,14 @@ From the repository root:
 
 ```powershell
 .\setup-context-palette.bat
-.\.venv\Scripts\python.exe -m unittest discover tests
+.\python-context-palette.bat -m unittest discover tests
 .\run-context-palette.bat
 .\stop-context-palette.bat
 ```
 
 Use `.\check-context-palette.bat` for the complete configuration, compilation, and test check.
+Use `.\python-context-palette.bat` for targeted tests, benchmarks, and other
+project-module commands; it supplies the repository's `src` import path.
 
 ### Codex sandbox and Python
 

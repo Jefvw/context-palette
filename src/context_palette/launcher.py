@@ -5,6 +5,7 @@ import ctypes
 import logging
 import queue
 import threading
+import time
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 from typing import Callable
@@ -73,6 +74,26 @@ from .window_layouts import (
 
 LOGGER = logging.getLogger("context_palette.launcher")
 LOGGER.addHandler(logging.NullHandler())
+
+SLOW_RESULT_REFRESH_SECONDS = 0.100
+SLOW_CONFIGURATION_RELOAD_SECONDS = 0.500
+
+
+def _warn_if_slow(
+    operation: str,
+    started_at: float,
+    threshold_seconds: float,
+    *,
+    action_count: int,
+) -> None:
+    elapsed_seconds = time.perf_counter() - started_at
+    if elapsed_seconds >= threshold_seconds:
+        LOGGER.warning(
+            "Slow %s: elapsed_ms=%.1f action_count=%d",
+            operation,
+            elapsed_seconds * 1000,
+            action_count,
+        )
 
 
 def suggest_url_template(value: str) -> str:
@@ -800,10 +821,13 @@ class LauncherApp:
                 self.local_command_surface_path,
             )
         except CommandSurfaceError as exc:
-            self.command_groups = []
+            button_count = sum(len(group.items) for group in self.command_groups)
+            self.status_var.set(
+                f"Quick actions could not be loaded; kept {button_count} previous button(s)."
+            )
             messagebox.showerror(
                 "Quick actions could not be loaded",
-                f"{exc}\n\nThe searchable action list is still available. Correct the button configuration and reload.",
+                f"{exc}\n\nNo buttons were changed. Correct the button configuration and reload.",
                 parent=self.root,
             )
             LOGGER.exception("Quick-action configuration failed to load")
@@ -972,8 +996,15 @@ class LauncherApp:
                 self.local_contexts_path,
             )
         except ContextError as exc:
-            self.context_definitions = []
-            messagebox.showerror("Context Palette", str(exc))
+            self.status_var.set(
+                f"Contexts could not be loaded; kept {len(self.context_definitions)} previous context(s)."
+            )
+            messagebox.showerror(
+                "Contexts could not be loaded",
+                f"{exc}\n\nNo contexts were changed. Correct the context configuration and reload.",
+                parent=self.root,
+            )
+            LOGGER.exception("Context configuration failed to load")
 
     def _load_palette_state(self) -> None:
         try:
@@ -1008,12 +1039,23 @@ class LauncherApp:
 
     def _change_focus_context(self) -> None:
         context = self.context_var.get().strip() or "General"
-        self.palette_state = PaletteState(
+        previous_state = self.palette_state
+        updated_state = PaletteState(
             self.palette_state.pinned_action_ids,
             context,
             self.palette_state.context_slots,
         )
-        save_palette_state(self.palette_path, self.palette_state)
+        try:
+            save_palette_state(self.palette_path, updated_state)
+        except OSError as exc:
+            self.context_var.set(previous_state.focus_context)
+            self.status_var.set("Focus context was not changed because it could not be saved.")
+            messagebox.showerror(
+                "Context Palette",
+                f"Could not save the focus context.\n\n{exc}",
+            )
+            return
+        self.palette_state = updated_state
         self.configuration_signature_cache = self._configuration_signature()
         self._refresh_results()
         self.status_var.set(f"Focus context: {context}")
@@ -1025,6 +1067,7 @@ class LauncherApp:
             self.status_var.set(f"{context}: {definition.description}")
 
     def _refresh_results(self) -> None:
+        started_at = time.perf_counter()
         if self.search_refresh_after_id is not None:
             try:
                 self.root.after_cancel(self.search_refresh_after_id)
@@ -1086,6 +1129,12 @@ class LauncherApp:
                 f"{count} matches · slots 1–5 pinned · slots 6–9 {self.palette_state.focus_context}"
             )
         self._update_preview()
+        _warn_if_slow(
+            "result refresh",
+            started_at,
+            SLOW_RESULT_REFRESH_SECONDS,
+            action_count=len(self.actions),
+        )
 
     def _schedule_refresh_results(self) -> None:
         if self.search_refresh_after_id is not None:
@@ -1122,6 +1171,7 @@ class LauncherApp:
         self._reload()
 
     def _reload(self) -> None:
+        started_at = time.perf_counter()
         self.status_var.set("Refreshing actions, contexts, and buttons…")
         self.root.configure(cursor="wait")
         self.root.update_idletasks()
@@ -1134,6 +1184,12 @@ class LauncherApp:
             self.configuration_signature_cache = self._configuration_signature()
         finally:
             self.root.configure(cursor="")
+            _warn_if_slow(
+                "configuration reload",
+                started_at,
+                SLOW_CONFIGURATION_RELOAD_SECONDS,
+                action_count=len(self.actions),
+            )
 
     def _toggle_selected_pin(self) -> None:
         action = self._selected_action()
@@ -1141,14 +1197,24 @@ class LauncherApp:
             self.status_var.set("No action selected")
             return
         try:
-            self.palette_state = toggle_pin(self.palette_state, action.id)
-            save_palette_state(self.palette_path, self.palette_state)
-            self.configuration_signature_cache = self._configuration_signature()
-            self._refresh_results()
-            verb = "Pinned" if action.id in self.palette_state.pinned_action_ids else "Unpinned"
-            self.status_var.set(f"{verb}: {action.display_text}")
+            updated_state = toggle_pin(self.palette_state, action.id)
         except ActionError as exc:
             messagebox.showerror("Context Palette", str(exc))
+            return
+        try:
+            save_palette_state(self.palette_path, updated_state)
+        except OSError as exc:
+            self.status_var.set("Pin was not changed because it could not be saved.")
+            messagebox.showerror(
+                "Context Palette",
+                f"Could not save the pin change.\n\n{exc}",
+            )
+            return
+        self.palette_state = updated_state
+        self.configuration_signature_cache = self._configuration_signature()
+        self._refresh_results()
+        verb = "Pinned" if action.id in self.palette_state.pinned_action_ids else "Unpinned"
+        self.status_var.set(f"{verb}: {action.display_text}")
 
     def _execute_selected(self) -> None:
         action = self._selected_action()

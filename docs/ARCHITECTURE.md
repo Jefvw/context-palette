@@ -302,6 +302,10 @@ other rows  ordinary search matches
 
 Changing the focus context changes slots 6–9 only. Search always remains global.
 
+Focus and pin changes are applied in memory only after the updated palette state
+has been persisted successfully. A write failure keeps the prior state visible
+and reports the failure to the user.
+
 The longer-term context model includes identity, knowledge, capabilities, and optional activation, with one focus context and multiple supporting contexts.
 
 ## Storage
@@ -396,13 +400,18 @@ Tkinter widgets are only accessed from the main thread.
 
 Configuration reloads are skipped when active file existence, modification time, and size are unchanged. Typed search changes are coalesced over 40 ms before recalculating slots and rows.
 
-Action reload is transactional in memory: combined shared/local actions replace the active list only after complete validation succeeds. A failed external edit reports the error and retains the last successfully loaded actions.
+Configuration reload is transactional in memory: combined shared/local actions,
+contexts, and quick-action groups replace their active lists only after complete
+validation succeeds. A failed external edit reports the affected file and
+retains the last successfully loaded interface configuration.
 
 Window layout restore may wait briefly for launched windows to appear, but this no longer blocks Tk rendering or input. Only one window action runs at a time.
 
 ## Diagnostics
 
 The standard-library logging system writes bounded local diagnostics to ignored `data/context-palette.log`. The file rotates at 512 KB and keeps two backups. Logging setup failure does not prevent application startup. Clipboard and Input / Output contents are not written deliberately.
+
+Complete result refreshes slower than 100 ms and configuration reloads slower than 500 ms write a warning containing only elapsed time and action count. Search text and action content are deliberately excluded.
 
 ## Tooltips and Help
 

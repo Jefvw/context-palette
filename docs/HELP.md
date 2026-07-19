@@ -41,6 +41,10 @@ Focus and Find are compact one-line controls. Hover over or click their `?` butt
 - Slots `6–9` are the top four actions for the selected focus context.
 - An action may appear in both groups.
 
+Focus and pin changes are saved before they take effect. If the local palette
+file cannot be written, Context Palette keeps the previous selection and
+explains the problem instead of showing an unsaved change.
+
 ## Find and run actions
 
 Search matches Technology, Task, Context, Action name, type, and content.
@@ -243,7 +247,7 @@ Context Palette uses constrained action types. It does not execute arbitrary she
 
 ## Troubleshooting
 
-Configuration reloads show a brief busy cursor and status message. Because all configuration is local and normally loads in under a second, Context Palette does not show a spinner that would flicker during ordinary use. Errors identify the affected area and preserve the rest of the launcher where possible. If an edited action file is invalid, the last successfully loaded actions remain available while the file is corrected.
+Configuration reloads show a brief busy cursor and status message. Because all configuration is local and normally loads in under a second, Context Palette does not show a spinner that would flicker during ordinary use. Errors identify the affected area and preserve the rest of the launcher where possible. If an edited action, context, or right-side button file is invalid, its last successfully loaded configuration remains available while the file is corrected.
 
 For an intermittent startup, configuration, or window-restore problem, inspect `data/context-palette.log`. The local log is ignored by Git, rotates automatically, and does not deliberately record clipboard or Input / Output contents.
 

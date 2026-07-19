@@ -6,6 +6,7 @@ This project has not published a versioned release. Changes are recorded under *
 
 ### Added
 
+- Project-aware Python wrapper for reliable targeted tests, benchmarks, and module commands from the repository root, with distinct environment and source-import recovery guidance.
 - Guided configuration for personal actions of every built-in type, focus contexts, context slots, and right-side buttons.
 - Built-in action catalogue with examples and generated documentation.
 - Capture Inbox, Draft creation, editing, explicit trust promotion, cheat-sheet promotion, and attended AI proposal review.
@@ -16,6 +17,9 @@ This project has not published a versioned release. Changes are recorded under *
 
 ### Changed
 
+- Preserved last-known-good contexts and right-side buttons when edited configuration files fail validation.
+- Kept Focus and pin state consistent when palette persistence fails, with actionable feedback instead of an uncaught UI error.
+- Added privacy-safe warnings for genuinely slow result refreshes and configuration reloads.
 - Centralized quick-action primary/fallback ordering so execution, configuration, and validation cannot drift.
 - Added predictable initial keyboard focus to Configure and its action, context, and button dialogs.
 - Preserved last-known-good actions when an edited action file fails to reload.

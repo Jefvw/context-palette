@@ -34,14 +34,19 @@ when the normal Windows check also fails.
 Run one module while developing:
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest tests.test_actions
+.\python-context-palette.bat -m unittest tests.test_actions
 ```
 
 Run the entire suite directly:
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest discover tests
+.\python-context-palette.bat -m unittest discover tests
 ```
+
+The wrapper runs the project-local interpreter with `src` on Python's import
+path, so application modules work consistently from the repository root. It
+distinguishes an unusable Python environment (repair with setup) from a project
+import error (investigate with the complete check).
 
 Do not document a fixed test count; it changes as coverage grows.
 
