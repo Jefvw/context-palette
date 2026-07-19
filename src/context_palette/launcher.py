@@ -277,9 +277,10 @@ class LauncherApp:
 
         self._build_ui()
         self._load_actions()
-        self._load_command_surface()
+        self._load_command_surface(render=False)
         self._load_contexts()
-        self._load_palette_state()
+        self._load_palette_state(render=False)
+        self._render_command_surface()
         self._refresh_results()
         self.configuration_signature_cache = self._configuration_signature()
         if not self.instance_server.start():
@@ -1139,7 +1140,7 @@ class LauncherApp:
             )
             LOGGER.exception("Action configuration failed to load")
 
-    def _load_command_surface(self) -> None:
+    def _load_command_surface(self, *, render: bool = True) -> None:
         try:
             self.command_groups = load_combined_command_groups(
                 self.command_surface_path,
@@ -1156,7 +1157,8 @@ class LauncherApp:
                 parent=self.root,
             )
             LOGGER.exception("Quick-action configuration failed to load")
-        self._render_command_surface()
+        if render:
+            self._render_command_surface()
 
     def _render_command_surface(self) -> None:
         for tooltip in self.command_surface_tooltips:
@@ -1414,7 +1416,7 @@ class LauncherApp:
             )
             LOGGER.exception("Context configuration failed to load")
 
-    def _load_palette_state(self) -> None:
+    def _load_palette_state(self, *, render: bool = True) -> None:
         try:
             self.palette_state = load_palette_state(self.palette_path)
         except ActionError as exc:
@@ -1445,7 +1447,8 @@ class LauncherApp:
         self.available_context_names = contexts
         self.context_var.set(self.palette_state.focus_context)
         self._refresh_focus_controls()
-        self._render_command_surface()
+        if render:
+            self._render_command_surface()
 
     def _refresh_focus_controls(self) -> None:
         context = self.context_var.get().strip() or "General"
@@ -1773,9 +1776,10 @@ class LauncherApp:
         self.root.update_idletasks()
         try:
             self._load_actions()
-            self._load_command_surface()
+            self._load_command_surface(render=False)
             self._load_contexts()
-            self._load_palette_state()
+            self._load_palette_state(render=False)
+            self._render_command_surface()
             self._refresh_results()
             self.configuration_signature_cache = self._configuration_signature()
         finally:

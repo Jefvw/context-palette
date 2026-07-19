@@ -33,6 +33,8 @@ This project has not published a versioned release. Changes are recorded under *
 
 ### Changed
 
+- Reduced startup and explicit reload work from two complete Quick-action
+  widget rebuilds to one after command groups and pin state are both loaded.
 - Replaced the full-width action-search row with a focused Actions workspace:
   Find sits above the list and Passwords, Types, Run, and Help use a compact
   vertical tool rail.

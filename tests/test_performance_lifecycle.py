@@ -33,6 +33,9 @@ class FakeRoot:
     def configure(self, **options: str) -> None:
         self.configurations.append(options)
 
+    def update_idletasks(self) -> None:
+        pass
+
 
 class FakeVariable:
     def __init__(self) -> None:
@@ -101,6 +104,38 @@ class PerformanceLifecycleTests(unittest.TestCase):
 
         self.assertEqual(app.root.cancelled, [first_identifier])
         self.assertEqual(len(app.root.after_callbacks), 2)
+
+    def test_coordinated_reload_renders_quick_actions_once_after_state_load(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = FakeRoot()
+        app.status_var = FakeVariable()
+        app.actions = []
+        events: list[object] = []
+        app._load_actions = lambda: events.append("actions")
+        app._load_command_surface = (
+            lambda *, render=True: events.append(("commands", render))
+        )
+        app._load_contexts = lambda: events.append("contexts")
+        app._load_palette_state = (
+            lambda *, render=True: events.append(("palette", render))
+        )
+        app._render_command_surface = lambda: events.append("surface")
+        app._refresh_results = lambda: events.append("results")
+        app._configuration_signature = lambda: ()
+
+        app._reload()
+
+        self.assertEqual(
+            events,
+            [
+                "actions",
+                ("commands", False),
+                "contexts",
+                ("palette", False),
+                "surface",
+                "results",
+            ],
+        )
 
     def test_diagnostic_log_is_rotating_and_bounded(self):
         with tempfile.TemporaryDirectory() as directory:

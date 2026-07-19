@@ -10,6 +10,22 @@ Measured launcher import time on the development machine was approximately 93 ms
 
 ## Implemented findings
 
+### Coordinated loads rebuilt Quick actions twice
+
+- **Why it mattered:** startup and explicit configuration reload loaded command
+  groups and rendered their widgets before palette pins were available, then
+  palette loading immediately destroyed and rebuilt the same surface.
+- **Estimated impact:** low with the current 18 buttons, increasing with
+  personal Quick actions and direct password buttons because each pass creates
+  widgets, bindings, menus, and tooltips.
+- **Measurement:** code-path instrumentation and a regression test confirmed
+  two complete surface renders per coordinated load.
+- **Improvement:** command and palette loaders retain standalone rendering by
+  default, but coordinated startup/reload defers both and renders once after
+  all state is available.
+- **Result:** one complete Quick-action render per startup or reload instead of
+  two, without caching or changing error recovery.
+
 ### Unchanged dependencies were installed on every development check
 
 - **Why it mattered:** the single development entry point ran pip before every

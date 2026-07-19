@@ -435,6 +435,9 @@ Configuration reload is transactional in memory: combined shared/local actions,
 contexts, and quick-action groups replace their active lists only after complete
 validation succeeds. A failed external edit reports the affected file and
 retains the last successfully loaded interface configuration.
+Coordinated startup and reload defer command-surface rendering until both
+command groups and palette pin state are loaded, then build the Quick-action
+widgets once. Standalone loader calls keep immediate rendering by default.
 
 
 ## Diagnostics
