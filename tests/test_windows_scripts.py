@@ -42,6 +42,36 @@ class WindowsScriptTests(unittest.TestCase):
         self.assertIn('cd /d "%~dp0"', script)
         self.assertLess(script.index(setup), script.index(check))
 
+    def test_ci_runs_the_same_three_validation_phases_as_local_check(self) -> None:
+        local = (ROOT / "check-context-palette.bat").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "tests.yml").read_text(
+            encoding="utf-8"
+        )
+        install = (
+            "python -m pip install --disable-pip-version-check "
+            "-r requirements.txt"
+        )
+        phases = (
+            "python -m context_palette.configuration_check",
+            "python -m compileall -q src",
+            "python -m unittest discover tests",
+        )
+
+        self.assertIn('python-version-file: ".python-version"', workflow)
+        self.assertIn('$env:PYTHONPATH = "$PWD\\src"', workflow)
+        self.assertIn(install, workflow)
+        for local_command, ci_command in (
+            ("-m context_palette.configuration_check", phases[0]),
+            ("-m compileall -q src", phases[1]),
+            ("-m unittest discover tests", phases[2]),
+        ):
+            self.assertIn(local_command, local)
+            self.assertIn(ci_command, workflow)
+        self.assertLess(workflow.index(install), workflow.index(phases[0]))
+        self.assertLess(workflow.index(phases[0]), workflow.index(phases[1]))
+        self.assertLess(workflow.index(phases[1]), workflow.index(phases[2]))
+        self.assertEqual(workflow.count("if ($LASTEXITCODE -ne 0)"), 4)
+
     def test_setup_reinstalls_dependencies_only_when_requirements_change(self) -> None:
         script = (ROOT / "setup-context-palette.bat").read_text(encoding="utf-8")
 
@@ -56,6 +86,18 @@ class WindowsScriptTests(unittest.TestCase):
         self.assertIn(install, script)
         self.assertIn(record, script)
         self.assertLess(script.index(install), script.index(record))
+
+    def test_setup_migrates_retired_local_features_before_validation(self) -> None:
+        script = (ROOT / "setup-context-palette.bat").read_text(encoding="utf-8")
+
+        migration = (
+            '".venv\\Scripts\\python.exe" -m '
+            "context_palette.retired_feature_cleanup"
+        )
+        tests = '".venv\\Scripts\\python.exe" -m unittest discover tests'
+        self.assertIn('set "PYTHONPATH=%CD%\\src"', script)
+        self.assertIn(migration, script)
+        self.assertLess(script.index(migration), script.index(tests))
 
     def test_launcher_rejects_a_missing_or_unusable_environment(self) -> None:
         script = (ROOT / "run-context-palette.bat").read_text(encoding="utf-8")

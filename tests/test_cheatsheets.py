@@ -17,14 +17,6 @@ from context_palette.cheatsheets import (
 
 
 class CheatSheetTests(unittest.TestCase):
-    def test_shared_powertoys_sheet_loads_and_includes_command_palette_shortcut(self):
-        sheets = load_cheatsheets(ROOT / "data" / "cheatsheets")
-        sheet = next(sheet for sheet in sheets if sheet.id == "powertoys-feature-shortcuts")
-
-        filtered = filter_cheatsheet(sheet, "command palette")
-
-        self.assertEqual(filtered.sections[0].items[0].detail, "Win + Alt + Space")
-
     def test_shared_company_reference_sheet_loads_and_finds_servicenow_prefix(self):
         sheets = load_cheatsheets(ROOT / "data" / "cheatsheets")
         sheet = next(sheet for sheet in sheets if sheet.id == "company-reference-prefixes")

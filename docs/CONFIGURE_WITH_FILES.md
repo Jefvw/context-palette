@@ -166,4 +166,5 @@ Full format: `docs/COMMAND_SURFACE_CONFIGURATION.md`.
 
 - Keep internal URLs, local paths, and private identifiers in local files.
 - Keep shared files reviewable and portable.
-- Do not commit personal runtime files like `data/inbox.json`, `data/palette.json`, or snapshot data under `data/layouts/snapshots/`.
+- Do not commit personal runtime files like `data/inbox.json` or
+  `data/palette.json`.

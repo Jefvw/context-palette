@@ -58,30 +58,18 @@ Measured launcher import time on the development machine was approximately 93 ms
 - **Improvement:** coalesce typed changes over 40 ms. Context changes and explicit reloads stay immediate.
 - **Result:** fast typing causes one final redraw per short burst without perceptible search delay.
 
-### Window restore blocked the Tk thread
-
-- **Why it mattered:** missing-window matching can wait several seconds per launched target, freezing paint and input.
-- **Estimated impact:** high for incomplete layouts; none for ordinary actions.
-- **Improvement:** window layout/restore runs on one daemon worker. Results return through a queue drained by the existing main-thread poller. Concurrent restores are rejected with clear status.
-- **Result:** the palette remains responsive and all Tk access stays on the main thread.
-
 ### Failures had no durable diagnostic record
 
-- **Why it mattered:** intermittent configuration and restore failures were difficult to investigate after a dialog closed.
+- **Why it mattered:** intermittent configuration failures were difficult to investigate after a dialog closed.
 - **Estimated impact:** medium supportability impact; negligible runtime cost.
 - **Improvement:** standard-library rotating logging writes to ignored `data/context-palette.log`, capped at 512 KB with two backups. Logging failure never prevents startup.
 - **Result:** bounded local diagnostics without adding a dependency or logging clipboard/workspace contents.
 
-### Snapshot browser URL validation was incomplete
-
-- **Why it mattered:** prefix-only checking accepted malformed values such as `https://`.
-- **Estimated impact:** low likelihood, medium correctness/security value.
-- **Improvement:** require a complete HTTP(S) URL with a hostname and a valid snapshot-window object.
-- **Result:** snapshot launch metadata now matches ordinary URL safety expectations.
-
 ### Real slowdowns were invisible
 
-- **Why it mattered:** the current search and slot calculation is fast, but future growth or machine-specific Tk rendering delays could not be distinguished from startup, configuration, or Windows integration problems.
+- **Why it mattered:** the current search and slot calculation is fast, but
+  future growth or machine-specific Tk rendering delays could not be
+  distinguished from startup or configuration problems.
 - **Estimated impact:** low runtime impact today; medium diagnostic value if responsiveness regresses.
 - **Measurement:** combined search and slot calculation took approximately 0.74 ms per iteration with 1,000 generated actions on the development machine, so no speculative data-path optimization was justified.
 - **Improvement:** warn in the bounded local diagnostic log when a complete result refresh exceeds 100 ms or a configuration reload exceeds 500 ms.

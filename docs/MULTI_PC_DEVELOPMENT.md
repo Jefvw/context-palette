@@ -4,7 +4,9 @@ This guide explains how to develop and use Context Palette safely on multiple Wi
 
 ## Recommended repository visibility
 
-Use a private GitHub repository while the product and data-separation model are still evolving. Runtime snapshots and personal data are ignored now, but earlier local Git history must also be reviewed before the first push.
+Use a private GitHub repository while the product and data-separation model is
+still evolving. Personal data is ignored now, but earlier local Git history
+must also be reviewed before the first push.
 
 No open-source license has been selected yet. Keep the repository private, or choose and add an appropriate license before intentionally publishing it for public reuse.
 
@@ -21,7 +23,6 @@ No open-source license has been selected yet. Keep the repository private, or ch
    ```powershell
    git status --short
    git check-ignore data\inbox.json data\local_actions.json data\local_contexts.json data\local_command_surface.json data\palette.json data\context-palette.log
-   git check-ignore data\layouts\snapshots\example.json
    ```
 
 3. Review the complete history for previously committed private data before pushing.
@@ -48,7 +49,7 @@ No open-source license has been selected yet. Keep the repository private, or ch
    ```
 
 The development entry point creates or repairs `.venv`, copies safe local-data
-templates when needed, creates the snapshot directory, verifies Tkinter, and
+templates when needed, verifies Tkinter, and
 runs the canonical configuration, compilation, and test checks.
 
 ## Python environments and dependencies across computers
@@ -125,9 +126,14 @@ or points to an unavailable Python installation, run
 available `.venv-unusable*` name and creates a fresh one. Local Context Palette
 data is stored under `data`, not inside `.venv`, so rebuilding the environment
 does not remove Inbox items, private actions, contexts, buttons, pins, or
-snapshots. Setup adopts an existing unmarked environment once, then stores an
+local settings. Setup adopts an existing unmarked environment once, then stores an
 ignored repository-location marker inside `.venv` so subsequent folder copies
 are detected reliably.
+
+Setup and application startup also remove local actions and references that
+belong to deliberately retired features. These migrations are idempotent and
+use the normal atomic writer, so each changed personal JSON file retains its
+previous contents in the ignored adjacent `.bak` file.
 
 ## Shared versus local data
 
@@ -139,7 +145,6 @@ are detected reliably.
 - `data/contexts.json`: reviewed portable context definitions.
 - `data/cheatsheets`: reviewed shared cheat sheets.
 - `data/command_surface.json`: reviewed shared global quick-action groups.
-- `data/layouts` except snapshots: reviewed portable example layouts.
 - `data/*.example.json`: initial local-data templates.
 
 ### Local to each computer
@@ -149,7 +154,6 @@ are detected reliably.
 - `data/local_contexts.json`: personal or work-specific contexts.
 - `data/local_command_surface.json`: personal or machine-specific quick-action groups.
 - `data/palette.json`: pins, focus context, and per-PC slots.
-- `data/layouts/snapshots/`: window titles, paths, URLs, and monitor layouts.
 - `data/context-palette.log*`: bounded local diagnostics.
 - `.venv`: the local Python environment.
 
@@ -180,7 +184,8 @@ If an application is installed differently on each computer, keep that action in
 
 ## Sharing an action intentionally
 
-New Inbox, snapshot, and cheat-sheet promotion actions are written to `data/local_actions.json` by default.
+New Inbox and cheat-sheet promotion actions are written to
+`data/local_actions.json` by default.
 
 To share one across computers:
 
@@ -206,10 +211,13 @@ Ask assistants to:
 
 ## GitHub Actions
 
-`.github/workflows/tests.yml` reads `.python-version` and runs the unit suite on
-Windows for pushes and pull requests. This verifies portable code paths but does
-not replace manual testing of global hotkeys, Tk focus, application launching,
-window placement, and multi-monitor behavior.
+`.github/workflows/tests.yml` reads `.python-version`, installs the tracked
+requirements, and runs the same configuration validation, source compilation,
+and unit-test phases as the local complete check on Windows for pushes and pull
+requests. This verifies dependency declarations, portable code paths, and
+shared configuration references but does not replace manual testing of global
+hotkeys, Tk focus, application launching, window placement, and multi-monitor
+behavior.
 
 ## Suggested daily workflow
 

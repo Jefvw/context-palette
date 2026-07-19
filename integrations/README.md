@@ -1,6 +1,8 @@
-# Windows automation integrations
+# Power Automate Desktop integration
 
-Context Palette exposes a small, safe command-line surface for Power Automate Desktop and PowerToys. It only shows and filters the palette; it cannot execute arbitrary commands or silently run an action.
+Context Palette exposes a small, safe command-line surface for Power Automate
+Desktop. It only shows and filters the palette; it cannot execute arbitrary
+commands or silently run an action.
 
 This is the project’s only supported external integration API. The accepted fields and security boundary are also described in [Architecture](../docs/ARCHITECTURE.md).
 
@@ -44,33 +46,14 @@ Recommended first flows:
 
 Do not automate clicks by row position: search results and numbered context slots can change. A future explicit action-ID API should require Trusted state, confirmation policy, result reporting, and tests before unattended execution is enabled.
 
-## PowerToys Keyboard Manager
-
-Context Palette already owns `Ctrl+Alt+P`. Use Keyboard Manager only to map another convenient shortcut to `Ctrl+Alt+P`; this preserves selected-text capture. Avoid assigning the same shortcut in both products.
-
-Keyboard Manager cannot reliably launch a batch file directly in every version. When a launch target is needed, create a normal Windows shortcut to `run-context-palette.bat`, give that shortcut a Windows shortcut key, and remap to it. Keep `Ctrl+Alt+P` as the canonical app hotkey.
-
-## PowerToys Workspaces
-
-Add Context Palette to a PowerToys Workspace by selecting the running app, or configure the workspace to start `run-context-palette.bat`. Context Palette itself should normally remain resident and does not need a fixed large window position.
-
-Use Context Palette's own `window_layout` and snapshot actions for task-specific layouts. PowerToys Workspaces is best for a broad machine workspace; Context Palette is best for context-specific opening, filtering, and later restoration.
-
-## PowerToys Run plug-in boundary
-
-A native PowerToys Run plug-in would require a separately built and version-matched .NET component. It is intentionally not a dependency of the portable Tkinter app. If later justified, the plug-in should be a thin optional adapter that calls this constrained bridge and is packaged independently.
-
 ## Manual integration check
 
 1. Start Context Palette normally.
 2. Run `integrations\Invoke-ContextPalette.ps1 -Context "General" -Search "date"`.
 3. Confirm the existing instance appears, `General` is focused, and search contains `date`.
 4. Run it with a nonexistent context and confirm no context changes and a status message appears.
-5. Map a spare PowerToys shortcut to `Ctrl+Alt+P` and confirm selected text still reaches Input / Output.
 
 ## Working examples
 
 - `examples/power-automate`: a directly runnable Tijdsregistratie PAD target.
-- `examples/powertoys-keyboard-manager`: selection-preserving remap and Start App examples.
-- `examples/powertoys-workspaces`: a dummy Tijdsregistratie workspace with browser and optional Outlook.
 - `examples/Test-IntegrationExamples.ps1`: syntax-checks every example without opening applications.

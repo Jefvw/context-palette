@@ -38,8 +38,6 @@ ACTION_TYPE_EXAMPLES = {
     "build_url_open": "Example: Ask for ABC 123 and open its generated website address.",
     "build_url_selection_open": "Example: Use selected text ABC 123, copy its URL, and open it.",
     "transform_list_csv": "Example: Convert three input lines into red, green, blue.",
-    "window_layout": "Example: Open and arrange reviewed Explorer folders across monitors.",
-    "restore_window_snapshot": "Example: Restore a personally captured writing workspace.",
 }
 
 
@@ -587,8 +585,6 @@ class ActionDraftDialog:
             "open_folder": "Folder path", "launch_app": "Application .exe path",
             "paste_credential": "Exact Windows or generic credential target name",
             "transform_list_csv": "Conversion mode: csv or sql_strings",
-            "window_layout": "Layout JSON path",
-            "restore_window_snapshot": "Snapshot JSON path",
         }.get(action_type, "Saved text or URL template")
         ttk.Label(outer, text=label).pack(anchor=tk.W, pady=(8, 0))
         self.value = tk.Text(outer, height=7, wrap=tk.WORD, undo=True)

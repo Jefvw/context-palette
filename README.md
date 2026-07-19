@@ -16,7 +16,6 @@ The application is under active development. It already supports the complete Ca
 - Captures clipboard material into an Inbox and converts it into Draft actions.
 - Supports attended, schema-validated AI proposals for selected action types.
 - Searches cheat sheets and promotes entries to Draft actions.
-- Captures and restores Windows layouts with documented limitations.
 - Stores personal data locally and writes application-managed JSON atomically.
 
 ## Requirements
@@ -107,7 +106,6 @@ Portable, reviewed examples are tracked:
 | `data/contexts.json` | Shared context definitions |
 | `data/command_surface.json` | Shared right-side button groups |
 | `data/cheatsheets/*.json` | Shared reference sheets |
-| `data/layouts/*.json` | Shared hand-authored layouts |
 
 Personal and runtime files are ignored by Git:
 
@@ -118,7 +116,6 @@ Personal and runtime files are ignored by Git:
 | `data/local_command_surface.json` | Personal right-side buttons |
 | `data/inbox.json` | Captured material |
 | `data/palette.json` | Focus, pins, and per-machine slot choices |
-| `data/layouts/snapshots/` | Captured window metadata |
 | `data/context-palette.log*` | Bounded local diagnostics |
 
 Use **Configure** for ordinary personal configuration. The JSON guides are intended for advanced editing, review, and automation:
@@ -129,7 +126,7 @@ Use **Configure** for ordinary personal configuration. The JSON guides are inten
 - [Cheat-sheet format](docs/CHEATSHEET_FORMAT.md)
 - [Complete file-based configuration](docs/CONFIGURE_WITH_FILES.md)
 
-Never publish runtime files without a deliberate privacy review. Snapshots can contain executable paths, window titles, and URLs.
+Never publish runtime files without a deliberate privacy review.
 
 ## Verification
 
@@ -149,7 +146,7 @@ The supported external bridge can show the resident palette and optionally selec
 .\integrations\Invoke-ContextPalette.ps1 -Context "Database" -Search "SQL"
 ```
 
-It cannot execute an action. See [Windows integrations](integrations/README.md) for the protocol boundary and Power Automate/PowerToys examples.
+It cannot execute an action. See [Power Automate Desktop integration](integrations/README.md) for the protocol boundary and example.
 
 ## Documentation
 

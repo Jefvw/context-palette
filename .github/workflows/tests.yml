@@ -16,6 +16,15 @@ jobs:
         with:
           python-version-file: ".python-version"
 
-      - name: Run unit tests
+      - name: Run complete project check
         shell: pwsh
-        run: python -m unittest discover tests
+        run: |
+          $env:PYTHONPATH = "$PWD\src"
+          python -m pip install --disable-pip-version-check -r requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m context_palette.configuration_check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m compileall -q src
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -19,7 +19,6 @@ Context Palette helps a Windows user capture useful material, turn it into a con
 | Protected credential paste | Implemented with limitations | Exact standard Windows or generic credential target; Trusted, confirmed, hotkey-originated paste only |
 | Input / Output transformations | Implemented | Selection or full field; result copied |
 | Cheat sheets and promotion | Implemented | Structured local JSON sheets |
-| Window layouts and snapshots | Implemented with limitations | Best-effort process/window matching; no generic document/tab recovery |
 | Attended AI assistance | Partial | Manual clipboard handoff; `copy_text` and `open_url` proposals only |
 | Context model | Partial | Explicit focus, metadata, preferred actions; no supporting-context composition or activation bundle |
 | External automation | Partial by design | Show/context/search only; no action execution API |
@@ -61,7 +60,6 @@ The MVP:
 - Arbitrary scripts, loops, conditions, or unattended workflows.
 - Automatic application-aware context switching.
 - Exact restoration of unsaved documents, browser history, or tab groups.
-- A native PowerToys Run plug-in.
 - Third-party UI or persistence frameworks.
 
 See [Roadmap](ROADMAP.md) for proposed outcomes and [Backlog](../BACKLOG.md) for actionable tasks.

@@ -1,5 +1,22 @@
 # Decisions
 
+## 2026-07-19 - Remove window restoration and PowerToys integration
+
+**Decision:** Remove `window_layout` and `restore_window_snapshot` actions,
+snapshot capture/restore UI, native layout code, shared layout configuration,
+and PowerToys-specific examples and reference material. Retain the constrained
+show/context/search bridge for Power Automate Desktop.
+
+**Reason:** Window restoration and PowerToys integration are no longer desired
+product responsibilities. Removing their complete implementation and
+configuration surface reduces platform-specific complexity and keeps Context
+Palette focused on quickly finding and running repeated actions.
+
+**Consequences:** Existing ignored snapshot files are not deleted, but Context
+Palette no longer reads, creates, validates, or restores them. Historical
+decision entries below describe the former implementation and are superseded by
+this decision.
+
 ## 2026-07-19 - Track the Python family, not the virtual environment
 
 **Decision:** Declare the supported Python family in `.python-version`, keep

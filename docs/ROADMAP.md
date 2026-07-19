@@ -12,16 +12,14 @@ The roadmap describes ordered product outcomes, not commitments or implemented b
 ## Next — deepen safe context workflows
 
 - Add richer context composition and ranking while preserving explicit focus and global search.
-- Improve snapshot selection, launch-target editing, and recovery reporting.
 - Design clipboard preservation/restoration as an explicit transaction with tests.
 - Design a small previewable linear sequence model; no loops, conditions, or arbitrary commands.
 - Expand AI-proposable action types only where type-specific validation and review are adequate.
 
-## Later — optional adapters and richer actions
+## Later — richer actions
 
 - Application-aware context suggestions that never switch focus silently.
 - Rich text, HTML, image, and character-picker actions with explicit clipboard behavior.
-- Optional adapters such as a separately packaged PowerToys Run plug-in.
 - A guarded action-ID automation API only after Trusted authorization, confirmation policy, structured results, and security tests exist.
 
 ## Explicit non-goals

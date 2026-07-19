@@ -41,7 +41,6 @@ Actions still carry their own `context` facet, so they remain globally searchabl
 | Turn lines into query values | `transform_list_csv` |
 | Reusable editable form | `workspace_template` |
 | Open a reviewed target | `open_url`, `open_file`, `open_folder`, `launch_app` |
-| Prepare or restore windows | `window_layout`, `restore_window_snapshot` |
 
 See [Action types](ACTION_TYPES.md) for fields and examples.
 

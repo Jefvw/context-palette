@@ -88,7 +88,7 @@ class SingleInstanceTests(unittest.TestCase):
             def sendall(self, message):
                 sent.append(message)
 
-        request = {"command": "show", "search": "window layout"}
+        request = {"command": "show", "search": "SQL template"}
         with patch("context_palette.single_instance.socket.create_connection", return_value=FakeClient()):
             self.assertTrue(notify_existing_instance(request=request))
         self.assertEqual(decode_request(sent[0]), request)

@@ -576,27 +576,6 @@ class ActionTests(unittest.TestCase):
         self.assertEqual(copied, output)
         self.assertRegex(output[0], r"Date: \d{4}")
 
-    def test_window_layout_action_uses_constrained_runner(self):
-        received = []
-        action = Action("layout", "Arrange", "Developing", "window_layout", "layout.json")
-
-        message = execute_action(action, window_layout_runner=lambda value: received.append(value) or "Done")
-
-        self.assertEqual(received, ["layout.json"])
-        self.assertEqual(message, "Done")
-
-    def test_window_snapshot_action_uses_constrained_runner(self):
-        received = []
-        action = Action("snapshot", "Restore", "Work", "restore_window_snapshot", "snapshot.json")
-
-        message = execute_action(
-            action,
-            window_snapshot_runner=lambda value: received.append(value) or "Restored",
-        )
-
-        self.assertEqual(received, ["snapshot.json"])
-        self.assertEqual(message, "Restored")
-
     def test_append_draft_copy_text_action(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "actions.json"

@@ -35,10 +35,7 @@ Never commit personal/runtime data:
 - `data/local_command_surface.json`
 - `data/local_contexts.json`
 - `data/palette.json`
-- `data/layouts/snapshots/`
 - `data/context-palette.log*`
-
-Snapshots can contain window titles, executable paths, URLs, and other private working context.
 
 Do not move local user data into tracked examples without explicit user approval and a privacy review.
 

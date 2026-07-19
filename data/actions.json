@@ -285,16 +285,6 @@
       "state": "Draft"
     },
     {
-      "id": "developing-arrange-three-explorers",
-      "title": "Arrange three Explorer windows",
-      "context": "Developing Context Palette",
-      "technology": "Windows Explorer / Win32",
-      "task": "Configure workspace",
-      "type": "window_layout",
-      "value": "data/layouts/three-explorers.json",
-      "state": "Draft"
-    },
-    {
       "id": "draft-8ed62547f42e",
       "title": "w11 shortuts",
       "context": "win11",

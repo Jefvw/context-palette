@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-import queue
 import sys
 import tempfile
 import unittest
@@ -13,7 +12,6 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from context_palette.actions import Action
 from context_palette.diagnostics import configure_logging
 from context_palette.launcher import LauncherApp, _warn_if_slow
 
@@ -42,14 +40,6 @@ class FakeVariable:
 
     def set(self, value: str) -> None:
         self.value = value
-
-
-class ImmediateThread:
-    def __init__(self, *, target, **_options) -> None:
-        self.target = target
-
-    def start(self) -> None:
-        self.target()
 
 
 class PerformanceLifecycleTests(unittest.TestCase):
@@ -111,32 +101,6 @@ class PerformanceLifecycleTests(unittest.TestCase):
 
         self.assertEqual(app.root.cancelled, [first_identifier])
         self.assertEqual(len(app.root.after_callbacks), 2)
-
-    def test_window_action_runs_on_worker_and_queues_result(self):
-        app = LauncherApp.__new__(LauncherApp)
-        app.root = FakeRoot()
-        app.status_var = FakeVariable()
-        app.window_action_results = queue.Queue()
-        app.window_action_in_progress = False
-        app._run_window_layout = lambda _value: "arranged"
-        app._run_window_snapshot = lambda _value: "restored"
-        action = Action(
-            id="layout",
-            title="Arrange workspace",
-            context="Developing",
-            type="window_layout",
-            value="layout.json",
-        )
-
-        with (
-            patch("context_palette.launcher.threading.Thread", ImmediateThread),
-            patch("context_palette.launcher.execute_action", return_value="Layout complete"),
-        ):
-            app._execute_window_action_async(action)
-
-        self.assertTrue(app.window_action_in_progress)
-        self.assertEqual(app.window_action_results.get_nowait(), (True, "Layout complete"))
-        self.assertIn("remains responsive", app.status_var.value)
 
     def test_diagnostic_log_is_rotating_and_bounded(self):
         with tempfile.TemporaryDirectory() as directory:

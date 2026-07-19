@@ -15,8 +15,6 @@ This overview is generated from `context_palette.action_types`, the shared sourc
 | `build_url_open` | Build and open a URL | URL builder | Prompts for an identifier or value. | Opens the complete URL without copying it. | Portable when the URL template is suitable for sharing. | Not yet |
 | `build_url_selection_open` | Build a URL from selected text | URL builder | Reads selected text, Input / Output, or clipboard text. | Copies and opens the complete URL. | Portable when the URL template is suitable for sharing. | Not yet |
 | `transform_list_csv` | Convert lines to a list | Transformation | Reads Input / Output text. | Replaces Input / Output and clipboard text. | Portable; operation is constrained by the application. | Not yet |
-| `window_layout` | Arrange a window layout | Window management | Reads a reviewed layout JSON file. | Opens and positions configured windows. | Portable only when its target paths are portable. | Not yet |
-| `restore_window_snapshot` | Restore a window snapshot | Window management | Reads a local snapshot containing window metadata. | Matches, starts, and positions restorable windows. | Local and potentially private; snapshots are never shared by default. | Not yet |
 
 ## AI guidance boundary
 

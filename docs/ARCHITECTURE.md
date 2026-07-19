@@ -96,11 +96,24 @@ The catalogue renders `docs/ACTION_TYPES.md`; an automated test requires the use
 
 Owns JSON replacement for application-written data. It serializes to a temporary sibling file, flushes it to disk, preserves the previous destination as `<name>.bak`, and uses `os.replace` so readers see either the previous complete file or the new complete file. Temporary and backup files are ignored by Git because they can contain private runtime data.
 
-Actions, Inbox state, palette state, captured snapshots, and snapshot launch-target edits use this single writer.
+Actions, Inbox state, and palette state use this single writer.
 
 ### `configuration_check.py`
 
-Provides a read-only project validation report and command-line exit status. It reuses the existing action, context, command-surface, Inbox, palette, cheat-sheet, and window-layout loaders, then verifies that context, command-surface, and palette action references resolve. `check-context-palette.bat` runs this validation before source compilation and the complete unit suite.
+Provides a read-only project validation report and command-line exit status. It
+reuses the existing action, context, command-surface, Inbox, palette, and
+cheat-sheet loaders, then verifies that context, command-surface, and palette
+action references resolve. `check-context-palette.bat` runs this validation
+before source compilation and the complete unit suite.
+
+### `retired_feature_cleanup.py`
+
+Owns narrow, idempotent migrations for deliberately removed local features.
+Setup and application startup remove retired action records and their references
+from ignored local actions, contexts, quick buttons, and palette state. Every
+changed file is written through `persistence.py`, preserving its previous
+contents as an ignored `.bak`. The migration stores and logs aggregate counts
+only; it does not inspect credential secrets or delete legacy snapshot files.
 
 ### `configuration_window.py` and `configuration_data.py`
 
@@ -162,8 +175,6 @@ Resident-process coordination through a localhost socket.
 
 `main.py` accepts optional `--context` and `--search` arguments. `integrations/Invoke-ContextPalette.ps1` provides the parameterized wrapper for Power Automate Desktop; the ordinary batch launcher remains argumentless.
 
-PowerToys Keyboard Manager can remap a shortcut to the canonical `Ctrl+Alt+P` hotkey, preserving selection capture. PowerToys Workspaces can start the ordinary launcher. A native PowerToys Run plug-in remains separate because it would introduce a version-specific .NET build and packaging surface.
-
 The bridge is attended by design: it may reveal and filter the palette but cannot run an action by ID. Any future unattended execution API requires a Trusted-action policy, confirmation rules, structured results, and separate security tests.
 
 ### `inbox.py`
@@ -204,19 +215,6 @@ standard-library `ctypes`.
 - Never enumerates credentials, writes credentials, logs passwords, or exposes
   passwords to action JSON, Input / Output, preview, search, or AI guidance.
 
-### `window_layouts.py`
-
-Native Windows monitor, window-layout, and snapshot support using `ctypes`.
-
-- Detects monitor work areas with `EnumDisplayMonitors`.
-- Opens and positions configured Explorer windows with `SetWindowPos`.
-- Stores relative coordinates rather than fixed pixels.
-- Captures ordinary visible, non-minimized application windows.
-- Matches snapshots by executable, native window class, and title preference.
-- Restarts missing ordinary desktop applications when possible.
-- Restores foreground state.
-- Uses explicit saved browser URLs when provided.
-
 ## Action model
 
 An action currently contains:
@@ -256,7 +254,11 @@ Search indexes title, technology, task, context, type, value, and maturity state
 
 This separation allows visual simplification without losing retrieval power.
 
-The main window defaults to `780x600` with a `700x480` minimum. A responsive horizontal paned area gives the left half to command-first search results and the right half to the global quick-action surface. Both panes expose headings and live counts. Management buttons use a compact five-column, two-row grid so every function remains visible.
+The main window defaults to `780x600` with a `700x480` minimum. A responsive
+horizontal paned area gives the left half to command-first search results and
+the right half to the global quick-action surface. Both panes expose headings
+and live counts. Management buttons use a compact grid so every function
+remains visible.
 
 Each group renders as a subarea containing multiple compact labels. Left-click opens the owning command-surface JSON plus the corresponding shared/local action JSON. Right-click exposes the item's action-ID list through the same `_execute_action` path used by selected and numbered actions.
 
@@ -277,8 +279,6 @@ The current allow-list includes:
 - `build_url_selection_open`
 - `transform_list_csv`
 - `workspace_template`
-- `window_layout`
-- `restore_window_snapshot`
 
 Action types that cause external effects use constrained implementations.
 `launch_app`, for example, accepts an existing absolute `.exe`, fixed argument
@@ -350,7 +350,8 @@ The shared file contains portable global quick-action groups. The ignored local 
 
 ### `data/local_actions.json`
 
-Ignored personal and machine-specific actions. New Inbox conversions, cheat-sheet promotions, and snapshots are written here by default.
+Ignored personal and machine-specific actions. New Inbox conversions and
+cheat-sheet promotions are written here by default.
 
 ### `data/inbox.json`
 
@@ -364,51 +365,7 @@ Ignored per-machine focus context, pinned IDs, and explicit context slot IDs.
 
 Structured reference sheets.
 
-### `data/layouts/*.json`
-
-Hand-authored relative window layouts.
-
-### `data/layouts/snapshots/*.json`
-
-Captured window situations, including local executable paths, titles, monitor placement, foreground metadata, and optional launch URLs.
-
-Snapshots are ignored because they may contain private local working information.
-
 Safe initial structures are tracked as `data/*.example.json` and copied by `setup-context-palette.bat`.
-
-## Window layout details
-
-### Monitor ordering
-
-Monitor index `0` is the primary monitor. Remaining monitors are ordered by desktop coordinates.
-
-### Relative placement
-
-Positions use values from 0 to 1 within a monitor's usable work area:
-
-```json
-{
-  "monitor": 1,
-  "x": 0,
-  "y": 0.5,
-  "width": 1,
-  "height": 0.5
-}
-```
-
-This means bottom half of the second monitor.
-
-### Snapshot limitations
-
-Standard Win32 enumeration exposes window titles, classes, processes, and rectangles, but not a reliable browser-tab URL or unsaved document state.
-
-Consequences:
-
-- Browser launch URLs are explicit user-provided metadata.
-- Browser history and tab groups are not reconstructed.
-- Packaged/protected applications may not start from captured executable paths.
-- Changed titles use executable/class fallback matching, which can swap similar browser windows.
-- Full background Z-order is not yet restored.
 
 ## Threading and responsiveness
 
@@ -416,7 +373,6 @@ Tkinter widgets are only accessed from the main thread.
 
 - The hotkey message loop runs in a daemon thread and writes a lightweight queue message.
 - The single-instance listener also signals through a queue.
-- Explicit window layout and snapshot restores run on one daemon worker because missing-window matching may take seconds. Results return through a queue and are presented by the Tk main thread.
 - The Tk main loop polls requests every 100 ms.
 - No database, network service, web frontend, or heavy UI framework is initialized.
 
@@ -427,7 +383,6 @@ contexts, and quick-action groups replace their active lists only after complete
 validation succeeds. A failed external edit reports the affected file and
 retains the last successfully loaded interface configuration.
 
-Window layout restore may wait briefly for launched windows to appear, but this no longer blocks Tk rendering or input. Only one window action runs at a time.
 
 ## Diagnostics
 
@@ -456,7 +411,7 @@ Detailed help is stored once in `docs/HELP.md` and displayed by the in-app searc
 - Keep API keys out of version-controlled files.
 - Never enumerate or write Windows credentials. Credential actions store only
   exact target names and are unavailable to AI proposal and external execution paths.
-- Require explicit user action for launches, window restoration, trust promotion, and browser URL metadata.
+- Require explicit user action for launches and trust promotion.
 - Treat captured text and AI responses as untrusted data. AI requests are previewed and copied manually; responses must pass the versioned proposal schema and existing action validation before selected proposals become local Drafts.
 
 ## Testing strategy
@@ -467,9 +422,8 @@ Tests use `unittest` and focus on pure or callback-injected behavior.
 - Inbox and cheat-sheet persistence.
 - Slot calculation and palette-state persistence.
 - Hotkey constants and single-instance behavior.
-- Window-layout schema selection and snapshot matching.
 
-External UI and Windows behavior also require documented manual tests. Current manually verified behavior includes two-monitor Explorer placement and snapshot capture/restore round trips.
+External UI and Windows behavior also require documented manual tests.
 
 Run:
 
@@ -505,10 +459,9 @@ When adding context behavior:
 
 ## Known architectural next steps
 
-- Extract secondary Inbox, Draft, sheet, and snapshot views from `launcher.py` without changing behavior.
+- Extract secondary Inbox, Draft, and sheet views from `launcher.py` without changing behavior.
 - Add supporting-context composition and weighted ranking.
 - Design safe linear action sequences and clipboard transactions as explicit, previewable models.
-- Improve snapshot selection and launch-target editing.
 - Consider optional application-aware context suggestions that never switch focus silently.
 - Add rich HTML and image actions only with explicit clipboard semantics.
 

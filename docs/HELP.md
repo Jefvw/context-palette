@@ -1,6 +1,7 @@
 # Context Palette Help
 
-Context Palette is a fast, portable Windows launcher for reusable actions, working contexts, captured material, transformations, and workspace layouts.
+Context Palette is a fast, portable Windows launcher for reusable actions,
+working contexts, captured material, and transformations.
 
 The interface uses a clean neutral surface with Segoe UI typography and a high-contrast dark teal accent. Teal is reserved for primary actions and active selections. Two light teal row shades distinguish pinned and focus-context slots, while slot numbers preserve the same meaning without relying on color alone. Native focus borders make keyboard location visible.
 
@@ -8,7 +9,7 @@ Developers can find the current implementation architecture in `docs/ARCHITECTUR
 
 Multi-PC cloning, GitHub publishing, portable paths, and shared/local data are documented in `docs/MULTI_PC_DEVELOPMENT.md`.
 
-Power Automate Desktop and PowerToys setup is documented in `integrations/README.md`.
+Power Automate Desktop setup is documented in `integrations/README.md`.
 
 ## Open and close the palette
 
@@ -77,7 +78,9 @@ The right half contains global configurable subareas. Each subarea contains mult
 
 Click **Configure** beside the Focus selector for the guided personal-configuration workspace:
 
-- **Actions:** edit every kind of personal action, including URLs, files, folders, applications, transformations, layouts, and snapshots. Shared actions remain read-only.
+- **Actions:** edit every kind of personal action, including URLs, files,
+  folders, applications, credentials, URL builders, and transformations.
+  Shared actions remain read-only.
 - **Built-in action types:** inspect what each built-in type reads and does, see a concrete example, then create a validated personal Draft.
 - **Contexts:** add or edit personal contexts and assign actions to slots 6–9.
 - **Right-side buttons:** add or edit personal button groups and assign existing actions. Technical IDs are generated automatically and are not shown in the normal form.
@@ -131,10 +134,6 @@ Executes the highlighted action. The exact effect appears in the bottom communic
 ### Capture
 
 Copies current clipboard text into the Inbox after asking for a title. Captures are stored locally in `data/inbox.json`.
-
-### Snapshot
-
-Records visible, non-minimized application windows, monitors, relative positions, foreground state, and optional browser launch URLs. It creates a Draft restore action in the current focus context.
 
 ### Inbox
 
@@ -247,7 +246,7 @@ To paste:
 The password is retrieved only after confirmation. It is placed temporarily on
 a Windows clipboard item marked to stay out of clipboard history and cloud
 sync, then cleared after 15 seconds if no other program replaced the clipboard.
-It is never placed in Input / Output, previews, action files, logs, snapshots,
+It is never placed in Input / Output, previews, action files, or logs,
 or AI prompts. The prior clipboard is not restored.
 
 Credential paste is unavailable after an ordinary launcher/external show
@@ -255,12 +254,6 @@ request because that route has no fresh destination window. Credential actions
 cannot run as Drafts and are not AI-proposable. Windows Credential Manager
 protects storage at rest, but this feature cannot protect against malicious
 software already running as the same Windows user.
-
-## Window layouts and snapshots
-
-Configured `window_layout` actions can open Explorer folders and position them across detected screens. Relative coordinates allow layouts to adapt to screen resolution.
-
-`Snapshot` captures an existing window situation. Restore first matches open windows by executable, native window class, and title. Missing ordinary desktop applications are started when possible. Explicit browser launch URLs reopen missing browser windows. Exact unsaved document state and browser history cannot be reconstructed generically.
 
 ## Product and reference lookups
 
@@ -284,7 +277,6 @@ The `Company Reference Prefixes` sheet documents known Archive and ServiceNow pr
 - `data/local_contexts.json`: ignored personal context definitions.
 - `data/local_command_surface.json`: ignored personal right-side buttons.
 - `data/cheatsheets`: reviewed cheat sheets shared through Git.
-- `data/layouts`: configured layouts and captured snapshots.
 - `data/context-palette.log*`: ignored bounded local diagnostics.
 
 When Context Palette updates a JSON file, it writes and flushes a temporary sibling before replacing the destination. If a previous destination existed, it is preserved beside the file with `.bak` appended. Backup and temporary files are local and ignored by Git because they can contain private data.
@@ -309,7 +301,10 @@ passwords, whitespace in the hostname area, or ambiguous backslashes are rejecte
 
 Configuration reloads show a brief busy cursor and status message. Because all configuration is local and normally loads in under a second, Context Palette does not show a spinner that would flicker during ordinary use. Errors identify the affected area and preserve the rest of the launcher where possible. If an edited action, context, or right-side button file is invalid, its last successfully loaded configuration remains available while the file is corrected.
 
-For an intermittent startup, configuration, or window-restore problem, inspect `data/context-palette.log`. The local log is ignored by Git, rotates automatically, and does not deliberately record clipboard or Input / Output contents.
+For an intermittent startup or configuration problem, inspect
+`data/context-palette.log`. The local log is ignored by Git, rotates
+automatically, and does not deliberately record clipboard or Input / Output
+contents.
 
 ### New features are reported as unsupported
 
@@ -322,7 +317,3 @@ Another application may own the shortcut. Quit duplicate instances and restart C
 ### Selected text was not captured
 
 Some applications block simulated copy operations. Copy manually, open Context Palette, then press `Ctrl+V` or use the text box's right-click menu.
-
-### Snapshot restore cannot restore everything
-
-Packaged/protected applications may not restart from an executable path. Browser windows need an explicit saved URL to reopen the correct page. Unsaved documents cannot be recreated automatically.

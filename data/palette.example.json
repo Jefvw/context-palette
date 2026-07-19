@@ -9,7 +9,6 @@
   "focus_context": "General",
   "context_slots": {
     "Developing Context Palette": [
-      "developing-arrange-three-explorers",
       "developing-open-vscode",
       "developing-open-project-folder",
       "general-open-python-docs"

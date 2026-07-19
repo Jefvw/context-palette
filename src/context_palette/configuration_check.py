@@ -15,7 +15,6 @@ from .command_surface import (
 from .contexts import ContextDefinition, ContextError, load_combined_contexts
 from .inbox import InboxError, load_inbox_items
 from .palette_state import PaletteState, load_palette_state
-from .window_layouts import WindowLayoutError, load_window_layout
 
 
 @dataclass(frozen=True)
@@ -79,15 +78,6 @@ def validate_project_configuration(root: Path) -> ConfigurationReport:
         counts["cheatsheets"] = len(load_cheatsheets(data / "cheatsheets"))
     except (CheatSheetError, OSError) as exc:
         errors.append(f"Cheat sheets: {exc}")
-
-    layout_count = 0
-    for path in sorted((data / "layouts").glob("*.json")):
-        try:
-            load_window_layout(path)
-            layout_count += 1
-        except (WindowLayoutError, OSError) as exc:
-            errors.append(f"Window layout {path.name}: {exc}")
-    counts["window_layouts"] = layout_count
 
     if actions:
         _validate_action_references(actions, contexts, groups, palette, errors)

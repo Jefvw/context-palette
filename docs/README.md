@@ -21,7 +21,8 @@ This directory separates current behavior, durable direction, historical rationa
 - [Right-side buttons](COMMAND_SURFACE_CONFIGURATION.md) — guided configuration and JSON reference.
 - [Cheat-sheet format](CHEATSHEET_FORMAT.md) — sheet authoring and promotion.
 - [Multi-PC use](MULTI_PC_DEVELOPMENT.md) — cloning and private-data boundaries.
-- [Windows integrations](../integrations/README.md) — attended Power Automate and PowerToys integration.
+- [Power Automate integration](../integrations/README.md) — attended show,
+  context, and search integration.
 
 ### Contributors and AI agents
 

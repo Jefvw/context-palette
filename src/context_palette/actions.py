@@ -60,8 +60,6 @@ class Action:
             "build_url_copy": "Copy",
             "build_url_open": "Open",
             "build_url_selection_open": "Open",
-            "window_layout": "Arrange",
-            "restore_window_snapshot": "Restore",
         }.get(self.type)
         return f"{inferred_command} → {title}" if inferred_command else title
 
@@ -366,8 +364,6 @@ def execute_action(
     selected_text: str | None = None,
     input_text: str | None = None,
     output_setter: Callable[[str], None] | None = None,
-    window_layout_runner: Callable[[str], str] | None = None,
-    window_snapshot_runner: Callable[[str], str] | None = None,
     credential_paster: Callable[[Action], str] | None = None,
     opener: Callable[[Action], None] | None = None,
 ) -> str:
@@ -378,16 +374,6 @@ def execute_action(
         if credential_paster is None:
             raise ActionError("Protected credential paste is unavailable.")
         return credential_paster(action)
-
-    if action.type == "restore_window_snapshot":
-        if window_snapshot_runner is None:
-            raise ActionError("No window snapshot runner is available.")
-        return window_snapshot_runner(action.value)
-
-    if action.type == "window_layout":
-        if window_layout_runner is None:
-            raise ActionError("No Windows layout runner is available.")
-        return window_layout_runner(action.value)
 
     if action.type == "workspace_template":
         expanded = expanded_action(action, clipboard_getter=clipboard_getter)

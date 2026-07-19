@@ -14,7 +14,9 @@ The main technical risk is concentrated UI orchestration. `launcher.py` still ow
 
 - No mandatory third-party runtime dependency.
 - No arbitrary shell-command action type.
-- Domain behaviour is separated into actions, contexts, command-surface configuration, Inbox, cheat sheets, palette state, single-instance coordination, hotkeys, and window layouts.
+- Domain behaviour is separated into actions, contexts, command-surface
+  configuration, Inbox, cheat sheets, palette state, single-instance
+  coordination, and hotkeys.
 - External effects are injected into action execution where practical, which keeps URL building, transformations, and dispatch testable.
 - Shared configuration and ignored runtime/personal data have explicit ownership rules.
 - The application has broad unit coverage for its non-visual behaviour.
@@ -27,7 +29,12 @@ Application-managed JSON now uses `persistence.py` to flush a temporary sibling,
 
 ### Completed: add a minimal Windows UI smoke test
 
-The Windows-only suite now constructs the complete Tk application with temporary data, processes pending layout work, and closes it through the normal shutdown path. The test isolates global-hotkey and single-instance operating-system boundaries so it cannot claim those integrations during a test run. Manual verification remains necessary for focus, global hotkeys, tooltips, monitor placement, and external application opening.
+The Windows-only suite now constructs the complete Tk application with
+temporary data and closes it through the normal shutdown path. The test
+isolates global-hotkey and single-instance operating-system boundaries so it
+cannot claim those integrations during a test run. Manual verification remains
+necessary for focus, global hotkeys, tooltips, monitor placement, and external
+application opening.
 
 ### Medium: continue splitting `launcher.py`
 

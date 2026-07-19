@@ -4,7 +4,6 @@ from pathlib import Path
 import ctypes
 import logging
 import queue
-import threading
 import time
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
@@ -68,16 +67,6 @@ from .palette_state import (
     load_palette_state,
     save_palette_state,
     toggle_pin,
-)
-from .window_layouts import (
-    WindowLayoutError,
-    apply_window_layout,
-    browser_windows_without_launch_url,
-    capture_window_snapshot,
-    describe_window_layout,
-    describe_window_snapshot,
-    restore_window_snapshot,
-    set_snapshot_launch_target,
 )
 from .windows_credentials import (
     CredentialAccessError,
@@ -200,7 +189,6 @@ class LauncherApp:
         self.slot_actions: dict[int, Action] = {}
         self.palette_state = PaletteState()
         self.show_requests: queue.Queue[dict[str, str]] = queue.Queue()
-        self.window_action_results: queue.Queue[tuple[bool, str]] = queue.Queue()
         self.instance_server = SingleInstanceServer(self.show_requests.put, instance_port)
         self.hotkey = GlobalHotkey(self._queue_hotkey_request)
         self.captured_selection: str | None = None
@@ -212,7 +200,6 @@ class LauncherApp:
         self.search_refresh_after_id: str | None = None
         self.action_type_filter: str | None = None
         self.passwords_button: ttk.Button | None = None
-        self.window_action_in_progress = False
         self.configuration_signature_cache: tuple[tuple[str, int, int], ...] = ()
         self.search_var = tk.StringVar()
         self.context_var = tk.StringVar(value="General")
@@ -534,17 +521,14 @@ class LauncherApp:
         capture_button = ttk.Button(controls, text="Capture", command=self._capture_clipboard)
         capture_button.grid(row=0, column=0, sticky=tk.EW, padx=(0, 3), pady=(0, 3))
         self._tooltip(capture_button, "Save current clipboard text to Inbox after asking for a title.")
-        snapshot_button = ttk.Button(controls, text="Snapshot", command=self._capture_window_snapshot)
-        snapshot_button.grid(row=0, column=1, sticky=tk.EW, padx=3, pady=(0, 3))
-        self._tooltip(snapshot_button, "Capture visible window positions and create a Draft restore action in this context.")
         inbox_button = ttk.Button(controls, text="Inbox", command=self._show_inbox)
-        inbox_button.grid(row=0, column=2, sticky=tk.EW, padx=3, pady=(0, 3))
+        inbox_button.grid(row=0, column=1, sticky=tk.EW, padx=3, pady=(0, 3))
         self._tooltip(inbox_button, "Review captures and convert them into structured Draft actions.")
         sheets_button = ttk.Button(controls, text="Sheets", command=self._show_cheatsheets)
-        sheets_button.grid(row=0, column=3, sticky=tk.EW, padx=3, pady=(0, 3))
+        sheets_button.grid(row=0, column=2, sticky=tk.EW, padx=3, pady=(0, 3))
         self._tooltip(sheets_button, "Open searchable local cheat sheets and promote useful entries to Draft actions.")
         edit_button = ttk.Button(controls, text="Edit", command=self._edit_selected)
-        edit_button.grid(row=0, column=4, sticky=tk.EW, padx=(3, 0), pady=(0, 3))
+        edit_button.grid(row=0, column=3, sticky=tk.EW, padx=3, pady=(0, 3))
         self._tooltip(edit_button, "Edit the selected Draft copy-text action. Other action types are currently read-only.")
         pin_button = ttk.Button(controls, text="Pin", command=self._toggle_selected_pin)
         pin_button.grid(row=1, column=0, sticky=tk.EW, padx=(0, 3))
@@ -794,7 +778,6 @@ class LauncherApp:
             self.root.withdraw()
 
     def _poll_show_requests(self) -> None:
-        self._drain_window_action_results()
         while True:
             try:
                 request = self.show_requests.get_nowait()
@@ -807,22 +790,6 @@ class LauncherApp:
             else:
                 self._handle_external_request(request)
         self.root.after(100, self._poll_show_requests)
-
-    def _drain_window_action_results(self) -> None:
-        while True:
-            try:
-                succeeded, message = self.window_action_results.get_nowait()
-            except queue.Empty:
-                return
-            self.window_action_in_progress = False
-            self.root.configure(cursor="")
-            self.status_var.set(message)
-            if not succeeded:
-                messagebox.showerror(
-                    "Window action failed",
-                    f"{message}\n\nThe palette remains available; review the local diagnostic log for details.",
-                    parent=self.root,
-                )
 
     def _handle_external_request(self, request: dict[str, str]) -> None:
         self.source_foreground_handle = None
@@ -1376,9 +1343,6 @@ class LauncherApp:
         self._execute_action(action)
 
     def _execute_action(self, action: Action) -> None:
-        if action.type in {"window_layout", "restore_window_snapshot"}:
-            self._execute_window_action_async(action)
-            return
         try:
             message = execute_action(
                 action,
@@ -1388,8 +1352,6 @@ class LauncherApp:
                 selected_text=self._workspace_text() or self.captured_selection,
                 input_text=self._workspace_text(),
                 output_setter=self._set_workspace_text,
-                window_layout_runner=self._run_window_layout,
-                window_snapshot_runner=self._run_window_snapshot,
                 credential_paster=self._paste_credential_action,
             )
             self.status_var.set(message)
@@ -1443,36 +1405,6 @@ class LauncherApp:
 
         self.root.after(120, paste_into_destination)
         return "Protected credential paste approved; returning to the destination."
-
-    def _execute_window_action_async(self, action: Action) -> None:
-        if self.window_action_in_progress:
-            self.status_var.set("A window action is already running. Wait for it to finish.")
-            return
-        self.window_action_in_progress = True
-        self.root.configure(cursor="wait")
-        self.status_var.set(f"Running {action.title}… The palette remains responsive.")
-
-        def worker() -> None:
-            try:
-                message = execute_action(
-                    action,
-                    window_layout_runner=self._run_window_layout,
-                    window_snapshot_runner=self._run_window_snapshot,
-                )
-                self.window_action_results.put((True, message))
-            except Exception as exc:
-                LOGGER.exception(
-                    "Background window action failed: id=%s type=%s",
-                    action.id,
-                    action.type,
-                )
-                self.window_action_results.put((False, str(exc)))
-
-        threading.Thread(
-            target=worker,
-            name="context-palette-window-action",
-            daemon=True,
-        ).start()
 
     def _edit_selected(self) -> None:
         action = self._selected_action()
@@ -1605,80 +1537,7 @@ class LauncherApp:
             return f"Transform Input / Output lines into {mode}.\nThe result replaces the field and is copied."
         if action.type == "workspace_template":
             return "Load this template into Input / Output and copy it:\n" + action.value
-        if action.type == "window_layout":
-            try:
-                return describe_window_layout(self._layout_path(action.value))
-            except WindowLayoutError as exc:
-                return f"Window layout unavailable:\n{exc}"
-        if action.type == "restore_window_snapshot":
-            try:
-                return describe_window_snapshot(self._layout_path(action.value))
-            except WindowLayoutError as exc:
-                return f"Window snapshot unavailable:\n{exc}"
         return f"{action.type}:\n{action.value}"
-
-    def _layout_path(self, value: str) -> Path:
-        path = Path(value)
-        if not path.is_absolute():
-            path = self.actions_path.parent.parent / path
-        return path
-
-    def _run_window_layout(self, value: str) -> str:
-        try:
-            return apply_window_layout(
-                self._layout_path(value),
-                base_directory=self.actions_path.parent.parent,
-            )
-        except WindowLayoutError as exc:
-            raise ActionError(str(exc)) from exc
-
-    def _run_window_snapshot(self, value: str) -> str:
-        try:
-            return restore_window_snapshot(self._layout_path(value))
-        except WindowLayoutError as exc:
-            raise ActionError(str(exc)) from exc
-
-    def _capture_window_snapshot(self) -> None:
-        name = simpledialog.askstring(
-            "Capture Window Snapshot",
-            "Name for the current window situation:",
-            initialvalue=f"{self.palette_state.focus_context} workspace",
-            parent=self.root,
-        )
-        if name is None:
-            return
-        try:
-            project_root = self.actions_path.parent.parent
-            path = capture_window_snapshot(
-                project_root / "data" / "layouts" / "snapshots",
-                name,
-                exclude_handle=self.root.winfo_id(),
-                foreground_handle=self.source_foreground_handle,
-            )
-            for window_index, title in browser_windows_without_launch_url(path):
-                url = simpledialog.askstring(
-                    "Browser Launch URL",
-                    f"Optional URL to reopen this browser window:\n\n{title}",
-                    parent=self.root,
-                )
-                if url:
-                    set_snapshot_launch_target(path, window_index, url)
-            relative_path = path.relative_to(project_root).as_posix()
-            action = Action(
-                id=f"snapshot-{path.stem}",
-                title=f"Restore {name.strip()}",
-                context=self.palette_state.focus_context,
-                technology="Windows / Win32",
-                task="Restore workspace",
-                type="restore_window_snapshot",
-                value=relative_path,
-                state="Draft",
-            )
-            append_action(self.local_actions_path, action)
-            self._reload()
-            self.status_var.set(f"Captured snapshot with action: {action.title}")
-        except (WindowLayoutError, ActionError, ValueError) as exc:
-            messagebox.showerror("Context Palette", str(exc))
 
     def _workspace_text(self) -> str:
         return self.workspace.get("1.0", "end-1c").strip()

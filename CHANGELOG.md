@@ -15,12 +15,15 @@ This project has not published a versioned release. Changes are recorded under *
 - Built-in action catalogue with examples and generated documentation.
 - Capture Inbox, Draft creation, editing, explicit trust promotion, cheat-sheet promotion, and attended AI proposal review.
 - Focus-context slots, global pins, configurable quick-action groups, and keyboard operation.
-- Constrained URL, file, folder, application, transformation, workspace, layout, and snapshot actions.
+- Constrained URL, file, folder, application, transformation, and workspace actions.
 - Atomic JSON replacement with local backups and a read-only configuration checker.
 - Searchable in-app Help, local bounded diagnostics, Windows integration examples, and CI on Python 3.12.
 
 ### Changed
 
+- Removed window-layout/snapshot actions and PowerToys-specific integration assets; retained the attended Power Automate bridge.
+- Added automatic backed-up cleanup of retired layout actions and local references on every machine.
+- Aligned Windows CI dependency installation, configuration validation, compilation, and tests with the complete local development workflow.
 - Skipped redundant dependency installation when the tracked requirements declaration has not changed.
 - Released tooltip objects for destroyed quick-action and password buttons whenever the surface is rebuilt.
 - Allowed protected paste to resolve exact targets from both Windows Credentials and Generic Credentials.

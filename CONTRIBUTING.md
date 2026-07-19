@@ -68,7 +68,6 @@ Never commit personal/runtime data:
 - `data/local_contexts.json`
 - `data/local_command_surface.json`
 - `data/palette.json`
-- `data/layouts/snapshots/`
 - `data/context-palette.log*`
 - `*.bak` and `*.tmp`
 

@@ -5,9 +5,8 @@ This file contains actionable future work. Completed user-visible work belongs i
 ## Now
 
 - Perform and record the manual Windows UI/accessibility smoke test for the guided Configure workflow.
-- Extract secondary Inbox, Draft, sheet, and snapshot views from `launcher.py` incrementally without changing behavior.
+- Extract secondary Inbox, Draft, and sheet views from `launcher.py` incrementally without changing behavior.
 - Refine action discovery and effect descriptions using real repeated-work feedback.
-- Improve snapshot selection, launch-target editing, and recovery messages.
 - Add focused tests for configuration-window keyboard order and validation recovery where Tk permits reliable automation.
 
 ## Next
@@ -28,7 +27,6 @@ This file contains actionable future work. Completed user-visible work belongs i
 - Investigate safe browser-specific URL discovery without focus or clipboard manipulation.
 - Add optional application-aware context suggestions; never switch automatically.
 - Explore a packageable tray icon and optional AutoHotkey adapter.
-- Evaluate a separately packaged PowerToys Run plug-in.
 - Design a Trusted-action external API before any unattended execution.
 - Expand attended AI authoring only for types with adequate validation and review.
 
@@ -36,5 +34,5 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 - Which action effects need a standard preview/result model before sequences are safe?
 - How should supporting contexts affect ranking without making results unpredictable?
-- What recovery guarantees are realistic for clipboard transactions and window restoration?
+- What recovery guarantees are realistic for clipboard transactions?
 - Which personal actions are frequent enough to justify new built-in types?

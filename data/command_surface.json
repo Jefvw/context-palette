@@ -62,12 +62,6 @@
           "label": "VS Code",
           "primary_action_id": "developing-open-vscode",
           "action_ids": ["developing-open-vscode"]
-        },
-        {
-          "id": "explorer-layout",
-          "label": "Explorer layout",
-          "primary_action_id": "developing-arrange-three-explorers",
-          "action_ids": ["developing-arrange-three-explorers"]
         }
       ]
     },

@@ -155,24 +155,6 @@ ACTION_TYPES = {
             "Replaces Input / Output and clipboard text.",
             "Portable; operation is constrained by the application.",
         ),
-        _definition(
-            "window_layout",
-            "Arrange a window layout",
-            "Window management",
-            "Open and arrange reviewed layout targets using relative monitor positions.",
-            "Reads a reviewed layout JSON file.",
-            "Opens and positions configured windows.",
-            "Portable only when its target paths are portable.",
-        ),
-        _definition(
-            "restore_window_snapshot",
-            "Restore a window snapshot",
-            "Window management",
-            "Restore a locally captured set of windows and relative positions.",
-            "Reads a local snapshot containing window metadata.",
-            "Matches, starts, and positions restorable windows.",
-            "Local and potentially private; snapshots are never shared by default.",
-        ),
     )
 }
 

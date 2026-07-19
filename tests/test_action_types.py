@@ -12,7 +12,7 @@ from context_palette.action_types import ACTION_TYPES, SUPPORTED_ACTION_TYPES, r
 class ActionTypeCatalogueTests(unittest.TestCase):
     def test_catalogue_covers_every_supported_action_type(self):
         self.assertEqual(set(ACTION_TYPES), SUPPORTED_ACTION_TYPES)
-        self.assertEqual(len(ACTION_TYPES), 13)
+        self.assertEqual(len(ACTION_TYPES), 11)
 
     def test_every_definition_has_user_and_ai_adaptation_metadata(self):
         for action_type, definition in ACTION_TYPES.items():

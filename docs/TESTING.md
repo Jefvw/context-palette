@@ -72,9 +72,9 @@ Perform only when relevant:
 - Open a reviewed HTTP/HTTPS URL.
 - Open an existing file and folder.
 - Launch an explicitly configured executable with fixed arguments.
-- Capture and restore a disposable window snapshot across the available monitors.
 - Verify the UI remains responsive during restore and rejects a concurrent restore.
-- Exercise `integrations\Invoke-ContextPalette.ps1` with valid and unknown contexts.
+- Exercise `integrations\Invoke-ContextPalette.ps1` with valid and unknown
+  contexts when testing the optional Power Automate bridge.
 
 Window restoration is best-effort. Do not use unsaved work as test material.
 

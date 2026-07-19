@@ -8,6 +8,10 @@ import zlib
 
 from .launcher import run
 from .diagnostics import configure_logging
+from .retired_feature_cleanup import (
+    RetirementCleanupError,
+    cleanup_retired_local_configuration,
+)
 from .single_instance import notify_existing_instance
 
 
@@ -52,7 +56,18 @@ def initial_launcher_request(request: dict[str, str]) -> dict[str, str] | None:
 def main(arguments: list[str] | None = None) -> None:
     root = project_root()
     os.environ.setdefault("PROJECT_ROOT", str(root))
-    configure_logging(root / "data" / "context-palette.log")
+    logger = configure_logging(root / "data" / "context-palette.log")
+    try:
+        cleanup_report = cleanup_retired_local_configuration(root)
+        if cleanup_report.files_changed:
+            logger.info(
+                "Removed retired local configuration: actions=%d references=%d files=%d",
+                cleanup_report.actions_removed,
+                cleanup_report.references_removed,
+                cleanup_report.files_changed,
+            )
+    except RetirementCleanupError:
+        logger.exception("Retired local configuration could not be cleaned")
     port = project_port(root)
     request = integration_request(sys.argv[1:] if arguments is None else arguments)
     if notify_existing_instance(port, request):
