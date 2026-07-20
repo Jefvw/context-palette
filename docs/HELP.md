@@ -166,7 +166,12 @@ The bottom communication line always stays one row high. Hover over it for the c
 - Open `Transform` through the right-click menu or the compact `⋮` button.
 - A transform changes the selection, or the complete field when nothing is selected.
 - Every transform result is copied to the clipboard automatically and can be reverted with one Undo.
-- Available transforms are lowercase, UPPERCASE, consecutive-space normalization, prefix/suffix on every line, and duplicate-line removal.
+- Transform groups provide lowercase, UPPERCASE, Proper Case, sentence case,
+  inverted case, consecutive-space normalization, per-line trimming,
+  prefix/suffix, blank-line removal, A–Z or Z–A sorting, joining lines with
+  spaces, SQL value-list formatting, and consecutive or global duplicate-line
+  removal. SQL formatting accepts lines, commas, tabs, or semicolons; numbers
+  and `NULL` remain unquoted, while text is quoted and apostrophes are escaped.
 - Transform actions read it and place their result back in it.
 - URL-builder actions use it as selected input when it is not empty.
 

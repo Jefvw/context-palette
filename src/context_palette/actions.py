@@ -504,6 +504,30 @@ def list_to_comma_separated(value: str, *, sql_strings: bool = False) -> str:
     return ", ".join(items)
 
 
+def list_to_sql_values(value: str) -> str:
+    """Format separated values as a parenthesized SQL value list."""
+    items = [
+        item.strip()
+        for item in re.split(r"[\r\n\t,;]+", value)
+        if item.strip()
+    ]
+    if not items:
+        raise ActionError("The Input / Output field does not contain SQL values.")
+
+    numeric_pattern = re.compile(
+        r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\Z"
+    )
+    formatted: list[str] = []
+    for item in items:
+        if numeric_pattern.fullmatch(item):
+            formatted.append(item)
+        elif item.casefold() == "null":
+            formatted.append("NULL")
+        else:
+            formatted.append(f"'{item.replace(chr(39), chr(39) * 2)}'")
+    return f"({', '.join(formatted)})"
+
+
 def transform_text(
     value: str,
     operation: str,
@@ -516,24 +540,112 @@ def transform_text(
         return value.lower()
     if operation == "uppercase":
         return value.upper()
+    if operation == "proper_case":
+        return re.sub(
+            r"[^\W_]+(?:'[^\W_]+)?",
+            lambda match: match.group(0)[:1].upper() + match.group(0)[1:].lower(),
+            value,
+        )
+    if operation == "sentence_case":
+        return _sentence_case(value)
+    if operation == "invert_case":
+        return value.swapcase()
     if operation == "normalize_spaces":
         return re.sub(r"[ \t]+", " ", value)
+    if operation == "trim_lines":
+        return _transform_line_bodies(value, lambda line: line.strip(" \t"))
     if operation == "prefix_suffix_lines":
         return _affix_each_line(value, prefix, suffix)
+    if operation == "remove_blank_lines":
+        return _filter_and_join_lines(
+            value,
+            lambda line: bool(line.strip(" \t")),
+        )
+    if operation == "sort_lines_ascending":
+        return _reorder_lines(value, lambda lines: sorted(lines, key=str.casefold))
+    if operation == "sort_lines_descending":
+        return _reorder_lines(
+            value,
+            lambda lines: sorted(lines, key=str.casefold, reverse=True),
+        )
+    if operation == "join_lines":
+        return re.sub(r"\r\n|\r|\n", " ", value)
+    if operation == "sql_values":
+        return list_to_sql_values(value)
+    if operation == "remove_consecutive_duplicate_lines":
+        return _remove_consecutive_duplicate_lines(value)
     if operation == "remove_duplicate_lines":
         return _remove_duplicate_lines(value)
     raise ActionError(f"Unsupported text transformation: {operation}")
 
 
-def _affix_each_line(value: str, prefix: str, suffix: str) -> str:
-    if not value:
-        return value
+def _sentence_case(value: str) -> str:
+    result: list[str] = []
+    capitalize_next = True
+    for character in value.lower():
+        if capitalize_next and character.isalpha():
+            result.append(character.upper())
+            capitalize_next = False
+        else:
+            result.append(character)
+        if character in ".!?":
+            capitalize_next = True
+    return "".join(result)
+
+
+def _transform_line_bodies(value: str, transform: Callable[[str], str]) -> str:
     transformed: list[str] = []
     for chunk in value.splitlines(keepends=True):
         body = chunk.rstrip("\r\n")
         ending = chunk[len(body) :]
-        transformed.append(prefix + body + suffix + ending)
+        transformed.append(transform(body) + ending)
     return "".join(transformed)
+
+
+def _affix_each_line(value: str, prefix: str, suffix: str) -> str:
+    if not value:
+        return value
+    return _transform_line_bodies(value, lambda line: prefix + line + suffix)
+
+
+def _line_separator(value: str) -> str:
+    return "\r\n" if "\r\n" in value else "\r" if "\r" in value else "\n"
+
+
+def _join_reordered_lines(value: str, lines: list[str]) -> str:
+    if not lines:
+        return ""
+    separator = _line_separator(value)
+    result = separator.join(lines)
+    if value.endswith(("\r", "\n")):
+        result += separator
+    return result
+
+
+def _filter_and_join_lines(
+    value: str,
+    keep: Callable[[str], bool],
+) -> str:
+    return _join_reordered_lines(
+        value,
+        [line for line in value.splitlines() if keep(line)],
+    )
+
+
+def _reorder_lines(
+    value: str,
+    reorder: Callable[[list[str]], list[str]],
+) -> str:
+    return _join_reordered_lines(value, reorder(value.splitlines()))
+
+
+def _remove_consecutive_duplicate_lines(value: str) -> str:
+    lines = value.splitlines()
+    unique: list[str] = []
+    for line in lines:
+        if not unique or line != unique[-1]:
+            unique.append(line)
+    return _join_reordered_lines(value, unique)
 
 
 def _remove_duplicate_lines(value: str) -> str:
@@ -546,11 +658,7 @@ def _remove_duplicate_lines(value: str) -> str:
         if line not in seen:
             seen.add(line)
             unique.append(line)
-    separator = "\r\n" if "\r\n" in value else "\r" if "\r" in value else "\n"
-    result = separator.join(unique)
-    if value.endswith(("\r", "\n")):
-        result += separator
-    return result
+    return _join_reordered_lines(value, unique)
 
 
 def expanded_action(

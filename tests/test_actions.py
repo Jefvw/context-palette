@@ -26,6 +26,7 @@ from context_palette.actions import (
     expand_template,
     load_actions,
     list_to_comma_separated,
+    list_to_sql_values,
     load_combined_actions,
     open_action_target,
     search_actions,
@@ -164,11 +165,23 @@ class ActionTests(unittest.TestCase):
     def test_workspace_case_transformations(self):
         self.assertEqual(transform_text("AbC É", "lowercase"), "abc é")
         self.assertEqual(transform_text("AbC é", "uppercase"), "ABC É")
+        self.assertEqual(transform_text("hELLO wORLD", "proper_case"), "Hello World")
+        self.assertEqual(
+            transform_text("hELLO WORLD. nEXT item?", "sentence_case"),
+            "Hello world. Next item?",
+        )
+        self.assertEqual(transform_text("Hello É", "invert_case"), "hELLO é")
 
     def test_workspace_normalize_spaces_preserves_line_breaks(self):
         value = "one   two\nthree\t\tfour"
 
         self.assertEqual(transform_text(value, "normalize_spaces"), "one two\nthree four")
+
+    def test_workspace_trim_lines_preserves_line_endings(self):
+        self.assertEqual(
+            transform_text("  one \t\r\n\ttwo  \r\n", "trim_lines"),
+            "one\r\ntwo\r\n",
+        )
 
     def test_workspace_prefix_suffix_applies_to_every_line(self):
         value = "one\n\ntwo\n"
@@ -183,9 +196,41 @@ class ActionTests(unittest.TestCase):
 
         self.assertEqual(transform_text(value, "remove_duplicate_lines"), "one\r\ntwo\r\n")
 
+    def test_workspace_line_cleanup_and_ordering(self):
+        self.assertEqual(
+            transform_text("one\n \t\ntwo\n", "remove_blank_lines"),
+            "one\ntwo\n",
+        )
+        self.assertEqual(
+            transform_text("beta\r\nAlpha\r\nalpha\r\n", "sort_lines_ascending"),
+            "Alpha\r\nalpha\r\nbeta\r\n",
+        )
+        self.assertEqual(
+            transform_text("beta\nAlpha\ncharlie\n", "sort_lines_descending"),
+            "charlie\nbeta\nAlpha\n",
+        )
+        self.assertEqual(transform_text("one\r\ntwo\nthree", "join_lines"), "one two three")
+        self.assertEqual(
+            transform_text(
+                "one\none\ntwo\none\none\n",
+                "remove_consecutive_duplicate_lines",
+            ),
+            "one\ntwo\none\n",
+        )
+
     def test_workspace_transform_rejects_unknown_operation(self):
         with self.assertRaises(ActionError):
             transform_text("text", "unknown")
+
+    def test_workspace_formats_mixed_values_for_sql(self):
+        self.assertEqual(
+            transform_text("1, -2.5\n6e3\tAmsterdam;O'Brien\nNULL", "sql_values"),
+            "(1, -2.5, 6e3, 'Amsterdam', 'O''Brien', NULL)",
+        )
+
+    def test_sql_value_list_rejects_empty_input(self):
+        with self.assertRaisesRegex(ActionError, "does not contain SQL values"):
+            list_to_sql_values(" \n\t,; ")
 
     def test_shared_product_lookup_actions_build_valid_urls(self):
         actions = {action.id: action for action in load_actions(ROOT / "data" / "actions.json")}
@@ -549,6 +594,12 @@ class ActionTests(unittest.TestCase):
         self.assertEqual(
             list_to_comma_separated("one\nO'Brien", sql_strings=True),
             "'one', 'O''Brien'",
+        )
+
+    def test_sql_value_list_keeps_numbers_and_quotes_strings(self):
+        self.assertEqual(
+            list_to_sql_values("001\n.5\n+4\nname"),
+            "(001, .5, +4, 'name')",
         )
 
     def test_execute_list_transform_updates_output_and_clipboard(self):

@@ -4,6 +4,11 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Added a Notepad++-inspired transformation starter pack with Proper Case,
+  sentence case, inverted case, per-line trimming, blank-line removal, stable
+  line sorting, line joining, and consecutive duplicate removal.
+- Added a workspace SQL value-list formatter that parenthesizes mixed numbers,
+  text, and `NULL`, quotes text, and safely escapes apostrophes.
 - Removed an obsolete date placeholder and consolidated two project-folder
   actions onto the portable `%PROJECT_ROOT%` definition.
 - Restored a visible route to the complete action and button configuration

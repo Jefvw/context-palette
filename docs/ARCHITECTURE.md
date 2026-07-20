@@ -365,6 +365,10 @@ Windows Credential Manager -- exact target --> protected clipboard --> captured 
 
 Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `launcher.py` owns selection ranges, one-step Undo grouping, clipboard updates, and menus. Action explanations and application status share a slim bottom communication line.
 
+The transformation menu groups deterministic operations into Case, Whitespace,
+and Lines. Line operations preserve the detected line-ending style and final
+newline where applicable.
+
 Numbered action dispatch is enabled only when the Find entry owns focus. All other widgets suppress it, making shortcut mode explicit and preventing accidental execution while navigating or editing. The communication line never wraps; its full untruncated action explanation is retained separately for a dynamic hover tooltip and click-open detail window.
 
 The numbered-slot colour legend and workspace heading are intentionally not rendered. Slot numbers and row colours carry the distinction. Standard editing and transformations are available through the context menu, with a compact `⋮` transform button as the only persistent workspace control.

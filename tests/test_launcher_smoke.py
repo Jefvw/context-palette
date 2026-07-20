@@ -299,6 +299,44 @@ class LauncherSmokeTests(unittest.TestCase):
                     for button, name in zip(icon_buttons, expected_names):
                         self.assertTrue(tooltips[button].startswith(f"{name} —"))
 
+                    transform_groups = [
+                        app.workspace_transform_menu.entrycget(index, "label")
+                        for index in range(3)
+                    ]
+                    self.assertEqual(
+                        transform_groups,
+                        ["Case", "Whitespace", "Lines"],
+                    )
+                    transform_commands: list[str] = []
+                    for index in range(3):
+                        submenu = root.nametowidget(
+                            app.workspace_transform_menu.entrycget(index, "menu")
+                        )
+                        transform_commands.extend(
+                            submenu.entrycget(command_index, "label")
+                            for command_index in range(submenu.index(tk.END) + 1)
+                        )
+                    self.assertEqual(
+                        transform_commands,
+                        [
+                            "lowercase",
+                            "UPPERCASE",
+                            "Proper Case",
+                            "Sentence case",
+                            "iNVERT cASE",
+                            "Normalize consecutive spaces",
+                            "Trim every line",
+                            "Prefix / suffix every line…",
+                            "Remove blank lines",
+                            "Sort lines A–Z",
+                            "Sort lines Z–A",
+                            "Join lines with spaces",
+                            "Format as SQL value list",
+                            "Remove consecutive duplicate lines",
+                            "Remove duplicate lines",
+                        ],
+                    )
+
                     copied: list[str] = []
                     app._set_workspace_text("One TWO\nThree")
                     app.workspace.tag_add(tk.SEL, "1.4", "1.7")

@@ -727,23 +727,80 @@ class LauncherApp:
         self.workspace_menu.add_command(label="Replace with clipboard", command=self._paste_into_workspace)
         self.workspace_menu.add_command(label="Clear", command=lambda: self._set_workspace_text(""))
         self.workspace_transform_menu = tk.Menu(self.workspace_menu, tearoff=False)
-        self.workspace_transform_menu.add_command(
+        case_menu = tk.Menu(self.workspace_transform_menu, tearoff=False)
+        case_menu.add_command(
             label="lowercase", command=lambda: self._transform_workspace("lowercase", "lowercase")
         )
-        self.workspace_transform_menu.add_command(
+        case_menu.add_command(
             label="UPPERCASE", command=lambda: self._transform_workspace("uppercase", "UPPERCASE")
         )
-        self.workspace_transform_menu.add_command(
+        case_menu.add_command(
+            label="Proper Case",
+            command=lambda: self._transform_workspace("proper_case", "Applied Proper Case"),
+        )
+        case_menu.add_command(
+            label="Sentence case",
+            command=lambda: self._transform_workspace("sentence_case", "Applied sentence case"),
+        )
+        case_menu.add_command(
+            label="iNVERT cASE",
+            command=lambda: self._transform_workspace("invert_case", "Inverted case"),
+        )
+        self.workspace_transform_menu.add_cascade(label="Case", menu=case_menu)
+
+        whitespace_menu = tk.Menu(self.workspace_transform_menu, tearoff=False)
+        whitespace_menu.add_command(
             label="Normalize consecutive spaces",
             command=lambda: self._transform_workspace("normalize_spaces", "Normalized spaces"),
         )
-        self.workspace_transform_menu.add_command(
+        whitespace_menu.add_command(
+            label="Trim every line",
+            command=lambda: self._transform_workspace("trim_lines", "Trimmed every line"),
+        )
+        self.workspace_transform_menu.add_cascade(
+            label="Whitespace",
+            menu=whitespace_menu,
+        )
+
+        lines_menu = tk.Menu(self.workspace_transform_menu, tearoff=False)
+        lines_menu.add_command(
             label="Prefix / suffix every line…", command=self._prefix_suffix_workspace
         )
-        self.workspace_transform_menu.add_command(
+        lines_menu.add_command(
+            label="Remove blank lines",
+            command=lambda: self._transform_workspace("remove_blank_lines", "Removed blank lines"),
+        )
+        lines_menu.add_command(
+            label="Sort lines A–Z",
+            command=lambda: self._transform_workspace("sort_lines_ascending", "Sorted lines A–Z"),
+        )
+        lines_menu.add_command(
+            label="Sort lines Z–A",
+            command=lambda: self._transform_workspace("sort_lines_descending", "Sorted lines Z–A"),
+        )
+        lines_menu.add_command(
+            label="Join lines with spaces",
+            command=lambda: self._transform_workspace("join_lines", "Joined lines"),
+        )
+        lines_menu.add_command(
+            label="Format as SQL value list",
+            command=lambda: self._transform_workspace(
+                "sql_values",
+                "Formatted SQL value list",
+            ),
+        )
+        lines_menu.add_command(
+            label="Remove consecutive duplicate lines",
+            command=lambda: self._transform_workspace(
+                "remove_consecutive_duplicate_lines",
+                "Removed consecutive duplicate lines",
+            ),
+        )
+        lines_menu.add_command(
             label="Remove duplicate lines",
             command=lambda: self._transform_workspace("remove_duplicate_lines", "Removed duplicate lines"),
         )
+        self.workspace_transform_menu.add_cascade(label="Lines", menu=lines_menu)
         self.workspace_menu.add_cascade(label="Transform", menu=self.workspace_transform_menu)
         self.workspace_transform_button = ttk.Button(
             workspace_body,
