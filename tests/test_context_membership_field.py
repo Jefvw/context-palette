@@ -68,6 +68,49 @@ class ContextMembershipFieldTests(unittest.TestCase):
         finally:
             root.destroy()
 
+    def test_keyboard_shortcuts_focus_entry_and_open_picker(self):
+        root = tk.Tk()
+        root.geometry("400x200")
+        try:
+            value = tk.StringVar()
+            field = ContextMembershipField(root, value, ("Mail", "Database"))
+            root.update()
+
+            self.assertEqual(field.label.cget("underline"), 3)
+            self.assertTrue(field.entry.bind("<Alt-Down>"))
+            self.assertTrue(field.entry.bind("<F4>"))
+
+            focus_requests: list[bool] = []
+            original_focus_set = field.entry.focus_set
+            field.entry.focus_set = lambda: focus_requests.append(True)
+            try:
+                self.assertEqual(field._focus_entry(), "break")
+            finally:
+                field.entry.focus_set = original_focus_set
+            self.assertEqual(focus_requests, [True])
+
+            calls: list[tuple[object, ...]] = []
+            original_tk = field.picker.tk
+            original_cget = field.picker.cget
+
+            class FakeTk:
+                def call(self, *args: object) -> None:
+                    calls.append(args)
+
+            field.picker.tk = FakeTk()
+            field.picker.cget = lambda _option: "normal"
+            try:
+                self.assertEqual(field._post_picker(), "break")
+            finally:
+                field.picker.tk = original_tk
+                field.picker.cget = original_cget
+            self.assertEqual(
+                calls,
+                [("ttk::menubutton::Post", field.picker)],
+            )
+        finally:
+            root.destroy()
+
 
 if __name__ == "__main__":
     unittest.main()

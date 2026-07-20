@@ -130,7 +130,8 @@ with a checklist of canonical defined contexts. Tag selection uses the same
 interaction for existing normalized tags but continues to allow new free-form
 values. Selection mechanics remain separate from domain validation in
 `actions.py`, so typed values and non-UI callers follow the same persistence
-rules.
+rules. Underlined Windows mnemonics move focus directly to each field, and
+`Alt+Down`/`F4` delegates checklist opening to Tk's native menubutton behavior.
 
 ### `persistence.py`
 

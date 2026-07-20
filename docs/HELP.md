@@ -130,6 +130,14 @@ The Tags field has the same **Choose…** control for tags already used by other
 actions. Tags remain open-ended: select existing ones for consistency, type new
 ones when needed, or combine both approaches.
 
+Keyboard shortcuts in these guided forms:
+
+- `Alt+C` moves directly to Specific contexts.
+- `Alt+T` moves directly to Tags.
+- `Alt+Down` or `F4` opens the checklist from either its field or **Choose…**
+  button.
+- Use the normal arrow keys and Space in the checklist, then `Esc` to close it.
+
 In **Actions**, use **Find actions** or press `Ctrl+F` to filter by action name,
 built-in type, context, tag, state, or source. Multiple words must
 all match. Press Enter on the selected result to edit it.

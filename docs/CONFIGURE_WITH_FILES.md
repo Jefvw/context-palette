@@ -38,7 +38,9 @@ Use local files for private URLs, local paths, and machine-specific behavior.
 .\run-context-palette.bat
 ```
 
-Restart is required after file edits so the app reloads definitions.
+Return to or reopen the palette after file edits. Changed definitions are
+detected by file signature and reloaded automatically; a restart is normally
+unnecessary.
 
 ## 3. Define contexts
 

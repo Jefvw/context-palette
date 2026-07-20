@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+import tkinter as tk
 import unittest
 from unittest.mock import patch
 
@@ -200,6 +201,48 @@ class ConfigurationDialogTests(unittest.TestCase):
         self.assertEqual(saved, [])
         self.assertEqual(dialog.window.destroy_calls, 0)
         self.assertIn("Unknown specific context: Typo", error.call_args.args[1])
+
+    def test_action_dialog_picker_selections_reach_created_draft(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        saved: list[Action] = []
+        try:
+            existing = Action(
+                "existing",
+                "Existing",
+                "General",
+                "copy_text",
+                "text",
+                tags=("sql",),
+            )
+            dialog = ActionDraftDialog(
+                root,
+                "copy_text",
+                [existing],
+                lambda action: saved.append(action) or True,
+                context_names=["General", "Mail"],
+            )
+            root.update_idletasks()
+            dialog.title_var.set("Reusable response")
+            dialog.tags_var.set("new tag")
+            dialog.value.insert("1.0", "Hello")
+
+            dialog.context_field.menu.invoke(
+                dialog.context_field.context_names.index("Mail")
+            )
+            dialog.tag_field.menu.invoke(
+                dialog.tag_field.tag_names.index("sql")
+            )
+            dialog._save()
+
+            self.assertEqual(len(saved), 1)
+            self.assertEqual(saved[0].effective_contexts, ("Mail",))
+            self.assertEqual(saved[0].effective_tags, ("new tag", "sql"))
+            self.assertEqual(saved[0].value, "Hello")
+        finally:
+            for child in root.winfo_children():
+                child.destroy()
+            root.destroy()
 
     def test_context_dialog_stays_open_when_save_callback_fails(self) -> None:
         dialog = ContextDialog.__new__(ContextDialog)

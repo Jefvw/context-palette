@@ -9,7 +9,8 @@ The application is under active development. It already supports the complete Ca
 - Opens instantly from a resident process with `F9` or `Ctrl+Alt+P`.
 - Searches actions by name, tag, context, type, state, and content.
 - Keeps five global pinned slots and four slots for the selected focus context.
-- Runs thirteen constrained action types without an arbitrary shell-command action.
+- Runs the constrained, allow-listed [standard action types](docs/ACTION_TYPES.md)
+  without an arbitrary shell-command action.
 - Pastes Trusted Windows or generic credentials without storing passwords in action JSON.
 - Provides compact, configurable right-side buttons for repeated actions.
 - Configures personal actions, contexts, and buttons through a guided window.

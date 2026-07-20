@@ -16,6 +16,8 @@ This project has not published a versioned release. Changes are recorded under *
   Configure, Inbox conversion, and Draft editing now also provide a reusable
   multi-select context checklist alongside the editable field, plus an
   optional checklist of existing tags that still permits new free-form tags.
+  Windows-style `Alt+C` and `Alt+T` mnemonics focus those fields, and
+  `Alt+Down`/`F4` opens their native keyboard-navigable checklists.
 - Added a Notepad++-inspired transformation starter pack with Proper Case,
   sentence case, inverted case, per-line trimming, blank-line removal, stable
   line sorting, line joining, and consecutive duplicate removal.

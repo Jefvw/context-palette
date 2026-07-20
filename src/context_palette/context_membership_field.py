@@ -37,6 +37,7 @@ class CommaSeparatedPickerField:
         *,
         label: str,
         empty_text: str,
+        mnemonic: str,
     ) -> None:
         self.variable = variable
         self.names = tuple(names)
@@ -45,7 +46,13 @@ class CommaSeparatedPickerField:
 
         self.frame = ttk.Frame(parent)
         self.frame.pack(fill=tk.X, pady=(8, 0))
-        ttk.Label(self.frame, text=label).pack(anchor=tk.W)
+        mnemonic_index = label.casefold().find(mnemonic.casefold())
+        self.label = ttk.Label(
+            self.frame,
+            text=label,
+            underline=mnemonic_index,
+        )
+        self.label.pack(anchor=tk.W)
 
         row = ttk.Frame(self.frame)
         row.pack(fill=tk.X, pady=(3, 0))
@@ -73,8 +80,28 @@ class CommaSeparatedPickerField:
             self.menu.add_command(label=empty_text, state=tk.DISABLED)
             self.picker.configure(state=tk.DISABLED)
 
+        self.label.bind("<Button-1>", self._focus_entry)
+        self.entry.bind("<Alt-Down>", self._post_picker)
+        self.entry.bind("<F4>", self._post_picker)
+        self.picker.bind("<Alt-Down>", self._post_picker)
+        self.picker.bind("<F4>", self._post_picker)
+        self.frame.winfo_toplevel().bind(
+            f"<Alt-{mnemonic.casefold()}>",
+            self._focus_entry,
+            add="+",
+        )
         self.variable.trace_add("write", self._text_changed)
         self._sync_checks()
+
+    def _focus_entry(self, _event: tk.Event | None = None) -> str:
+        self.entry.focus_set()
+        return "break"
+
+    def _post_picker(self, _event: tk.Event | None = None) -> str:
+        if str(self.picker.cget("state")) == tk.DISABLED:
+            return "break"
+        self.picker.tk.call("ttk::menubutton::Post", self.picker)
+        return "break"
 
     def _text_changed(self, *_args: object) -> None:
         self._sync_checks()
@@ -128,6 +155,7 @@ class ContextMembershipField(CommaSeparatedPickerField):
             names,
             label=label,
             empty_text="No specific contexts defined",
+            mnemonic="c",
         )
 
 
@@ -150,4 +178,5 @@ class TagSelectionField(CommaSeparatedPickerField):
             names,
             label=label,
             empty_text="No existing tags",
+            mnemonic="t",
         )
