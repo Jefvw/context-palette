@@ -20,6 +20,7 @@ from context_palette.launcher import (
     MINIMUM_WORKSPACE_HEIGHT,
     LauncherApp,
 )
+from context_palette.workspace_transforms import WORKSPACE_TRANSFORM_GROUPS
 
 
 @unittest.skipUnless(sys.platform == "win32", "The launcher smoke test requires Windows Tk.")
@@ -301,14 +302,14 @@ class LauncherSmokeTests(unittest.TestCase):
 
                     transform_groups = [
                         app.workspace_transform_menu.entrycget(index, "label")
-                        for index in range(3)
+                        for index in range(len(WORKSPACE_TRANSFORM_GROUPS))
                     ]
                     self.assertEqual(
                         transform_groups,
-                        ["Case", "Whitespace", "Lines"],
+                        [group.label for group in WORKSPACE_TRANSFORM_GROUPS],
                     )
                     transform_commands: list[str] = []
-                    for index in range(3):
+                    for index in range(len(WORKSPACE_TRANSFORM_GROUPS)):
                         submenu = root.nametowidget(
                             app.workspace_transform_menu.entrycget(index, "menu")
                         )
@@ -319,21 +320,9 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(
                         transform_commands,
                         [
-                            "lowercase",
-                            "UPPERCASE",
-                            "Proper Case",
-                            "Sentence case",
-                            "iNVERT cASE",
-                            "Normalize consecutive spaces",
-                            "Trim every line",
-                            "Prefix / suffix every line…",
-                            "Remove blank lines",
-                            "Sort lines A–Z",
-                            "Sort lines Z–A",
-                            "Join lines with spaces",
-                            "Format as SQL value list",
-                            "Remove consecutive duplicate lines",
-                            "Remove duplicate lines",
+                            transform.label
+                            for group in WORKSPACE_TRANSFORM_GROUPS
+                            for transform in group.transforms
                         ],
                     )
 

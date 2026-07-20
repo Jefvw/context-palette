@@ -850,3 +850,42 @@ The slot legend and text toolbar are also omitted: their functions remain discov
 **Reason:** Showing and searching the palette must remain immediate over long resident sessions. Rebuilding unchanged widgets, recurring widget-tree traversal, and multi-second restore waits on the Tk thread are avoidable costs. A database, cache service, async framework, or broad UI refactor would cost more maintainability than it saves.
 
 **Consequences:** External JSON edits remain detectable through file signatures. Date/clipboard-dependent action expansion is never cached. Tk widgets remain main-thread-only. Window actions reject concurrent execution and report completion through the existing queue poller.
+
+## 2026-07-20 - Declare workspace transformation presentation in one catalogue
+
+**Decision:** Store the ordered workspace-transform groups, user labels,
+operation keys, completion messages, and prompt requirements in
+`workspace_transforms.py`. Render the Tk menus generically from that catalogue,
+while keeping pure transformation implementations in `actions.py`.
+
+**Reason:** Adding a constrained text operation previously required repeating
+the same metadata inside the large launcher and its menu test. A small typed
+catalogue makes future additions easier to locate and review without combining
+presentation metadata with transformation algorithms or introducing a UI
+framework.
+
+## 2026-07-20 - Extract the Input / Output workspace from the launcher
+
+**Decision:** Move Input / Output widget construction, menus, selection and undo
+handling, constrained transformation dispatch, clipboard copy/replacement, and
+the prefix/suffix prompt into `workspace_panel.py`. Inject the few services it
+needs and retain narrow launcher delegates for existing orchestration callers.
+
+**Reason:** The launcher is the largest and most frequently touched module.
+Keeping a stable, cohesive workspace feature inside that orchestrator made both
+UI changes and future context-model changes harder to review. The extracted
+component has explicit dependencies, while compatibility delegates avoid a
+broad simultaneous rewrite.
+
+## 2026-07-20 - Separate action-discovery presentation from policy
+
+**Decision:** Move construction and event wiring for the Find field, action
+type controls, flat results, Focus tree, and discovery tooltips into
+`action_discovery_panel.py`. Keep filtering, ranking, context hierarchy,
+selection interpretation, and action execution in the launcher and inject them
+as callbacks.
+
+**Reason:** The discovery UI is stable, but the context and ranking approach is
+expected to change. Separating widgets from policy makes that overhaul easier
+without prematurely designing a new context model. Compatibility aliases keep
+the extraction incremental and protect existing integrations and tests.

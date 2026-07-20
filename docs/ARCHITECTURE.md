@@ -96,6 +96,32 @@ Defines the machine-readable catalogue for every supported action type: user lab
 
 The catalogue renders `docs/ACTION_TYPES.md`; an automated test requires the user-readable overview to remain identical to the executable definitions.
 
+### `workspace_transforms.py`
+
+Defines the ordered, user-facing catalogue for Input / Output transformations:
+menu groups, labels, operation keys, completion feedback, and whether an
+operation needs an additional prompt. The launcher renders its Transform menu
+from this catalogue instead of repeating every command in the UI orchestrator.
+Pure transformation algorithms and validation remain in `actions.py`.
+
+### `workspace_panel.py`
+
+Owns the complete Input / Output UI component: text widget, edit and Transform
+menus, selection-first replacement, undo boundaries, prefix/suffix prompting,
+clipboard copy and replacement, and transformation feedback. It depends on
+small injected callbacks for clipboard access, status messages, and tooltip
+registration. `launcher.py` retains compatibility delegates for action
+execution and integration flows, but no longer owns workspace widget mechanics.
+
+### `action_discovery_panel.py`
+
+Owns construction and event wiring for the left action-discovery presentation:
+heading and count, global Find entry, type controls, Run and Help controls, flat
+result list, Focus tree, scrollbar, and row tooltips. Search policy, action
+ranking, filtering, Focus hierarchy, selection meaning, and execution remain in
+`launcher.py` and are supplied through narrow callbacks. Compatibility aliases
+allow existing launcher orchestration to migrate incrementally.
+
 ### `persistence.py`
 
 Owns JSON replacement for application-written data. It serializes to a temporary sibling file, flushes it to disk, preserves the previous destination as `<name>.bak`, and uses `os.replace` so readers see either the previous complete file or the new complete file. Temporary and backup files are ignored by Git because they can contain private runtime data.

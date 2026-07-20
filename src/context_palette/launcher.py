@@ -23,10 +23,10 @@ from .actions import (
     load_combined_actions,
     load_actions,
     search_actions,
-    transform_text,
     trusted_action,
     update_action,
 )
+from .action_discovery_panel import ActionDiscoveryPanel
 from .ai_guidance_window import AIGuidanceWindow
 from .action_types import ACTION_TYPES
 from .cheat_sheet_window import CheatSheetWindow
@@ -56,7 +56,7 @@ from .inbox import InboxError, InboxItem, append_inbox_item, create_clipboard_it
 from .inbox import update_inbox_item_state
 from .single_instance import SingleInstanceServer
 from .style import COLORS, configure_theme
-from .tooltips import ListboxItemTooltip, TreeviewItemTooltip, WidgetTooltip
+from .tooltips import WidgetTooltip
 from .window_geometry import configure_main_window, configure_standard_window
 from .palette_state import (
     PaletteState,
@@ -71,6 +71,7 @@ from .windows_credentials import (
     read_windows_credential,
     set_protected_clipboard_text,
 )
+from .workspace_panel import WorkspacePanel
 
 LOGGER = logging.getLogger("context_palette.launcher")
 LOGGER.addHandler(logging.NullHandler())
@@ -168,24 +169,6 @@ def suggest_url_template(value: str) -> str:
         separator = "" if current.endswith("/") else "/"
         return current + separator + "{id_url}"
     return current
-
-
-class PrefixSuffixDialog(simpledialog.Dialog):
-    def body(self, master: tk.Misc) -> tk.Widget:
-        ttk.Label(master, text="Prefix for every line").grid(row=0, column=0, sticky=tk.W)
-        self.prefix_var = tk.StringVar()
-        prefix_entry = ttk.Entry(master, textvariable=self.prefix_var, width=42)
-        prefix_entry.grid(row=1, column=0, sticky=tk.EW, pady=(3, 9))
-        ttk.Label(master, text="Suffix for every line").grid(row=2, column=0, sticky=tk.W)
-        self.suffix_var = tk.StringVar()
-        ttk.Entry(master, textvariable=self.suffix_var, width=42).grid(
-            row=3, column=0, sticky=tk.EW, pady=(3, 0)
-        )
-        master.columnconfigure(0, weight=1)
-        return prefix_entry
-
-    def apply(self) -> None:
-        self.result = (self.prefix_var.get(), self.suffix_var.get())
 
 
 class LauncherApp:
@@ -447,142 +430,37 @@ class LauncherApp:
         self._refresh_results()
 
     def _build_results_area(self, outer: ttk.Frame) -> None:
-
         results_area = ttk.Panedwindow(outer, orient=tk.HORIZONTAL)
         results_area.pack(fill=tk.BOTH, expand=True)
-        results_frame = ttk.Frame(results_area)
-        results_area.add(results_frame, weight=1)
-        results_header = ttk.Frame(results_frame)
-        results_header.pack(fill=tk.X, pady=(0, 5))
-        ttk.Label(
-            results_header,
-            textvariable=self.actions_heading_var,
-            style="PaneHeader.TLabel",
-        ).pack(side=tk.LEFT)
-        ttk.Label(
-            results_header,
-            textvariable=self.results_count_var,
-            style="Muted.TLabel",
-        ).pack(side=tk.RIGHT)
-
-        search_row = ttk.Frame(results_frame)
-        search_row.pack(fill=tk.X, pady=(0, 5))
-        find_label = ttk.Label(search_row, text="Find action", style="Heading.TLabel")
-        find_label.pack(anchor=tk.W)
-        self._tooltip(find_label, "Type any technology, task, context, action name, type, or content.")
-        search = ttk.Entry(search_row, textvariable=self.search_var, font=("Segoe UI", 11))
-        self.search_entry = search
-        search.pack(fill=tk.X, pady=(3, 0))
-        search.focus_set()
-        search.bind("<KeyPress>", self._handle_keypress)
-        search.bind("<Return>", lambda _event: self._execute_selected())
-
-        results_body = ttk.Frame(results_frame)
-        results_body.pack(fill=tk.BOTH, expand=True)
-
-        self.actions_tool_rail = ttk.Frame(results_body, width=88)
-        self.actions_tool_rail.pack(side=tk.RIGHT, fill=tk.Y, padx=(6, 0))
-        self.actions_tool_rail.pack_propagate(False)
-        self.passwords_button = ttk.Button(
-            self.actions_tool_rail,
-            text="Passwords",
-            command=self._toggle_password_actions,
-            style="Compact.TButton",
+        self.action_discovery_panel = ActionDiscoveryPanel(
+            results_area,
+            heading_var=self.actions_heading_var,
+            count_var=self.results_count_var,
+            search_var=self.search_var,
+            action_type_filter_var=self.action_type_filter_var,
+            tooltip_adder=self._tooltip,
+            keypress_handler=self._handle_keypress,
+            execute_selected=self._execute_selected,
+            update_preview=self._update_preview,
+            toggle_password_actions=self._toggle_password_actions,
+            select_action_type_filter=self._select_action_type_filter,
+            show_help=self._show_help,
+            result_tooltip_text=self._result_tooltip_text,
+            focus_tree_tooltip_text=self._focus_tree_tooltip_text,
         )
-        self.passwords_button.pack(fill=tk.X)
-        self._tooltip(
-            self.passwords_button,
-            "Passwords — Show only protected Windows Credential Manager actions. Activate again to show all actions.",
-        )
-
-        type_filter = ttk.Menubutton(
-            self.actions_tool_rail,
-            text="Types ▾",
-            style="Compact.TButton",
-        )
-        type_filter.pack(fill=tk.X, pady=(5, 0))
-        type_menu = tk.Menu(type_filter, tearoff=False)
-        type_menu.add_radiobutton(
-            label="All types",
-            variable=self.action_type_filter_var,
-            value="All types",
-            command=lambda: self._select_action_type_filter(None),
-        )
-        type_menu.add_separator()
-        for action_type, definition in ACTION_TYPES.items():
-            type_menu.add_radiobutton(
-                label=definition.label,
-                variable=self.action_type_filter_var,
-                value=definition.label,
-                command=lambda selected=action_type: self._select_action_type_filter(selected),
-            )
-        type_filter.configure(menu=type_menu)
-        self._tooltip(
-            type_filter,
-            "Types — Filter the action list by any built-in action type, or show all types.",
-        )
-
-        run_button = ttk.Button(
-            self.actions_tool_rail,
-            text="Run",
-            command=self._execute_selected,
-            style="Accent.TButton",
-        )
-        run_button.pack(fill=tk.X, pady=(12, 0))
-        self._tooltip(run_button, "Execute the highlighted action. Its input and effect appear in Action info below.")
-        search_help = ttk.Button(
-            self.actions_tool_rail,
-            text="?",
-            width=3,
-            command=self._show_help,
-            style="Compact.TButton",
-        )
-        search_help.pack(fill=tk.X, pady=(5, 0))
-        self._tooltip(
-            search_help,
-            "Search globally across technology, task, context, action name, type, and content.",
-        )
-        self.type_filter = type_filter
-        self.run_button = run_button
-        self.action_help_button = search_help
-
-        actions_list_frame = ttk.Frame(results_body)
-        actions_list_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.actions_list_frame = actions_list_frame
-        scrollbar = ttk.Scrollbar(actions_list_frame, orient=tk.VERTICAL)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.results_scrollbar = scrollbar
-        self.results = tk.Listbox(
-            actions_list_frame,
-            activestyle="dotbox",
-            font=("Segoe UI", 10),
-            selectmode=tk.BROWSE,
-            yscrollcommand=scrollbar.set,
-            borderwidth=1,
-            relief=tk.SOLID,
-            highlightthickness=1,
-            highlightcolor=COLORS["focus"],
-            highlightbackground=COLORS["border"],
-        )
-        self.results.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.configure(command=self.results.yview)
-        self.results.bind("<KeyPress>", self._handle_keypress)
-        self.results.bind("<<ListboxSelect>>", lambda _event: self._update_preview())
-        self.results.bind("<Double-Button-1>", lambda _event: self._execute_selected())
-        self.results.bind("<Return>", lambda _event: self._execute_selected())
-        self.results_tooltip = ListboxItemTooltip(self.results, self._result_tooltip_text)
-        self.focus_tree = ttk.Treeview(
-            actions_list_frame,
-            show="tree",
-            selectmode="browse",
-        )
-        self.focus_tree.bind("<<TreeviewSelect>>", lambda _event: self._update_preview())
-        self.focus_tree.bind("<Double-Button-1>", lambda _event: self._execute_selected())
-        self.focus_tree.bind("<Return>", lambda _event: self._execute_selected())
-        self.focus_tree_tooltip = TreeviewItemTooltip(
-            self.focus_tree,
-            self._focus_tree_tooltip_text,
-        )
+        discovery = self.action_discovery_panel
+        self.search_entry = discovery.search_entry
+        self.actions_tool_rail = discovery.tool_rail
+        self.passwords_button = discovery.passwords_button
+        self.type_filter = discovery.type_filter
+        self.run_button = discovery.run_button
+        self.action_help_button = discovery.help_button
+        self.actions_list_frame = discovery.list_frame
+        self.results_scrollbar = discovery.scrollbar
+        self.results = discovery.results
+        self.results_tooltip = discovery.results_tooltip
+        self.focus_tree = discovery.focus_tree
+        self.focus_tree_tooltip = discovery.focus_tree_tooltip
 
         self.command_surface_panel = ttk.Frame(results_area, padding=(6, 0, 0, 0))
         results_area.add(self.command_surface_panel, weight=2)
@@ -625,7 +503,7 @@ class LauncherApp:
             ),
         )
         self.action_console = results_area
-        self.actions_panel = results_frame
+        self.actions_panel = discovery.frame
         self.action_console_ratio = 0.44
         self.action_console.bind("<Configure>", self._resize_action_console)
         self.action_console.bind("<ButtonRelease-1>", self._remember_action_console_split)
@@ -682,138 +560,20 @@ class LauncherApp:
         self.root.bind("<F1>", lambda _event: self._show_help())
 
     def _build_workspace(self, outer: ttk.Frame) -> None:
-
-        self.workspace_panel = ttk.Frame(outer)
-        self.workspace_panel.pack(fill=tk.BOTH, expand=True)
-        workspace_header = ttk.Frame(self.workspace_panel)
-        workspace_header.pack(fill=tk.X, pady=(0, 4))
-        ttk.Label(
-            workspace_header,
-            text="Input / Output",
-            style="PaneHeader.TLabel",
-        ).pack(side=tk.LEFT)
-        ttk.Label(
-            workspace_header,
-            text="Selection, clipboard, and transformation workspace",
-            style="Muted.TLabel",
-        ).pack(side=tk.LEFT, padx=(8, 0))
-        workspace_body = ttk.Frame(self.workspace_panel)
-        workspace_body.pack(fill=tk.BOTH, expand=True)
-        self.workspace = tk.Text(
-            workspace_body,
-            height=8,
-            wrap=tk.WORD,
-            undo=True,
-            font=("Consolas", 10),
-            borderwidth=1,
-            relief=tk.SOLID,
-            padx=7,
-            pady=6,
+        self.workspace_component = WorkspacePanel(
+            outer,
+            clipboard_getter=self.root.clipboard_get,
+            clipboard_setter=lambda value: self._set_clipboard(value),
+            status_setter=self.status_var.set,
+            tooltip_adder=self._tooltip,
         )
-        self.workspace.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.workspace.bind("<Control-a>", self._select_all_workspace)
-        self.workspace.bind("<Control-A>", self._select_all_workspace)
-        self.workspace.bind("<Button-3>", self._show_workspace_menu)
-        self.workspace_menu = tk.Menu(self.workspace, tearoff=False)
-        self.workspace_menu.add_command(label="Undo", command=lambda: self.workspace.event_generate("<<Undo>>"))
-        self.workspace_menu.add_command(label="Redo", command=lambda: self.workspace.event_generate("<<Redo>>"))
-        self.workspace_menu.add_separator()
-        self.workspace_menu.add_command(label="Cut", command=lambda: self.workspace.event_generate("<<Cut>>"))
-        self.workspace_menu.add_command(label="Copy", command=lambda: self.workspace.event_generate("<<Copy>>"))
-        self.workspace_menu.add_command(label="Paste", command=lambda: self.workspace.event_generate("<<Paste>>"))
-        self.workspace_menu.add_command(label="Select all", command=self._select_all_workspace)
-        self.workspace_menu.add_separator()
-        self.workspace_menu.add_command(label="Copy all", command=self._copy_workspace_to_clipboard)
-        self.workspace_menu.add_command(label="Replace with clipboard", command=self._paste_into_workspace)
-        self.workspace_menu.add_command(label="Clear", command=lambda: self._set_workspace_text(""))
-        self.workspace_transform_menu = tk.Menu(self.workspace_menu, tearoff=False)
-        case_menu = tk.Menu(self.workspace_transform_menu, tearoff=False)
-        case_menu.add_command(
-            label="lowercase", command=lambda: self._transform_workspace("lowercase", "lowercase")
-        )
-        case_menu.add_command(
-            label="UPPERCASE", command=lambda: self._transform_workspace("uppercase", "UPPERCASE")
-        )
-        case_menu.add_command(
-            label="Proper Case",
-            command=lambda: self._transform_workspace("proper_case", "Applied Proper Case"),
-        )
-        case_menu.add_command(
-            label="Sentence case",
-            command=lambda: self._transform_workspace("sentence_case", "Applied sentence case"),
-        )
-        case_menu.add_command(
-            label="iNVERT cASE",
-            command=lambda: self._transform_workspace("invert_case", "Inverted case"),
-        )
-        self.workspace_transform_menu.add_cascade(label="Case", menu=case_menu)
-
-        whitespace_menu = tk.Menu(self.workspace_transform_menu, tearoff=False)
-        whitespace_menu.add_command(
-            label="Normalize consecutive spaces",
-            command=lambda: self._transform_workspace("normalize_spaces", "Normalized spaces"),
-        )
-        whitespace_menu.add_command(
-            label="Trim every line",
-            command=lambda: self._transform_workspace("trim_lines", "Trimmed every line"),
-        )
-        self.workspace_transform_menu.add_cascade(
-            label="Whitespace",
-            menu=whitespace_menu,
-        )
-
-        lines_menu = tk.Menu(self.workspace_transform_menu, tearoff=False)
-        lines_menu.add_command(
-            label="Prefix / suffix every line…", command=self._prefix_suffix_workspace
-        )
-        lines_menu.add_command(
-            label="Remove blank lines",
-            command=lambda: self._transform_workspace("remove_blank_lines", "Removed blank lines"),
-        )
-        lines_menu.add_command(
-            label="Sort lines A–Z",
-            command=lambda: self._transform_workspace("sort_lines_ascending", "Sorted lines A–Z"),
-        )
-        lines_menu.add_command(
-            label="Sort lines Z–A",
-            command=lambda: self._transform_workspace("sort_lines_descending", "Sorted lines Z–A"),
-        )
-        lines_menu.add_command(
-            label="Join lines with spaces",
-            command=lambda: self._transform_workspace("join_lines", "Joined lines"),
-        )
-        lines_menu.add_command(
-            label="Format as SQL value list",
-            command=lambda: self._transform_workspace(
-                "sql_values",
-                "Formatted SQL value list",
-            ),
-        )
-        lines_menu.add_command(
-            label="Remove consecutive duplicate lines",
-            command=lambda: self._transform_workspace(
-                "remove_consecutive_duplicate_lines",
-                "Removed consecutive duplicate lines",
-            ),
-        )
-        lines_menu.add_command(
-            label="Remove duplicate lines",
-            command=lambda: self._transform_workspace("remove_duplicate_lines", "Removed duplicate lines"),
-        )
-        self.workspace_transform_menu.add_cascade(label="Lines", menu=lines_menu)
-        self.workspace_menu.add_cascade(label="Transform", menu=self.workspace_transform_menu)
-        self.workspace_transform_button = ttk.Button(
-            workspace_body,
-            text="⋮",
-            width=3,
-            command=self._show_workspace_transform_button_menu,
-            style="Compact.TButton",
-        )
-        self.workspace_transform_button.pack(side=tk.RIGHT, anchor=tk.N, padx=(5, 0))
-        self._tooltip(
-            self.workspace_transform_button,
-            "Transform selected text, or the complete field when nothing is selected. Results are copied.",
-        )
+        # Compatibility aliases keep launcher orchestration and integrations
+        # independent while callers migrate to the focused component.
+        self.workspace_panel = self.workspace_component.frame
+        self.workspace = self.workspace_component.text
+        self.workspace_menu = self.workspace_component.context_menu
+        self.workspace_transform_menu = self.workspace_component.transform_menu
+        self.workspace_transform_button = self.workspace_component.transform_button
 
     def _build_footer(self, outer: ttk.Frame) -> None:
 
@@ -894,37 +654,6 @@ class LauncherApp:
         lines.append(f"Action: {action.title}")
         return "\n".join(lines)
 
-    def _select_all_workspace(self, _event=None) -> str:
-        self.workspace.tag_add(tk.SEL, "1.0", "end-1c")
-        self.workspace.mark_set(tk.INSERT, "1.0")
-        self.workspace.see(tk.INSERT)
-        return "break"
-
-    def _show_workspace_menu(self, event: tk.Event) -> str:
-        self.workspace.focus_set()
-        try:
-            self.workspace_menu.tk_popup(event.x_root, event.y_root)
-        finally:
-            self.workspace_menu.grab_release()
-        return "break"
-
-    def _show_workspace_transform_button_menu(self) -> None:
-        self.workspace.focus_set()
-        try:
-            self.workspace_transform_menu.tk_popup(
-                self.workspace_transform_button.winfo_rootx(),
-                self.workspace_transform_button.winfo_rooty()
-                + self.workspace_transform_button.winfo_height(),
-            )
-        finally:
-            self.workspace_transform_menu.grab_release()
-
-    def _workspace_transform_range(self) -> tuple[str, str, bool]:
-        try:
-            return self.workspace.index(tk.SEL_FIRST), self.workspace.index(tk.SEL_LAST), True
-        except tk.TclError:
-            return "1.0", "end-1c", False
-
     def _transform_workspace(
         self,
         operation: str,
@@ -933,35 +662,9 @@ class LauncherApp:
         prefix: str = "",
         suffix: str = "",
     ) -> None:
-        start, end, had_selection = self._workspace_transform_range()
-        source = self.workspace.get(start, end)
-        if not source:
-            self.status_var.set("Input / Output is empty; nothing was transformed.")
-            return
-        try:
-            result = transform_text(source, operation, prefix=prefix, suffix=suffix)
-        except ActionError as exc:
-            messagebox.showerror("Context Palette", str(exc))
-            return
-        self.workspace.edit_separator()
-        self.workspace.replace(start, end, result)
-        self.workspace.edit_separator()
-        result_end = self.workspace.index(f"{start}+{len(result)}c")
-        self.workspace.mark_set(tk.INSERT, result_end)
-        if had_selection:
-            self.workspace.tag_add(tk.SEL, start, result_end)
-        self._set_clipboard(result)
-        scope = "selection" if had_selection else "complete field"
-        self.status_var.set(f"{description} in {scope}; result copied to clipboard.")
-
-    def _prefix_suffix_workspace(self) -> None:
-        dialog = PrefixSuffixDialog(self.root, title="Prefix / suffix every line")
-        if dialog.result is None:
-            return
-        prefix, suffix = dialog.result
-        self._transform_workspace(
-            "prefix_suffix_lines",
-            "Added line prefix / suffix",
+        self.workspace_component.transform(
+            operation,
+            description,
             prefix=prefix,
             suffix=suffix,
         )
@@ -2097,37 +1800,23 @@ class LauncherApp:
         return f"{action.type}:\n{action.value}"
 
     def _workspace_text(self) -> str:
-        return self.workspace.get("1.0", "end-1c").strip()
+        return self.workspace_component.get_text()
 
     def _set_workspace_text(self, value: str) -> None:
-        self.workspace.delete("1.0", tk.END)
-        self.workspace.insert("1.0", value)
+        self.workspace_component.set_text(value)
 
     def _paste_into_workspace(self) -> None:
-        try:
-            self._set_workspace_text(self.root.clipboard_get())
-            self.status_var.set("Pasted clipboard text into Input / Output")
-        except tk.TclError:
-            messagebox.showerror("Context Palette", "The clipboard does not contain text.")
+        self.workspace_component.replace_with_clipboard()
 
     def _sync_workspace_from_clipboard(self) -> None:
-        try:
-            value = self.root.clipboard_get()
-        except tk.TclError:
-            return
-        self._set_workspace_text(value)
+        self.workspace_component.sync_from_clipboard()
 
     def _sync_workspace_from_clipboard_if_safe(self) -> None:
         if self.protected_clipboard_sequence is None:
             self._sync_workspace_from_clipboard()
 
     def _copy_workspace_to_clipboard(self) -> None:
-        value = self._workspace_text()
-        if not value:
-            self.status_var.set("Input / Output is empty; nothing was copied.")
-            return
-        self._set_clipboard(value)
-        self.status_var.set("Copied Input / Output to the clipboard.")
+        self.workspace_component.copy_all()
 
     def _set_clipboard(self, value: str) -> None:
         self.root.clipboard_clear()
