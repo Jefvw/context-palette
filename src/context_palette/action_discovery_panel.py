@@ -23,12 +23,14 @@ class ActionDiscoveryPanel:
         count_var: tk.StringVar,
         search_var: tk.StringVar,
         action_type_filter_var: tk.StringVar,
+        tag_filter_var: tk.StringVar,
         tooltip_adder: Callable[[tk.Widget, TooltipText], None],
         keypress_handler: Callable[[tk.Event], object],
         execute_selected: Callable[[], None],
         update_preview: Callable[[], None],
         toggle_password_actions: Callable[[], None],
         select_action_type_filter: Callable[[str | None], None],
+        select_tag_filter: Callable[[str | None], None],
         show_help: Callable[[], None],
         result_tooltip_text: Callable[[int], str],
         focus_tree_tooltip_text: Callable[[str], str],
@@ -55,7 +57,7 @@ class ActionDiscoveryPanel:
         find_label.pack(anchor=tk.W)
         tooltip_adder(
             find_label,
-            "Type any technology, task, context, action name, type, or content.",
+            "Type any tag, context, action name, type, or content.",
         )
         self.search_entry = ttk.Entry(
             search_row,
@@ -112,6 +114,20 @@ class ActionDiscoveryPanel:
             "Types — Filter the action list by any built-in action type, or show all types.",
         )
 
+        self.tag_filter_var = tag_filter_var
+        self.select_tag_filter = select_tag_filter
+        self.tag_filter = ttk.Menubutton(
+            self.tool_rail,
+            text="Tags ▾",
+            style="Compact.TButton",
+        )
+        self.tag_filter.pack(fill=tk.X, pady=(5, 0))
+        tooltip_adder(
+            self.tag_filter,
+            "Tags — Narrow actions by a reusable descriptive tag.",
+        )
+        self.set_tags(())
+
         self.run_button = ttk.Button(
             self.tool_rail,
             text="Run",
@@ -133,7 +149,7 @@ class ActionDiscoveryPanel:
         self.help_button.pack(fill=tk.X, pady=(5, 0))
         tooltip_adder(
             self.help_button,
-            "Search globally across technology, task, context, action name, type, and content.",
+            "Search globally across tags, contexts, action names, types, and content.",
         )
 
         self.list_frame = ttk.Frame(body)
@@ -175,3 +191,26 @@ class ActionDiscoveryPanel:
             self.focus_tree,
             focus_tree_tooltip_text,
         )
+
+    def set_tags(self, tags: tuple[str, ...]) -> None:
+        previous_menu = getattr(self, "tag_menu", None)
+        if previous_menu is not None:
+            previous_menu.destroy()
+        menu = tk.Menu(self.tag_filter, tearoff=False)
+        menu.add_radiobutton(
+            label="All tags",
+            variable=self.tag_filter_var,
+            value="All tags",
+            command=lambda: self.select_tag_filter(None),
+        )
+        if tags:
+            menu.add_separator()
+        for tag in tags:
+            menu.add_radiobutton(
+                label=tag,
+                variable=self.tag_filter_var,
+                value=tag,
+                command=lambda selected=tag: self.select_tag_filter(selected),
+            )
+        self.tag_filter.configure(menu=menu)
+        self.tag_menu = menu

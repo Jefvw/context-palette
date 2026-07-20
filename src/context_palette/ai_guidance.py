@@ -11,8 +11,16 @@ from .inbox import InboxItem
 
 
 RESPONSE_FORMAT = "context-palette-action-proposals"
-RESPONSE_VERSION = 1
+RESPONSE_VERSION = 2
 PROPOSAL_FIELDS = {
+    "title",
+    "contexts",
+    "tags",
+    "type",
+    "value",
+    "explanation",
+}
+LEGACY_PROPOSAL_FIELDS = {
     "title",
     "technology",
     "task",
@@ -107,9 +115,8 @@ Use exactly this response format:
   "proposals": [
     {{
       "title": "Copy concise descriptive title",
-      "technology": "Technology or empty string",
-      "task": "Task or empty string",
-      "context": "Existing or clearly appropriate context",
+      "contexts": ["Zero or more specific contexts; omit General"],
+      "tags": ["short", "reusable", "descriptive tags"],
       "type": "{example_type}",
       "value": "Complete reusable action text",
       "explanation": "Why this proposal is reusable"
@@ -149,9 +156,13 @@ def build_example_response(
             "proposals": [
                 {
                     "title": title,
-                    "technology": "",
-                    "task": "",
-                    "context": context.strip() or item.suggested_context or "General",
+                    "contexts": (
+                        []
+                        if (context.strip() or item.suggested_context or "General").casefold()
+                        == "general"
+                        else [context.strip() or item.suggested_context]
+                    ),
+                    "tags": [],
                     "type": action_type,
                     "value": value,
                     "explanation": explanation,
@@ -178,8 +189,11 @@ def review_ai_proposals(response: str, variation: PromptVariation) -> AIProposal
         raise AIGuidanceError("AI response must be a JSON object.")
     if data.get("format") != RESPONSE_FORMAT:
         raise AIGuidanceError(f"AI response has an unsupported format; expected {RESPONSE_FORMAT}.")
-    if data.get("version") != RESPONSE_VERSION:
-        raise AIGuidanceError(f"AI response has an unsupported version; expected {RESPONSE_VERSION}.")
+    version = data.get("version")
+    if version not in {1, RESPONSE_VERSION}:
+        raise AIGuidanceError(
+            f"AI response has an unsupported version; expected 1 or {RESPONSE_VERSION}."
+        )
     raw_proposals = data.get("proposals")
     if not isinstance(raw_proposals, list) or not raw_proposals:
         raise AIGuidanceError("AI response must contain at least one proposal.")
@@ -192,7 +206,7 @@ def review_ai_proposals(response: str, variation: PromptVariation) -> AIProposal
     issues: list[str] = []
     for index, raw in enumerate(raw_proposals, start=1):
         try:
-            proposals.append(_parse_proposal(raw, index, variation))
+            proposals.append(_parse_proposal(raw, index, variation, version))
         except AIGuidanceError as exc:
             issues.append(str(exc))
     return AIProposalReview(proposals=tuple(proposals), issues=tuple(issues))
@@ -202,11 +216,15 @@ def _parse_proposal(
     raw: object,
     index: int,
     variation: PromptVariation,
+    version: int,
 ) -> ActionProposal:
         if not isinstance(raw, dict):
             raise AIGuidanceError(f"Proposal #{index} must be an object.")
-        unknown = set(raw) - PROPOSAL_FIELDS
-        missing = PROPOSAL_FIELDS - set(raw)
+        expected_fields = (
+            LEGACY_PROPOSAL_FIELDS if version == 1 else PROPOSAL_FIELDS
+        )
+        unknown = set(raw) - expected_fields
+        missing = expected_fields - set(raw)
         if unknown or missing:
             details = []
             if missing:
@@ -214,8 +232,21 @@ def _parse_proposal(
             if unknown:
                 details.append("unknown: " + ", ".join(sorted(unknown)))
             raise AIGuidanceError(f"Proposal #{index} has invalid fields ({'; '.join(details)}).")
-        if not all(isinstance(raw[field], str) for field in PROPOSAL_FIELDS):
-            raise AIGuidanceError(f"Proposal #{index} fields must all be text.")
+        text_fields = (
+            LEGACY_PROPOSAL_FIELDS
+            if version == 1
+            else PROPOSAL_FIELDS - {"contexts", "tags"}
+        )
+        if not all(isinstance(raw[field], str) for field in text_fields):
+            raise AIGuidanceError(f"Proposal #{index} text fields must contain text.")
+        if version == RESPONSE_VERSION and not all(
+            isinstance(raw[field], list)
+            and all(isinstance(value, str) for value in raw[field])
+            for field in ("contexts", "tags")
+        ):
+            raise AIGuidanceError(
+                f"Proposal #{index} contexts and tags must be lists of text."
+            )
         if raw["type"] not in variation.allowed_action_types:
             raise AIGuidanceError(f"Proposal #{index} has unsupported type: {raw['type']}")
         explanation = raw["explanation"].strip()
@@ -226,11 +257,20 @@ def _parse_proposal(
                 "copy_text": draft_copy_text_action,
                 "open_url": draft_open_url_action,
             }[raw["type"]]
-            action = constructor(
+            if version == 1:
+                action = constructor(
                     title=raw["title"],
                     technology=raw["technology"],
                     task=raw["task"],
                     context=raw["context"],
+                    value=raw["value"],
+                )
+            else:
+                action = constructor(
+                    title=raw["title"],
+                    context="General",
+                    contexts=raw["contexts"],
+                    tags=raw["tags"],
                     value=raw["value"],
                 )
         except ActionError as exc:

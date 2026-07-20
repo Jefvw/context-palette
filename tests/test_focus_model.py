@@ -8,7 +8,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.actions import Action
 from context_palette.contexts import ContextDefinition
-from context_palette.focus_model import focus_action_hierarchy, resolve_focus_state
+from context_palette.focus_model import actions_for_context, resolve_focus_state
 from context_palette.palette_state import PaletteState
 
 
@@ -38,7 +38,7 @@ class FocusModelTests(unittest.TestCase):
 
         self.assertEqual(
             resolved.available_names,
-            ("Database", "Developing", "General"),
+            ("General", "Database", "Developing"),
         )
         self.assertEqual(resolved.palette_state.focus_context, "Database")
         self.assertEqual(
@@ -50,11 +50,16 @@ class FocusModelTests(unittest.TestCase):
         )
         self.assertEqual(resolved.palette_state.pinned_action_ids, ("general",))
 
-    def test_resolve_falls_back_to_first_name_but_keeps_focus_when_none_exist(self):
+    def test_resolve_falls_back_to_general_and_matches_focus_case_insensitively(self):
         available = resolve_focus_state(
             [Action("mail", "Mail", "Mail", "copy_text", "1")],
             [ContextDefinition("Developing")],
             PaletteState(focus_context="Missing"),
+        )
+        matched = resolve_focus_state(
+            [Action("mail", "Mail", "Mail", "copy_text", "1")],
+            [],
+            PaletteState(focus_context="mail"),
         )
         empty = resolve_focus_state(
             [],
@@ -62,11 +67,38 @@ class FocusModelTests(unittest.TestCase):
             PaletteState(focus_context="Personal"),
         )
 
-        self.assertEqual(available.palette_state.focus_context, "Developing")
-        self.assertEqual(empty.available_names, ())
-        self.assertEqual(empty.palette_state.focus_context, "Personal")
+        self.assertEqual(available.palette_state.focus_context, "General")
+        self.assertEqual(matched.palette_state.focus_context, "Mail")
+        self.assertEqual(empty.available_names, ("General",))
+        self.assertEqual(empty.palette_state.focus_context, "General")
 
-    def test_hierarchy_uses_explicit_context_and_canonical_order(self):
+    def test_resolve_canonicalizes_saved_context_slot_keys(self):
+        resolved = resolve_focus_state(
+            [
+                Action("mail-one", "Mail one", "Mail", "copy_text", "1"),
+                Action("mail-two", "Mail two", "Mail", "copy_text", "2"),
+            ],
+            [ContextDefinition("Mail", preferred_action_ids=("mail-two",))],
+            PaletteState(
+                focus_context="MAIL",
+                context_slots={
+                    "mail": ("mail-one",),
+                    "Mail": ("mail-two",),
+                    "Removed context": ("mail-two",),
+                },
+            ),
+        )
+
+        self.assertEqual(resolved.palette_state.focus_context, "Mail")
+        self.assertEqual(
+            resolved.palette_state.context_slots,
+            {
+                "Mail": ("mail-two",),
+                "Removed context": ("mail-two",),
+            },
+        )
+
+    def test_context_actions_use_membership_and_canonical_order(self):
         actions = [
             Action("one", "First", "General", "copy_text", "1", technology="Text", task="Copy"),
             Action("two", "Second", "Other", "copy_text", "2", technology="Text", task="Copy"),
@@ -75,15 +107,14 @@ class FocusModelTests(unittest.TestCase):
             Action("five", "First", "General", "copy_text", "5", technology="Text", task="Copy"),
         ]
 
-        hierarchy = focus_action_hierarchy(actions, "GENERAL")
+        general = actions_for_context(actions, "GENERAL")
+        other = actions_for_context(actions, "Other")
 
-        self.assertEqual([technology for technology, _tasks in hierarchy], ["Text", "Other"])
         self.assertEqual(
-            [action.id for action in hierarchy[0][1][0][1]],
-            ["one", "five"],
+            [action.id for action in general],
+            ["one", "two", "three", "five"],
         )
-        self.assertEqual(hierarchy[1][1][0][0], "Other")
-        self.assertEqual(hierarchy[1][1][0][1][0].id, "three")
+        self.assertEqual([action.id for action in other], ["two"])
 
 
 if __name__ == "__main__":

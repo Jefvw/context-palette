@@ -70,16 +70,14 @@ def action_slots(actions: list[Action], state: PaletteState) -> dict[int, Action
 
     configured = (state.context_slots or {}).get(state.focus_context, ())
     context_actions = [by_id[action_id] for action_id in configured if action_id in by_id]
-    if not context_actions:
-        context_actions = [action for action in actions if action.context == state.focus_context][:4]
-    if len(context_actions) < 4:
-        used_ids = {action.id for action in context_actions}
-        fallbacks = [
-            action
-            for action in actions
-            if action.id not in used_ids and action.context == "General"
-        ]
-        context_actions.extend(fallbacks[: 4 - len(context_actions)])
+    used_ids = {action.id for action in context_actions}
+    context_fallbacks = [
+        action
+        for action in actions
+        if action.id not in used_ids
+        and action.belongs_to_context(state.focus_context)
+    ]
+    context_actions.extend(context_fallbacks[: 4 - len(context_actions)])
     if len(context_actions) < 4:
         used_ids = {action.id for action in context_actions}
         fallbacks = [action for action in actions if action.id not in used_ids]

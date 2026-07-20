@@ -7,7 +7,7 @@ The application is under active development. It already supports the complete Ca
 ## What it does today
 
 - Opens instantly from a resident process with `F9` or `Ctrl+Alt+P`.
-- Searches actions by name, technology, task, context, type, state, and content.
+- Searches actions by name, tag, context, type, state, and content.
 - Keeps five global pinned slots and four slots for the selected focus context.
 - Runs thirteen constrained action types without an arbitrary shell-command action.
 - Pastes Trusted Windows or generic credentials without storing passwords in action JSON.
@@ -90,10 +90,13 @@ Close, `Esc`, and **Hide** keep the process resident. **Quit** stops it.
 Capture → Draft → Test → Refine → Trusted
 ```
 
-Actions also have searchable facets:
+Every action belongs to the virtual **General** root. An action can additionally
+belong to one or more specific contexts and have any number of reusable tags:
 
 ```text
-Technology → Task → Context → Action
+General (all actions)
+├── Specific contexts (focused workspaces)
+└── Tags (independent discovery filters)
 ```
 
 `Trusted` records an explicit user review; it is not a security sandbox or a guarantee that an external target still exists.

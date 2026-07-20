@@ -17,6 +17,8 @@ from context_palette.palette_state import (
     save_palette_state,
     toggle_pin,
 )
+from context_palette.focus_model import resolve_focus_state
+from context_palette.contexts import ContextDefinition
 
 
 class PaletteStateTests(unittest.TestCase):
@@ -70,6 +72,42 @@ class PaletteStateTests(unittest.TestCase):
         self.assertEqual(slots[6].id, "a")
         self.assertEqual(slots[7].id, "b")
         self.assertEqual(slots[8].id, "c")
+
+    def test_preferred_slots_fill_with_context_members_before_global_actions(self):
+        actions = [
+            Action("preferred", "Preferred", "Mail", "copy_text", "a"),
+            Action("unrelated", "Unrelated", "Database", "copy_text", "b"),
+            Action(
+                "member",
+                "Also useful for mail",
+                "Mail",
+                "copy_text",
+                "c",
+                contexts=("Mail", "Customer support"),
+            ),
+        ]
+
+        slots = action_slots(
+            actions,
+            PaletteState((), "Mail", {"Mail": ("preferred",)}),
+        )
+
+        self.assertEqual(
+            [slots[number].id for number in (6, 7, 8)],
+            ["preferred", "member", "unrelated"],
+        )
+
+    def test_resolved_mixed_case_slot_key_is_used_by_action_slots(self):
+        state = resolve_focus_state(
+            self.actions,
+            [ContextDefinition("Mail")],
+            PaletteState((), "MAIL", {"mail": ("b", "a")}),
+        ).palette_state
+
+        slots = action_slots(self.actions, state)
+
+        self.assertEqual(state.focus_context, "Mail")
+        self.assertEqual([slots[6].id, slots[7].id], ["b", "a"])
 
 
 if __name__ == "__main__":

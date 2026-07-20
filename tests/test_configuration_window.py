@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -146,10 +147,10 @@ class ConfigurationDialogTests(unittest.TestCase):
         dialog = ActionDraftDialog.__new__(ActionDraftDialog)
         dialog.action_type = "copy_text"
         dialog.action = None
+        dialog.context_names = ()
         dialog.title_var = FakeVariable("Greeting")
-        dialog.context_var = FakeVariable("General")
-        dialog.technology_var = FakeVariable()
-        dialog.task_var = FakeVariable()
+        dialog.contexts_var = FakeVariable()
+        dialog.tags_var = FakeVariable()
         dialog.arguments_var = FakeVariable()
         dialog.working_directory_var = FakeVariable()
         dialog.value = FakeText("Hello")
@@ -164,10 +165,10 @@ class ConfigurationDialogTests(unittest.TestCase):
         dialog = ActionDraftDialog.__new__(ActionDraftDialog)
         dialog.action_type = "copy_text"
         dialog.action = None
+        dialog.context_names = ()
         dialog.title_var = FakeVariable("Greeting")
-        dialog.context_var = FakeVariable("General")
-        dialog.technology_var = FakeVariable()
-        dialog.task_var = FakeVariable()
+        dialog.contexts_var = FakeVariable()
+        dialog.tags_var = FakeVariable()
         dialog.arguments_var = FakeVariable()
         dialog.working_directory_var = FakeVariable()
         dialog.value = FakeText("Hello")
@@ -177,6 +178,28 @@ class ConfigurationDialogTests(unittest.TestCase):
         dialog._save()
 
         self.assertEqual(dialog.window.destroy_calls, 1)
+
+    def test_action_dialog_rejects_an_unknown_specific_context(self) -> None:
+        dialog = ActionDraftDialog.__new__(ActionDraftDialog)
+        dialog.action_type = "copy_text"
+        dialog.action = None
+        dialog.context_names = ("General", "Mail")
+        dialog.title_var = FakeVariable("Greeting")
+        dialog.contexts_var = FakeVariable("Typo")
+        dialog.tags_var = FakeVariable()
+        dialog.arguments_var = FakeVariable()
+        dialog.working_directory_var = FakeVariable()
+        dialog.value = FakeText("Hello")
+        dialog.window = FakeWindow()
+        saved: list[Action] = []
+        dialog.on_save = lambda action: saved.append(action) or True
+
+        with patch("context_palette.configuration_window.messagebox.showerror") as error:
+            dialog._save()
+
+        self.assertEqual(saved, [])
+        self.assertEqual(dialog.window.destroy_calls, 0)
+        self.assertIn("Unknown specific context: Typo", error.call_args.args[1])
 
     def test_context_dialog_stays_open_when_save_callback_fails(self) -> None:
         dialog = ContextDialog.__new__(ContextDialog)

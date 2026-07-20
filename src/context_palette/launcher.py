@@ -25,6 +25,7 @@ from .actions import (
     search_actions,
     trusted_action,
     update_action,
+    validate_context_memberships,
 )
 from .action_discovery_panel import ActionDiscoveryPanel
 from .ai_guidance_window import AIGuidanceWindow
@@ -40,7 +41,7 @@ from .command_surface import (
     load_combined_command_groups,
 )
 from .configuration_window import ConfigurationWindow
-from .focus_model import focus_action_hierarchy, resolve_focus_state
+from .focus_model import actions_for_context, resolve_focus_state
 from .hotkeys import (
     GlobalHotkey,
     cursor_location,
@@ -52,6 +53,7 @@ from .hotkeys import (
 )
 from .help_window import HelpWindow
 from .contexts import ContextDefinition, ContextError, load_combined_contexts
+from .context_membership_field import ContextMembershipField, TagSelectionField
 from .inbox import InboxError, InboxItem, append_inbox_item, create_clipboard_item, load_inbox_items
 from .inbox import update_inbox_item_state
 from .single_instance import SingleInstanceServer
@@ -218,13 +220,14 @@ class LauncherApp:
         self.search_entry: ttk.Entry | None = None
         self.search_refresh_after_id: str | None = None
         self.action_type_filter: str | None = None
+        self.action_tag_filter: str | None = None
         self.focus_actions_mode = False
         self.focus_tree_actions: dict[str, Action] = {}
-        self.focus_tree_expansion: dict[str, set[tuple[str, ...]]] = {}
         self.focus_tree_context: str | None = None
         self.results_view = "flat"
         self.passwords_button: ttk.Button | None = None
         self.action_type_filter_var = tk.StringVar(value="All types")
+        self.action_tag_filter_var = tk.StringVar(value="All tags")
         self.configuration_signature_cache: tuple[tuple[str, int, int], ...] = ()
         self.search_var = tk.StringVar()
         self.context_var = tk.StringVar(value="General")
@@ -382,7 +385,7 @@ class LauncherApp:
         )
         self._tooltip(
             focus_actions_button,
-            "Show actions explicitly assigned to the active Focus, grouped by technology and task.",
+            "Show actions belonging to the active Focus. General contains every action.",
         )
         self._tooltip(
             manage_focus,
@@ -429,6 +432,11 @@ class LauncherApp:
             )
         self._refresh_results()
 
+    def _select_tag_filter(self, tag: str | None) -> None:
+        self.action_tag_filter = tag
+        self.action_tag_filter_var.set(tag or "All tags")
+        self._refresh_results()
+
     def _build_results_area(self, outer: ttk.Frame) -> None:
         results_area = ttk.Panedwindow(outer, orient=tk.HORIZONTAL)
         results_area.pack(fill=tk.BOTH, expand=True)
@@ -438,12 +446,14 @@ class LauncherApp:
             count_var=self.results_count_var,
             search_var=self.search_var,
             action_type_filter_var=self.action_type_filter_var,
+            tag_filter_var=self.action_tag_filter_var,
             tooltip_adder=self._tooltip,
             keypress_handler=self._handle_keypress,
             execute_selected=self._execute_selected,
             update_preview=self._update_preview,
             toggle_password_actions=self._toggle_password_actions,
             select_action_type_filter=self._select_action_type_filter,
+            select_tag_filter=self._select_tag_filter,
             show_help=self._show_help,
             result_tooltip_text=self._result_tooltip_text,
             focus_tree_tooltip_text=self._focus_tree_tooltip_text,
@@ -453,6 +463,7 @@ class LauncherApp:
         self.actions_tool_rail = discovery.tool_rail
         self.passwords_button = discovery.passwords_button
         self.type_filter = discovery.type_filter
+        self.tag_filter = discovery.tag_filter
         self.run_button = discovery.run_button
         self.action_help_button = discovery.help_button
         self.actions_list_frame = discovery.list_frame
@@ -646,11 +657,12 @@ class LauncherApp:
         if index < 0 or index >= len(self.displayed_actions):
             return ""
         action = self.displayed_actions[index]
-        lines = [f"Context: {action.context or 'General'}"]
-        if action.technology:
-            lines.append(f"Technology: {action.technology}")
-        if action.task:
-            lines.append(f"Task: {action.task}")
+        lines = [
+            "Contexts: "
+            + (", ".join(action.effective_contexts) or "General only")
+        ]
+        if action.effective_tags:
+            lines.append(f"Tags: {', '.join(action.effective_tags)}")
         lines.append(f"Action: {action.title}")
         return "\n".join(lines)
 
@@ -875,6 +887,21 @@ class LauncherApp:
                 self.actions_path,
                 self.local_actions_path,
             )
+            available_tags = tuple(
+                sorted(
+                    {tag for action in self.actions for tag in action.effective_tags},
+                    key=str.casefold,
+                )
+            )
+            if hasattr(self, "action_discovery_panel"):
+                self.action_discovery_panel.set_tags(available_tags)
+            if (
+                getattr(self, "action_tag_filter", None) is not None
+                and self.action_tag_filter.casefold()
+                not in {tag.casefold() for tag in available_tags}
+            ):
+                self.action_tag_filter = None
+                self.action_tag_filter_var.set("All tags")
             self.status_var.set(f"Loaded {len(self.actions)} actions")
         except ActionError as exc:
             self.status_var.set(
@@ -1118,8 +1145,8 @@ class LauncherApp:
                     type="open_file",
                     value=str(path.resolve()),
                     state="Trusted",
-                    technology="JSON",
-                    task="Configure quick actions",
+                    contexts=("Configuration",),
+                    tags=("json", "configure quick actions"),
                 )
             )
         self.status_var.set(f"Opened menu and action configuration for {group.label}.")
@@ -1212,8 +1239,6 @@ class LauncherApp:
     def _change_focus_context(self) -> None:
         context = self.context_var.get().strip() or "General"
         previous_state = self.palette_state
-        if getattr(self, "results_view", "flat") == "focus":
-            self._remember_focus_tree_expansion(previous_state.focus_context)
         updated_state = PaletteState(
             self.palette_state.pinned_action_ids,
             context,
@@ -1258,6 +1283,7 @@ class LauncherApp:
             self.focus_actions_mode
             and not self.search_var.get().strip()
             and self.action_type_filter is None
+            and self.action_tag_filter is None
         ):
             self._render_focus_actions()
             _warn_if_slow(
@@ -1274,6 +1300,15 @@ class LauncherApp:
                 action
                 for action in self.filtered_actions
                 if action.type == self.action_type_filter
+            ]
+        if self.action_tag_filter is not None:
+            selected_tag = self.action_tag_filter.casefold()
+            self.filtered_actions = [
+                action
+                for action in self.filtered_actions
+                if selected_tag in {
+                    tag.casefold() for tag in action.effective_tags
+                }
             ]
         self.slot_actions = action_slots(self.actions, self.palette_state)
         matching_ids = {action.id for action in self.filtered_actions}
@@ -1311,7 +1346,15 @@ class LauncherApp:
         self.results_count_var.set(f"{count} action" if count == 1 else f"{count} actions")
         if not self.displayed_actions:
             query = self.search_var.get().strip()
-            if self.action_type_filter is not None:
+            if self.action_tag_filter is not None:
+                empty_message = (
+                    f'No actions tagged “{self.action_tag_filter}” match “{query}”.\n'
+                    "Clear Find or choose another tag."
+                    if query
+                    else f'No actions use the tag “{self.action_tag_filter}”.\n'
+                    "Choose another tag or add it in Configure."
+                )
+            elif self.action_type_filter is not None:
                 type_label = ACTION_TYPES[self.action_type_filter].label
                 empty_message = (
                     f'No {type_label} actions match “{query}”.\n'
@@ -1331,7 +1374,11 @@ class LauncherApp:
                 foreground=COLORS["muted_text"],
                 background=COLORS["surface"],
             )
-            if self.action_type_filter is not None:
+            if self.action_tag_filter is not None:
+                self.status_var.set(
+                    f"No matching action tagged {self.action_tag_filter}."
+                )
+            elif self.action_type_filter is not None:
                 type_label = ACTION_TYPES[self.action_type_filter].label
                 self.status_var.set(
                     f"No matching {type_label} action. Clear Find or choose another type."
@@ -1339,7 +1386,12 @@ class LauncherApp:
             else:
                 self.status_var.set("No matching action. Clear Find or create one in Configure.")
         else:
-            if self.action_type_filter is not None:
+            if self.action_tag_filter is not None:
+                self.status_var.set(
+                    f"{count} action{'s' if count != 1 else ''} tagged "
+                    f"{self.action_tag_filter}"
+                )
+            elif self.action_type_filter is not None:
                 type_label = ACTION_TYPES[self.action_type_filter].label
                 label = f"{type_label} action" if count == 1 else f"{type_label} actions"
                 self.status_var.set(f"{count} {label}")
@@ -1358,7 +1410,6 @@ class LauncherApp:
     def _show_flat_results(self) -> None:
         if self.results_view == "flat":
             return
-        self._remember_focus_tree_expansion()
         self.focus_tree.pack_forget()
         self.results.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.results_scrollbar.configure(command=self.results.yview)
@@ -1374,106 +1425,40 @@ class LauncherApp:
         self.focus_tree.configure(yscrollcommand=self.results_scrollbar.set)
         self.results_view = "focus"
 
-    def _remember_focus_tree_expansion(self, context: str | None = None) -> None:
-        if self.results_view != "focus":
-            return
-        expanded: set[tuple[str, ...]] = set()
-        for technology_id in self.focus_tree.get_children():
-            technology = self.focus_tree.item(technology_id, "text")
-            if self.focus_tree.item(technology_id, "open"):
-                expanded.add((technology,))
-            for task_id in self.focus_tree.get_children(technology_id):
-                task = self.focus_tree.item(task_id, "text")
-                if self.focus_tree.item(task_id, "open"):
-                    expanded.add((technology, task))
-        owner = (
-            context
-            or getattr(self, "focus_tree_context", None)
-            or self.palette_state.focus_context
-        )
-        key = owner.casefold()
-        self.focus_tree_expansion[key] = expanded
-
     def _render_focus_actions(self) -> None:
-        if self.results_view == "focus":
-            self._remember_focus_tree_expansion(
-                getattr(self, "focus_tree_context", None)
-            )
         self._show_focus_tree()
         self.focus_tree.delete(*self.focus_tree.get_children())
         self.focus_tree_actions.clear()
-        hierarchy = focus_action_hierarchy(
+        focused_actions = actions_for_context(
             self.actions,
             self.palette_state.focus_context,
         )
-        stored_expansion = self.focus_tree_expansion.get(
-            self.palette_state.focus_context.casefold()
-        )
-        expanded = stored_expansion if stored_expansion is not None else set()
-        count = 0
-        for technology_index, (technology, tasks) in enumerate(hierarchy):
-            technology_id = f"technology:{technology_index}"
+        for index, action in enumerate(focused_actions):
+            item_id = f"action:{index}:{action.id}"
             self.focus_tree.insert(
                 "",
                 tk.END,
-                iid=technology_id,
-                text=technology,
-                open=(technology,) in expanded,
+                iid=item_id,
+                text=action.compact_display_text,
             )
-            for task_index, (task, actions) in enumerate(tasks):
-                task_id = f"task:{technology_index}:{task_index}"
-                self.focus_tree.insert(
-                    technology_id,
-                    tk.END,
-                    iid=task_id,
-                    text=task,
-                    open=(technology, task) in expanded,
-                )
-                for action_index, action in enumerate(actions):
-                    item_id = f"action:{technology_index}:{task_index}:{action_index}:{action.id}"
-                    self.focus_tree.insert(task_id, tk.END, iid=item_id, text=action.title)
-                    self.focus_tree_actions[item_id] = action
-                    count += 1
+            self.focus_tree_actions[item_id] = action
+        count = len(focused_actions)
         context = self.palette_state.focus_context
         self.focus_tree_context = context
         self.actions_heading_var.set(f"Focus actions — {context}")
         self.results_count_var.set(f"{count} action" if count == 1 else f"{count} actions")
         if count:
-            first_technology = self.focus_tree.get_children()[0]
-            first_task = self.focus_tree.get_children(first_technology)[0]
-            if stored_expansion is None:
-                self.focus_tree.item(first_technology, open=True)
-                self.focus_tree.item(first_task, open=True)
-            initial_item = self._first_visible_focus_tree_item()
+            initial_item = self.focus_tree.get_children()[0]
             self.focus_tree.selection_set(initial_item)
             self.focus_tree.focus(initial_item)
             self.status_var.set(
-                f"{count} actions explicitly assigned to {context}. Find remains global."
+                f"{count} actions in {context}. Find remains global."
             )
         else:
             self.status_var.set(
-                f"No actions are explicitly assigned to {context}. Find searches all actions."
+                f"No actions belong to {context}. Find searches all actions."
             )
         self._update_preview()
-
-    def _first_visible_focus_tree_item(self) -> str:
-        """Return a visible leaf, or a visible non-executable branch as fallback."""
-        technologies = self.focus_tree.get_children()
-        for technology_id in technologies:
-            if not self.focus_tree.item(technology_id, "open"):
-                continue
-            for task_id in self.focus_tree.get_children(technology_id):
-                if not self.focus_tree.item(task_id, "open"):
-                    continue
-                actions = self.focus_tree.get_children(task_id)
-                if actions:
-                    return actions[0]
-        first_technology = technologies[0]
-        if self.focus_tree.item(first_technology, "open"):
-            tasks = self.focus_tree.get_children(first_technology)
-            if tasks:
-                return tasks[0]
-        return first_technology
 
     def _schedule_refresh_results(self) -> None:
         if self.search_refresh_after_id is not None:
@@ -1664,7 +1649,18 @@ class LauncherApp:
             )
             return
 
-        DraftActionEditor(self.root, action, self._save_edited_action)
+        DraftActionEditor(
+            self.root,
+            action,
+            self.available_context_names,
+            tuple(
+                sorted(
+                    {tag for item in self.actions for tag in item.effective_tags},
+                    key=str.casefold,
+                )
+            ),
+            self._save_edited_action,
+        )
 
     def _mark_selected_trusted(self) -> None:
         action = self._selected_action()
@@ -1753,7 +1749,8 @@ class LauncherApp:
             return ""
         return (
             f"{action.title}\n"
-            f"Context: {action.context or 'General'}\n"
+            f"Contexts: {', '.join(action.effective_contexts) or 'General only'}\n"
+            f"Tags: {', '.join(action.effective_tags) or '(none)'}\n"
             f"Type: {ACTION_TYPES[action.type].label}\n"
             f"State: {action.state}"
         )
@@ -1842,9 +1839,22 @@ class LauncherApp:
     def _ask_for_action_input(self, prompt: str) -> str | None:
         return simpledialog.askstring("Build URL", prompt, parent=self.root)
 
-    def _save_edited_action(self, action: Action, title: str, context: str, value: str) -> None:
+    def _save_edited_action(
+        self,
+        action: Action,
+        title: str,
+        contexts: tuple[str, ...],
+        tags: tuple[str, ...],
+        value: str,
+    ) -> None:
         try:
-            updated = edited_copy_text_action(action, title=title, context=context, value=value)
+            updated = edited_copy_text_action(
+                action,
+                title=title,
+                contexts=contexts,
+                tags=tags,
+                value=value,
+            )
             update_action(self._action_storage_path(action), updated)
             self._reload()
             self.status_var.set(f"Saved draft action: {updated.title}")
@@ -1887,6 +1897,7 @@ class LauncherApp:
             items,
             self.actions,
             self.palette_state.focus_context,
+            self.available_context_names,
             self.local_actions_path,
             self.inbox_path,
             self._reload,
@@ -1996,6 +2007,7 @@ class InboxWindow:
         items: list[InboxItem],
         actions: list[Action],
         focus_context: str,
+        context_names: list[str],
         actions_path: Path,
         inbox_path: Path,
         on_change: Callable[[], None],
@@ -2003,6 +2015,7 @@ class InboxWindow:
         self.items = items
         self.actions = actions
         self.focus_context = focus_context
+        self.context_names = context_names
         self.actions_path = actions_path
         self.inbox_path = inbox_path
         self.on_change = on_change
@@ -2107,6 +2120,7 @@ class InboxWindow:
             item,
             self.actions,
             item.suggested_context or self.focus_context,
+            self.context_names,
             self._save_created_action,
         )
 
@@ -2114,7 +2128,11 @@ class InboxWindow:
         item = self._selected_item()
         if item is None:
             return
-        contexts = {action.context for action in self.actions if action.context}
+        contexts = {
+            context
+            for action in self.actions
+            for context in action.effective_contexts
+        }
         contexts.update((self.focus_context, item.suggested_context, "General"))
         AIGuidanceWindow(
             self.window,
@@ -2163,22 +2181,25 @@ class DraftActionCreator:
         item: InboxItem,
         actions: list[Action],
         initial_context: str,
+        context_names: list[str],
         on_save: Callable[[InboxItem, Action], None],
     ) -> None:
         self.item = item
         self.on_save = on_save
+        self.context_names = tuple(context_names)
         self.window = tk.Toplevel(parent)
         self.window.title("Create Draft Action")
         configure_standard_window(self.window)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
 
-        technologies = sorted({action.technology for action in actions if action.technology}, key=str.casefold)
-        tasks = sorted({action.task for action in actions if action.task}, key=str.casefold)
-        contexts = sorted({action.context for action in actions if action.context}, key=str.casefold)
-
-        self.technology_var = tk.StringVar()
-        self.task_var = tk.StringVar()
-        self.context_var = tk.StringVar(value=initial_context or "General")
+        tags = sorted(
+            {tag for action in actions for tag in action.effective_tags},
+            key=str.casefold,
+        )
+        self.tags_var = tk.StringVar()
+        self.contexts_var = tk.StringVar(
+            value="" if initial_context.casefold() == "general" else initial_context
+        )
         self.title_var = tk.StringVar(value=item.title)
         self.action_type_var = tk.StringVar(value="Copy captured text")
         self.guidance_var = tk.StringVar()
@@ -2220,9 +2241,17 @@ class DraftActionCreator:
         left.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
         right = ttk.Frame(metadata)
         right.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self._field(left, "Technology", self.technology_var, technologies)
-        self._field(right, "Task", self.task_var, tasks)
-        self._field(left, "Context", self.context_var, contexts)
+        self.context_field = ContextMembershipField(
+            left,
+            self.contexts_var,
+            self.context_names,
+            label="Specific contexts",
+        )
+        self.tag_field = TagSelectionField(
+            right,
+            self.tags_var,
+            tags,
+        )
 
         ttk.Label(right, text="Action name").pack(anchor=tk.W, pady=(8, 0))
         title_entry = ttk.Entry(right, textvariable=self.title_var)
@@ -2242,7 +2271,7 @@ class DraftActionCreator:
 
         self.path_var = tk.StringVar()
         ttk.Label(form, textvariable=self.path_var).pack(anchor=tk.W, pady=(6, 0))
-        for variable in (self.technology_var, self.task_var, self.context_var, self.title_var):
+        for variable in (self.tags_var, self.contexts_var, self.title_var):
             variable.trace_add("write", lambda *_args: self._update_path())
 
         self._update_path()
@@ -2266,9 +2295,8 @@ class DraftActionCreator:
         parts = [
             value.strip()
             for value in (
-                self.technology_var.get(),
-                self.task_var.get(),
-                self.context_var.get(),
+                self.contexts_var.get() or "General",
+                self.tags_var.get(),
                 self.title_var.get(),
             )
             if value.strip()
@@ -2312,11 +2340,23 @@ class DraftActionCreator:
     def _save(self) -> None:
         try:
             action_type = self.ACTION_TYPES[self.action_type_var.get()]
+            contexts = validate_context_memberships(
+                (
+                    part.strip()
+                    for part in self.contexts_var.get().split(",")
+                    if part.strip()
+                ),
+                self.context_names,
+            )
             common = {
                 "title": self.title_var.get(),
-                "technology": self.technology_var.get(),
-                "task": self.task_var.get(),
-                "context": self.context_var.get(),
+                "context": "General",
+                "contexts": contexts,
+                "tags": tuple(
+                    part.strip()
+                    for part in self.tags_var.get().split(",")
+                    if part.strip()
+                ),
             }
             if action_type == "copy_text":
                 action = draft_copy_text_action(
@@ -2341,10 +2381,17 @@ class DraftActionEditor:
         self,
         parent: tk.Tk,
         action: Action,
-        on_save: Callable[[Action, str, str, str], None],
+        context_names: list[str],
+        tag_names: tuple[str, ...],
+        on_save: Callable[
+            [Action, str, tuple[str, ...], tuple[str, ...], str],
+            None,
+        ],
     ) -> None:
         self.action = action
         self.on_save = on_save
+        self.context_names = tuple(context_names)
+        self.tag_names = tag_names
         self.window = tk.Toplevel(parent)
         self.window.title("Edit Draft Action")
         configure_standard_window(self.window)
@@ -2362,9 +2409,19 @@ class DraftActionEditor:
         self.title_var = tk.StringVar(value=action.title)
         ttk.Entry(outer, textvariable=self.title_var).pack(fill=tk.X, pady=(4, 8))
 
-        ttk.Label(outer, text="Context").pack(anchor=tk.W)
-        self.context_var = tk.StringVar(value=action.context)
-        ttk.Entry(outer, textvariable=self.context_var).pack(fill=tk.X, pady=(4, 8))
+        self.contexts_var = tk.StringVar(value=", ".join(action.effective_contexts))
+        self.context_field = ContextMembershipField(
+            outer,
+            self.contexts_var,
+            self.context_names,
+        )
+
+        self.tags_var = tk.StringVar(value=", ".join(action.effective_tags))
+        self.tag_field = TagSelectionField(
+            outer,
+            self.tags_var,
+            self.tag_names,
+        )
 
         ttk.Label(outer, text="Text").pack(anchor=tk.W)
         self.text = tk.Text(outer, wrap=tk.WORD)
@@ -2372,10 +2429,27 @@ class DraftActionEditor:
         self.text.insert("1.0", action.value)
 
     def _save(self) -> None:
+        try:
+            contexts = validate_context_memberships(
+                (
+                    part.strip()
+                    for part in self.contexts_var.get().split(",")
+                    if part.strip()
+                ),
+                self.context_names,
+            )
+        except ActionError as exc:
+            messagebox.showerror("Context Palette", str(exc), parent=self.window)
+            return
         self.on_save(
             self.action,
             self.title_var.get(),
-            self.context_var.get(),
+            contexts,
+            tuple(
+                part.strip()
+                for part in self.tags_var.get().split(",")
+                if part.strip()
+            ),
             self.text.get("1.0", tk.END),
         )
         self.window.destroy()

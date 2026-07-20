@@ -4,6 +4,18 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Replaced fixed Technology/Task action classification with reusable tags and
+  optional multi-context membership. General now acts as a virtual root
+  containing every action; Focus Actions is a flat membership list, and Tags
+  provides a dedicated discovery filter. Existing legacy personal action files
+  remain readable while edited and newly created actions use the new format.
+  Partially configured Focus slots now fill with other members of that context
+  before unrelated global actions. Saved Focus names and slot keys also match
+  current context names case-insensitively. Guided action forms now identify
+  unknown specific contexts before saving and retain the form for correction.
+  Configure, Inbox conversion, and Draft editing now also provide a reusable
+  multi-select context checklist alongside the editable field, plus an
+  optional checklist of existing tags that still permits new free-form tags.
 - Added a Notepad++-inspired transformation starter pack with Proper Case,
   sentence case, inverted case, per-line trimming, blank-line removal, stable
   line sorting, line joining, and consecutive duplicate removal.

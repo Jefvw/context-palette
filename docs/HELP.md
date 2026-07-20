@@ -49,18 +49,16 @@ file cannot be written, Context Palette keeps the previous selection and
 explains the problem instead of showing an unsaved change.
 
 Choose **Focus actions** to browse actions explicitly assigned to the active
-Focus. The tree groups them by Technology, then Task. Expand or collapse
-branches with the mouse or normal arrow keys; select a leaf and use Run, Enter,
-or double-click as usual. Branches cannot run. Missing Technology or Task is
-shown as **Other**. Activating **Focus actions** moves keyboard focus directly
-into the tree so arrow-key navigation can begin immediately. Returning to a
-Focus restores its expanded and collapsed branches; Run never targets an action
-hidden beneath a collapsed branch.
+Focus. The list stays flat and follows the normal action order. General contains
+every action; a specific Focus contains actions assigned to that context.
+Select an action and use Run, Enter, or double-click as usual. Activating
+**Focus actions** moves keyboard focus directly into the list so arrow-key
+navigation can begin immediately.
 
 Find remains global. Typing while Focus Actions is active temporarily shows the
 existing flat global results; it does not limit search to the Focus. Clearing
-Find returns to the Focus tree. Changing Focus refreshes the tree only while
-that tree is visible with Find empty.
+Find returns to the Focus list. Changing Focus refreshes the list only while
+that list is visible with Find empty.
 
 ## Find and run actions
 
@@ -68,12 +66,14 @@ The left side of the action dashboard is one Actions workspace. Find action
 sits directly above the numbered list it filters. Passwords, Types, Run, and
 the action-search Help control form the narrow rail beside that list.
 
-Search matches Technology, Task, Context, Action name, type, and content.
+Search matches tags, contexts, Action name, type, and content.
 
 - Type to filter actions.
 - Click **Passwords** for the protected-credential shortcut, or open **Types**
   to filter by any built-in action type. Choose **All types** to clear the type
-  filter. Find text and type filters work together.
+  filter.
+- Open **Tags** to filter by one exact reusable tag. Choose **All tags** to
+  clear it. Find text, type, and tag filters work together.
 - Use Up/Down, Page Up/Page Down, Home, and End to navigate.
 - Press Enter, double-click, or click **Run**.
 - Numpad 1 through 9 executes the corresponding fixed slot.
@@ -119,8 +119,19 @@ Choose **Manage focus → Manage focuses…** for Focus configuration. Choose
 
 Configure opens with keyboard focus on the action list. Action, context, and button dialogs focus and select their first editable field, so typing can begin immediately.
 
+Use **Choose…** in guided action forms to select one or more defined specific
+contexts. The adjacent field remains editable for quick keyboard entry and
+shows the selected names as a comma-separated list. Names match without regard
+to capitalization and are saved using the context's current spelling. If a
+typed name is unknown, the form stays open and identifies it; create the
+context first, correct the spelling, or leave the field empty for General only.
+
+The Tags field has the same **Choose…** control for tags already used by other
+actions. Tags remain open-ended: select existing ones for consistency, type new
+ones when needed, or combine both approaches.
+
 In **Actions**, use **Find actions** or press `Ctrl+F` to filter by action name,
-built-in type, context, technology, task, state, or source. Multiple words must
+built-in type, context, tag, state, or source. Multiple words must
 all match. Press Enter on the selected result to edit it.
 
 The Actions, Contexts, and Right-side buttons tables select their first useful
@@ -204,7 +215,8 @@ Copies current clipboard text into the Inbox after asking for a title. Captures 
 
 ### Inbox
 
-Shows captured items. An item can be converted into a structured Draft action with Technology, Task, Context, Action name, and a guided action type.
+Shows captured items. An item can be converted into a structured Draft action
+with contexts, tags, Action name, and a guided action type.
 
 Select an Inbox item and click **Ask AI** for an attended AI-guidance workflow:
 
@@ -264,19 +276,21 @@ Stops Context Palette completely and releases the global hotkey.
 
 ## Action naming
 
-Actions use four separate searchable fields:
+Actions use independent searchable metadata:
 
 ```text
-Technology > Task > Context > Action name
+Contexts | Tags | Action name
 ```
 
 Example:
 
 ```text
-Browser / Colruyt > Commercial product ID > Product lookup > Open Colruyt product ID
+Product lookup | browser, commercial product ID | Open Colruyt product ID
 ```
 
-To keep the launcher fast to scan, result rows show `Command → subject`, for example `Open → Colruyt product ID`. Context, Technology, and Task remain fully searchable and appear in the row's hover tooltip and the bottom communication line.
+To keep the launcher fast to scan, result rows show `Command → subject`, for
+example `Open → Colruyt product ID`. Contexts and tags remain fully searchable
+and appear in the row's hover tooltip and the bottom communication line.
 
 The main palette keeps its compact width. Its nine management commands use the
 single character strip documented above, keeping every command directly

@@ -13,6 +13,7 @@ from .actions import (
     configured_draft_action,
     edited_configured_action,
     update_action,
+    validate_context_memberships,
 )
 from .action_types import ACTION_TYPES
 from .command_surface import (
@@ -24,6 +25,11 @@ from .command_surface import (
 )
 from .configuration_data import save_local_command_item, save_local_context
 from .contexts import ContextDefinition, ContextError, load_combined_contexts, load_contexts
+from .context_membership_field import (
+    ContextMembershipField,
+    TagSelectionField,
+    specific_context_names,
+)
 from .window_geometry import configure_standard_window
 
 
@@ -50,9 +56,8 @@ def action_matches_filter(action: Action, query: str, *, personal: bool) -> bool
         (
             action.title,
             ACTION_TYPES[action.type].label,
-            action.context,
-            action.technology,
-            action.task,
+            *action.effective_contexts,
+            *action.effective_tags,
             action.state,
             "Personal" if personal else "Shared read-only",
         )
@@ -171,19 +176,24 @@ class ConfigurationWindow:
         ).pack(side=tk.RIGHT)
         self.action_tree = ttk.Treeview(
             tab,
-            columns=("type", "context", "source", "state"),
+            columns=("type", "contexts", "tags", "source", "state"),
             show="tree headings",
             selectmode="browse",
         )
         for column, label, width in (
             ("#0", "Action", 245),
             ("type", "Built-in type", 150),
-            ("context", "Context", 130),
+            ("contexts", "Contexts", 145),
+            ("tags", "Tags", 150),
             ("source", "Source", 115),
             ("state", "State", 70),
         ):
             self.action_tree.heading(column, text=label)
-            self.action_tree.column(column, width=width, stretch=column in {"#0", "context"})
+            self.action_tree.column(
+                column,
+                width=width,
+                stretch=column in {"#0", "contexts", "tags"},
+            )
         self.action_tree.pack(fill=tk.BOTH, expand=True)
         self.action_tree.bind("<Double-1>", lambda _event: self._edit_action())
         self.action_tree.bind("<Return>", lambda _event: self._edit_action())
@@ -301,7 +311,11 @@ class ConfigurationWindow:
         selected = self.type_list.curselection()
         if selected:
             ActionDraftDialog(
-                self.window, self.type_ids[selected[0]], self.actions, self._save_action
+                self.window,
+                self.type_ids[selected[0]],
+                self.actions,
+                self._save_action,
+                context_names=[context.name for context in self.contexts],
             )
 
     def _save_action(self, action: Action) -> bool:
@@ -395,7 +409,8 @@ class ConfigurationWindow:
                 text=action.title,
                 values=(
                     ACTION_TYPES[action.type].label,
-                    action.context,
+                    ", ".join(action.effective_contexts) or "General only",
+                    ", ".join(action.effective_tags),
                     "Personal" if local else "Shared (read-only)",
                     action.state,
                 ),
@@ -430,6 +445,7 @@ class ConfigurationWindow:
             self.actions,
             self._save_edited_action,
             action=action,
+            context_names=[context.name for context in self.contexts],
         )
 
     def _save_edited_action(self, action: Action) -> bool:
@@ -543,10 +559,12 @@ class ActionDraftDialog:
         on_save: Callable[[Action], bool],
         *,
         action: Action | None = None,
+        context_names: list[str] | None = None,
     ) -> None:
         self.action_type = action_type
         self.action = action
         self.on_save = on_save
+        self.context_names = tuple(context_names or ())
         definition = ACTION_TYPES[action_type]
         self.window = tk.Toplevel(parent)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
@@ -575,9 +593,12 @@ class ActionDraftDialog:
             style="Muted.TLabel", wraplength=610,
         ).pack(anchor=tk.W, pady=(2, 6))
         self.title_var = tk.StringVar(value=action.title if action else "")
-        self.context_var = tk.StringVar(value=action.context if action else "General")
-        self.technology_var = tk.StringVar(value=action.technology if action else "")
-        self.task_var = tk.StringVar(value=action.task if action else "")
+        self.contexts_var = tk.StringVar(
+            value=", ".join(action.effective_contexts) if action else ""
+        )
+        self.tags_var = tk.StringVar(
+            value=", ".join(action.effective_tags) if action else ""
+        )
         self.arguments_var = tk.StringVar(
             value="\n".join(action.arguments) if action else ""
         )
@@ -585,18 +606,36 @@ class ActionDraftDialog:
             value=action.working_directory or "" if action else ""
         )
         title_entry = _entry(outer, "Action name", self.title_var)
-        ttk.Label(outer, text="Context").pack(anchor=tk.W, pady=(7, 0))
-        ttk.Combobox(
-            outer, textvariable=self.context_var,
-            values=sorted({item.context for item in actions if item.context}, key=str.casefold),
-        ).pack(fill=tk.X, pady=(2, 0))
-        row = ttk.Frame(outer)
-        row.pack(fill=tk.X)
-        left, right = ttk.Frame(row), ttk.Frame(row)
-        left.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
-        right.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
-        _entry(left, "Technology (optional)", self.technology_var)
-        _entry(right, "Task (optional)", self.task_var)
+        self.context_field = ContextMembershipField(
+            outer,
+            self.contexts_var,
+            self.context_names,
+            label="Specific contexts (optional; General always includes it)",
+        )
+        known_contexts = specific_context_names(self.context_names)
+        if known_contexts:
+            ttk.Label(
+                outer,
+                text="Choose one or more defined contexts, or type their names separated by commas.",
+                style="Muted.TLabel",
+                wraplength=610,
+            ).pack(anchor=tk.W, pady=(2, 0))
+        known_tags = sorted(
+            {tag for item in actions for tag in item.effective_tags},
+            key=str.casefold,
+        )
+        self.tag_field = TagSelectionField(
+            outer,
+            self.tags_var,
+            known_tags,
+        )
+        if known_tags:
+            ttk.Label(
+                outer,
+                text="Choose tags already in use, or type new tags separated by commas.",
+                style="Muted.TLabel",
+                wraplength=610,
+            ).pack(anchor=tk.W, pady=(2, 0))
         label = {
             "open_url": "Complete website address", "open_file": "File path",
             "open_folder": "Folder path", "launch_app": "Application .exe path",
@@ -621,10 +660,16 @@ class ActionDraftDialog:
 
     def _save(self) -> None:
         try:
+            contexts = validate_context_memberships(
+                _comma_separated(self.contexts_var.get()),
+                self.context_names,
+            )
             values = dict(
-                title=self.title_var.get(), context=self.context_var.get(),
+                title=self.title_var.get(),
+                context="General",
+                contexts=contexts,
+                tags=_comma_separated(self.tags_var.get()),
                 action_type=self.action_type, value=self.value.get("1.0", "end-1c"),
-                technology=self.technology_var.get(), task=self.task_var.get(),
                 arguments=self.arguments_var.get().splitlines(),
                 working_directory=self.working_directory_var.get(),
             )
@@ -656,12 +701,8 @@ class ContextDialog:
         _dialog_buttons(outer, self._save, self.window.destroy)
         self.name = tk.StringVar(value=context.name if context else "")
         self.description = tk.StringVar(value=context.description if context else "")
-        self.technology = tk.StringVar(value=context.technology if context else "")
-        self.task = tk.StringVar(value=context.task if context else "")
         name_entry = _entry(outer, "Context name", self.name)
         _entry(outer, "Description", self.description)
-        _entry(outer, "Technology (optional)", self.technology)
-        _entry(outer, "Task (optional)", self.task)
         preferred = context.preferred_action_ids if context else ()
         self.action_choices = _action_choices(actions)
         labels_by_id = {action_id: label for label, action_id in self.action_choices.items()}
@@ -694,7 +735,6 @@ class ContextDialog:
         saved = self.on_save(
             ContextDefinition(
                 name=name, description=self.description.get().strip(),
-                technology=self.technology.get().strip(), task=self.task.get().strip(),
                 preferred_action_ids=tuple(
                     dict.fromkeys(
                         self.action_choices[item.get()]
@@ -792,10 +832,18 @@ def _stable_id(label: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", label.strip().casefold()).strip("-")
 
 
+def _comma_separated(value: str) -> tuple[str, ...]:
+    return tuple(part.strip() for part in value.split(",") if part.strip())
+
+
 def _action_choices(actions: list[Action]) -> dict[str, str]:
     choices: dict[str, str] = {}
-    for action in sorted(actions, key=lambda item: (item.title.casefold(), item.context.casefold())):
-        label = f"{action.title} · {action.context}"
+    for action in sorted(
+        actions,
+        key=lambda item: (item.title.casefold(), item.effective_contexts),
+    ):
+        context_label = ", ".join(action.effective_contexts) or "General"
+        label = f"{action.title} · {context_label}"
         if label in choices:
             label = f"{label} · {ACTION_TYPES[action.type].label}"
         choices[label] = action.id

@@ -20,7 +20,7 @@ Context Palette helps a Windows user capture useful material, turn it into a con
 | Input / Output transformations | Implemented | Selection or full field; result copied |
 | Cheat sheets and promotion | Implemented | Structured local JSON sheets |
 | Attended AI assistance | Partial | Manual clipboard handoff; `copy_text` and `open_url` proposals only |
-| Context model | Partial | Explicit focus, metadata, preferred actions; no supporting-context composition or activation bundle |
+| Context model | Partial | General root, multiple specific memberships, tags, explicit focus, preferred actions; no supporting-context composition or activation bundle |
 | External automation | Partial by design | Show/context/search only; no action execution API |
 | Clipboard transactions | Deferred | No automatic preservation/restoration |
 | Safe action sequences | Deferred | No multi-step sequence language |

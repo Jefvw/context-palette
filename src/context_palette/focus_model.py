@@ -7,9 +7,6 @@ from .contexts import ContextDefinition
 from .palette_state import PaletteState
 
 
-FocusActionHierarchy = list[tuple[str, list[tuple[str, list[Action]]]]]
-
-
 @dataclass(frozen=True)
 class ResolvedFocusState:
     palette_state: PaletteState
@@ -22,14 +19,24 @@ def resolve_focus_state(
     palette_state: PaletteState,
 ) -> ResolvedFocusState:
     """Apply current Focus discovery, slot-preference, and fallback policy."""
-    configured_names = {definition.name for definition in definitions}
-    available_names = tuple(
-        sorted(
-            configured_names | {action.context for action in actions},
+    names_by_key = {"general": "General"}
+    for definition in definitions:
+        names_by_key.setdefault(definition.name.casefold(), definition.name)
+    for action in actions:
+        for context in action.effective_contexts:
+            names_by_key.setdefault(context.casefold(), context)
+    available_names = (
+        "General",
+        *sorted(
+            (name for key, name in names_by_key.items() if key != "general"),
             key=str.casefold,
-        )
+        ),
     )
-    configured_slots = dict(palette_state.context_slots)
+    configured_slots: dict[str, tuple[str, ...]] = {}
+    for context, action_ids in palette_state.context_slots.items():
+        canonical_context = names_by_key.get(context.casefold(), context)
+        if canonical_context not in configured_slots or context == canonical_context:
+            configured_slots[canonical_context] = action_ids
     known_action_ids = {action.id for action in actions}
     for definition in definitions:
         if definition.name not in configured_slots and definition.preferred_action_ids:
@@ -40,8 +47,7 @@ def resolve_focus_state(
             )
 
     focus_context = palette_state.focus_context
-    if focus_context not in available_names and available_names:
-        focus_context = available_names[0]
+    focus_context = names_by_key.get(focus_context.casefold(), "General")
     return ResolvedFocusState(
         PaletteState(
             palette_state.pinned_action_ids,
@@ -52,22 +58,14 @@ def resolve_focus_state(
     )
 
 
-def focus_action_hierarchy(
+def actions_for_context(
     actions: list[Action],
     focus_context: str,
-) -> FocusActionHierarchy:
-    """Group visible actions for an explicit Focus in canonical action order."""
-    technologies: dict[str, dict[str, list[Action]]] = {}
-    for action in actions:
-        if (
-            action.context.casefold() != focus_context.casefold()
-            or action.state not in VISIBLE_STATES
-        ):
-            continue
-        technology = action.technology.strip() or "Other"
-        task = action.task.strip() or "Other"
-        technologies.setdefault(technology, {}).setdefault(task, []).append(action)
+) -> list[Action]:
+    """Return visible actions belonging to an explicit Focus in canonical order."""
     return [
-        (technology, list(tasks.items()))
-        for technology, tasks in technologies.items()
+        action
+        for action in actions
+        if action.belongs_to_context(focus_context)
+        and action.state in VISIBLE_STATES
     ]

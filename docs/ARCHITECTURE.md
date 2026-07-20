@@ -65,7 +65,7 @@ Presentation and application orchestration.
 - Exposes Focus editing and the complete configuration workspace through the
   compact Manage focus menu without adding another permanent header control.
 - Renders numbered slots, global flat search results, or an explicitly activated
-  Focus Actions tree grouped by the action's Technology and Task facets.
+  flat list of actions belonging to the selected Focus.
 - Renders a global JSON-configured quick-action surface beside search results,
   plus an explicit allow-listed `open_sheets` application command.
 - Owns Input / Output, the communication line, systematic widget tooltips, Inbox, sheets, Help, and action editors.
@@ -116,11 +116,21 @@ execution and integration flows, but no longer owns workspace widget mechanics.
 ### `action_discovery_panel.py`
 
 Owns construction and event wiring for the left action-discovery presentation:
-heading and count, global Find entry, type controls, Run and Help controls, flat
-result list, Focus tree, scrollbar, and row tooltips. Search policy, action
-ranking, filtering, Focus hierarchy, selection meaning, and execution remain in
+heading and count, global Find entry, type and tag controls, Run and Help
+controls, flat result list, Focus list, scrollbar, and row tooltips. Search
+policy, action ranking, filtering, Focus membership, selection meaning, and execution remain in
 `launcher.py` and are supplied through narrow callbacks. Compatibility aliases
 allow existing launcher orchestration to migrate incrementally.
+
+### `context_membership_field.py`
+
+Provides reusable comma-separated picker fields used by Configure, Inbox
+conversion, and Draft editing. Context membership combines an editable field
+with a checklist of canonical defined contexts. Tag selection uses the same
+interaction for existing normalized tags but continues to allow new free-form
+values. Selection mechanics remain separate from domain validation in
+`actions.py`, so typed values and non-UI callers follow the same persistence
+rules.
 
 ### `persistence.py`
 
@@ -156,7 +166,8 @@ Stores and calculates launcher organization.
 - Slots 1–5: persistent global pins.
 - Slots 6–9: top four actions for the focus context.
 - Duplicate actions across both groups are intentional.
-- Missing context slots fall back to useful General/available actions.
+- Unfilled context slots prefer other actions belonging to the active Focus,
+  then fall back to remaining globally available actions.
 
 ### `command_surface.py`
 
@@ -198,11 +209,11 @@ Loads and validates standalone shared and local context definitions. A definitio
 
 ### `focus_model.py`
 
-Owns pure runtime Focus policy independently of Tk and persistence. It currently
-discovers available Focus names, resolves preferred slots and unavailable-Focus
-fallbacks, and builds the visible Technology → Task → action hierarchy while
-preserving canonical action order. This is the intended replacement boundary
-for future context-model changes.
+Owns pure runtime Focus policy independently of Tk and persistence. It discovers
+available Focus names, resolves preferred slots and unavailable-Focus fallbacks,
+and selects the flat action membership list for a Focus while preserving
+canonical action order. This is the intended replacement boundary for future
+context-model changes.
 
 ### `single_instance.py`
 
@@ -271,9 +282,8 @@ An action currently contains:
 ```text
 id
 title
-technology
-task
-context
+contexts
+tags
 type
 value
 state
@@ -281,7 +291,22 @@ arguments
 working_directory
 ```
 
-Technology, Task, Context, and Action title are separate facets. They are not stored as one hierarchical name.
+`contexts` and `tags` are optional lists. Every action belongs to the virtual
+General root even when `contexts` is absent. Specific context membership can be
+shared by several contexts. Tags are normalized, case-insensitive discovery
+facets and never define a hierarchy. Legacy singular `context`, `technology`,
+and `task` fields remain readable for existing personal files, but application
+writes use `contexts` and `tags`.
+
+Guided action forms validate specific memberships against the currently loaded
+context definitions and canonicalize their capitalization before saving.
+Their shared context-membership control offers checklist selection while
+retaining direct keyboard entry.
+The same component offers existing-tag selection without restricting creation
+of new tags.
+Direct JSON loading remains backward-compatible and permissive so an older
+personal action is not made unreadable merely because its context definition is
+temporarily missing.
 
 ### Presentation versus search
 
@@ -291,15 +316,15 @@ Compact result rows show:
 Command → subject
 ```
 
-The command is taken from a recognized leading verb such as Open, Copy, Convert, Search, Arrange, or Restore. When a title does not include one, a suitable command is inferred from the constrained action type. Context, Technology, Task, and the original title are shown in a delayed per-row hover tooltip.
+The command is taken from a recognized leading verb such as Open, Copy, Convert, Search, Arrange, or Restore. When a title does not include one, a suitable command is inferred from the constrained action type. Contexts, tags, and the original title are shown in a delayed per-row hover tooltip.
 
 The full explanation path is:
 
 ```text
-Technology > Task > Context > Action title
+Contexts | Tags | Action title
 ```
 
-Search indexes title, technology, task, context, type, value, and maturity state. Multiple query terms use AND semantics.
+Search indexes title, tags, contexts, type, value, and maturity state. Multiple query terms use AND semantics. The tag menu applies an additional exact tag filter.
 
 This separation allows visual simplification without losing retrieval power.
 
@@ -412,17 +437,12 @@ other rows  ordinary search matches
 Changing the focus context changes slots 6–9 only. Search always remains global.
 
 The **Focus actions** control is a separate presentation mode. With Find empty,
-it shows only visible actions whose explicit `context` matches the active Focus,
-grouped as Technology → Task → action in canonical action order. Missing facets
-are presented as `Other`; no folder data is persisted. Typing in Find swaps the
-tree for the existing global flat results, and clearing Find restores the tree
-only when Focus Actions mode was explicitly activated. Branches are never
-executable; leaves map back to the existing action dispatcher. Session-only
-expansion state is keyed by the Focus that actually rendered the tree, rather
-than by a newly selected Focus, so direct Focus changes cannot transfer branch
-state between contexts. Initial selection is limited to an action leaf visible
-through expanded branches. If every branch is collapsed, the first visible
-branch is selected and the existing dispatcher receives no action.
+it shows a flat list of visible actions belonging to the active Focus in
+canonical action order. General contains every action; a specific Focus uses the
+action's `contexts` memberships. Typing in Find swaps this view for the global
+flat results, and clearing Find restores Focus Actions only when that mode was
+explicitly activated. Tags do not create folders in this view because they are
+independent filters rather than structural ownership.
 
 Quick actions remain action-ID configuration. Built-in application commands are
 not configurable strings or method names: the launcher contains a closed,
@@ -435,6 +455,11 @@ Focus and pin changes are applied in memory only after the updated palette state
 has been persisted successfully. A write failure keeps the prior state visible
 and reports the failure to the user.
 
+Focus names and matching `context_slots` keys are resolved case-insensitively
+to the current canonical spelling. This keeps older per-machine palette files
+usable after capitalization changes. Unknown slot keys are preserved, and an
+exact canonical key takes precedence if both spellings exist.
+
 The longer-term context model includes identity, knowledge, capabilities, and optional activation, with one focus context and multiple supporting contexts.
 
 ## Storage
@@ -446,6 +471,9 @@ All data is local and inspectable.
 Reviewed portable action records shared through Git.
 
 Action IDs are unique case-insensitively within a file and across shared/local files. This keeps pins, context slots, command-surface references, edits, and trust promotion unambiguous.
+New records store optional `contexts` and `tags` arrays. Omitting `contexts`
+means General-only membership; General itself is never persisted as a specific
+membership.
 
 ### `data/contexts.json` and `data/local_contexts.json`
 

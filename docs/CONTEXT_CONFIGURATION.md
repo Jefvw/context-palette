@@ -24,15 +24,32 @@ Do not put internal URLs, customer names, work paths, or personal identifiers in
 {
   "name": "Archives",
   "description": "Build an archive URL from selected or copied text.",
-  "technology": "Browser",
-  "task": "Archive lookup",
   "preferred_action_ids": ["archives-open-selected-item"]
 }
 ```
 
 `name` is the stable, case-insensitively unique context identity. `preferred_action_ids` supplies up to four default actions for slots 6–9. Explicit per-machine slots in `palette.json` override those defaults.
 
-Actions still carry their own `context` facet, so they remain globally searchable even when another focus is selected.
+Every action belongs to the virtual **General** root. Actions may also carry a
+`contexts` list for one or more specific workspaces and a `tags` list for
+independent discovery terms. Search remains global regardless of Focus.
+
+```json
+{
+  "id": "archives-open-selected-item",
+  "title": "Open selected archive item",
+  "contexts": ["Archives"],
+  "tags": ["browser", "archive lookup"],
+  "type": "build_url_selection_open",
+  "value": "https://example.test/archive/{selection_url}",
+  "state": "Draft"
+}
+```
+
+Do not store General in `contexts`; it is implied for every action. Existing
+personal files using singular `context`, `technology`, and `task` remain
+readable. Saving an edited action writes the current `contexts` and `tags`
+format.
 
 ## Useful patterns
 

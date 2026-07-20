@@ -889,3 +889,23 @@ as callbacks.
 expected to change. Separating widgets from policy makes that overhaul easier
 without prematurely designing a new context model. Compatibility aliases keep
 the extraction incremental and protect existing integrations and tests.
+
+## 2026-07-20 - Make General the root and replace fixed classification with tags
+
+**Decision:** Treat General as a virtual root containing every action. Allow
+actions to belong to zero or more specific contexts through `contexts` and to
+carry independent free-form `tags`. Present Focus Actions as a flat membership
+list and provide tags as an exact discovery filter. Continue reading legacy
+singular `context`, `technology`, and `task` fields, but write the new format
+for created or edited actions.
+
+**Reason:** Context expresses the workspace in which an action is useful;
+Technology and Task imposed a rigid hierarchy that made actions harder to
+classify and retrieve. Tags support overlapping descriptions without creating
+another ownership tree. Read-old/write-new compatibility improves existing
+personal data safely without silently rewriting ignored files.
+
+**Consequences:** General is never stored in an action's `contexts` list.
+Specific context membership may be shared. Tags are normalized
+case-insensitively and remain filters rather than hierarchy. Supporting-context
+composition and automatic focus inference remain future work.

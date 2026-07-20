@@ -29,12 +29,16 @@ The long-term context model has four dimensions:
 
 | Dimension | Purpose | Current status |
 | --- | --- | --- |
-| Identity | Name, description, technology, task, and intended use | Implemented |
+| Identity | Name, description, and intended use | Implemented |
 | Knowledge | References, terminology, examples, and cheat sheets | Partly implemented |
 | Capabilities | Preferred actions and transformations | Implemented at a basic level |
 | Activation | Visible bundle of reviewed applications, folders, files, URLs, and references | Proposed |
 
 One context is the explicit focus. Supporting contexts may contribute knowledge or ranking in the future, but they must not make action retrieval unpredictable or switch focus silently.
+
+Every action is available through the General root and may belong to one or
+more specific contexts. Free-form tags provide quick cross-context discovery
+without turning classification into a fixed hierarchy.
 
 ## Explicit effects
 

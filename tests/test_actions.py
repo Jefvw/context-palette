@@ -34,11 +34,29 @@ from context_palette.actions import (
     trusted_action,
     update_action,
     validate_credential_target,
+    validate_context_memberships,
     validate_http_url,
 )
 
 
 class ActionTests(unittest.TestCase):
+    def test_context_membership_validation_canonicalizes_and_rejects_unknown_names(self):
+        self.assertEqual(
+            validate_context_memberships(
+                ("mail", "Customer Support", "MAIL", "General"),
+                ("General", "Mail", "Customer support"),
+            ),
+            ("Mail", "Customer support"),
+        )
+        with self.assertRaisesRegex(
+            ActionError,
+            "Unknown specific contexts: Missing, Typo",
+        ):
+            validate_context_memberships(
+                ("Mail", "Missing", "Typo"),
+                ("General", "Mail"),
+            )
+
     def test_credential_action_requires_trust_and_dedicated_paster(self):
         draft = Action(
             "credential",
@@ -279,8 +297,8 @@ class ActionTests(unittest.TestCase):
             "Open Colruyt product ID",
         )
         self.assertEqual(
-            actions["general-open-python-docs"].task,
-            "Technical reference",
+            actions["general-open-python-docs"].effective_tags,
+            ("browser", "python", "technical reference"),
         )
 
     def test_draft_build_url_action_validates_and_preserves_metadata(self):
@@ -391,6 +409,53 @@ class ActionTests(unittest.TestCase):
         self.assertEqual([action.id for action in search_actions(actions, "email greeting")], ["email"])
         self.assertEqual([action.id for action in search_actions(actions, "select")], ["database"])
 
+    def test_new_action_schema_normalizes_contexts_and_tags(self):
+        path = self._write_actions(
+            [
+                {
+                    "id": "tagged",
+                    "title": "Format query values",
+                    "contexts": ["Database", "database", "General"],
+                    "tags": ["SQL", " query   input ", "sql"],
+                    "type": "copy_text",
+                    "value": "example",
+                }
+            ]
+        )
+
+        action = load_actions(path)[0]
+
+        self.assertEqual(action.effective_contexts, ("Database",))
+        self.assertEqual(action.effective_tags, ("sql", "query input"))
+        self.assertTrue(action.belongs_to_context("General"))
+        self.assertTrue(action.belongs_to_context("database"))
+        self.assertFalse(action.belongs_to_context("Email"))
+        self.assertEqual(search_actions([action], "query input database"), [action])
+
+    def test_saving_legacy_action_writes_only_new_context_and_tag_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "actions.json"
+            append_action(
+                path,
+                Action(
+                    "legacy",
+                    "Legacy",
+                    "Database",
+                    "copy_text",
+                    "text",
+                    technology="SQL",
+                    task="Query input",
+                ),
+            )
+
+            raw = json.loads(path.read_text(encoding="utf-8"))["actions"][0]
+
+        self.assertEqual(raw["contexts"], ["Database"])
+        self.assertEqual(raw["tags"], ["sql", "query input"])
+        self.assertNotIn("context", raw)
+        self.assertNotIn("technology", raw)
+        self.assertNotIn("task", raw)
+
     def test_compact_display_separates_command_and_hides_context(self):
         action = Action(
             "item",
@@ -403,7 +468,7 @@ class ActionTests(unittest.TestCase):
         )
 
         self.assertEqual(action.compact_display_text, "Open → selected product")
-        self.assertIn("Browser", action.display_text)
+        self.assertIn("browser", action.display_text)
         self.assertEqual(search_actions([action], "browser product lookup"), [action])
 
     def test_compact_display_infers_command_when_title_has_no_verb(self):
@@ -680,7 +745,7 @@ class ActionTests(unittest.TestCase):
 
             self.assertEqual([action.id for action in load_actions(path)], ["one", "two"])
 
-    def test_draft_copy_text_action_accepts_technology_and_task(self):
+    def test_legacy_technology_and_task_are_effective_tags(self):
         action = draft_copy_text_action(
             title="Open item",
             technology="Browser",
@@ -691,8 +756,9 @@ class ActionTests(unittest.TestCase):
 
         self.assertEqual(
             action.display_text,
-            "Browser > Product lookup > Colruyt > Open item",
+            "Colruyt > browser > product lookup > Open item",
         )
+        self.assertEqual(action.effective_tags, ("browser", "product lookup"))
 
     def test_update_draft_copy_text_action(self):
         with tempfile.TemporaryDirectory() as directory:

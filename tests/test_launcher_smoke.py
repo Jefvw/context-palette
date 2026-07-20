@@ -117,17 +117,20 @@ class LauncherSmokeTests(unittest.TestCase):
                     self._assert_balanced_panes(app)
                     self.assertIs(app.passwords_button.master, app.actions_tool_rail)
                     self.assertIs(app.type_filter.master, app.actions_tool_rail)
+                    self.assertIs(app.tag_filter.master, app.actions_tool_rail)
                     self.assertIs(app.run_button.master, app.actions_tool_rail)
                     self.assertIs(app.action_help_button.master, app.actions_tool_rail)
                     self.assertEqual(app.actions_tool_rail.winfo_width(), 88)
                     self.assertGreaterEqual(app.results.winfo_width(), 220)
                     self.assertEqual(app.passwords_button.cget("text"), "Passwords")
+                    self.assertEqual(app.tag_filter.cget("text"), "Tags ▾")
                     self.assertEqual(app.type_filter.cget("text"), "Types ▾")
                     self.assertEqual(app.run_button.cget("text"), "Run")
                     self.assertEqual(app.action_help_button.cget("text"), "?")
                     self.assertIs(app.search_entry.tk_focusNext(), app.passwords_button)
                     self.assertIs(app.passwords_button.tk_focusNext(), app.type_filter)
-                    self.assertIs(app.type_filter.tk_focusNext(), app.run_button)
+                    self.assertIs(app.type_filter.tk_focusNext(), app.tag_filter)
+                    self.assertIs(app.tag_filter.tk_focusNext(), app.run_button)
                     self.assertIs(app.run_button.tk_focusNext(), app.action_help_button)
                     self.assertIs(app.action_help_button.tk_focusNext(), app.results)
 
@@ -149,38 +152,35 @@ class LauncherSmokeTests(unittest.TestCase):
                     type_menu.invoke(0)
                     self.assertIsNone(app.action_type_filter)
 
+                    tag_menu = root.nametowidget(app.tag_filter.cget("menu"))
+                    database_tag_index = next(
+                        index
+                        for index in range(tag_menu.index(tk.END) + 1)
+                        if tag_menu.type(index) == "radiobutton"
+                        and tag_menu.entrycget(index, "label") == "database"
+                    )
+                    tag_menu.invoke(database_tag_index)
+                    self.assertEqual(app.action_tag_filter, "database")
+                    self.assertEqual(
+                        [action.id for action in app.filtered_actions],
+                        ["database-only"],
+                    )
+                    tag_menu.invoke(0)
+                    self.assertIsNone(app.action_tag_filter)
+
                     app._activate_focus_actions()
                     root.update()
                     self.assertEqual(app.results_view, "focus")
                     self.assertIs(root.focus_get(), app.focus_tree)
                     self.assertEqual(
                         {action.id for action in app.focus_tree_actions.values()},
-                        {"general-first", "general-second"},
+                        {"general-first", "general-second", "database-only"},
                     )
                     app._show_flat_results()
-                    app.focus_tree_expansion["general"] = {
-                        ("Other",),
-                        ("Other", "Other"),
-                    }
                     app._render_focus_actions()
-                    self.assertEqual(app._selected_action().id, "general-second")
-                    app._show_flat_results()
-                    app.focus_tree_expansion["general"] = set()
-                    app._render_focus_actions()
-                    self.assertIsNone(app._selected_action())
-                    self.assertFalse(
-                        any(
-                            app.focus_tree.item(item_id, "open")
-                            for item_id in app.focus_tree.get_children()
-                        )
-                    )
-                    app.focus_tree_expansion["database"] = {("Database",)}
+                    self.assertEqual(app._selected_action().id, "general-first")
                     app.context_var.set("Database")
                     app._change_focus_context()
-                    self.assertEqual(
-                        app.focus_tree_expansion["database"],
-                        {("Database",)},
-                    )
                     app.context_var.set("General")
                     app._change_focus_context()
 

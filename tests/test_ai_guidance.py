@@ -61,12 +61,31 @@ class AIGuidanceTests(unittest.TestCase):
         self.assertEqual(proposals[0].action.state, "Draft")
         self.assertTrue(proposals[0].action.id.startswith("draft-"))
 
+    def test_current_proposals_accept_multiple_contexts_and_normalized_tags(self):
+        response = """{
+          "format": "context-palette-action-proposals",
+          "version": 2,
+          "proposals": [{
+            "title": "Copy concise follow-up",
+            "contexts": ["Email", "Customer support"],
+            "tags": [" Follow Up ", "EMAIL", "email"],
+            "type": "copy_text",
+            "value": "Hello, just following up.",
+            "explanation": "Reusable concise response."
+          }]
+        }"""
+
+        proposal = parse_ai_proposals(response, PROMPT_VARIATIONS[0])[0]
+
+        self.assertEqual(proposal.action.effective_contexts, ("Email", "Customer support"))
+        self.assertEqual(proposal.action.effective_tags, ("follow up", "email"))
+
     def test_response_must_be_plain_json_with_expected_format_and_version(self):
         with self.assertRaisesRegex(AIGuidanceError, "format"):
             parse_ai_proposals('{"format":"other","version":1,"proposals":[]}', PROMPT_VARIATIONS[0])
         with self.assertRaisesRegex(AIGuidanceError, "version"):
             parse_ai_proposals(
-                '{"format":"context-palette-action-proposals","version":2,"proposals":[]}',
+                '{"format":"context-palette-action-proposals","version":3,"proposals":[]}',
                 PROMPT_VARIATIONS[0],
             )
 

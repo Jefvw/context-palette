@@ -33,10 +33,27 @@ class Action:
     working_directory: str | None = None
     technology: str = ""
     task: str = ""
+    contexts: tuple[str, ...] = ()
+    tags: tuple[str, ...] = ()
+
+    @property
+    def effective_contexts(self) -> tuple[str, ...]:
+        source = self.contexts or ((self.context,) if self.context else ())
+        return normalize_contexts(source)
+
+    @property
+    def effective_tags(self) -> tuple[str, ...]:
+        return normalize_tags((*self.tags, self.technology, self.task))
+
+    def belongs_to_context(self, context: str) -> bool:
+        if context.strip().casefold() == "general":
+            return True
+        key = context.strip().casefold()
+        return any(item.casefold() == key for item in self.effective_contexts)
 
     @property
     def display_text(self) -> str:
-        parts = [part for part in (self.technology, self.task, self.context, self.title) if part]
+        parts = [*self.effective_contexts, *self.effective_tags, self.title]
         return " > ".join(dict.fromkeys(parts))
 
     @property
@@ -62,6 +79,59 @@ class Action:
             "build_url_selection_open": "Open",
         }.get(self.type)
         return f"{inferred_command} → {title}" if inferred_command else title
+
+
+def normalize_contexts(values: Iterable[str]) -> tuple[str, ...]:
+    """Return distinct specific contexts; General is the implicit root."""
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        clean = value.strip()
+        key = clean.casefold()
+        if not clean or key == "general" or key in seen:
+            continue
+        seen.add(key)
+        normalized.append(clean)
+    return tuple(normalized)
+
+
+def normalize_tags(values: Iterable[str]) -> tuple[str, ...]:
+    """Return distinct lower-case tags suitable for filtering and persistence."""
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        clean = " ".join(value.strip().split()).casefold()
+        if not clean or clean in seen:
+            continue
+        seen.add(clean)
+        normalized.append(clean)
+    return tuple(normalized)
+
+
+def validate_context_memberships(
+    values: Iterable[str],
+    available_contexts: Iterable[str],
+) -> tuple[str, ...]:
+    """Return canonical specific contexts or reject undefined memberships."""
+    contexts = normalize_contexts(values)
+    canonical_by_key = {
+        context.strip().casefold(): context.strip()
+        for context in available_contexts
+        if context.strip() and context.strip().casefold() != "general"
+    }
+    unknown = [
+        context
+        for context in contexts
+        if context.casefold() not in canonical_by_key
+    ]
+    if unknown:
+        label = "context" if len(unknown) == 1 else "contexts"
+        raise ActionError(
+            f"Unknown specific {label}: {', '.join(unknown)}. "
+            "Create the context first or correct its name. "
+            "Leave this field empty for General only."
+        )
+    return tuple(canonical_by_key[context.casefold()] for context in contexts)
 
 
 def load_actions(path: Path) -> list[Action]:
@@ -140,9 +210,11 @@ def draft_copy_text_action(
     value: str,
     technology: str = "",
     task: str = "",
+    contexts: Iterable[str] = (),
+    tags: Iterable[str] = (),
 ) -> Action:
     clean_title = title.strip()
-    clean_context = context.strip() or "General"
+    clean_contexts = normalize_contexts((*contexts, context))
     clean_value = value.strip()
     if not clean_title:
         raise ActionError("Action title cannot be empty.")
@@ -152,12 +224,14 @@ def draft_copy_text_action(
     return Action(
         id=f"draft-{uuid4().hex[:12]}",
         title=clean_title,
-        context=clean_context,
+        context=clean_contexts[0] if clean_contexts else "General",
         type="copy_text",
         value=clean_value,
         state="Draft",
         technology=technology.strip(),
         task=task.strip(),
+        contexts=clean_contexts,
+        tags=normalize_tags(tags),
     )
 
 
@@ -168,9 +242,11 @@ def draft_open_url_action(
     value: str,
     technology: str = "",
     task: str = "",
+    contexts: Iterable[str] = (),
+    tags: Iterable[str] = (),
 ) -> Action:
     clean_title = title.strip()
-    clean_context = context.strip() or "General"
+    clean_contexts = normalize_contexts((*contexts, context))
     clean_value = value.strip()
     if not clean_title:
         raise ActionError("Action title cannot be empty.")
@@ -178,12 +254,14 @@ def draft_open_url_action(
     return Action(
         id=f"draft-{uuid4().hex[:12]}",
         title=clean_title,
-        context=clean_context,
+        context=clean_contexts[0] if clean_contexts else "General",
         type="open_url",
         value=clean_value,
         state="Draft",
         technology=technology.strip(),
         task=task.strip(),
+        contexts=clean_contexts,
+        tags=normalize_tags(tags),
     )
 
 
@@ -195,12 +273,14 @@ def draft_build_url_action(
     action_type: str = "build_url_selection_open",
     technology: str = "",
     task: str = "",
+    contexts: Iterable[str] = (),
+    tags: Iterable[str] = (),
 ) -> Action:
     allowed_types = {"build_url_copy", "build_url_open", "build_url_selection_open"}
     if action_type not in allowed_types:
         raise ActionError("Unsupported URL-builder action type.")
     clean_title = title.strip()
-    clean_context = context.strip() or "General"
+    clean_contexts = normalize_contexts((*contexts, context))
     clean_template = template.strip()
     if not clean_title:
         raise ActionError("Action title cannot be empty.")
@@ -208,12 +288,14 @@ def draft_build_url_action(
     return Action(
         id=f"draft-{uuid4().hex[:12]}",
         title=clean_title,
-        context=clean_context,
+        context=clean_contexts[0] if clean_contexts else "General",
         type=action_type,
         value=clean_template,
         state="Draft",
         technology=technology.strip(),
         task=task.strip(),
+        contexts=clean_contexts,
+        tags=normalize_tags(tags),
     )
 
 
@@ -225,6 +307,8 @@ def configured_draft_action(
     value: str,
     technology: str = "",
     task: str = "",
+    contexts: Iterable[str] = (),
+    tags: Iterable[str] = (),
     arguments: Iterable[str] = (),
     working_directory: str = "",
 ) -> Action:
@@ -236,11 +320,12 @@ def configured_draft_action(
     if action_type not in SUPPORTED_ACTION_TYPES:
         raise ActionError(f"Unsupported action type: {action_type}")
     validate_action_value(action_type, clean_value)
+    clean_contexts = normalize_contexts((*contexts, context))
 
     return Action(
         id=f"draft-{uuid4().hex[:12]}",
         title=clean_title,
-        context=context.strip() or "General",
+        context=clean_contexts[0] if clean_contexts else "General",
         type=action_type,
         value=clean_value,
         state="Draft",
@@ -248,6 +333,8 @@ def configured_draft_action(
         working_directory=working_directory.strip() or None,
         technology=technology.strip(),
         task=task.strip(),
+        contexts=clean_contexts,
+        tags=normalize_tags(tags),
     )
 
 
@@ -260,6 +347,8 @@ def edited_configured_action(
     value: str,
     technology: str = "",
     task: str = "",
+    contexts: Iterable[str] = (),
+    tags: Iterable[str] = (),
     arguments: Iterable[str] = (),
     working_directory: str = "",
 ) -> Action:
@@ -271,6 +360,8 @@ def edited_configured_action(
         value=value,
         technology=technology,
         task=task,
+        contexts=contexts,
+        tags=tags,
         arguments=arguments,
         working_directory=working_directory,
     )
@@ -285,15 +376,25 @@ def edited_configured_action(
         working_directory=validated.working_directory,
         technology=validated.technology,
         task=validated.task,
+        contexts=validated.contexts,
+        tags=validated.tags,
     )
 
 
-def edited_copy_text_action(action: Action, *, title: str, context: str, value: str) -> Action:
+def edited_copy_text_action(
+    action: Action,
+    *,
+    title: str,
+    context: str = "General",
+    value: str,
+    contexts: Iterable[str] = (),
+    tags: Iterable[str] = (),
+) -> Action:
     if action.type != "copy_text" or action.state != "Draft":
         raise ActionError("Only draft copy-text actions can be edited right now.")
 
     clean_title = title.strip()
-    clean_context = context.strip() or "General"
+    clean_contexts = normalize_contexts((*contexts, context))
     clean_value = value.strip()
     if not clean_title:
         raise ActionError("Action title cannot be empty.")
@@ -303,14 +404,14 @@ def edited_copy_text_action(action: Action, *, title: str, context: str, value: 
     return Action(
         id=action.id,
         title=clean_title,
-        context=clean_context,
+        context=clean_contexts[0] if clean_contexts else "General",
         type=action.type,
         value=clean_value,
         state=action.state,
         arguments=action.arguments,
         working_directory=action.working_directory,
-        technology=action.technology,
-        task=action.task,
+        contexts=clean_contexts,
+        tags=normalize_tags(tags),
     )
 
 
@@ -329,6 +430,8 @@ def trusted_action(action: Action) -> Action:
         working_directory=action.working_directory,
         technology=action.technology,
         task=action.task,
+        contexts=action.contexts,
+        tags=action.tags,
     )
 
 
@@ -342,9 +445,8 @@ def search_actions(actions: Iterable[Action], query: str) -> list[Action]:
         searchable = " ".join(
             [
                 action.title,
-                action.technology,
-                action.task,
-                action.context,
+                *action.effective_tags,
+                *action.effective_contexts,
                 action.type,
                 action.value,
                 action.state,
@@ -405,7 +507,16 @@ def execute_action(
         clipboard_setter(url)
         selected_opener = opener or open_action_target
         selected_opener(
-            Action(action.id, action.title, action.context, "open_url", url, action.state)
+            Action(
+                action.id,
+                action.title,
+                action.context,
+                "open_url",
+                url,
+                action.state,
+                contexts=action.contexts,
+                tags=action.tags,
+            )
         )
         return "Copied the built URL and opened it in the browser."
 
@@ -423,7 +534,16 @@ def execute_action(
             return "Copied the built URL to the clipboard."
         selected_opener = opener or open_action_target
         selected_opener(
-            Action(action.id, action.title, action.context, "open_url", url, action.state)
+            Action(
+                action.id,
+                action.title,
+                action.context,
+                "open_url",
+                url,
+                action.state,
+                contexts=action.contexts,
+                tags=action.tags,
+            )
         )
         return "Opened the built URL."
 
@@ -697,6 +817,8 @@ def expanded_action(
         ),
         technology=action.technology,
         task=action.task,
+        contexts=action.contexts,
+        tags=action.tags,
     )
 
 
@@ -775,7 +897,7 @@ def _parse_action(item: object, index: int) -> Action:
     if not isinstance(item, dict):
         raise ActionError(f"Action #{index} must be an object.")
 
-    required = ["id", "title", "context", "type", "value"]
+    required = ["id", "title", "type", "value"]
     missing = [field for field in required if not isinstance(item.get(field), str)]
     if missing:
         raise ActionError(f"Action #{index} is missing text fields: {', '.join(missing)}")
@@ -804,11 +926,26 @@ def _parse_action(item: object, index: int) -> Action:
     task = item.get("task", "")
     if not isinstance(technology, str) or not isinstance(task, str):
         raise ActionError(f"Action #{index} has invalid technology or task metadata.")
+    legacy_context = item.get("context", "General")
+    if not isinstance(legacy_context, str):
+        raise ActionError(f"Action #{index} has invalid context metadata.")
+    raw_contexts = item.get("contexts", [])
+    if not isinstance(raw_contexts, list) or not all(
+        isinstance(value, str) for value in raw_contexts
+    ):
+        raise ActionError(f"Action #{index} has invalid contexts metadata.")
+    raw_tags = item.get("tags", [])
+    if not isinstance(raw_tags, list) or not all(
+        isinstance(value, str) for value in raw_tags
+    ):
+        raise ActionError(f"Action #{index} has invalid tags metadata.")
+    contexts = normalize_contexts(raw_contexts)
+    primary_context = contexts[0] if contexts else legacy_context.strip() or "General"
 
     return Action(
         id=item["id"],
         title=item["title"],
-        context=item["context"],
+        context=primary_context,
         type=action_type,
         value=item["value"],
         state=state,
@@ -816,6 +953,8 @@ def _parse_action(item: object, index: int) -> Action:
         working_directory=working_directory,
         technology=technology,
         task=task,
+        contexts=contexts,
+        tags=normalize_tags(raw_tags),
     )
 
 
@@ -848,7 +987,6 @@ def _action_to_dict(action: Action) -> dict[str, object]:
     data: dict[str, object] = {
         "id": action.id,
         "title": action.title,
-        "context": action.context,
         "type": action.type,
         "value": action.value,
         "state": action.state,
@@ -857,10 +995,10 @@ def _action_to_dict(action: Action) -> dict[str, object]:
         data["arguments"] = list(action.arguments)
     if action.working_directory:
         data["working_directory"] = action.working_directory
-    if action.technology:
-        data["technology"] = action.technology
-    if action.task:
-        data["task"] = action.task
+    if action.effective_contexts:
+        data["contexts"] = list(action.effective_contexts)
+    if action.effective_tags:
+        data["tags"] = list(action.effective_tags)
     return data
 
 

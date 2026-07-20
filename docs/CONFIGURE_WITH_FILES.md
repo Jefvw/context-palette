@@ -50,8 +50,6 @@ Minimal example:
 {
   "name": "Database",
   "description": "Data quality and SQL operations",
-  "technology": "Data",
-  "task": "Analysis",
   "preferred_action_ids": [
     "db-open-dashboard",
     "db-copy-default-query"
@@ -77,9 +75,8 @@ Example `copy_text` action:
 {
   "id": "db-copy-default-query",
   "title": "Copy default DQ query",
-  "context": "Database",
-  "technology": "Data",
-  "task": "Analysis",
+  "contexts": ["Database"],
+  "tags": ["sql", "data quality"],
   "type": "copy_text",
   "value": "select * from dq_issues where created_at >= current_date - interval '7 day';",
   "state": "Draft"
@@ -92,9 +89,8 @@ Example URL-builder action from selected/copied text:
 {
   "id": "db-open-dashboard",
   "title": "Open dashboard by ID",
-  "context": "Database",
-  "technology": "Browser",
-  "task": "Lookup",
+  "contexts": ["Database"],
+  "tags": ["dashboard", "lookup"],
   "type": "build_url_selection_open",
   "value": "https://example.company/dashboards/{id_url}",
   "state": "Draft"
@@ -104,7 +100,9 @@ Example URL-builder action from selected/copied text:
 Notes:
 
 - Action `id` must be unique across shared and local action files.
-- `context` should match a defined context name.
+- `contexts` is optional. Each value should match a defined context name.
+- Every action is automatically available in General; do not add General to `contexts`.
+- `tags` is optional and can contain any reusable discovery terms.
 - Use only supported `type` values.
 
 Supported action types and behavior: `docs/ACTION_TYPES.md`.
