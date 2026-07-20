@@ -1,5 +1,40 @@
 # Decisions
 
+## 2026-07-20 - Isolate current Focus policy before context redesign
+
+**Decision:** Move the pure Focus-to-action hierarchy rule from the Tk launcher
+into `focus_model.py`, with dedicated characterization tests. Keep context
+definitions and palette persistence unchanged until the replacement context
+approach is specified.
+
+**Reason:** A planned context overhaul needs a clear domain boundary, but
+changing storage or product semantics prematurely would encode guesses. The
+focused module separates current policy from UI orchestration and provides one
+intentional replacement point.
+
+**Consequences:** Current Focus behavior is unchanged. Future context work can
+evolve or replace the pure model before adapting the launcher and persistence
+edges.
+
+The boundary also owns current available-Focus discovery, preferred-slot
+resolution, and missing-Focus fallback. The launcher retains only loading,
+persistence, Tk variable updates, and rendering.
+
+## 2026-07-20 - Arm protected clipboard cleanup before paste dispatch
+
+**Decision:** Schedule the sequence-checked credential clipboard clear
+immediately after the protected clipboard write, before the delayed destination
+focus and paste callback runs.
+
+**Reason:** Scheduling cleanup only after sending the paste shortcut left an
+exception path where protected clipboard content could remain without a timer.
+Arming cleanup first preserves the existing 15-second usability window while
+making dispatch failures fail closed.
+
+**Consequences:** Destination failures still clear immediately. The delayed
+callback remains harmless if another application replaces the clipboard because
+the existing sequence-number check prevents clearing unrelated content.
+
 ## 2026-07-19 - Keep Focus browsing explicit and global search global
 
 **Decision:** Replace the wide Focus combobox with a compact explicit menu,

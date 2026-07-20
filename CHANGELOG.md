@@ -4,6 +4,22 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Restored a visible route to the complete action and button configuration
+  workspace through the compact Manage focus menu, while retaining `Ctrl+,`.
+- Preserved active pins, Focus, and context slots when the local palette file
+  is temporarily locked or otherwise unreadable, with regression coverage.
+- Made compact-control names and explanations appear on keyboard focus as well
+  as pointer hover.
+- Armed conditional credential clipboard clearing before destination focus and
+  paste dispatch, closing an exception path that could leave cleanup unscheduled.
+- Extracted the Cheat Sheet secondary window from the launcher orchestrator
+  into a focused module without changing its behavior.
+- Added safe per-stage timing details to slow configuration-reload diagnostics
+  after measurement showed action search itself is already fast.
+- Isolated the current Focus action-grouping policy from the Tk launcher in a
+  dedicated, characterized domain module to prepare for context-model changes.
+- Moved available-Focus discovery, preferred-slot resolution, and fallback
+  policy into that same pure model boundary.
 - Replaced the wide Focus selector with a compact explicit menu, added direct
   Focus management, and introduced a Technology → Task → action Focus browser
   that leaves ordinary Find results global. Keyboard focus now moves directly
@@ -62,6 +78,9 @@ This project has not published a versioned release. Changes are recorded under *
 - Made Configure context and button tables directly operable with keyboard selection and Enter.
 - Added fast, keyboard-accessible filtering to Configure → Actions across user-visible action facets.
 - Preserved last-known-good contexts and right-side buttons when edited configuration files fail validation.
+- Preserved active pins, Focus, and context slots when palette-state reload
+  fails instead of resetting state and aborting the reload, and made first
+  start safe when no valid palette state exists yet.
 - Kept Focus and pin state consistent when palette persistence fails, with actionable feedback instead of an uncaught UI error.
 - Added privacy-safe warnings for genuinely slow result refreshes and configuration reloads.
 - Centralized quick-action primary/fallback ordering so execution, configuration, and validation cannot drift.

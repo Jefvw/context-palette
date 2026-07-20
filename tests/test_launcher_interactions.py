@@ -179,9 +179,9 @@ class LauncherInteractionTests(unittest.TestCase):
             ) as clear,
         ):
             result = app._paste_credential_action(action)
-            first_callback = app.root.after_callbacks.pop(0)
-            first_callback()
             clear_callback = app.root.after_callbacks.pop(0)
+            paste_callback = app.root.after_callbacks.pop(0)
+            paste_callback()
             clear_callback()
 
         title.assert_called_once_with(123)
@@ -208,6 +208,49 @@ class LauncherInteractionTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ActionError, "F9"):
             app._paste_credential_action(action)
+
+    def test_credential_cleanup_is_armed_before_paste_dispatch(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = FakeRoot()
+        app.source_foreground_handle = 123
+        app.protected_clipboard_sequence = None
+        action = Action(
+            "credential",
+            "Paste login",
+            "General",
+            "paste_credential",
+            "ContextPalette/example-login",
+            "Trusted",
+        )
+
+        with (
+            patch("context_palette.launcher.window_title", return_value="Sign in"),
+            patch("context_palette.launcher.messagebox.askyesno", return_value=True),
+            patch(
+                "context_palette.launcher.read_windows_credential",
+                return_value=CredentialSecret("user", "do-not-show"),
+            ),
+            patch("context_palette.launcher.set_protected_clipboard_text", return_value=42),
+            patch("context_palette.launcher.focus_window", return_value=True),
+            patch(
+                "context_palette.launcher.send_paste_shortcut",
+                side_effect=RuntimeError("Windows input failed"),
+            ),
+            patch(
+                "context_palette.launcher.clear_clipboard_if_unchanged",
+                return_value=True,
+            ) as clear,
+        ):
+            app._paste_credential_action(action)
+            cleanup_callback = app.root.after_callbacks.pop(0)
+            paste_callback = app.root.after_callbacks.pop(0)
+
+            with self.assertRaisesRegex(RuntimeError, "Windows input failed"):
+                paste_callback()
+            cleanup_callback()
+
+        clear.assert_called_once_with(42)
+        self.assertIsNone(app.protected_clipboard_sequence)
 
     def test_successful_focus_change_persists_before_applying_and_refreshes(self):
         previous = PaletteState(("existing",), "General", {})
@@ -284,6 +327,68 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertEqual(app.context_definitions, [existing])
         self.assertIn("kept 1 previous context", app.status_var.value)
         showerror.assert_called_once()
+
+    def test_failed_palette_reload_preserves_last_known_good_state(self):
+        previous = PaletteState(
+            ("existing",),
+            "General",
+            {"General": ("existing",)},
+        )
+        app = LauncherApp.__new__(LauncherApp)
+        app.palette_state = previous
+        app.palette_path = Path("palette.json")
+        app.actions = [
+            Action(
+                "existing",
+                "Existing",
+                "General",
+                "copy_text",
+                "text",
+                "Trusted",
+            )
+        ]
+        app.context_definitions = []
+        app.context_var = FakeVariable()
+        app.status_var = FakeVariable()
+        app.root = object()
+        app._refresh_focus_controls = lambda: None
+        app._render_command_surface = lambda: None
+
+        with (
+            patch(
+                "context_palette.launcher.load_palette_state",
+                side_effect=ActionError("invalid palette"),
+            ),
+            patch("context_palette.launcher.messagebox.showerror") as showerror,
+        ):
+            app._load_palette_state()
+
+        self.assertEqual(app.palette_state, previous)
+        self.assertIn("kept previous", app.status_var.value)
+        showerror.assert_called_once()
+
+    def test_failed_initial_palette_load_keeps_usable_empty_slots(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.palette_state = PaletteState()
+        app.palette_path = Path("palette.json")
+        app.actions = []
+        app.context_definitions = []
+        app.context_var = FakeVariable()
+        app.status_var = FakeVariable()
+        app.root = object()
+        app._refresh_focus_controls = lambda: None
+        app._render_command_surface = lambda: None
+
+        with (
+            patch(
+                "context_palette.launcher.load_palette_state",
+                side_effect=ActionError("invalid palette"),
+            ),
+            patch("context_palette.launcher.messagebox.showerror"),
+        ):
+            app._load_palette_state()
+
+        self.assertEqual(app.palette_state.context_slots, {})
 
     def test_failed_focus_save_restores_previous_context(self):
         app = LauncherApp.__new__(LauncherApp)

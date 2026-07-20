@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,6 +50,19 @@ class PaletteStateTests(unittest.TestCase):
             save_palette_state(path, state)
             loaded = load_palette_state(path)
         self.assertEqual(loaded, state)
+
+    def test_read_failure_is_reported_as_an_action_error(self):
+        path = Path("palette.json")
+
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", side_effect=OSError("file is locked")),
+        ):
+            with self.assertRaisesRegex(
+                ActionError,
+                r"Palette configuration could not be read: palette\.json",
+            ):
+                load_palette_state(path)
 
     def test_context_slots_are_filled_with_general_fallbacks(self):
         slots = action_slots(self.actions, PaletteState((), "Mail", {}))

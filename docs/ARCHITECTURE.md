@@ -62,6 +62,8 @@ Presentation and application orchestration.
 
 - Builds the Tkinter interface.
 - Maintains the explicitly selected focus context through a compact menu launcher.
+- Exposes Focus editing and the complete configuration workspace through the
+  compact Manage focus menu without adding another permanent header control.
 - Renders numbered slots, global flat search results, or an explicitly activated
   Focus Actions tree grouped by the action's Technology and Task facets.
 - Renders a global JSON-configured quick-action surface beside search results,
@@ -70,7 +72,7 @@ Presentation and application orchestration.
 - Connects platform-independent action execution to Windows-specific callbacks.
 - Ensures Tk operations stay on the Tk main thread.
 
-The main-window construction is divided into focused header, results/command-surface, shortcut, workspace, and footer builders. Inbox, Draft, and Cheat Sheet windows still live in this module and are the next safe extraction boundary; this is documented in `TECHNICAL_REVIEW.md`.
+The main-window construction is divided into focused header, results/command-surface, shortcut, workspace, and footer builders. Inbox and Draft windows still live in this module and are the next safe extraction boundary; this is documented in `TECHNICAL_REVIEW.md`.
 
 The launcher does not implement action transformations or window matching directly. Those responsibilities live in specialized modules.
 
@@ -148,6 +150,12 @@ Owns the shared native ttk theme, Segoe UI font policy, grey/teal/aqua palette, 
 
 Owns construction and in-document search for the searchable Help window. `launcher.py` retains orchestration responsibility and opens this focused secondary view with the project Help path.
 
+### `cheat_sheet_window.py`
+
+Owns the searchable Cheat Sheet secondary window, including selection, preview,
+and promotion to a local Draft action. `launcher.py` retains loading and
+orchestration responsibility.
+
 ### `hotkeys.py`
 
 Native Windows hotkey and selection-copy support using `ctypes`.
@@ -161,6 +169,14 @@ Native Windows hotkey and selection-copy support using `ctypes`.
 ### `contexts.py`
 
 Loads and validates standalone shared and local context definitions. A definition provides identity metadata and up to four preferred action IDs. Explicit per-machine choices in `palette.json` override configured defaults.
+
+### `focus_model.py`
+
+Owns pure runtime Focus policy independently of Tk and persistence. It currently
+discovers available Focus names, resolves preferred slots and unavailable-Focus
+fallbacks, and builds the visible Technology → Task → action hierarchy while
+preserving canonical action order. This is the intended replacement boundary
+for future context-model changes.
 
 ### `single_instance.py`
 
@@ -214,6 +230,8 @@ standard-library `ctypes`.
 - Writes the password with Windows clipboard-history and cloud-upload exclusion formats.
 - Returns a clipboard sequence number so delayed clearing occurs only if another
   application has not replaced the clipboard.
+- Arms delayed conditional clearing before destination focus and paste dispatch,
+  so an input-dispatch failure cannot leave cleanup unscheduled.
 - Retains protected-clipboard tracking until an ordinary clipboard replacement
   completes, so a failed write cannot make the secret eligible for workspace
   synchronization.
@@ -291,6 +309,10 @@ available action, right-click exposes the same canonical action-ID menu, and
 Shift/Ctrl+click opens the owning menu and action configuration files.
 
 Quick-action labels participate in keyboard focus. Enter or Space executes the first available primary action. Empty search, Inbox, cheat-sheet, and command-surface states contain recovery guidance rather than blank widgets. Reloads use a short busy cursor/status state; local loading is intentionally not animated.
+
+Ordinary widget tooltips respond to both pointer hover and keyboard focus. This
+keeps the full names and explanations of compact symbol controls available
+without expanding the fixed-size main-window layout.
 
 Configured Quick-action subjects and allow-listed built-in subjects share one
 mouse/keyboard binding contract for left click, right click, Enter, and Space.
@@ -435,6 +457,11 @@ Configuration reload is transactional in memory: combined shared/local actions,
 contexts, and quick-action groups replace their active lists only after complete
 validation succeeds. A failed external edit reports the affected file and
 retains the last successfully loaded interface configuration.
+Invalid or temporarily unreadable palette state follows the same last-known-good
+rule: active pins, Focus, and context slots remain in memory while the local
+file is corrected or becomes accessible again.
+The domain default always contains an empty context-slot mapping, so a missing
+or initially invalid palette file cannot fail first-start normalization.
 Coordinated startup and reload defer command-surface rendering until both
 command groups and palette pin state are loaded, then build the Quick-action
 widgets once. Standalone loader calls keep immediate rendering by default.
@@ -442,7 +469,7 @@ widgets once. Standalone loader calls keep immediate rendering by default.
 
 ## Diagnostics
 
-The standard-library logging system writes bounded local diagnostics to ignored `data/context-palette.log`. The file rotates at 512 KB and keeps two backups. Logging setup failure does not prevent application startup. Clipboard and Input / Output contents are not written deliberately.
+The standard-library logging system writes bounded local diagnostics to ignored `data/context-palette.log`. The file rotates at 512 KB and keeps two backups. Logging setup failure does not prevent application startup. Clipboard and Input / Output contents are not written deliberately. Slow configuration reload warnings include safe per-stage durations, but never file paths or configured content.
 
 Complete result refreshes slower than 100 ms and configuration reloads slower than 500 ms write a warning containing only elapsed time and action count. Search text and action content are deliberately excluded.
 
@@ -515,7 +542,7 @@ When adding context behavior:
 
 ## Known architectural next steps
 
-- Extract secondary Inbox, Draft, and sheet views from `launcher.py` without changing behavior.
+- Extract secondary Inbox and Draft views from `launcher.py` without changing behavior.
 - Add supporting-context composition and weighted ranking.
 - Design safe linear action sequences and clipboard transactions as explicit, previewable models.
 - Consider optional application-aware context suggestions that never switch focus silently.

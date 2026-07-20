@@ -38,7 +38,7 @@ application opening.
 
 ### Medium: continue splitting `launcher.py`
 
-The UI construction is now divided into header, results/command surface, shortcuts, workspace, and footer methods. Tooltip behaviour lives in `tooltips.py`. A later maintenance pass should move Help, Inbox, Draft editor/creator, and Cheat Sheet windows into one or more focused UI modules. Do this mechanically; do not introduce a UI framework or redesign the screens during extraction.
+The UI construction is now divided into header, results/command surface, shortcuts, workspace, and footer methods. Tooltip behaviour lives in `tooltips.py`; Help and Cheat Sheet windows now have focused modules. A later maintenance pass should move Inbox and Draft editor/creator windows into one or more focused UI modules. Do this mechanically; do not introduce a UI framework or redesign the screens during extraction.
 
 ### Medium: make action input/output effects explicit
 
@@ -55,6 +55,8 @@ The current `unittest`, `compileall`, and `git diff --check` checks are useful. 
 ## Completed in this review
 
 - Extracted widget and list-row tooltip implementations from `launcher.py` into `tooltips.py`.
+- Extracted the Cheat Sheet secondary window into `cheat_sheet_window.py`
+  without changing its behavior.
 - Split the main UI construction into focused methods without changing layout or behaviour.
 - Added case-insensitive duplicate action-ID validation within and across shared/local files.
 - Prevented appending an action whose ID already exists with different casing.

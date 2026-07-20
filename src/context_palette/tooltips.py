@@ -14,6 +14,8 @@ class WidgetTooltip:
         self.after_id: str | None = None
         widget.bind("<Enter>", self._schedule, add="+")
         widget.bind("<Leave>", self.hide, add="+")
+        widget.bind("<FocusIn>", self._schedule, add="+")
+        widget.bind("<FocusOut>", self.hide, add="+")
         widget.bind("<ButtonPress>", self.hide, add="+")
         widget.bind("<Destroy>", self.hide, add="+")
         setattr(widget, "_context_palette_has_tooltip", True)

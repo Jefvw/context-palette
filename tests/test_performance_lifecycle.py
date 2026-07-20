@@ -57,6 +57,28 @@ class PerformanceLifecycleTests(unittest.TestCase):
         self.assertEqual(warning.call_args.args[1], "result refresh")
         self.assertAlmostEqual(warning.call_args.args[2], 200.0)
         self.assertEqual(warning.call_args.args[3], 31)
+        self.assertEqual(warning.call_args.args[4], "")
+
+    def test_slow_operation_warning_can_include_safe_stage_timings(self):
+        with (
+            patch("context_palette.launcher.time.perf_counter", return_value=1.7),
+            patch("context_palette.launcher.LOGGER.warning") as warning,
+        ):
+            _warn_if_slow(
+                "configuration reload",
+                1.0,
+                0.5,
+                action_count=31,
+                stage_timings_ms={
+                    "actions": 12.34,
+                    "quick_actions": 456.78,
+                },
+            )
+
+        self.assertEqual(
+            warning.call_args.args[4],
+            " stages_ms=actions:12.3,quick_actions:456.8",
+        )
 
     def test_fast_operation_does_not_write_performance_warning(self):
         with (

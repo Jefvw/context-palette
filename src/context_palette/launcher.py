@@ -12,7 +12,6 @@ from typing import Callable
 from .actions import (
     Action,
     ActionError,
-    VISIBLE_STATES,
     append_action,
     append_actions,
     build_url,
@@ -30,14 +29,8 @@ from .actions import (
 )
 from .ai_guidance_window import AIGuidanceWindow
 from .action_types import ACTION_TYPES
-from .cheatsheets import (
-    CheatSheet,
-    CheatSheetError,
-    CheatSheetItem,
-    draft_action_from_cheatsheet_item,
-    filter_cheatsheet,
-    load_cheatsheets,
-)
+from .cheat_sheet_window import CheatSheetWindow
+from .cheatsheets import CheatSheetError, load_cheatsheets
 from .command_surface import (
     CommandGroup,
     CommandItem,
@@ -47,6 +40,7 @@ from .command_surface import (
     load_combined_command_groups,
 )
 from .configuration_window import ConfigurationWindow
+from .focus_model import focus_action_hierarchy, resolve_focus_state
 from .hotkeys import (
     GlobalHotkey,
     cursor_location,
@@ -133,27 +127,6 @@ def frequent_credential_actions(
     return selected[:limit]
 
 
-def focus_action_hierarchy(
-    actions: list[Action],
-    focus_context: str,
-) -> list[tuple[str, list[tuple[str, list[Action]]]]]:
-    """Group explicitly focused actions without changing their canonical order."""
-    technologies: dict[str, dict[str, list[Action]]] = {}
-    for action in actions:
-        if (
-            action.context.casefold() != focus_context.casefold()
-            or action.state not in VISIBLE_STATES
-        ):
-            continue
-        technology = action.technology.strip() or "Other"
-        task = action.task.strip() or "Other"
-        technologies.setdefault(technology, {}).setdefault(task, []).append(action)
-    return [
-        (technology, list(tasks.items()))
-        for technology, tasks in technologies.items()
-    ]
-
-
 def execute_builtin_quick_command(command_id: str, *, open_sheets: Callable[[], None]) -> None:
     """Execute one explicitly allow-listed application command."""
     if command_id == BUILTIN_QUICK_COMMAND_OPEN_SHEETS:
@@ -168,14 +141,22 @@ def _warn_if_slow(
     threshold_seconds: float,
     *,
     action_count: int,
+    stage_timings_ms: dict[str, float] | None = None,
 ) -> None:
     elapsed_seconds = time.perf_counter() - started_at
     if elapsed_seconds >= threshold_seconds:
+        stage_summary = ""
+        if stage_timings_ms:
+            stage_summary = " stages_ms=" + ",".join(
+                f"{name}:{duration_ms:.1f}"
+                for name, duration_ms in stage_timings_ms.items()
+            )
         LOGGER.warning(
-            "Slow %s: elapsed_ms=%.1f action_count=%d",
+            "Slow %s: elapsed_ms=%.1f action_count=%d%s",
             operation,
             elapsed_seconds * 1000,
             action_count,
+            stage_summary,
         )
 
 
@@ -404,6 +385,11 @@ class LauncherApp:
             label="Manage focuses…",
             command=self._show_focus_configuration,
         )
+        manage_focus_menu.add_separator()
+        manage_focus_menu.add_command(
+            label="Configure actions and buttons…",
+            command=self._show_configuration,
+        )
         manage_focus.configure(menu=manage_focus_menu)
         context_help = ttk.Button(context_panel, text="?", width=3, command=self._show_help)
         context_help.pack(side=tk.RIGHT)
@@ -417,7 +403,7 @@ class LauncherApp:
         )
         self._tooltip(
             manage_focus,
-            "Manage focus — Open the existing Focus configuration area.",
+            "Manage focus — Edit focuses or configure actions and buttons.",
         )
         self._tooltip(
             context_help,
@@ -427,6 +413,7 @@ class LauncherApp:
         self.configure_button = manage_focus
         self.focus_actions_button = focus_actions_button
         self.manage_focus_button = manage_focus
+        self.manage_focus_menu = manage_focus_menu
 
     def _activate_focus_actions(self) -> None:
         self.focus_actions_mode = True
@@ -1418,33 +1405,26 @@ class LauncherApp:
 
     def _load_palette_state(self, *, render: bool = True) -> None:
         try:
-            self.palette_state = load_palette_state(self.palette_path)
+            loaded_state = load_palette_state(self.palette_path)
         except ActionError as exc:
-            self.palette_state = PaletteState()
-            messagebox.showerror("Context Palette", str(exc))
-        configured_names = {context.name for context in self.context_definitions}
-        contexts = sorted(configured_names | {action.context for action in self.actions}, key=str.casefold)
-        configured_slots = dict(self.palette_state.context_slots)
-        known_action_ids = {action.id for action in self.actions}
-        for definition in self.context_definitions:
-            if definition.name not in configured_slots and definition.preferred_action_ids:
-                configured_slots[definition.name] = tuple(
-                    action_id
-                    for action_id in definition.preferred_action_ids
-                    if action_id in known_action_ids
-                )
-        self.palette_state = PaletteState(
-            self.palette_state.pinned_action_ids,
-            self.palette_state.focus_context,
-            configured_slots,
-        )
-        if self.palette_state.focus_context not in contexts and contexts:
-            self.palette_state = PaletteState(
-                self.palette_state.pinned_action_ids,
-                contexts[0],
-                self.palette_state.context_slots,
+            self.status_var.set(
+                "Palette settings could not be loaded; kept previous pins, Focus, and slots."
             )
-        self.available_context_names = contexts
+            messagebox.showerror(
+                "Palette settings could not be loaded",
+                f"{exc}\n\nPrevious pins, Focus, and context slots remain active.",
+                parent=self.root,
+            )
+            LOGGER.exception("Palette configuration failed to load")
+        else:
+            self.palette_state = loaded_state
+        resolved = resolve_focus_state(
+            self.actions,
+            self.context_definitions,
+            self.palette_state,
+        )
+        self.palette_state = resolved.palette_state
+        self.available_context_names = list(resolved.available_names)
         self.context_var.set(self.palette_state.focus_context)
         self._refresh_focus_controls()
         if render:
@@ -1771,17 +1751,39 @@ class LauncherApp:
 
     def _reload(self) -> None:
         started_at = time.perf_counter()
+        stage_timings_ms: dict[str, float] = {}
+
+        def run_stage(name: str, callback: Callable[[], None]) -> None:
+            stage_started_at = time.perf_counter()
+            callback()
+            stage_timings_ms[name] = (
+                time.perf_counter() - stage_started_at
+            ) * 1000
+
         self.status_var.set("Refreshing actions, contexts, and buttons…")
         self.root.configure(cursor="wait")
         self.root.update_idletasks()
         try:
-            self._load_actions()
-            self._load_command_surface(render=False)
-            self._load_contexts()
-            self._load_palette_state(render=False)
-            self._render_command_surface()
-            self._refresh_results()
-            self.configuration_signature_cache = self._configuration_signature()
+            run_stage("actions", self._load_actions)
+            run_stage(
+                "buttons",
+                lambda: self._load_command_surface(render=False),
+            )
+            run_stage("contexts", self._load_contexts)
+            run_stage(
+                "palette",
+                lambda: self._load_palette_state(render=False),
+            )
+            run_stage("quick_actions", self._render_command_surface)
+            run_stage("results", self._refresh_results)
+            run_stage(
+                "signature",
+                lambda: setattr(
+                    self,
+                    "configuration_signature_cache",
+                    self._configuration_signature(),
+                ),
+            )
         finally:
             self.root.configure(cursor="")
             _warn_if_slow(
@@ -1789,6 +1791,7 @@ class LauncherApp:
                 started_at,
                 SLOW_CONFIGURATION_RELOAD_SECONDS,
                 action_count=len(self.actions),
+                stage_timings_ms=stage_timings_ms,
             )
 
     def _toggle_selected_pin(self) -> None:
@@ -1881,11 +1884,11 @@ class LauncherApp:
                 )
                 return
             send_paste_shortcut()
-            self.root.after(
-                15_000,
-                lambda: self._clear_protected_clipboard(sequence),
-            )
 
+        self.root.after(
+            15_000,
+            lambda: self._clear_protected_clipboard(sequence),
+        )
         self.root.after(120, paste_into_destination)
         return "Protected credential paste approved; returning to the destination."
 
@@ -2630,205 +2633,6 @@ class DraftActionEditor:
             self.text.get("1.0", tk.END),
         )
         self.window.destroy()
-
-
-class CheatSheetWindow:
-    def __init__(
-        self,
-        parent: tk.Tk,
-        sheets: list[CheatSheet],
-        actions_path: Path,
-        on_change: Callable[[], None],
-    ) -> None:
-        self.sheets = sheets
-        self.actions_path = actions_path
-        self.on_change = on_change
-        self.filtered_items: list[tuple[CheatSheet, str, CheatSheetItem]] = []
-        self.selected_sheet_index = 0
-        self.selected_item_index = 0
-        self.search_entry: ttk.Entry | None = None
-        self.status_var = tk.StringVar(value="")
-        self.search_var = tk.StringVar()
-        self.search_var.trace_add("write", lambda *_args: self._refresh_items())
-        self.window = tk.Toplevel(parent)
-        self.window.title("Context Palette Cheat Sheets")
-        configure_standard_window(self.window)
-        self.window.bind("<Escape>", lambda _event: self.window.destroy())
-
-        outer = ttk.Frame(self.window, padding=12)
-        outer.pack(fill=tk.BOTH, expand=True)
-
-        controls = ttk.Frame(outer)
-        controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
-        ttk.Label(controls, textvariable=self.status_var, style="Status.TLabel").pack(side=tk.LEFT)
-        ttk.Button(
-            controls,
-            text="Close",
-            command=self.window.destroy,
-            style="Compact.TButton",
-        ).pack(side=tk.RIGHT)
-
-        ttk.Label(outer, text="Cheat sheets", style="Title.TLabel").pack(anchor=tk.W)
-        ttk.Label(
-            outer,
-            text=f"{len(sheets)} local reference sheet{'s' if len(sheets) != 1 else ''}",
-            style="Muted.TLabel",
-        ).pack(anchor=tk.W, pady=(2, 8))
-
-        self.listbox = tk.Listbox(outer, activestyle="dotbox", height=6, exportselection=False)
-        self.listbox.pack(fill=tk.X, pady=(4, 8))
-        self.listbox.bind("<<ListboxSelect>>", lambda _event: self._select_sheet())
-
-        ttk.Label(outer, text="Search selected sheet").pack(anchor=tk.W)
-        search_row = ttk.Frame(outer)
-        search_row.pack(fill=tk.X, pady=(4, 8))
-
-        search = ttk.Entry(search_row, textvariable=self.search_var)
-        self.search_entry = search
-        search.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        search.bind("<Escape>", lambda _event: self.window.destroy())
-        ttk.Button(search_row, text="Promote to Draft", command=self._promote_selected).pack(
-            side=tk.LEFT, padx=(8, 0)
-        )
-
-        self.items = tk.Listbox(outer, activestyle="dotbox", height=8, exportselection=False)
-        self.items.pack(fill=tk.BOTH, expand=True)
-        self.items.bind("<<ListboxSelect>>", lambda _event: self._select_item())
-
-        self.preview = tk.Text(outer, wrap=tk.WORD)
-        self.preview.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
-        self.preview.configure(state=tk.DISABLED)
-
-        self._load_sheets()
-        self.window.transient(parent)
-        self.window.lift()
-        self.window.after(80, self.focus_search)
-
-    def _load_sheets(self) -> None:
-        for sheet in self.sheets:
-            self.listbox.insert(tk.END, sheet.title)
-        if self.sheets:
-            self.listbox.selection_set(0)
-            self.listbox.activate(0)
-        self._refresh_items()
-
-    def _refresh_items(self) -> None:
-        sheet = self._selected_sheet()
-        self.filtered_items = []
-        self.selected_item_index = 0
-        self.items.delete(0, tk.END)
-
-        if sheet is None:
-            self.items.insert(
-                tk.END,
-                "No cheat sheets are available. Add a local sheet or check configuration.",
-            )
-            self.items.itemconfigure(0, foreground=COLORS["muted_text"])
-            self.status_var.set("No cheat sheets available")
-            self._update_preview()
-            return
-
-        filtered_sheet = filter_cheatsheet(sheet, self.search_var.get())
-        for section in filtered_sheet.sections:
-            for item in section.items:
-                self.filtered_items.append((sheet, section.title, item))
-                self.items.insert(tk.END, f"{section.title} > {item.label}: {item.detail}")
-
-        if self.filtered_items:
-            self.items.selection_set(0)
-            self.items.activate(0)
-            self.status_var.set(f"{len(self.filtered_items)} matching items")
-        else:
-            query = self.search_var.get().strip()
-            self.items.insert(
-                tk.END,
-                f'No entries match “{query}”. Clear search to show all entries.'
-                if query
-                else "This sheet has no entries.",
-            )
-            self.items.itemconfigure(0, foreground=COLORS["muted_text"])
-            self.status_var.set("No matching entries")
-        self._update_preview()
-
-    def _select_sheet(self) -> None:
-        selected = self.listbox.curselection()
-        if selected:
-            self.selected_sheet_index = selected[0]
-        self._refresh_items()
-
-    def _select_item(self) -> None:
-        selected = self.items.curselection()
-        if selected:
-            self.selected_item_index = selected[0]
-        self._update_preview()
-
-    def _update_preview(self) -> None:
-        selected = self._selected_item()
-        if selected is None:
-            sheet = self._selected_sheet()
-            if sheet is None:
-                text = "No cheat sheets available."
-            elif self.search_var.get().strip():
-                text = f"No matching items for: {self.search_var.get().strip()}"
-            else:
-                text = "Select a cheat-sheet item."
-        else:
-            sheet, section_title, item = selected
-            text = (
-                f"Sheet: {sheet.title}\n"
-                f"Section: {section_title}\n"
-                f"Item: {item.label}\n\n"
-                f"{item.detail}\n\n"
-                f"Tags: {', '.join(item.tags) if item.tags else '(none)'}"
-            )
-
-        self.preview.configure(state=tk.NORMAL)
-        self.preview.delete("1.0", tk.END)
-        self.preview.insert("1.0", text)
-        self.preview.configure(state=tk.DISABLED)
-
-    def _selected_sheet(self) -> CheatSheet | None:
-        if not self.sheets:
-            return None
-        if self.selected_sheet_index >= len(self.sheets):
-            self.selected_sheet_index = 0
-        if self.selected_sheet_index < 0:
-            return None
-        return self.sheets[self.selected_sheet_index]
-
-    def _selected_item(self):
-        if not self.filtered_items:
-            return None
-        if self.selected_item_index >= len(self.filtered_items):
-            self.selected_item_index = 0
-        if self.selected_item_index < 0:
-            return None
-        return self.filtered_items[self.selected_item_index]
-
-    def _promote_selected(self) -> None:
-        selected = self._selected_item()
-        if selected is None:
-            self.status_var.set("Select a cheat-sheet item first")
-            return
-
-        sheet, _section_title, item = selected
-        try:
-            action = draft_action_from_cheatsheet_item(sheet, item)
-            append_action(self.actions_path, action)
-            self.on_change()
-            self.status_var.set(f"Promoted: {item.label}")
-            messagebox.showinfo(
-                "Context Palette",
-                f"Created draft action:\n\n{sheet.title} > {item.label}",
-                parent=self.window,
-            )
-        except ActionError as exc:
-            messagebox.showerror("Context Palette", str(exc), parent=self.window)
-
-    def focus_search(self) -> None:
-        if self.search_entry is not None:
-            self.search_entry.focus_force()
-            self.search_entry.selection_range(0, tk.END)
 
 
 def run(

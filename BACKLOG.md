@@ -5,7 +5,8 @@ This file contains actionable future work. Completed user-visible work belongs i
 ## Now
 
 - Perform and record the manual Windows UI/accessibility smoke test for the guided Configure workflow.
-- Extract secondary Inbox, Draft, and sheet views from `launcher.py` incrementally without changing behavior.
+- Extract secondary Inbox and Draft views from `launcher.py` incrementally
+  without changing behavior. The sheet view has been extracted.
 - Refine action discovery and effect descriptions using real repeated-work feedback.
 - Add focused tests for configuration-window keyboard order and validation recovery where Tk permits reliable automation.
 

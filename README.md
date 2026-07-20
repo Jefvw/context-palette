@@ -77,7 +77,9 @@ After the application starts:
 1. Press `F9` to capture selected text and show the palette. Use `Ctrl+Alt+P` as the fallback shortcut.
 2. Type in **Find**, select an action, and press `Enter`.
 3. Choose a **Focus** context to change slots 6–9.
-4. Open **Configure** to add personal actions, contexts, or right-side buttons.
+4. Choose **Manage focus → Configure actions and buttons…**, or press `Ctrl+,`,
+   to add personal actions, contexts, or right-side buttons. **Manage focuses…**
+   opens the relevant context tab directly.
 5. Use **Capture** when material should enter the Inbox before becoming an action.
 
 Close, `Esc`, and **Hide** keep the process resident. **Quit** stops it.
@@ -118,7 +120,9 @@ Personal and runtime files are ignored by Git:
 | `data/palette.json` | Focus, pins, and per-machine slot choices |
 | `data/context-palette.log*` | Bounded local diagnostics |
 
-Use **Configure** for ordinary personal configuration. The JSON guides are intended for advanced editing, review, and automation:
+Choose **Manage focus → Configure actions and buttons…**, or press `Ctrl+,`, to
+open **Configure** for ordinary personal configuration. The
+JSON guides are intended for advanced editing, review, and automation:
 
 - [Action types](docs/ACTION_TYPES.md)
 - [Context configuration](docs/CONTEXT_CONFIGURATION.md)

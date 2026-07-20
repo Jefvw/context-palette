@@ -376,6 +376,15 @@ class LauncherSmokeTests(unittest.TestCase):
                         surface_tooltip_count,
                     )
 
+                    self.assertEqual(
+                        [
+                            app.manage_focus_menu.entrycget(index, "label")
+                            for index in (0, 2)
+                        ],
+                        ["Manage focuses…", "Configure actions and buttons…"],
+                    )
+                    self.assertEqual(app.manage_focus_menu.type(1), "separator")
+
                     for help_button in (
                         app.global_help_button,
                         app.action_help_button,
@@ -391,6 +400,18 @@ class LauncherSmokeTests(unittest.TestCase):
                         self.assertEqual(len(help_windows), 1)
                         help_windows[0].destroy()
                         root.update()
+
+                    app._show_cheatsheets()
+                    root.update()
+                    sheet_windows = [
+                        child
+                        for child in root.winfo_children()
+                        if isinstance(child, tk.Toplevel)
+                        and child.title() == "Context Palette Cheat Sheets"
+                    ]
+                    self.assertEqual(len(sheet_windows), 1)
+                    sheet_windows[0].destroy()
+                    root.update()
 
                     app._show_configuration()
                     root.update_idletasks()

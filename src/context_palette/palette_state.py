@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from pathlib import Path
 
@@ -12,7 +12,7 @@ from .persistence import atomic_write_json
 class PaletteState:
     pinned_action_ids: tuple[str, ...] = ()
     focus_context: str = "General"
-    context_slots: dict[str, tuple[str, ...]] | None = None
+    context_slots: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def load_palette_state(path: Path) -> PaletteState:
@@ -20,6 +20,8 @@ def load_palette_state(path: Path) -> PaletteState:
         return PaletteState()
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ActionError(f"Palette configuration could not be read: {path}") from exc
     except json.JSONDecodeError as exc:
         raise ActionError(f"Palette configuration is not valid JSON: {path}") from exc
     if not isinstance(raw, dict):

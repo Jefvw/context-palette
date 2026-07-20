@@ -15,7 +15,6 @@ from context_palette.launcher import (
     BUILTIN_QUICK_COMMAND_OPEN_SHEETS,
     LauncherApp,
     execute_builtin_quick_command,
-    focus_action_hierarchy,
 )
 
 
@@ -62,25 +61,6 @@ class FakeMenu:
 
 
 class LauncherCommandSurfaceTests(unittest.TestCase):
-    def test_focus_hierarchy_uses_explicit_context_and_canonical_order(self):
-        actions = [
-            Action("one", "First", "General", "copy_text", "1", technology="Text", task="Copy"),
-            Action("two", "Second", "Other", "copy_text", "2", technology="Text", task="Copy"),
-            Action("three", "Third", "general", "copy_text", "3", technology="", task=""),
-            Action("four", "Archived", "General", "copy_text", "4", state="Archived"),
-            Action("five", "First", "General", "copy_text", "5", technology="Text", task="Copy"),
-        ]
-
-        hierarchy = focus_action_hierarchy(actions, "GENERAL")
-
-        self.assertEqual([technology for technology, _tasks in hierarchy], ["Text", "Other"])
-        self.assertEqual(
-            [action.id for action in hierarchy[0][1][0][1]],
-            ["one", "five"],
-        )
-        self.assertEqual(hierarchy[1][1][0][0], "Other")
-        self.assertEqual(hierarchy[1][1][0][1][0].id, "three")
-
     def test_builtin_quick_command_allow_list_opens_only_sheets(self):
         calls: list[str] = []
 

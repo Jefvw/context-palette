@@ -19,6 +19,8 @@ Power Automate Desktop setup is documented in `integrations/README.md`.
 - Press `Esc`, click `Hide`, or close the window to hide it.
 - Press `Ctrl+L` or `Ctrl+K` to return keyboard focus to Find.
 - Press `Ctrl+I` to capture clipboard text, `Ctrl+,` to open Configure, or `F1` to open Help.
+- Choose **Manage focus → Configure actions and buttons…** for a visible route
+  to the complete personal-configuration workspace.
 - Click `Quit` to stop the resident process completely.
 - If a development instance becomes stuck, run `stop-context-palette.bat` and start again. The stop command targets this project's virtual-environment GUI and foreground diagnostic process trees; it does not stop unrelated Python applications or Context Palette clones in other folders.
 
@@ -96,14 +98,17 @@ behavior.
 - Tab to a quick action and press Enter or Space to run its primary action.
 - Every item uses the same selected text, Input / Output, clipboard, and safe action executor as the search list.
 - Configure shared groups in `data/command_surface.json` and private groups in `data/local_command_surface.json`.
-- Use **Configure > Right-side buttons** to add or edit personal groups and buttons without editing JSON. Choose existing actions from lists; stable IDs are generated from the visible names when left blank.
+- Press `Ctrl+,`, then use **Right-side buttons** to add or edit personal groups
+  and buttons without editing JSON. Choose existing actions from lists; stable
+  IDs are generated from the visible names when left blank.
 - Groups remain in configured order across two columns. Subjects remain in
   configured order from top to bottom inside each group.
 
 ## Configure
 
-Choose **Manage focus** for Focus configuration, or use the configuration
-shortcut (`Ctrl+,`) for the complete guided personal-configuration workspace:
+Choose **Manage focus → Manage focuses…** for Focus configuration. Choose
+**Manage focus → Configure actions and buttons…**, or use the shortcut
+(`Ctrl+,`), for the complete guided personal-configuration workspace:
 
 - **Actions:** edit every kind of personal action, including URLs, files,
   folders, applications, credentials, URL builders, and transformations.
@@ -228,7 +233,9 @@ be promoted to Draft actions.
 
 ### Edit
 
-Edits the selected Draft copy-text action from the launcher. To edit any personal built-in action type, open **Configure > Actions**. Shared actions and Trusted actions remain read-only in the launcher edit flow.
+Edits the selected Draft copy-text action from the launcher. To edit any
+personal built-in action type, press `Ctrl+,`, then open **Actions**. Shared
+actions and Trusted actions remain read-only in the launcher edit flow.
 
 ### Pin
 
@@ -269,6 +276,8 @@ To keep the launcher fast to scan, result rows show `Command → subject`, for e
 The main palette keeps its compact width. Its nine management commands use the
 single character strip documented above, keeping every command directly
 available without reducing the action console or transformation workspace.
+Hover over a compact control, or move keyboard focus to it with `Tab`, to see
+its full command name and explanation.
 
 ## Protected Windows credential paste
 
@@ -283,10 +292,10 @@ immediately. Pinned credential actions appear first in pin order; remaining
 positions use other Trusted credential actions. Draft credentials are never
 shown as direct-paste buttons.
 
-Use **Configure → Built-in action types → Paste a Windows credential** to create
-a personal Draft. The action stores only an exact target from the **Windows
-Credentials** or **Generic Credentials** section of Credential Manager; it
-never stores the username or password.
+Press `Ctrl+,`, then choose **Built-in action types → Paste a Windows
+credential** to create a personal Draft. The action stores only an exact target
+from the **Windows Credentials** or **Generic Credentials** section of
+Credential Manager; it never stores the username or password.
 
 Set up the credential first:
 
@@ -367,7 +376,15 @@ passwords, whitespace in the hostname area, or ambiguous backslashes are rejecte
 
 ## Troubleshooting
 
-Configuration reloads show a brief busy cursor and status message. Because all configuration is local and normally loads in under a second, Context Palette does not show a spinner that would flicker during ordinary use. Errors identify the affected area and preserve the rest of the launcher where possible. If an edited action, context, or right-side button file is invalid, its last successfully loaded configuration remains available while the file is corrected.
+Configuration reloads show a brief busy cursor and status message. Because all
+configuration is local and normally loads in under a second, Context Palette
+does not show a spinner that would flicker during ordinary use. Errors identify
+the affected area and preserve the rest of the launcher where possible. If an
+edited action, context, right-side button, or palette-state file is invalid,
+its last successfully loaded configuration remains available while the file is
+corrected. Palette failures retain the active pins, Focus, and context slots.
+On first start, a missing or invalid palette uses safe empty pins and slots
+instead of preventing the launcher from opening.
 
 For an intermittent startup or configuration problem, inspect
 `data/context-palette.log`. The local log is ignored by Git, rotates

@@ -4,7 +4,11 @@ A focus context gives slots 6–9 a predictable set of preferred actions while s
 
 ## Recommended: Configure window
 
-Open **Configure > Contexts** to create or edit a personal context and choose up to four actions. The form uses action names instead of IDs and saves to ignored `data/local_contexts.json`. Shared contexts are visible but read-only.
+Choose **Manage focus → Manage focuses…** to open **Contexts** directly, or
+press `Ctrl+,` and select **Contexts**. Create or edit a personal context and
+choose up to four actions. The form uses action names instead of IDs and saves
+to ignored `data/local_contexts.json`. Shared contexts are visible but
+read-only.
 
 ## Advanced JSON files
 
