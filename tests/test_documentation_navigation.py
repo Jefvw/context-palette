@@ -38,6 +38,30 @@ class DocumentationNavigationTests(unittest.TestCase):
         self.assertNotIn("Configure >", help_document)
         self.assertNotIn("Configure →", help_document)
 
+    def test_change_guide_is_linked_and_names_current_owners(self):
+        contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        documentation_index = (ROOT / "docs" / "README.md").read_text(
+            encoding="utf-8"
+        )
+        change_guide = (ROOT / "docs" / "CHANGE_GUIDE.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("docs/CHANGE_GUIDE.md", contributing)
+        self.assertIn("CHANGE_GUIDE.md", documentation_index)
+        for owner in (
+            "workspace_transforms.py",
+            "workspace_panel.py",
+            "action_discovery_panel.py",
+            "focus_model.py",
+            "configuration_window.py",
+            "command_surface.py",
+            "persistence.py",
+        ):
+            self.assertIn(owner, change_guide)
+        self.assertIn(r".\develop-context-palette.bat", change_guide)
+        self.assertIn("git diff --check", change_guide)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -130,6 +130,25 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertIs(app.type_filter.tk_focusNext(), app.run_button)
                     self.assertIs(app.run_button.tk_focusNext(), app.action_help_button)
                     self.assertIs(app.action_help_button.tk_focusNext(), app.results)
+
+                    app.passwords_button.invoke()
+                    self.assertEqual(app.action_type_filter, "paste_credential")
+                    self.assertEqual(app.passwords_button.cget("style"), "Accent.TButton")
+                    app.passwords_button.invoke()
+                    self.assertIsNone(app.action_type_filter)
+
+                    type_menu = root.nametowidget(app.type_filter.cget("menu"))
+                    open_url_index = next(
+                        index
+                        for index in range(type_menu.index(tk.END) + 1)
+                        if type_menu.type(index) == "radiobutton"
+                        and type_menu.entrycget(index, "label") == "Open a website"
+                    )
+                    type_menu.invoke(open_url_index)
+                    self.assertEqual(app.action_type_filter, "open_url")
+                    type_menu.invoke(0)
+                    self.assertIsNone(app.action_type_filter)
+
                     app._activate_focus_actions()
                     root.update()
                     self.assertEqual(app.results_view, "focus")
@@ -327,12 +346,41 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
 
                     copied: list[str] = []
+                    case_menu = root.nametowidget(
+                        app.workspace_transform_menu.entrycget(0, "menu")
+                    )
+                    proper_case_index = next(
+                        index
+                        for index in range(case_menu.index(tk.END) + 1)
+                        if case_menu.entrycget(index, "label") == "Proper Case"
+                    )
+                    app._set_workspace_text("hELLO wORLD")
+                    with patch.object(app, "_set_clipboard", copied.append):
+                        case_menu.invoke(proper_case_index)
+                    self.assertEqual(app._workspace_text(), "Hello World")
+                    self.assertEqual(copied, ["Hello World"])
+
+                    lines_menu = root.nametowidget(
+                        app.workspace_transform_menu.entrycget(2, "menu")
+                    )
+                    sql_index = next(
+                        index
+                        for index in range(lines_menu.index(tk.END) + 1)
+                        if lines_menu.entrycget(index, "label")
+                        == "Format as SQL value list"
+                    )
+                    app._set_workspace_text("1\nO'Brien")
+                    with patch.object(app, "_set_clipboard", copied.append):
+                        lines_menu.invoke(sql_index)
+                    self.assertEqual(app._workspace_text(), "(1, 'O''Brien')")
+                    self.assertEqual(copied[-1], "(1, 'O''Brien')")
+
                     app._set_workspace_text("One TWO\nThree")
                     app.workspace.tag_add(tk.SEL, "1.4", "1.7")
                     with patch.object(app, "_set_clipboard", copied.append):
                         app._transform_workspace("lowercase", "lowercase")
                     self.assertEqual(app._workspace_text(), "One two\nThree")
-                    self.assertEqual(copied, ["two"])
+                    self.assertEqual(copied[-1], "two")
                     self.assertIn("selection", app.status_var.get())
 
                     app.workspace.tag_remove(tk.SEL, "1.0", tk.END)

@@ -14,7 +14,8 @@ This command:
 
 1. Validates shared and local configuration and cross-file action references.
 2. Compiles `src`.
-3. Runs the complete `unittest` suite.
+3. Runs the complete `unittest` suite, including internal Markdown-link and
+   filename-casing validation for root, `docs/`, and `integrations/` guides.
 
 It is read-only except for Python bytecode caches.
 
@@ -49,6 +50,17 @@ distinguishes an unusable Python environment (repair with setup) from a project
 import error (investigate with the complete check).
 
 Do not document a fixed test count; it changes as coverage grows.
+
+Run the documentation-link check directly after moving or renaming a guide:
+
+```powershell
+.\python-context-palette.bat -m unittest tests.test_documentation_links
+```
+
+The checker reports the source document, line number, target, and whether the
+path is missing or has incorrect filename casing. It intentionally ignores web
+links, email links, heading-only anchors, inline-code examples, and fenced code
+blocks.
 
 `tests.test_launcher_smoke` exercises the real Tk view transition between
 explicit Focus Actions and flat global search results. Its temporary fixture

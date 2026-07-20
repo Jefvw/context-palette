@@ -389,7 +389,7 @@ Input / Output workspace <---- Paste / manual edit
 Windows Credential Manager -- exact target --> protected clipboard --> captured destination
 ```
 
-Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `launcher.py` owns selection ranges, one-step Undo grouping, clipboard updates, and menus. Action explanations and application status share a slim bottom communication line.
+Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `workspace_panel.py` owns selection ranges, one-step Undo grouping, clipboard updates, and menus. The launcher injects clipboard and status callbacks and retains orchestration delegates. Action explanations and application status share a slim bottom communication line.
 
 The transformation menu groups deterministic operations into Case, Whitespace,
 and Lines. Line operations preserve the detected line-ending style and final

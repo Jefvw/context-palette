@@ -13,6 +13,8 @@ Before changing code, read:
 5. `BACKLOG.md` — planned work.
 
 Detailed development guidance also exists in `docs/AGENTS.md` and `docs/DEVELOPMENT_PROCESS.md`.
+Use `docs/CHANGE_GUIDE.md` to locate the owning files and focused tests for
+common modifications.
 
 ## Product constraints
 

@@ -157,7 +157,8 @@ It cannot execute an action. See [Power Automate Desktop integration](integratio
 Start with the [documentation index](docs/README.md).
 
 - Users: [Help](docs/HELP.md)
-- Contributors: [Contributing](CONTRIBUTING.md) and [Development process](docs/DEVELOPMENT_PROCESS.md)
+- Contributors: [Contributing](CONTRIBUTING.md), [Change guide](docs/CHANGE_GUIDE.md),
+  and [Development process](docs/DEVELOPMENT_PROCESS.md)
 - Architects: [Architecture](docs/ARCHITECTURE.md), [decisions](docs/DECISIONS.md), and [product vision](docs/PRODUCT_VISION.md)
 - Planning: [MVP](docs/MVP.md), [roadmap](docs/ROADMAP.md), and [backlog](BACKLOG.md)
 - History: [Changelog](CHANGELOG.md)

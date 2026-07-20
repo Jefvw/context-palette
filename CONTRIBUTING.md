@@ -22,6 +22,9 @@ runs the canonical project check.
 3. Inspect the working tree and preserve unrelated changes.
 4. Confirm whether affected data is shared or personal.
 
+For common tasks, use the [Change guide](docs/CHANGE_GUIDE.md) to find the
+owning module, focused tests, and documentation that normally changes with it.
+
 ## Design constraints
 
 - Target Windows without administrator rights.
