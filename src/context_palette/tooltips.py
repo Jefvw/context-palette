@@ -4,6 +4,34 @@ import tkinter as tk
 from typing import Callable
 
 
+def widget_tooltip_position(
+    widget_bounds: tuple[int, int, int, int],
+    tooltip_size: tuple[int, int],
+    screen_bounds: tuple[int, int, int, int],
+    *,
+    gap: int = 4,
+    margin: int = 8,
+) -> tuple[int, int]:
+    """Place a tooltip below or above its widget and keep it on-screen."""
+    widget_x, widget_y, widget_width, widget_height = widget_bounds
+    tooltip_width, tooltip_height = tooltip_size
+    screen_left, screen_top, screen_right, screen_bottom = screen_bounds
+
+    minimum_x = screen_left + margin
+    maximum_x = max(minimum_x, screen_right - tooltip_width - margin)
+    x = max(minimum_x, min(widget_x, maximum_x))
+
+    below = widget_y + widget_height + gap
+    if below + tooltip_height <= screen_bottom - margin:
+        y = below
+    else:
+        y = widget_y - tooltip_height - gap
+    minimum_y = screen_top + margin
+    maximum_y = max(minimum_y, screen_bottom - tooltip_height - margin)
+    y = max(minimum_y, min(y, maximum_y))
+    return x, y
+
+
 class WidgetTooltip:
     """Delayed hover help for an ordinary Tk widget."""
 
@@ -46,9 +74,25 @@ class WidgetTooltip:
             font=("Segoe UI", 9),
         )
         label.pack()
-        x = self.widget.winfo_rootx()
-        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
-        window.geometry(f"+{x}+{y}")
+        window.update_idletasks()
+        screen_left = window.winfo_vrootx()
+        screen_top = window.winfo_vrooty()
+        x, y = widget_tooltip_position(
+            (
+                self.widget.winfo_rootx(),
+                self.widget.winfo_rooty(),
+                self.widget.winfo_width(),
+                self.widget.winfo_height(),
+            ),
+            (window.winfo_reqwidth(), window.winfo_reqheight()),
+            (
+                screen_left,
+                screen_top,
+                screen_left + window.winfo_vrootwidth(),
+                screen_top + window.winfo_vrootheight(),
+            ),
+        )
+        window.geometry(f"{x:+d}{y:+d}")
         self.window = window
 
     def hide(self, _event=None) -> None:

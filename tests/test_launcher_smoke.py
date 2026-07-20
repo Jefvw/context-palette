@@ -385,6 +385,28 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     self.assertEqual(app.manage_focus_menu.type(1), "separator")
 
+                    for menu_index, expected_tab in ((0, "Contexts"), (2, "Actions")):
+                        app.manage_focus_menu.invoke(menu_index)
+                        root.update()
+                        configuration_windows = [
+                            child
+                            for child in root.winfo_children()
+                            if isinstance(child, tk.Toplevel)
+                            and child.title() == "Configure Context Palette"
+                        ]
+                        self.assertEqual(len(configuration_windows), 1)
+                        notebook = next(
+                            child
+                            for child in self._descendants(configuration_windows[0])
+                            if isinstance(child, ttk.Notebook)
+                        )
+                        self.assertEqual(
+                            notebook.tab(notebook.select(), "text"),
+                            expected_tab,
+                        )
+                        configuration_windows[0].destroy()
+                        root.update()
+
                     for help_button in (
                         app.global_help_button,
                         app.action_help_button,
@@ -412,17 +434,6 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(len(sheet_windows), 1)
                     sheet_windows[0].destroy()
                     root.update()
-
-                    app._show_configuration()
-                    root.update_idletasks()
-                    configuration_windows = [
-                        child
-                        for child in root.winfo_children()
-                        if isinstance(child, tk.Toplevel)
-                        and child.title() == "Configure Context Palette"
-                    ]
-                    self.assertEqual(len(configuration_windows), 1)
-                    configuration_windows[0].destroy()
 
                     app.quit_app()
                     root_destroyed = True

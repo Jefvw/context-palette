@@ -20,6 +20,8 @@ This project has not published a versioned release. Changes are recorded under *
   dedicated, characterized domain module to prepare for context-model changes.
 - Moved available-Focus discovery, preferred-slot resolution, and fallback
   policy into that same pure model boundary.
+- Kept keyboard and hover tooltips on-screen near display edges, including on
+  secondary monitors with negative coordinates.
 - Replaced the wide Focus selector with a compact explicit menu, added direct
   Focus management, and introduced a Technology → Task → action Focus browser
   that leaves ordinary Find results global. Keyboard focus now moves directly

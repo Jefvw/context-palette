@@ -6,7 +6,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from context_palette.tooltips import WidgetTooltip
+from context_palette.tooltips import WidgetTooltip, widget_tooltip_position
 
 
 class FakeWidget:
@@ -18,6 +18,36 @@ class FakeWidget:
 
 
 class WidgetTooltipTests(unittest.TestCase):
+    def test_position_prefers_below_when_it_fits(self):
+        self.assertEqual(
+            widget_tooltip_position(
+                (100, 100, 80, 30),
+                (200, 60),
+                (0, 0, 1920, 1080),
+            ),
+            (100, 134),
+        )
+
+    def test_position_moves_above_and_clamps_at_bottom_right(self):
+        self.assertEqual(
+            widget_tooltip_position(
+                (1870, 1030, 40, 30),
+                (240, 80),
+                (0, 0, 1920, 1080),
+            ),
+            (1672, 946),
+        )
+
+    def test_position_supports_negative_secondary_monitor_coordinates(self):
+        self.assertEqual(
+            widget_tooltip_position(
+                (-120, 980, 60, 30),
+                (220, 70),
+                (-1920, 0, 0, 1080),
+            ),
+            (-228, 906),
+        )
+
     def test_tooltip_is_available_to_mouse_and_keyboard_users(self):
         widget = FakeWidget()
 

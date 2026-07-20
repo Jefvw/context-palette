@@ -312,7 +312,9 @@ Quick-action labels participate in keyboard focus. Enter or Space executes the f
 
 Ordinary widget tooltips respond to both pointer hover and keyboard focus. This
 keeps the full names and explanations of compact symbol controls available
-without expanding the fixed-size main-window layout.
+without expanding the fixed-size main-window layout. They prefer the space
+below a control, move above it near the bottom edge, and remain inside the
+virtual desktop, including secondary monitors with negative coordinates.
 
 Configured Quick-action subjects and allow-listed built-in subjects share one
 mouse/keyboard binding contract for left click, right click, Enter, and Space.

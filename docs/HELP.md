@@ -277,7 +277,8 @@ The main palette keeps its compact width. Its nine management commands use the
 single character strip documented above, keeping every command directly
 available without reducing the action console or transformation workspace.
 Hover over a compact control, or move keyboard focus to it with `Tab`, to see
-its full command name and explanation.
+its full command name and explanation. The explanation remains visible when
+the palette is positioned near a display edge.
 
 ## Protected Windows credential paste
 
