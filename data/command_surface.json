@@ -48,8 +48,8 @@
         {
           "id": "project-folder",
           "label": "Project folder",
-          "primary_action_id": "general-open-project-folder",
-          "action_ids": ["general-open-project-folder", "developing-open-project-folder"]
+          "primary_action_id": "developing-open-project-folder",
+          "action_ids": ["developing-open-project-folder"]
         },
         {
           "id": "python-docs",

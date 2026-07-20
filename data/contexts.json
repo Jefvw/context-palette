@@ -5,7 +5,7 @@
       "description": "Reusable actions that are useful in any application.",
       "preferred_action_ids": [
         "qtp-copy-date-time",
-        "general-open-project-folder",
+        "developing-open-project-folder",
         "general-open-python-docs"
       ]
     },

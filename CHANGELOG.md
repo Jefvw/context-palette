@@ -4,6 +4,8 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Removed an obsolete date placeholder and consolidated two project-folder
+  actions onto the portable `%PROJECT_ROOT%` definition.
 - Restored a visible route to the complete action and button configuration
   workspace through the compact Manage focus menu, while retaining `Ctrl+,`.
 - Preserved active pins, Focus, and context slots when the local palette file

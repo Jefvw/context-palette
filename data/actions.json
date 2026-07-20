@@ -31,26 +31,6 @@
       "state": "Draft"
     },
     {
-      "id": "general-current-date",
-      "title": "Copy current date placeholder",
-      "context": "General",
-      "technology": "Windows",
-      "task": "Insert date and time",
-      "type": "copy_text",
-      "value": "Replace this with today's date when date actions are implemented.",
-      "state": "Draft"
-    },
-    {
-      "id": "general-open-project-folder",
-      "title": "Open Context Palette folder",
-      "context": "General",
-      "technology": "Windows Explorer",
-      "task": "Project navigation",
-      "type": "open_folder",
-      "value": ".",
-      "state": "Draft"
-    },
-    {
       "id": "general-open-python-docs",
       "title": "Open Python documentation",
       "context": "General",
