@@ -291,7 +291,16 @@ availability, performs explicit bounded refreshes, and persists edits through
 `work_item_storage.py`. Configure scans use the existing background coordinator;
 concurrent requests coalesce into one subsequent latest-state refresh. The panel
 uses a weak completion callback and ignores late results after its Tk container
-is destroyed. It never modifies work folders or workbook files.
+is destroyed. Existing-source management never modifies work folders or files;
+new-item creation delegates its guarded write to `work_item_creation.py`.
+
+### `work_item_creation.py`
+
+Owns UI-independent name suggestion, Windows filename validation, collision
+refusal, and guarded template copying. It creates one new direct-child folder
+and copies the configured generic `.xlsx` to exact `<folder-name>.xlsx`. If the
+copy fails, it removes only partial output created by that attempt. The dialog
+owns confirmation and optional local-tag saving.
 
 ### `single_instance.py`
 

@@ -136,6 +136,19 @@ lists. In Sources, use `Insert` to add and `Delete` to remove; `F5` refreshes
 from either list and Enter edits the selected row. Source dialogs place focus in
 the Source name field automatically.
 
+### Create a Work Item from the generic Excel template
+
+In **Configure**, choose **Work Items**, select one existing `.xlsx` file as the
+generic template, and save it. Choose **Create Work Item**, then select the
+source and enter a kind, organisation, subject, and optional project code. The
+suggested name is only assistance: **Final Work Item name** remains editable.
+
+The confirmation shows the exact folder and workbook. Context Palette refuses
+Windows-invalid or marker-style names and existing folders. It creates
+`<source>\<final name>\<final name>.xlsx` by copying the template without
+opening or changing its contents. Optional tags stay local. If copying fails,
+only output newly created by that attempt is cleaned up.
+
 ## Quick-action surface
 
 The wider right side of the action console contains global configurable
@@ -473,6 +486,9 @@ The `Company Reference Prefixes` sheet documents known Archive and ServiceNow pr
 - `data/palette.json`: ignored per-machine focus context, pins, and context slots.
 - `data/local_contexts.json`: ignored personal context definitions.
 - `data/local_command_surface.json`: ignored personal right-side buttons.
+- `data/local_work_item_sources.json`: ignored machine-local Work Item sources.
+- `data/local_work_item_metadata.json`: ignored personal Work Item tags.
+- `data/local_work_item_settings.json`: ignored generic Excel template path.
 - `data/cheatsheets`: reviewed cheat sheets shared through Git.
 - `data/context-palette.log*`: ignored bounded local diagnostics.
 

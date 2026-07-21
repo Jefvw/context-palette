@@ -17,6 +17,11 @@ This project has not published a versioned release. Changes are recorded under *
 - Unified Work Item workbook, item-folder, and source-folder opening behind one
   constrained validation path so keyboard and context-menu behavior cannot
   drift independently.
+- Added guided Work Item creation from one machine-local generic `.xlsx`
+  template. The app suggests a structured name while leaving the final name
+  editable, previews exact destinations, refuses collisions and unsafe Windows
+  names, copies to an exact matching workbook name, saves optional tags, and
+  cleans up only newly created partial output when copying fails.
 - Added Work Items discovery to the main Actions workspace. The compact Work
   button reuses Find and the result list, with structured project-code and
   personal-tag filters, background refresh, clear unavailable/empty states,

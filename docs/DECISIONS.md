@@ -1,5 +1,20 @@
 # Decisions
 
+## 2026-07-21 — Create Work Items from one generic local Excel template
+
+**Decision:** Start with one machine-local generic `.xlsx` template. Suggest a
+name from kind, organisation, subject, and optional project code, but let the
+user edit the final name. Create one direct folder and exact-name workbook,
+refusing collisions and unsafe Windows names.
+
+**Why:** Copying an existing workbook preserves its formatting without Excel
+automation or a new dependency. An editable suggestion assists consistent
+naming without turning the convention into a restriction.
+
+**Consequence:** Each computer configures its own ignored template path. The
+first version has no multiple templates, template generation, merging, or
+overwrite behavior.
+
 ## 2026-07-21 — Keep Work Item configuration private and separate from discovery
 
 **Decision:** Manage Work Item sources and per-item tags in a dedicated

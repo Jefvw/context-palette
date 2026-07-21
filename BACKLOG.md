@@ -7,6 +7,8 @@ This file contains actionable future work. Completed user-visible work belongs i
 - Complete Phase 5 of the approved [Work Items discovery plan](docs/WORK_ITEMS_PLAN.md):
   representative performance measurements and manual Windows checks on another
   computer/path. Phases 1–4 include guided private source/tag configuration.
+- Manually verify generic-template Work Item creation with a real workbook and
+  a representative network or disconnected source when back at the Windows desk.
 - Perform and record the manual Windows UI/accessibility smoke test for the guided Configure workflow.
 - Extract secondary Inbox and Draft views from `launcher.py` incrementally
   without changing behavior. The sheet view has been extracted.

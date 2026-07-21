@@ -18,6 +18,7 @@ from context_palette.work_item_configuration import (
 )
 from context_palette.work_item_refresh import WorkItemIndex
 from context_palette.work_item_storage import (
+    WorkItemCreationSettings,
     WorkItemMetadata,
     load_work_item_metadata,
     load_work_item_sources,
@@ -30,6 +31,38 @@ from context_palette.work_items import WorkItemSource
 class WorkItemConfigurationTests(unittest.TestCase):
     def test_stable_source_id_is_generated_from_friendly_name(self) -> None:
         self.assertEqual(_stable_source_id(" CAP40 Product & Support "), "cap40-product-support")
+
+    def test_created_work_item_copies_template_saves_tags_and_requests_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workitems = root / "workitems"
+            workitems.mkdir()
+            template = root / "generic.xlsx"
+            template.write_bytes(b"generic-workbook")
+            source = WorkItemSource("cap40", "CAP40", workitems)
+            panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)
+            panel.parent = None
+            panel.creation_settings = WorkItemCreationSettings(template)
+            panel.metadata = {}
+            panel.metadata_path = root / "metadata.json"
+            panel.on_change = Mock()
+            panel.feedback = Mock()
+            panel._start_refresh = Mock()
+
+            created = panel._created_work_item(
+                source,
+                "ISS-CAP40-example",
+                ("urgent",),
+            )
+
+            workbook = workitems / "ISS-CAP40-example" / "ISS-CAP40-example.xlsx"
+            key = "cap40/ISS-CAP40-example"
+            self.assertTrue(created)
+            self.assertEqual(workbook.read_bytes(), template.read_bytes())
+            self.assertEqual(load_work_item_metadata(panel.metadata_path)[key].tags, ("urgent",))
+            self.assertEqual(panel.select_after_refresh, key)
+            panel.on_change.assert_called_once_with()
+            panel._start_refresh.assert_called_once_with()
 
     def test_f6_switches_between_work_item_lists(self) -> None:
         panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)

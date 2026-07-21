@@ -17,6 +17,33 @@ class WorkItemMetadata:
     tags: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class WorkItemCreationSettings:
+    template_path: Path | None = None
+
+
+def load_work_item_creation_settings(path: Path) -> WorkItemCreationSettings:
+    if not path.exists():
+        return WorkItemCreationSettings()
+    payload = _read_object(path, "Work-item creation settings")
+    if set(payload) != {"template_path"} or not isinstance(payload["template_path"], str):
+        raise WorkItemStorageError("Work-item creation settings must contain template_path text only.")
+    raw_path = payload["template_path"].strip()
+    if not raw_path:
+        return WorkItemCreationSettings()
+    template_path = Path(raw_path)
+    if not template_path.is_absolute():
+        raise WorkItemStorageError("Work-item template path must be absolute.")
+    return WorkItemCreationSettings(template_path)
+
+
+def save_work_item_creation_settings(path: Path, settings: WorkItemCreationSettings) -> None:
+    template = settings.template_path
+    if template is not None and not Path(template).is_absolute():
+        raise WorkItemStorageError("Work-item template path must be absolute.")
+    atomic_write_json(path, {"template_path": str(template) if template is not None else ""})
+
+
 def work_item_metadata_key(source_id: str, relative_folder: str) -> str:
     clean_source_id = source_id.strip()
     clean_folder = relative_folder.strip()

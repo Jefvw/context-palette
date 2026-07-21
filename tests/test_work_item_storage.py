@@ -12,10 +12,13 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.work_item_storage import (
     WorkItemMetadata,
+    WorkItemCreationSettings,
     WorkItemStorageError,
     load_work_item_metadata,
+    load_work_item_creation_settings,
     load_work_item_sources,
     save_work_item_metadata,
+    save_work_item_creation_settings,
     save_work_item_sources,
     work_item_metadata_key,
 )
@@ -29,6 +32,20 @@ class WorkItemStorageTests(unittest.TestCase):
 
             self.assertEqual(load_work_item_sources(root / "sources.json"), ())
             self.assertEqual(load_work_item_metadata(root / "metadata.json"), {})
+            self.assertEqual(
+                load_work_item_creation_settings(root / "settings.json"),
+                WorkItemCreationSettings(),
+            )
+
+    def test_creation_settings_round_trip_machine_local_template(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "local_work_item_settings.json"
+            settings = WorkItemCreationSettings(root / "templates" / "generic.xlsx")
+
+            save_work_item_creation_settings(path, settings)
+
+            self.assertEqual(load_work_item_creation_settings(path), settings)
 
     def test_sources_round_trip_and_atomic_replacement_preserves_backup(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -102,6 +119,7 @@ class WorkItemStorageTests(unittest.TestCase):
 
         self.assertIn("/data/local_work_item_sources.json", gitignore)
         self.assertIn("/data/local_work_item_metadata.json", gitignore)
+        self.assertIn("/data/local_work_item_settings.json", gitignore)
 
 
 if __name__ == "__main__":

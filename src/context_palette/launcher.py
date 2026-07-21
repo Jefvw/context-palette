@@ -233,6 +233,7 @@ class LauncherApp:
         self.cheatsheets_dir = cheatsheets_dir
         self.local_work_item_sources_path = actions_path.parent / "local_work_item_sources.json"
         self.local_work_item_metadata_path = actions_path.parent / "local_work_item_metadata.json"
+        self.local_work_item_settings_path = actions_path.parent / "local_work_item_settings.json"
         self.work_item_sources: tuple[WorkItemSource, ...] = ()
         self.work_item_metadata: dict[str, WorkItemMetadata] = {}
         self.work_item_index = WorkItemIndex()
@@ -1800,6 +1801,7 @@ class LauncherApp:
             self.palette_path,
             self.local_work_item_sources_path,
             self.local_work_item_metadata_path,
+            self.local_work_item_settings_path,
         )
         signature = []
         for path in paths:
@@ -2419,6 +2421,7 @@ class LauncherApp:
             palette_path=self.palette_path,
             work_item_sources_path=self.local_work_item_sources_path,
             work_item_metadata_path=self.local_work_item_metadata_path,
+            work_item_settings_path=self.local_work_item_settings_path,
             work_item_sources=self.work_item_sources,
             work_item_metadata=self.work_item_metadata,
             work_item_index=self.work_item_index,

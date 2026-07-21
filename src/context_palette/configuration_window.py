@@ -104,6 +104,7 @@ class ConfigurationWindow:
         palette_path: Path,
         work_item_sources_path: Path,
         work_item_metadata_path: Path,
+        work_item_settings_path: Path,
         work_item_sources: tuple[WorkItemSource, ...],
         work_item_metadata: dict[str, WorkItemMetadata],
         work_item_index: WorkItemIndex,
@@ -123,6 +124,7 @@ class ConfigurationWindow:
         self.palette_path = palette_path
         self.work_item_sources_path = work_item_sources_path
         self.work_item_metadata_path = work_item_metadata_path
+        self.work_item_settings_path = work_item_settings_path
         self.on_change = on_change
         self.contexts: list[ContextDefinition] = []
         self.groups: list[CommandGroup] = []
@@ -405,6 +407,7 @@ class ConfigurationWindow:
             index=index,
             sources_path=self.work_item_sources_path,
             metadata_path=self.work_item_metadata_path,
+            settings_path=self.work_item_settings_path,
             on_change=self.on_change,
             feedback=self._set_feedback,
         )

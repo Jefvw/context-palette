@@ -92,7 +92,7 @@ class PerformanceLifecycleTests(unittest.TestCase):
     def test_unchanged_configuration_skips_full_reload(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            paths = [root / f"config-{index}.json" for index in range(9)]
+            paths = [root / f"config-{index}.json" for index in range(10)]
             for path in paths:
                 path.write_text("{}", encoding="utf-8")
             app = LauncherApp.__new__(LauncherApp)
@@ -106,6 +106,7 @@ class PerformanceLifecycleTests(unittest.TestCase):
                 app.palette_path,
                 app.local_work_item_sources_path,
                 app.local_work_item_metadata_path,
+                app.local_work_item_settings_path,
             ) = paths
             app.configuration_signature_cache = app._configuration_signature()
             reloads: list[bool] = []

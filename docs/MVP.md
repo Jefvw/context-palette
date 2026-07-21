@@ -22,6 +22,7 @@ Context Palette helps a Windows user capture useful material, turn it into a con
 | Attended AI assistance | Partial | Manual clipboard handoff; `copy_text` and `open_url` proposals only |
 | Context model | Partial | General root, multiple specific memberships, tags, explicit focus, preferred actions; no supporting-context composition or activation bundle |
 | Work Items discovery | Implemented | Bounded local discovery, main-window search/opening, and guided private source/tag configuration |
+| Work Item creation | Implemented | Editable suggested name, one local generic `.xlsx` template, collision-safe folder/workbook creation, optional tags |
 | External automation | Partial by design | Show/context/search only; no action execution API |
 | Clipboard transactions | Deferred | No automatic preservation/restoration |
 | Safe action sequences | Deferred | No multi-step sequence language |

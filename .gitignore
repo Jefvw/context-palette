@@ -11,6 +11,7 @@ __pycache__/
 /data/local_command_surface.json
 /data/local_work_item_sources.json
 /data/local_work_item_metadata.json
+/data/local_work_item_settings.json
 /data/palette.json
 /data/layouts/snapshots/
 
