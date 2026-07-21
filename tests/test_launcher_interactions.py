@@ -21,6 +21,7 @@ from context_palette.launcher import (
 )
 from context_palette.palette_state import PaletteState
 from context_palette.windows_credentials import CredentialSecret
+from context_palette.work_items import DiscoveredWorkItem
 
 
 class FakeVariable:
@@ -72,6 +73,31 @@ class FakeKeyEvent:
 
 
 class LauncherInteractionTests(unittest.TestCase):
+    def test_missing_work_item_folder_keeps_folder_target_semantics(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.status_var = FakeVariable()
+        missing_folder = Path("C:/missing/workitems/ISS-CAP40-example")
+        item = DiscoveredWorkItem(
+            source_id="cap40",
+            source_name="CAP40",
+            relative_folder="ISS-CAP40-example",
+            folder_path=missing_folder,
+            display_name="ISS-CAP40-example",
+            kind_code="ISS",
+            kind_name="Issue",
+            organisation="CAP40",
+            subject="example",
+            project_codes=(),
+            matching_workbook_path=None,
+        )
+
+        with patch("context_palette.launcher.open_action_target") as open_target:
+            opened = app._open_work_item_target(item, missing_folder)
+
+        self.assertTrue(opened)
+        self.assertEqual(open_target.call_args.args[0].type, "open_folder")
+
     def test_shift_number_executes_slot_for_azerty_find_input(self):
         app = LauncherApp.__new__(LauncherApp)
         app.search_entry = object()

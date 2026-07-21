@@ -14,6 +14,9 @@ This project has not published a versioned release. Changes are recorded under *
   Configure safely ignores late scan results without retaining destroyed UI.
   Keyboard setup now starts in the first source field and supports F6 pane
   switching plus list-local Insert, Delete, F5, and Enter commands.
+- Unified Work Item workbook, item-folder, and source-folder opening behind one
+  constrained validation path so keyboard and context-menu behavior cannot
+  drift independently.
 - Added Work Items discovery to the main Actions workspace. The compact Work
   button reuses Find and the result list, with structured project-code and
   personal-tag filters, background refresh, clear unavailable/empty states,

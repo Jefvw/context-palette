@@ -1896,25 +1896,11 @@ class LauncherApp:
                 self.status_var.set("No Work Item selected")
                 return
             target = item.folder_path if open_folder else item.default_open_path
-            action_type = "open_folder" if target == item.folder_path else "open_file"
-            try:
-                open_action_target(
-                    Action(
-                        f"work-item:{item.source_id}:{item.relative_folder}",
-                        item.display_name,
-                        "General",
-                        action_type,
-                        str(target),
-                        "Trusted",
-                    )
-                )
-            except ActionError as exc:
-                self.status_var.set("Work Item could not be opened.")
-                messagebox.showerror("Work Item could not be opened", str(exc), parent=self.root)
+            if not self._open_work_item_target(item, target):
                 return
             self.status_var.set(
                 f"Opened folder: {item.display_name}"
-                if action_type == "open_folder"
+                if target != item.matching_workbook_path
                 else f"Opened workbook: {item.matching_workbook_path.name}"
             )
             return
@@ -2515,8 +2501,13 @@ class LauncherApp:
         finally:
             menu.grab_release()
 
-    def _open_work_item_target(self, item: DiscoveredWorkItem, target: Path) -> None:
-        action_type = "open_folder" if target.is_dir() else "open_file"
+    def _open_work_item_target(self, item: DiscoveredWorkItem, target: Path) -> bool:
+        action_type = (
+            "open_file"
+            if item.matching_workbook_path is not None
+            and target == item.matching_workbook_path
+            else "open_folder"
+        )
         try:
             open_action_target(
                 Action(
@@ -2531,8 +2522,9 @@ class LauncherApp:
         except ActionError as exc:
             self.status_var.set("Work Item target could not be opened.")
             messagebox.showerror("Work Item could not be opened", str(exc), parent=self.root)
-            return
+            return False
         self.status_var.set(f"Opened: {target.name}")
+        return True
 
     def _configure_focus_action_from_event(self, event: tk.Event) -> str:
         item_id = self.focus_tree.identify_row(event.y)

@@ -76,7 +76,8 @@ Presentation and application orchestration.
 - Switches the existing discovery list into Work Items mode without changing
   the main-window dimensions. Find, project-code/tag filters, selection,
   previews, and constrained open commands consume the immutable in-memory Work
-  Item index; action mode state remains intact.
+  Item index; action mode state remains intact. All keyboard, default, and
+  context-menu targets pass through one constrained Work Item opening boundary.
 
 The main-window construction is divided into focused header, results/command-surface, shortcut, workspace, and footer builders. Inbox and Draft windows still live in this module and are the next safe extraction boundary; this is documented in `TECHNICAL_REVIEW.md`.
 
