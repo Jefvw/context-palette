@@ -1,6 +1,6 @@
 # Work Items discovery plan
 
-Status: **Approved — not implemented**
+Status: **Approved — Phases 1–2 implemented; Phases 3–5 not implemented**
 
 This document records the agreed product design and implementation plan for
 finding local work-item folders and their matching Excel starting files.
@@ -265,7 +265,7 @@ index in memory rather than persist a cache containing work information.
 
 ## Implementation plan
 
-### Phase 1 — Pure discovery domain
+### Phase 1 — Pure discovery domain — Implemented
 
 - Define immutable source and discovered-work-item models.
 - Validate ignored source configuration.
@@ -275,12 +275,22 @@ index in memory rather than persist a cache containing work information.
 - Add temporary-directory tests for valid, marker, missing-workbook, multiple
   workbook, unavailable-source, marker-subtree omission, and no-recursion cases.
 
-### Phase 2 — Local persistence and refresh
+Implementation: `src/context_palette/work_items.py`, verified by
+`tests/test_work_items.py`. This phase has no application UI or persistence.
+
+### Phase 2 — Local persistence and refresh — Implemented
 
 - Add ignored source and metadata formats with atomic writes.
 - Add last-known-good in-memory source results.
 - Add a background refresh boundary that never mutates Tk off the main thread.
 - Measure representative scan time before considering a persistent cache.
+
+Implementation: `src/context_palette/work_item_storage.py` and
+`src/context_palette/work_item_refresh.py`, verified by
+`tests/test_work_item_storage.py` and `tests/test_work_item_refresh.py`.
+The source and metadata files are ignored, writes are atomic, and the index is
+memory-only. A 500-folder direct scan measured 21.9 ms on the development
+machine on 2026-07-21, so no persistent private cache was added.
 
 ### Phase 3 — Discovery interface
 

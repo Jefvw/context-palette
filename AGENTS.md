@@ -36,6 +36,8 @@ Never commit personal/runtime data:
 - `data/local_actions.json`
 - `data/local_command_surface.json`
 - `data/local_contexts.json`
+- `data/local_work_item_sources.json`
+- `data/local_work_item_metadata.json`
 - `data/palette.json`
 - `data/context-palette.log*`
 

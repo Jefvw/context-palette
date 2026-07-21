@@ -4,10 +4,10 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Now
 
-- Implement the approved [Work Items discovery plan](docs/WORK_ITEMS_PLAN.md)
-  incrementally, beginning with the pure bounded discovery domain. Do not add UI
-  or persistence before its parsing, exact-workbook, marker-omission, and
-  no-deep-recursion tests pass.
+- Continue the approved [Work Items discovery plan](docs/WORK_ITEMS_PLAN.md)
+  with Phase 3 discovery interface. Phases 1–2 now provide verified bounded
+  discovery, ignored local persistence, last-known-good in-memory results, and
+  main-thread delivery; preserve those boundaries while adding the interface.
 - Perform and record the manual Windows UI/accessibility smoke test for the guided Configure workflow.
 - Extract secondary Inbox and Draft views from `launcher.py` incrementally
   without changing behavior. The sheet view has been extracted.

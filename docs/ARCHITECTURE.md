@@ -247,6 +247,37 @@ and selects the flat action membership list for a Focus while preserving
 canonical action order. This is the intended replacement boundary for future
 context-model changes.
 
+### `work_items.py`
+
+Owns the pure, UI-independent first phase of Work Items discovery. Immutable
+source and discovered-item models validate stable source identity and absolute
+paths. The scanner enumerates only direct children of one configured
+`workitems` folder, rejects unavailable sources without creating them, skips
+names ending in at least five hyphens before inspecting the child, and never
+recurses. Each eligible folder is parsed without making successful parsing a
+condition of discovery. Only an exact case-insensitive `<folder-name>.xlsx`
+file directly inside the folder becomes its matching workbook; otherwise the
+folder is the default target. Persistence, caching, refresh coordination,
+search integration, and UI remain outside this implemented boundary.
+
+### `work_item_storage.py` and `work_item_refresh.py`
+
+Provide the implemented second Work Items phase without connecting it to the
+interface yet. Storage strictly loads and atomically writes ignored
+`local_work_item_sources.json` and `local_work_item_metadata.json`. Metadata
+identity combines a stable source ID with one direct relative folder name;
+absolute paths exist only in the machine-local source file. Personal tags are
+normalized and deduplicated.
+
+Refresh combines independently discovered sources into an immutable in-memory
+index. A failed source retains only its own previous successful items while
+available sources refresh normally; removed sources leave the index. No index
+is written to disk. The background coordinator places completed immutable
+results on a thread-safe queue. Future Tk orchestration must call `drain()` on
+the main thread, so worker code has no Tk callback or widget access. A local
+500-folder direct-scan measurement completed in 21.9 ms on 2026-07-21, providing
+no evidence that a private persistent cache is warranted.
+
 ### `single_instance.py`
 
 Resident-process coordination through a localhost socket.
