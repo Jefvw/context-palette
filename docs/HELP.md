@@ -99,6 +99,38 @@ The Actions heading shows the current match count. When nothing matches, the lis
 
 Blue rows are pinned slots 1–5. Green rows are focus-context slots 6–9. Neutral rows are other search results.
 
+## Find and open Work Items
+
+Choose **Work** beside the action filters to use the same Find field and result
+area for configured local work-item folders. Choose **Work** again to return to
+Actions. Existing action filters and Focus slots are preserved while Work Items
+is active.
+
+- Find matches the folder name, parsed kind, organisation, subject, source
+  name, detected project codes, and personal tags.
+- **Projects** filters by one detected four-character project code.
+- **Tags** filters by one personal Work Item tag.
+- Enter, double-click, or **Open** opens the exact matching
+  `<folder-name>.xlsx`; when it does not exist, the work-item folder opens.
+- Shift+Enter always opens the work-item folder.
+- Right-click offers the exact workbook when available, the work-item folder,
+  and the configured source folder.
+- Right-click a result and choose **Edit personal tags…** to open that exact
+  Work Item in Configure.
+- Unavailable sources keep their last successful in-memory results for the
+  current app session. No Work Item index is written to disk.
+
+To set up Work Items, open **Configure**, then choose **Work Items**. Add one or more folders
+named `workitems`, giving each a friendly source name. The stable source ID is
+suggested automatically and keeps tags attached when the source path differs
+on another computer. The same page shows source state, provides explicit
+refresh, and lets you edit comma-separated personal tags. Removing a source
+never deletes work folders or files. Its private tags are retained, so adding a
+source with the same stable ID restores them.
+
+Source paths and tags remain in ignored local files on this computer. Configure
+does not alter the Work Item folders or their Excel files.
+
 ## Quick-action surface
 
 The wider right side of the action console contains global configurable

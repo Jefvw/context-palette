@@ -24,13 +24,18 @@ class ActionDiscoveryPanel:
         search_var: tk.StringVar,
         action_type_filter_var: tk.StringVar,
         tag_filter_var: tk.StringVar,
+        project_filter_var: tk.StringVar,
+        work_tag_filter_var: tk.StringVar,
         tooltip_adder: Callable[[tk.Widget, TooltipText], None],
         keypress_handler: Callable[[tk.Event], object],
-        execute_selected: Callable[[], None],
+        execute_selected: Callable[..., None],
         update_preview: Callable[[], None],
         toggle_password_actions: Callable[[], None],
+        toggle_work_items: Callable[[], None],
         select_action_type_filter: Callable[[str | None], None],
         select_tag_filter: Callable[[str | None], None],
+        select_project_filter: Callable[[str | None], None],
+        select_work_tag_filter: Callable[[str | None], None],
         show_help: Callable[[], None],
         result_tooltip_text: Callable[[int], str],
         focus_tree_tooltip_text: Callable[[str], str],
@@ -69,6 +74,10 @@ class ActionDiscoveryPanel:
         self.search_entry.pack(fill=tk.X, pady=(3, 0))
         self.search_entry.focus_set()
         self.search_entry.bind("<KeyPress>", keypress_handler)
+        self.search_entry.bind(
+            "<Shift-Return>",
+            lambda _event: execute_selected(open_folder=True),
+        )
         self.search_entry.bind("<Return>", lambda _event: execute_selected())
 
         body = ttk.Frame(self.frame)
@@ -89,28 +98,29 @@ class ActionDiscoveryPanel:
             "Passwords — Show only protected Windows Credential Manager actions. Activate again to show all actions.",
         )
 
+        self.work_items_button = ttk.Button(
+            self.tool_rail,
+            text="Work",
+            command=toggle_work_items,
+            style="Compact.TButton",
+        )
+        self.work_items_button.pack(fill=tk.X, pady=(5, 0))
+        tooltip_adder(
+            self.work_items_button,
+            "Work — Find configured work-item folders and their exact matching Excel workbook.",
+        )
+
         self.type_filter = ttk.Menubutton(
             self.tool_rail,
             text="Types ▾",
             style="Compact.TButton",
         )
         self.type_filter.pack(fill=tk.X, pady=(5, 0))
-        type_menu = tk.Menu(self.type_filter, tearoff=False)
-        type_menu.add_radiobutton(
-            label="All types",
-            variable=action_type_filter_var,
-            value="All types",
-            command=lambda: select_action_type_filter(None),
-        )
-        type_menu.add_separator()
-        for action_type, definition in ACTION_TYPES.items():
-            type_menu.add_radiobutton(
-                label=definition.label,
-                variable=action_type_filter_var,
-                value=definition.label,
-                command=lambda selected=action_type: select_action_type_filter(selected),
-            )
-        self.type_filter.configure(menu=type_menu)
+        self.action_type_filter_var = action_type_filter_var
+        self.project_filter_var = project_filter_var
+        self.select_action_type_filter = select_action_type_filter
+        self.select_project_filter = select_project_filter
+        self._set_action_type_menu()
         tooltip_adder(
             self.type_filter,
             "Types — Filter the action list by any built-in action type, or show all types.",
@@ -118,6 +128,8 @@ class ActionDiscoveryPanel:
 
         self.tag_filter_var = tag_filter_var
         self.select_tag_filter = select_tag_filter
+        self.work_tag_filter_var = work_tag_filter_var
+        self.select_work_tag_filter = select_work_tag_filter
         self.tag_filter = ttk.Menubutton(
             self.tool_rail,
             text="Tags ▾",
@@ -175,6 +187,10 @@ class ActionDiscoveryPanel:
         self.results.bind("<KeyPress>", keypress_handler)
         self.results.bind("<<ListboxSelect>>", lambda _event: update_preview())
         self.results.bind("<Double-Button-1>", lambda _event: execute_selected())
+        self.results.bind(
+            "<Shift-Return>",
+            lambda _event: execute_selected(open_folder=True),
+        )
         self.results.bind("<Return>", lambda _event: execute_selected())
         self.results.bind("<Button-3>", configure_flat_action)
         self.results_tooltip = ListboxItemTooltip(
@@ -196,25 +212,103 @@ class ActionDiscoveryPanel:
             focus_tree_tooltip_text,
         )
 
-    def set_tags(self, tags: tuple[str, ...]) -> None:
+    def set_work_item_mode(
+        self,
+        enabled: bool,
+        *,
+        project_codes: tuple[str, ...] = (),
+        tags: tuple[str, ...] = (),
+    ) -> None:
+        self.work_items_button.configure(
+            style="Accent.TButton" if enabled else "Compact.TButton"
+        )
+        if enabled:
+            self.type_filter.configure(text="Projects ▾")
+            self._set_project_menu(project_codes)
+            self.set_tags(
+                tags,
+                variable=self.work_tag_filter_var,
+                select=self.select_work_tag_filter,
+                empty_label="All work tags",
+            )
+        else:
+            self.type_filter.configure(text="Types ▾")
+            self._set_action_type_menu()
+            self.set_tags(tags)
+
+    def _set_action_type_menu(self) -> None:
+        previous_menu = getattr(self, "type_menu", None)
+        if previous_menu is not None:
+            previous_menu.destroy()
+        menu = tk.Menu(self.type_filter, tearoff=False)
+        menu.add_radiobutton(
+            label="All types",
+            variable=self.action_type_filter_var,
+            value="All types",
+            command=lambda: self.select_action_type_filter(None),
+        )
+        menu.add_separator()
+        for action_type, definition in ACTION_TYPES.items():
+            menu.add_radiobutton(
+                label=definition.label,
+                variable=self.action_type_filter_var,
+                value=definition.label,
+                command=lambda selected=action_type: self.select_action_type_filter(selected),
+            )
+        self.type_filter.configure(menu=menu)
+        self.type_menu = menu
+
+    def _set_project_menu(self, project_codes: tuple[str, ...]) -> None:
+        previous_menu = getattr(self, "type_menu", None)
+        if previous_menu is not None:
+            previous_menu.destroy()
+        menu = tk.Menu(self.type_filter, tearoff=False)
+        menu.add_radiobutton(
+            label="All project codes",
+            variable=self.project_filter_var,
+            value="All project codes",
+            command=lambda: self.select_project_filter(None),
+        )
+        if project_codes:
+            menu.add_separator()
+        for project_code in project_codes:
+            menu.add_radiobutton(
+                label=project_code,
+                variable=self.project_filter_var,
+                value=project_code,
+                command=lambda selected=project_code: self.select_project_filter(selected),
+            )
+        self.type_filter.configure(menu=menu)
+        self.type_menu = menu
+
+    def set_tags(
+        self,
+        tags: tuple[str, ...],
+        *,
+        variable: tk.StringVar | None = None,
+        select: Callable[[str | None], None] | None = None,
+        empty_label: str = "All tags",
+    ) -> None:
+        selected_variable = variable or self.tag_filter_var
+        selected_callback = select or self.select_tag_filter
         previous_menu = getattr(self, "tag_menu", None)
         if previous_menu is not None:
             previous_menu.destroy()
         menu = tk.Menu(self.tag_filter, tearoff=False)
         menu.add_radiobutton(
-            label="All tags",
-            variable=self.tag_filter_var,
-            value="All tags",
-            command=lambda: self.select_tag_filter(None),
+            label=empty_label,
+            variable=selected_variable,
+            value=empty_label,
+            command=lambda: selected_callback(None),
         )
         if tags:
             menu.add_separator()
         for tag in tags:
             menu.add_radiobutton(
                 label=tag,
-                variable=self.tag_filter_var,
+                variable=selected_variable,
                 value=tag,
-                command=lambda selected=tag: self.select_tag_filter(selected),
+                command=lambda selected=tag: selected_callback(selected),
             )
         self.tag_filter.configure(menu=menu)
         self.tag_menu = menu

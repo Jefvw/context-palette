@@ -4,10 +4,9 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Now
 
-- Continue the approved [Work Items discovery plan](docs/WORK_ITEMS_PLAN.md)
-  with Phase 3 discovery interface. Phases 1–2 now provide verified bounded
-  discovery, ignored local persistence, last-known-good in-memory results, and
-  main-thread delivery; preserve those boundaries while adding the interface.
+- Complete Phase 5 of the approved [Work Items discovery plan](docs/WORK_ITEMS_PLAN.md):
+  representative performance measurements and manual Windows checks on another
+  computer/path. Phases 1–4 include guided private source/tag configuration.
 - Perform and record the manual Windows UI/accessibility smoke test for the guided Configure workflow.
 - Extract secondary Inbox and Draft views from `launcher.py` incrementally
   without changing behavior. The sheet view has been extracted.

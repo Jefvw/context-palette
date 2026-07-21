@@ -1,6 +1,6 @@
 # Work Items discovery plan
 
-Status: **Approved — Phases 1–2 implemented; Phases 3–5 not implemented**
+Status: **Approved — Phases 1–4 implemented; Phase 5 not implemented**
 
 This document records the agreed product design and implementation plan for
 finding local work-item folders and their matching Excel starting files.
@@ -292,7 +292,7 @@ The source and metadata files are ignored, writes are atomic, and the index is
 memory-only. A 500-folder direct scan measured 21.9 ms on the development
 machine on 2026-07-21, so no persistent private cache was added.
 
-### Phase 3 — Discovery interface
+### Phase 3 — Discovery interface — Implemented
 
 - Add the compact Work Items filter and mixed result presentation.
 - Implement Find, structured project-code filtering, personal-tag filtering,
@@ -300,12 +300,24 @@ machine on 2026-07-21, so no persistent private cache was added.
 - Add constrained workbook/folder/source-folder opening.
 - Preserve existing action search, Focus, slots, and execution behavior.
 
-### Phase 4 — Guided configuration
+Implementation: the main discovery workspace exposes a compact Work mode and
+reuses Find, the flat result list, Projects/Tags filters, preview/status area,
+keyboard execution, tooltips, and a constrained context menu. Refresh uses the
+Phase 2 background queue and retains per-source last-known-good results. Source
+and tag authoring is supplied by Phase 4.
+
+### Phase 4 — Guided configuration — Implemented
 
 - Add the Work Items Configure tab and source editor.
 - Add the personal-tag metadata editor.
 - Reuse existing accessible picker behavior where appropriate.
 - Add missing/unavailable source feedback and explicit refresh.
+
+Implementation: the **Work Items** Configure tab manages friendly source names,
+stable IDs, validated existing `workitems` folders, source removal, explicit
+refresh, discovery summaries, and private comma-separated tags. The main result
+context menu deep-links to the selected Work Item. All writes use ignored local
+storage, and removing a source never changes work files.
 
 ### Phase 5 — Verification and documentation
 

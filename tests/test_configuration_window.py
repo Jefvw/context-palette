@@ -90,6 +90,9 @@ class FakeEntry:
     def focus_set(self) -> None:
         self.focus_calls += 1
 
+    def focus(self) -> None:
+        self.focus_set()
+
     def selection_range(self, start: object, end: object) -> None:
         self.selection = (start, end)
 
@@ -154,7 +157,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         configuration.notebook = FakeNotebook()
 
-        for keysym, expected_tab in (("a", 0), ("t", 1), ("c", 2), ("b", 3), ("d", 4)):
+        for keysym, expected_tab in (("a", 0), ("t", 1), ("c", 2), ("b", 3), ("w", 4), ("d", 5)):
             with self.subTest(keysym=keysym):
                 self.assertEqual(
                     configuration._handle_configure_keypress(
@@ -188,6 +191,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.type_list = FakeEntry()
         configuration.context_tree = FakeEntry()
         configuration.button_tree = FakeEntry()
+        configuration.work_items_panel = FakeEntry()
         configuration.diagnostics_text = FakeEntry()
 
         result = configuration._show_diagnostics_tab()
@@ -195,16 +199,17 @@ class ConfigurationDialogTests(unittest.TestCase):
         callback()
 
         self.assertEqual(result, "break")
-        self.assertEqual(configuration.notebook.selected, 4)
+        self.assertEqual(configuration.notebook.selected, 5)
         self.assertEqual(configuration.diagnostics_text.focus_calls, 1)
 
     def test_diagnostics_tab_change_moves_focus_into_read_only_summary(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
-        configuration.notebook = FakeNotebook(selected=4)
+        configuration.notebook = FakeNotebook(selected=5)
         configuration.action_tree = FakeEntry()
         configuration.type_list = FakeEntry()
         configuration.context_tree = FakeEntry()
         configuration.button_tree = FakeEntry()
+        configuration.work_items_panel = FakeEntry()
         configuration.diagnostics_text = FakeEntry()
 
         configuration._focus_current_tab()

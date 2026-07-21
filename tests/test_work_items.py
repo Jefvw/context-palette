@@ -15,6 +15,7 @@ from context_palette.work_items import (
     discover_work_items,
     is_marker_folder_name,
     parse_work_item_name,
+    work_item_matches,
 )
 
 
@@ -107,6 +108,26 @@ class WorkItemDiscoveryTests(unittest.TestCase):
                 discover_work_items(source)
 
             self.assertFalse(missing.exists())
+
+    def test_search_combines_text_project_code_and_personal_tag_filters(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory) / "workitems"
+            folder = root / "ISS-CAP40-AB9C-age-verification"
+            folder.mkdir(parents=True)
+            item = discover_work_items(self._source(root))[0]
+
+            self.assertTrue(work_item_matches(item, "issue verification"))
+            self.assertTrue(
+                work_item_matches(
+                    item,
+                    "cap40",
+                    tags=("urgent",),
+                    project_code="ab9c",
+                    tag="URGENT",
+                )
+            )
+            self.assertFalse(work_item_matches(item, "verification", project_code="XY9Z"))
+            self.assertFalse(work_item_matches(item, "verification", tags=("urgent",), tag="later"))
 
     def test_source_requires_stable_id_name_and_absolute_path(self) -> None:
         with self.assertRaises(WorkItemDiscoveryError):

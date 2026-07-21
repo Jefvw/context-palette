@@ -42,8 +42,8 @@ This directory separates current behavior, durable direction, historical rationa
 - [Product vision](PRODUCT_VISION.md) — durable direction; proposals are labeled.
 - [Roadmap](ROADMAP.md) — ordered outcomes.
 - [Backlog](../BACKLOG.md) — actionable work items.
-- [Work Items discovery plan](WORK_ITEMS_PLAN.md) — approved proposal and
-  phased plan; not implemented.
+- [Work Items discovery plan](WORK_ITEMS_PLAN.md) — implemented phases and
+  remaining cross-machine verification.
 - [Decisions](DECISIONS.md) — append-only rationale.
 - [Changelog](../CHANGELOG.md) — user-visible history.
 - [Technical review](TECHNICAL_REVIEW.md) and [performance audit](PERFORMANCE_AUDIT.md) — dated audits, including completed findings.

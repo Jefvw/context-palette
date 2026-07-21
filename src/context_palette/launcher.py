@@ -22,6 +22,7 @@ from .actions import (
     expanded_action,
     load_combined_actions,
     load_actions,
+    open_action_target,
     search_actions,
     trusted_action,
     update_action,
@@ -74,6 +75,15 @@ from .windows_credentials import (
     set_protected_clipboard_text,
 )
 from .workspace_panel import WorkspacePanel
+from .work_item_refresh import WorkItemIndex, WorkItemRefreshCoordinator
+from .work_item_storage import (
+    WorkItemMetadata,
+    WorkItemStorageError,
+    load_work_item_metadata,
+    load_work_item_sources,
+    work_item_metadata_key,
+)
+from .work_items import DiscoveredWorkItem, WorkItemSource, work_item_matches
 
 LOGGER = logging.getLogger("context_palette.launcher")
 LOGGER.addHandler(logging.NullHandler())
@@ -221,6 +231,17 @@ class LauncherApp:
         self.palette_path = palette_path
         self.inbox_path = inbox_path
         self.cheatsheets_dir = cheatsheets_dir
+        self.local_work_item_sources_path = actions_path.parent / "local_work_item_sources.json"
+        self.local_work_item_metadata_path = actions_path.parent / "local_work_item_metadata.json"
+        self.work_item_sources: tuple[WorkItemSource, ...] = ()
+        self.work_item_metadata: dict[str, WorkItemMetadata] = {}
+        self.work_item_index = WorkItemIndex()
+        self.work_item_refresh = WorkItemRefreshCoordinator()
+        self.work_item_refresh_pending = False
+        self.work_items_mode = False
+        self.displayed_work_items: list[DiscoveredWorkItem] = []
+        self.work_project_filter: str | None = None
+        self.work_tag_filter: str | None = None
         self.actions: list[Action] = []
         self.filtered_actions: list[Action] = []
         self.displayed_actions: list[Action] = []
@@ -240,12 +261,17 @@ class LauncherApp:
         self.action_type_filter: str | None = None
         self.action_tag_filter: str | None = None
         self.focus_actions_mode = False
+        self.work_items_mode = False
+        self.work_project_filter = None
+        self.work_tag_filter = None
         self.focus_tree_actions: dict[str, Action] = {}
         self.focus_tree_context: str | None = None
         self.results_view = "flat"
         self.passwords_button: ttk.Button | None = None
         self.action_type_filter_var = tk.StringVar(value="All types")
         self.action_tag_filter_var = tk.StringVar(value="All tags")
+        self.work_project_filter_var = tk.StringVar(value="All project codes")
+        self.work_tag_filter_var = tk.StringVar(value="All work tags")
         self.configuration_signature_cache: tuple[tuple[str, int, int], ...] = ()
         self.search_var = tk.StringVar()
         self.context_var = tk.StringVar(value="General")
@@ -265,6 +291,7 @@ class LauncherApp:
         self._load_command_surface(render=False)
         self._load_contexts()
         self._load_palette_state(render=False)
+        self._load_work_item_configuration()
         self._render_command_surface()
         self._refresh_results()
         self.configuration_signature_cache = self._configuration_signature()
@@ -281,6 +308,8 @@ class LauncherApp:
         if initial_request:
             self.show_requests.put(initial_request)
         self._poll_show_requests()
+        self._poll_work_item_refresh()
+        self._start_work_item_refresh()
         self._audit_tooltips()
 
     def _build_ui(self) -> None:
@@ -420,6 +449,7 @@ class LauncherApp:
         self.manage_focus_menu = manage_focus_menu
 
     def _activate_focus_actions(self) -> None:
+        self._set_work_items_mode(False)
         self.focus_actions_mode = True
         self._refresh_results()
         self.root.after_idle(self._focus_active_results)
@@ -428,8 +458,12 @@ class LauncherApp:
         """Move keyboard users into the result view they explicitly opened."""
         if self.results_view == "focus" and self.focus_tree.winfo_manager():
             self.focus_tree.focus_force()
+        elif self.work_items_mode:
+            self.results.focus_force()
 
     def _toggle_password_actions(self) -> None:
+        if getattr(self, "work_items_mode", False):
+            self._set_work_items_mode(False)
         selected = (
             None if self.action_type_filter == "paste_credential" else "paste_credential"
         )
@@ -455,6 +489,41 @@ class LauncherApp:
         self.action_tag_filter_var.set(tag or "All tags")
         self._refresh_results()
 
+    def _toggle_work_items(self) -> None:
+        self._set_work_items_mode(not self.work_items_mode)
+
+    def _set_work_items_mode(self, enabled: bool) -> None:
+        self.work_items_mode = enabled
+        if enabled:
+            self.focus_actions_mode = False
+            if self.work_item_sources and not self.work_item_refresh.running:
+                self._start_work_item_refresh()
+        action_tags = tuple(
+            sorted(
+                {tag for action in self.actions for tag in action.effective_tags},
+                key=str.casefold,
+            )
+        )
+        self.action_discovery_panel.set_work_item_mode(
+            enabled,
+            project_codes=self._available_work_project_codes(),
+            tags=self._available_work_tags() if enabled else action_tags,
+        )
+        if not enabled:
+            self.actions_heading_var.set("Actions")
+        self._refresh_results()
+        self.root.after_idle(self._focus_active_results)
+
+    def _select_work_project_filter(self, project_code: str | None) -> None:
+        self.work_project_filter = project_code
+        self.work_project_filter_var.set(project_code or "All project codes")
+        self._refresh_results()
+
+    def _select_work_tag_filter(self, tag: str | None) -> None:
+        self.work_tag_filter = tag
+        self.work_tag_filter_var.set(tag or "All work tags")
+        self._refresh_results()
+
     def _build_results_area(self, outer: ttk.Frame) -> None:
         results_area = ttk.Panedwindow(outer, orient=tk.HORIZONTAL)
         results_area.pack(fill=tk.BOTH, expand=True)
@@ -465,13 +534,18 @@ class LauncherApp:
             search_var=self.search_var,
             action_type_filter_var=self.action_type_filter_var,
             tag_filter_var=self.action_tag_filter_var,
+            project_filter_var=self.work_project_filter_var,
+            work_tag_filter_var=self.work_tag_filter_var,
             tooltip_adder=self._tooltip,
             keypress_handler=self._handle_keypress,
             execute_selected=self._execute_selected,
             update_preview=self._update_preview,
             toggle_password_actions=self._toggle_password_actions,
+            toggle_work_items=self._toggle_work_items,
             select_action_type_filter=self._select_action_type_filter,
             select_tag_filter=self._select_tag_filter,
+            select_project_filter=self._select_work_project_filter,
+            select_work_tag_filter=self._select_work_tag_filter,
             show_help=self._show_help,
             result_tooltip_text=self._result_tooltip_text,
             focus_tree_tooltip_text=self._focus_tree_tooltip_text,
@@ -482,6 +556,7 @@ class LauncherApp:
         self.search_entry = discovery.search_entry
         self.actions_tool_rail = discovery.tool_rail
         self.passwords_button = discovery.passwords_button
+        self.work_items_button = discovery.work_items_button
         self.type_filter = discovery.type_filter
         self.tag_filter = discovery.tag_filter
         self.run_button = discovery.run_button
@@ -602,8 +677,20 @@ class LauncherApp:
         self.action_tag_filter = None
         self.action_type_filter_var.set("All types")
         self.action_tag_filter_var.set("All tags")
+        if hasattr(self, "work_project_filter_var"):
+            self.work_project_filter_var.set("All project codes")
+        if hasattr(self, "work_tag_filter_var"):
+            self.work_tag_filter_var.set("All work tags")
         if self.passwords_button is not None:
             self.passwords_button.configure(style="Compact.TButton")
+        if hasattr(self, "action_discovery_panel"):
+            action_tags = tuple(
+                sorted(
+                    {tag for action in self.actions for tag in action.effective_tags},
+                    key=str.casefold,
+                )
+            )
+            self.action_discovery_panel.set_work_item_mode(False, tags=action_tags)
         self.captured_selection = None
         self.source_foreground_handle = None
         self._set_workspace_text("")
@@ -705,6 +792,23 @@ class LauncherApp:
         control.bind("<space>", on_keyboard, add="+")
 
     def _result_tooltip_text(self, index: int) -> str:
+        if self.work_items_mode:
+            if index < 0 or index >= len(self.displayed_work_items):
+                return ""
+            item = self.displayed_work_items[index]
+            tags = self._work_item_tags(item)
+            workbook = (
+                item.matching_workbook_path.name
+                if item.matching_workbook_path is not None
+                else "No exact workbook; opens folder"
+            )
+            return (
+                f"{item.display_name}\n"
+                f"{item.kind_name or 'Work item'} · {item.organisation or 'Unparsed'} · {item.source_name}\n"
+                f"Project codes: {', '.join(item.project_codes) or '(none)'}\n"
+                f"Tags: {', '.join(tags) or '(none)'}\n"
+                f"Workbook: {workbook}"
+            )
         if index < 0 or index >= len(self.displayed_actions):
             return ""
         action = self.displayed_actions[index]
@@ -944,7 +1048,7 @@ class LauncherApp:
                     key=str.casefold,
                 )
             )
-            if hasattr(self, "action_discovery_panel"):
+            if hasattr(self, "action_discovery_panel") and not self.work_items_mode:
                 self.action_discovery_panel.set_tags(available_tags)
             if (
                 getattr(self, "action_tag_filter", None) is not None
@@ -964,6 +1068,116 @@ class LauncherApp:
                 parent=self.root,
             )
             LOGGER.exception("Action configuration failed to load")
+
+    def _load_work_item_configuration(self) -> None:
+        try:
+            sources = load_work_item_sources(
+                self.local_work_item_sources_path
+            )
+            metadata = load_work_item_metadata(
+                self.local_work_item_metadata_path
+            )
+        except WorkItemStorageError as exc:
+            self.status_var.set("Work Items configuration could not be loaded.")
+            messagebox.showerror(
+                "Work Items configuration could not be loaded",
+                f"{exc}\n\nExisting in-memory Work Items results were kept.",
+                parent=self.root,
+            )
+            LOGGER.exception("Work Items local configuration failed to load")
+            return
+        self.work_item_sources = sources
+        self.work_item_metadata = metadata
+        if not sources:
+            self.work_item_index = WorkItemIndex()
+
+    def _start_work_item_refresh(self) -> None:
+        if not self.work_item_sources:
+            if self.work_item_refresh.running:
+                self.work_item_refresh_pending = True
+            else:
+                self._accept_work_item_index(WorkItemIndex())
+            return
+        if self.work_item_refresh.start(
+            self.work_item_sources,
+            self.work_item_index,
+            self._accept_work_item_index,
+        ):
+            if self.work_items_mode:
+                self.status_var.set("Refreshing Work Items…")
+        else:
+            self.work_item_refresh_pending = True
+
+    def _poll_work_item_refresh(self) -> None:
+        try:
+            self.work_item_refresh.drain()
+            self.root.after(100, self._poll_work_item_refresh)
+        except tk.TclError:
+            return
+
+    def _accept_work_item_index(self, index: WorkItemIndex) -> None:
+        configured_source_ids = {
+            source.id.casefold() for source in self.work_item_sources
+        }
+        self.work_item_index = WorkItemIndex(
+            tuple(
+                result
+                for result in index.sources
+                if result.source.id.casefold() in configured_source_ids
+            ),
+            index.elapsed_seconds,
+        )
+        project_codes = self._available_work_project_codes()
+        work_tags = self._available_work_tags()
+        if (
+            self.work_project_filter is not None
+            and self.work_project_filter.casefold()
+            not in {code.casefold() for code in project_codes}
+        ):
+            self.work_project_filter = None
+            self.work_project_filter_var.set("All project codes")
+        if (
+            self.work_tag_filter is not None
+            and self.work_tag_filter.casefold()
+            not in {tag.casefold() for tag in work_tags}
+        ):
+            self.work_tag_filter = None
+            self.work_tag_filter_var.set("All work tags")
+        if self.work_items_mode:
+            self.action_discovery_panel.set_work_item_mode(
+                True,
+                project_codes=project_codes,
+                tags=work_tags,
+            )
+            self._refresh_results()
+        if getattr(self, "work_item_refresh_pending", False):
+            self.work_item_refresh_pending = False
+            self.root.after_idle(self._start_work_item_refresh)
+
+    def _work_item_tags(self, item: DiscoveredWorkItem) -> tuple[str, ...]:
+        key = work_item_metadata_key(item.source_id, item.relative_folder)
+        metadata = self.work_item_metadata.get(key)
+        return metadata.tags if metadata is not None else ()
+
+    def _available_work_project_codes(self) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                {code for item in self.work_item_index.items for code in item.project_codes},
+                key=str.casefold,
+            )
+        )
+
+    def _available_work_tags(self) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                {
+                    tag
+                    for item in self.work_item_index.items
+                    for tag in self._work_item_tags(item)
+                },
+                key=str.casefold,
+            )
+        )
 
     def _load_command_surface(self, *, render: bool = True) -> None:
         try:
@@ -1330,6 +1544,9 @@ class LauncherApp:
             self.search_refresh_after_id = None
         self.results_tooltip.hide()
         self.focus_tree_tooltip.hide()
+        if self.work_items_mode:
+            self._render_work_items()
+            return
         if (
             self.focus_actions_mode
             and not self.search_var.get().strip()
@@ -1458,6 +1675,58 @@ class LauncherApp:
             action_count=len(self.actions),
         )
 
+    def _render_work_items(self) -> None:
+        self._show_flat_results()
+        self.actions_heading_var.set("Work Items")
+        self.results.delete(0, tk.END)
+        self.displayed_actions = []
+        self.displayed_slots = []
+        self.displayed_work_items = [
+            item
+            for item in self.work_item_index.items
+            if work_item_matches(
+                item,
+                self.search_var.get(),
+                tags=self._work_item_tags(item),
+                project_code=self.work_project_filter,
+                tag=self.work_tag_filter,
+            )
+        ]
+        for item in self.displayed_work_items:
+            kind = item.kind_name or "Work item"
+            subject = item.subject.replace("-", " ")
+            organisation = f"{item.organisation} " if item.organisation else ""
+            self.results.insert(tk.END, f"{kind} → {organisation}{subject}")
+        count = len(self.displayed_work_items)
+        self.results_count_var.set(
+            f"{count} work item" if count == 1 else f"{count} work items"
+        )
+        if count:
+            self.results.selection_set(0)
+            self.results.activate(0)
+            stale_count = sum(
+                1 for source in self.work_item_index.sources if source.using_last_known_good
+            )
+            suffix = f" · {stale_count} source stale" if stale_count else ""
+            self.status_var.set(f"{count} Work Items match{suffix}.")
+        else:
+            if not self.work_item_sources:
+                message = "No Work Item sources configured yet."
+                status = "No Work Item sources are configured."
+            elif self.work_item_refresh.running and not self.work_item_index.sources:
+                message = "Refreshing Work Items…"
+                status = message
+            elif any(source.error for source in self.work_item_index.sources):
+                message = "No available Work Items.\nOne or more source folders are unavailable."
+                status = "Work Item sources are unavailable."
+            else:
+                message = "No Work Items match Find and the selected filters."
+                status = message
+            self.results.insert(tk.END, message)
+            self.results.itemconfigure(0, foreground=COLORS["muted_text"])
+            self.status_var.set(status)
+        self._update_preview()
+
     def _show_flat_results(self) -> None:
         if self.results_view == "flat":
             return
@@ -1529,6 +1798,8 @@ class LauncherApp:
             self.command_surface_path,
             self.local_command_surface_path,
             self.palette_path,
+            self.local_work_item_sources_path,
+            self.local_work_item_metadata_path,
         )
         signature = []
         for path in paths:
@@ -1566,12 +1837,14 @@ class LauncherApp:
                 lambda: self._load_command_surface(render=False),
             )
             run_stage("contexts", self._load_contexts)
+            run_stage("work_items", self._load_work_item_configuration)
             run_stage(
                 "palette",
                 lambda: self._load_palette_state(render=False),
             )
             run_stage("quick_actions", self._render_command_surface)
             run_stage("results", self._refresh_results)
+            self._start_work_item_refresh()
             run_stage(
                 "signature",
                 lambda: setattr(
@@ -1616,7 +1889,35 @@ class LauncherApp:
         verb = "Pinned" if action.id in self.palette_state.pinned_action_ids else "Unpinned"
         self.status_var.set(f"{verb}: {action.display_text}")
 
-    def _execute_selected(self) -> None:
+    def _execute_selected(self, *, open_folder: bool = False) -> None:
+        if self.work_items_mode:
+            item = self._selected_work_item()
+            if item is None:
+                self.status_var.set("No Work Item selected")
+                return
+            target = item.folder_path if open_folder else item.default_open_path
+            action_type = "open_folder" if target == item.folder_path else "open_file"
+            try:
+                open_action_target(
+                    Action(
+                        f"work-item:{item.source_id}:{item.relative_folder}",
+                        item.display_name,
+                        "General",
+                        action_type,
+                        str(target),
+                        "Trusted",
+                    )
+                )
+            except ActionError as exc:
+                self.status_var.set("Work Item could not be opened.")
+                messagebox.showerror("Work Item could not be opened", str(exc), parent=self.root)
+                return
+            self.status_var.set(
+                f"Opened folder: {item.display_name}"
+                if action_type == "open_folder"
+                else f"Opened workbook: {item.matching_workbook_path.name}"
+            )
+            return
         action = self._selected_action()
         if action is None:
             self.status_var.set("No action selected")
@@ -1848,7 +2149,12 @@ class LauncherApp:
         return "break"
 
     def _move_selection(self, offset: int, event: tk.Event) -> str:
-        if not self.displayed_actions:
+        result_count = (
+            len(self.displayed_work_items)
+            if self.work_items_mode
+            else len(self.displayed_actions)
+        )
+        if not result_count:
             return "break"
 
         selected = self.results.curselection()
@@ -1856,10 +2162,15 @@ class LauncherApp:
         return self._select_index(current + offset, event)
 
     def _select_index(self, index: int, _event: tk.Event) -> str:
-        if not self.displayed_actions:
+        result_count = (
+            len(self.displayed_work_items)
+            if self.work_items_mode
+            else len(self.displayed_actions)
+        )
+        if not result_count:
             return "break"
 
-        bounded_index = max(0, min(index, len(self.displayed_actions) - 1))
+        bounded_index = max(0, min(index, result_count - 1))
         self.results.selection_clear(0, tk.END)
         self.results.selection_set(bounded_index)
         self.results.activate(bounded_index)
@@ -1868,6 +2179,8 @@ class LauncherApp:
         return "break"
 
     def _selected_action(self) -> Action | None:
+        if self.work_items_mode:
+            return None
         if self.results_view == "focus":
             selected = self.focus_tree.selection()
             return self.focus_tree_actions.get(selected[0]) if selected else None
@@ -1879,7 +2192,36 @@ class LauncherApp:
             return None
         return self.displayed_actions[index]
 
+    def _selected_work_item(self) -> DiscoveredWorkItem | None:
+        if not self.work_items_mode:
+            return None
+        selected = self.results.curselection()
+        if not selected or selected[0] >= len(self.displayed_work_items):
+            return None
+        return self.displayed_work_items[selected[0]]
+
     def _update_preview(self) -> None:
+        if self.work_items_mode:
+            item = self._selected_work_item()
+            if item is None:
+                self.action_info_full = "Select a Work Item to see its source and open target."
+                return
+            tags = self._work_item_tags(item)
+            default = (
+                f"Workbook: {item.matching_workbook_path.name}"
+                if item.matching_workbook_path is not None
+                else "Default: Open work-item folder"
+            )
+            detail = (
+                f"{item.display_name}\n"
+                f"{item.kind_name or 'Work item'} · {item.organisation or 'Unparsed'} · {item.source_name}\n"
+                f"Project codes: {', '.join(item.project_codes) or '(none)'}\n"
+                f"Tags: {', '.join(tags) or '(none)'}\n"
+                f"{default}"
+            )
+            self.action_info_full = detail
+            self.status_var.set(" · ".join(detail.splitlines()))
+            return
         action = self._selected_action()
         if action is None:
             self.action_info_full = "Select an action to see what it reads and what it will do."
@@ -2076,6 +2418,7 @@ class LauncherApp:
         *,
         initial_tab: str = "actions",
         initial_action_id: str | None = None,
+        initial_work_item_key: str | None = None,
     ) -> None:
         ConfigurationWindow(
             self.root,
@@ -2088,9 +2431,15 @@ class LauncherApp:
             command_surface_path=self.command_surface_path,
             local_command_surface_path=self.local_command_surface_path,
             palette_path=self.palette_path,
+            work_item_sources_path=self.local_work_item_sources_path,
+            work_item_metadata_path=self.local_work_item_metadata_path,
+            work_item_sources=self.work_item_sources,
+            work_item_metadata=self.work_item_metadata,
+            work_item_index=self.work_item_index,
             on_change=self._reload,
             initial_tab=initial_tab,
             initial_action_id=initial_action_id,
+            initial_work_item_key=initial_work_item_key,
         )
 
     def _show_action_configuration(self, action: Action) -> None:
@@ -2102,18 +2451,88 @@ class LauncherApp:
     def _configure_flat_action_from_event(self, event: tk.Event) -> str:
         index = self.results.nearest(event.y)
         bounds = self.results.bbox(index)
+        result_count = (
+            len(self.displayed_work_items)
+            if self.work_items_mode
+            else len(self.displayed_actions)
+        )
         if (
             bounds is None
             or not (bounds[1] <= event.y < bounds[1] + bounds[3])
-            or index >= len(self.displayed_actions)
+            or index >= result_count
         ):
             return "break"
         self.results.selection_clear(0, tk.END)
         self.results.selection_set(index)
         self.results.activate(index)
         self._update_preview()
+        if self.work_items_mode:
+            self._show_work_item_menu(event, self.displayed_work_items[index])
+            return "break"
         self._show_action_configuration(self.displayed_actions[index])
         return "break"
+
+    def _show_work_item_menu(
+        self,
+        event: tk.Event,
+        item: DiscoveredWorkItem,
+    ) -> None:
+        menu = tk.Menu(self.root, tearoff=False)
+        if item.matching_workbook_path is not None:
+            menu.add_command(
+                label="Open workbook",
+                command=lambda: self._open_work_item_target(
+                    item,
+                    item.matching_workbook_path,
+                ),
+            )
+        menu.add_command(
+            label="Open work-item folder",
+            command=lambda: self._open_work_item_target(item, item.folder_path),
+        )
+        source = next(
+            (source for source in self.work_item_sources if source.id == item.source_id),
+            None,
+        )
+        if source is not None:
+            menu.add_command(
+                label="Open source folder",
+                command=lambda: self._open_work_item_target(item, source.workitems_path),
+            )
+        menu.add_separator()
+        menu.add_command(
+            label="Edit personal tags…",
+            command=lambda: self._show_configuration(
+                initial_tab="work_items",
+                initial_work_item_key=work_item_metadata_key(
+                    item.source_id,
+                    item.relative_folder,
+                ),
+            ),
+        )
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def _open_work_item_target(self, item: DiscoveredWorkItem, target: Path) -> None:
+        action_type = "open_folder" if target.is_dir() else "open_file"
+        try:
+            open_action_target(
+                Action(
+                    f"work-item:{item.source_id}:{item.relative_folder}",
+                    item.display_name,
+                    "General",
+                    action_type,
+                    str(target),
+                    "Trusted",
+                )
+            )
+        except ActionError as exc:
+            self.status_var.set("Work Item target could not be opened.")
+            messagebox.showerror("Work Item could not be opened", str(exc), parent=self.root)
+            return
+        self.status_var.set(f"Opened: {target.name}")
 
     def _configure_focus_action_from_event(self, event: tk.Event) -> str:
         item_id = self.focus_tree.identify_row(event.y)
@@ -2158,7 +2577,12 @@ class LauncherApp:
         if keysym == "End":
             if self.results_view == "focus" and event.widget == self.focus_tree:
                 return None
-            return self._select_index(len(self.displayed_actions) - 1, event)
+            result_count = (
+                len(self.displayed_work_items)
+                if self.work_items_mode
+                else len(self.displayed_actions)
+            )
+            return self._select_index(result_count - 1, event)
 
         slot = self._slot_from_key(event)
         if slot is None:

@@ -4,14 +4,27 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Added a **Work Items** Configure tab for managing local source folders,
+  refreshing the index, reviewing source state, and editing private per-item
+  tags. Removing a source never deletes work files, and the result context menu
+  opens the selected item directly for tag editing. Source removal is one
+  atomic configuration write and retains private tags for safe reuse. Configure
+  scans run in the background, and edits made during a scan queue one latest
+  refresh instead of freezing the window or being silently missed. Closing
+  Configure safely ignores late scan results without retaining destroyed UI.
+- Added Work Items discovery to the main Actions workspace. The compact Work
+  button reuses Find and the result list, with structured project-code and
+  personal-tag filters, background refresh, clear unavailable/empty states,
+  exact workbook opening, folder fallback, Shift+Enter folder opening, and a
+  constrained right-click menu.
 - Added a dedicated, searchable Keyboard Shortcuts page exposed through the
   main-window **⌨** button. Guided action-form mnemonics now use the same
   layout-independent Alt handling as Configure. Only Shift plus a physical
   top-row number key executes slots 1–9 while Find is focused; plain number-row
   and numpad input remain ordinary Find text.
-- Prevented Ctrl/Alt/Shift-modified number keys from executing main-palette
-  action slots. Plain `1`–`9` still run slots, while combinations such as
-  `Ctrl+2` and `Ctrl+3` are left available to focused controls. Inside
+- Prevented Ctrl/Alt-modified number keys from executing main-palette action
+  slots. Plain numbers remain Find text and Shift plus the physical top row
+  runs slots 1–9. Inside
   Configure, layout-independent `Alt+A`, `Alt+T`, `Alt+C`, `Alt+B`, and `Alt+D`
   select Actions, Built-in action types, Contexts, Right-side buttons, and
   Diagnostics. Their letters are underlined in the tab labels.

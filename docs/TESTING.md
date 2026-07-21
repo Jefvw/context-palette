@@ -123,10 +123,21 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
     each physical top-row number key and verify the corresponding populated
     slots execute. Verify plain number-row and numpad digits filter Find, and
     Ctrl+number does not execute a slot.
-12. Trigger a validation error and confirm the message identifies the field without losing the form contents.
-13. Capture an Inbox item, convert it to a Draft, test it, and promote it only after confirmation.
-14. Open Help and verify in-document search.
-15. Open Configure → Diagnostics. Verify configuration counts are current,
+12. With at least one disposable local Work Item source configured, choose
+    **Configure**, then **Work Items**. Add and edit a source using Browse,
+    confirm its state and item summary, edit a discovered item's personal tags,
+    and use Refresh index. Confirm removing the source clearly states that no
+    folders or files will be deleted. Re-add it for the opening checks. Choose
+    **Work** and verify Find, Projects, and Tags combine correctly. Press Enter
+    on an item with an exact workbook and verify that workbook opens; press
+    Shift+Enter and verify its folder opens. Verify an item without the exact
+    workbook falls back to its folder. Right-click and check workbook, item
+    folder, and source-folder routes. Temporarily make one source unavailable
+    and verify other sources refresh while its last successful rows remain.
+13. Trigger a validation error and confirm the message identifies the field without losing the form contents.
+14. Capture an Inbox item, convert it to a Draft, test it, and promote it only after confirmation.
+15. Open Help and verify in-document search.
+16. Open Configure → Diagnostics. Verify configuration counts are current,
     Refresh updates recent automatic-paste outcomes, and Copy safe summary
     places the visible report on the clipboard. Confirm raw error messages,
     sample action values, pasted text, credential fields, paths, and window

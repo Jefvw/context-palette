@@ -73,6 +73,10 @@ Presentation and application orchestration.
 - Ensures Tk operations stay on the Tk main thread.
 - Resets transient presentation state through the main-window `F5` shortcut
   without changing persisted Focus, pins, slots, actions, or configuration.
+- Switches the existing discovery list into Work Items mode without changing
+  the main-window dimensions. Find, project-code/tag filters, selection,
+  previews, and constrained open commands consume the immutable in-memory Work
+  Item index; action mode state remains intact.
 
 The main-window construction is divided into focused header, results/command-surface, shortcut, workspace, and footer builders. Inbox and Draft windows still live in this module and are the next safe extraction boundary; this is documented in `TECHNICAL_REVIEW.md`.
 
@@ -258,12 +262,12 @@ recurses. Each eligible folder is parsed without making successful parsing a
 condition of discovery. Only an exact case-insensitive `<folder-name>.xlsx`
 file directly inside the folder becomes its matching workbook; otherwise the
 folder is the default target. Persistence, caching, refresh coordination,
-search integration, and UI remain outside this implemented boundary.
+search integration, and UI remain outside this domain boundary.
 
 ### `work_item_storage.py` and `work_item_refresh.py`
 
-Provide the implemented second Work Items phase without connecting it to the
-interface yet. Storage strictly loads and atomically writes ignored
+Provide private Work Items persistence and background refresh. Storage strictly
+loads and atomically writes ignored
 `local_work_item_sources.json` and `local_work_item_metadata.json`. Metadata
 identity combines a stable source ID with one direct relative folder name;
 absolute paths exist only in the machine-local source file. Personal tags are
@@ -277,6 +281,16 @@ results on a thread-safe queue. Future Tk orchestration must call `drain()` on
 the main thread, so worker code has no Tk callback or widget access. A local
 500-folder direct-scan measurement completed in 21.9 ms on 2026-07-21, providing
 no evidence that a private persistent cache is warranted.
+
+### `work_item_configuration.py`
+
+Owns the guided **Work Items** Configure panel and its source/tag dialogs. It
+validates existing absolute source folders, generates stable local IDs, reports
+availability, performs explicit bounded refreshes, and persists edits through
+`work_item_storage.py`. Configure scans use the existing background coordinator;
+concurrent requests coalesce into one subsequent latest-state refresh. The panel
+uses a weak completion callback and ignores late results after its Tk container
+is destroyed. It never modifies work folders or workbook files.
 
 ### `single_instance.py`
 

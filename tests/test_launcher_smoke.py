@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import time
 import tkinter as tk
 from tkinter import ttk
 import unittest
@@ -74,6 +75,34 @@ class LauncherSmokeTests(unittest.TestCase):
             inbox_path = self._write_json(data / "inbox.json", {"items": []})
             cheatsheets_dir = data / "cheatsheets"
             cheatsheets_dir.mkdir()
+            workitems = data / "work-source" / "workitems"
+            exact_folder = workitems / "ISS-CAP40-AB9C-age-verification"
+            exact_folder.mkdir(parents=True)
+            exact_workbook = exact_folder / f"{exact_folder.name}.xlsx"
+            exact_workbook.write_text("", encoding="utf-8")
+            (workitems / "QST-CAP40-question").mkdir()
+            self._write_json(
+                data / "local_work_item_sources.json",
+                {
+                    "sources": [
+                        {
+                            "id": "cap40",
+                            "name": "CAP40 Product",
+                            "workitems_path": str(workitems),
+                        }
+                    ]
+                },
+            )
+            self._write_json(
+                data / "local_work_item_metadata.json",
+                {
+                    "work_items": {
+                        "cap40/ISS-CAP40-AB9C-age-verification": {
+                            "tags": ["urgent"]
+                        }
+                    }
+                },
+            )
 
             root = tk.Tk()
             root_destroyed = False
@@ -91,6 +120,7 @@ class LauncherSmokeTests(unittest.TestCase):
                         return_value=False,
                     ) as start_hotkey,
                     patch("context_palette.launcher.GlobalHotkey.stop") as stop_hotkey,
+                    patch("context_palette.launcher.open_action_target") as open_target,
                 ):
                     app = LauncherApp(
                         root,
@@ -130,11 +160,42 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertTrue(root.bind("<F5>"))
                     self.assertTrue(root.bind("<Control-Shift-D>"))
                     self.assertIs(app.search_entry.tk_focusNext(), app.passwords_button)
-                    self.assertIs(app.passwords_button.tk_focusNext(), app.type_filter)
+                    self.assertIs(app.passwords_button.tk_focusNext(), app.work_items_button)
+                    self.assertIs(app.work_items_button.tk_focusNext(), app.type_filter)
                     self.assertIs(app.type_filter.tk_focusNext(), app.tag_filter)
                     self.assertIs(app.tag_filter.tk_focusNext(), app.run_button)
                     self.assertIs(app.run_button.tk_focusNext(), app.action_help_button)
                     self.assertIs(app.action_help_button.tk_focusNext(), app.results)
+
+                    deadline = time.monotonic() + 2.0
+                    while not app.work_item_index.items and time.monotonic() < deadline:
+                        root.update()
+                        time.sleep(0.01)
+                    self.assertEqual(len(app.work_item_index.items), 2)
+
+                    app.work_items_button.invoke()
+                    root.update()
+                    self.assertTrue(app.work_items_mode)
+                    self.assertEqual(app.actions_heading_var.get(), "Work Items")
+                    self.assertEqual(app.results_count_var.get(), "2 work items")
+                    self.assertIn("Issue", app.results.get(0))
+                    self.assertEqual(app.type_filter.cget("text"), "Projects ▾")
+                    self.assertEqual(app.work_project_filter_var.get(), "All project codes")
+
+                    app._select_work_project_filter("AB9C")
+                    self.assertEqual(app.results_count_var.get(), "1 work item")
+                    app._select_work_tag_filter("urgent")
+                    self.assertEqual(app.results_count_var.get(), "1 work item")
+                    app._execute_selected()
+                    self.assertEqual(open_target.call_args.args[0].value, str(exact_workbook))
+                    app._execute_selected(open_folder=True)
+                    self.assertEqual(open_target.call_args.args[0].value, str(exact_folder))
+
+                    app.work_items_button.invoke()
+                    root.update()
+                    self.assertFalse(app.work_items_mode)
+                    self.assertEqual(app.actions_heading_var.get(), "Actions")
+                    self.assertEqual(app.type_filter.cget("text"), "Types ▾")
 
                     opened_action_ids: list[str] = []
                     original_show_configuration = app._show_configuration

@@ -37,6 +37,10 @@ from .context_membership_field import (
     specific_context_names,
 )
 from .window_geometry import configure_standard_window
+from .work_item_configuration import WorkItemsConfigurationPanel
+from .work_item_refresh import WorkItemIndex
+from .work_items import WorkItemSource
+from .work_item_storage import WorkItemMetadata
 
 
 ACTION_TYPE_EXAMPLES = {
@@ -98,9 +102,15 @@ class ConfigurationWindow:
         command_surface_path: Path,
         local_command_surface_path: Path,
         palette_path: Path,
+        work_item_sources_path: Path,
+        work_item_metadata_path: Path,
+        work_item_sources: tuple[WorkItemSource, ...],
+        work_item_metadata: dict[str, WorkItemMetadata],
+        work_item_index: WorkItemIndex,
         on_change: Callable[[], None],
         initial_tab: str = "actions",
         initial_action_id: str | None = None,
+        initial_work_item_key: str | None = None,
     ) -> None:
         self.actions = actions
         self.local_action_ids = local_action_ids
@@ -111,6 +121,8 @@ class ConfigurationWindow:
         self.command_surface_path = command_surface_path
         self.local_command_surface_path = local_command_surface_path
         self.palette_path = palette_path
+        self.work_item_sources_path = work_item_sources_path
+        self.work_item_metadata_path = work_item_metadata_path
         self.on_change = on_change
         self.contexts: list[ContextDefinition] = []
         self.groups: list[CommandGroup] = []
@@ -118,6 +130,7 @@ class ConfigurationWindow:
         self.action_filter_count_var = tk.StringVar()
         self.initial_tab = initial_tab
         self.initial_action_id = initial_action_id
+        self.initial_work_item_key = initial_work_item_key
 
         self.window = tk.Toplevel(parent)
         self.window.title("Configure Context Palette")
@@ -156,18 +169,27 @@ class ConfigurationWindow:
         self._build_types_tab(self.notebook)
         self._build_contexts_tab(self.notebook)
         self._build_buttons_tab(self.notebook)
+        self._build_work_items_tab(
+            self.notebook,
+            work_item_sources,
+            work_item_metadata,
+            work_item_index,
+        )
         self._build_diagnostics_tab(self.notebook)
         tab_indexes = {
             "actions": 0,
             "types": 1,
             "contexts": 2,
             "buttons": 3,
-            "diagnostics": 4,
+            "work_items": 4,
+            "diagnostics": 5,
         }
         self.notebook.select(tab_indexes.get(self.initial_tab, 0))
         self.notebook.bind("<<NotebookTabChanged>>", self._focus_selected_tab)
         self.window.bind("<Control-f>", self._focus_action_filter)
         self._reload()
+        if self.initial_work_item_key:
+            self.work_items_panel.select_item(self.initial_work_item_key)
         self.window.transient(parent)
         self.window.lift()
         self.window.after_idle(self._focus_current_tab)
@@ -187,7 +209,8 @@ class ConfigurationWindow:
             "t": 1,
             "c": 2,
             "b": 3,
-            "d": 4,
+            "w": 4,
+            "d": 5,
         }.get(str(getattr(event, "keysym", "")).casefold())
         if tab_index is None:
             return None
@@ -366,8 +389,32 @@ class ConfigurationWindow:
             command=self._copy_diagnostics,
         ).pack(side=tk.LEFT, padx=(6, 0))
 
+    def _build_work_items_tab(
+        self,
+        notebook: ttk.Notebook,
+        sources: tuple[WorkItemSource, ...],
+        metadata: dict[str, WorkItemMetadata],
+        index: WorkItemIndex,
+    ) -> None:
+        tab = ttk.Frame(notebook, padding=10)
+        notebook.add(tab, text="Work Items", underline=0)
+        self.work_items_panel = WorkItemsConfigurationPanel(
+            tab,
+            sources=sources,
+            metadata=metadata,
+            index=index,
+            sources_path=self.work_item_sources_path,
+            metadata_path=self.work_item_metadata_path,
+            on_change=self.on_change,
+            feedback=self._set_feedback,
+        )
+
+    def _set_feedback(self, message: str, success: bool) -> None:
+        self.feedback_var.set(message)
+        self.feedback_label.configure(style="Success.TLabel" if success else "Error.TLabel")
+
     def _show_diagnostics_tab(self, _event: tk.Event | None = None) -> str:
-        return self._show_config_tab(4)
+        return self._show_config_tab(5)
 
     def _show_config_tab(self, tab_index: int) -> str:
         self.notebook.select(tab_index)
@@ -384,9 +431,13 @@ class ConfigurationWindow:
             self.type_list,
             self.context_tree,
             self.button_tree,
+            self.work_items_panel,
             self.diagnostics_text,
         )
-        targets[selected].focus_set()
+        if selected == 4:
+            self.work_items_panel.focus()
+        else:
+            targets[selected].focus_set()
 
     def _show_type(self) -> None:
         selected = self.type_list.curselection()

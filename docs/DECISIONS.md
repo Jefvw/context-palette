@@ -1,8 +1,24 @@
 # Decisions
 
+## 2026-07-21 — Keep Work Item configuration private and separate from discovery
+
+**Decision:** Manage Work Item sources and per-item tags in a dedicated
+Configure tab. Keep stable IDs immutable after creation, validate an existing
+folder when saving, retain missing configured sources, and remove only Context
+Palette's source entry—not work files—when deleting a source. Retain orphaned
+private tags so removal needs only one atomic write and re-adding the same stable
+ID restores them.
+
+**Why:** The main window remains optimized for finding and opening items, while
+setup has room to explain paths, availability, identity, and privacy. Stable IDs
+preserve tag identity across machine-specific paths.
+
+**Consequence:** Each computer needs its own ignored source configuration.
+Phase 5 still requires manual checks across computers and unavailable drives.
+
 ## 2026-07-20 - Plan bounded local Work Items discovery
 
-**Status:** Proposed; not implemented.
+**Status:** Implemented through Phases 1–4; Phase 5 verification remains.
 
 **Decision:** Model work items as transient resources discovered from explicitly
 configured local `workitems` sources rather than persisted actions. Omit visual
@@ -1013,3 +1029,18 @@ keycode rather than the layout-dependent character.
 and numpad shortcuts did not work reliably on the user's keyboard. A single
 explicit modifier provides a visible distinction between searching and running
 while physical key positions make the command consistent on AZERTY and QWERTY.
+
+## 2026-07-21 - Reuse the main discovery workspace for Work Items
+
+**Decision:** Add a compact Work mode to the existing action-discovery rail.
+Reuse Find, the flat list, Projects/Tags controls, preview/status feedback, and
+keyboard/mouse execution rather than create a separate window. Enter opens the
+exact workbook with folder fallback; Shift+Enter always opens the folder. Keep
+source and personal-tag editing out of this phase and retain the immutable
+background-refresh boundary.
+
+**Reason:** Work Items and actions share the same primary user goal: quickly
+find and perform a known operation. A second search window would duplicate
+navigation and consume more screen space. Mode-specific filter variables keep
+existing action state intact, while constrained open targets preserve the
+application's allow-listed execution model.

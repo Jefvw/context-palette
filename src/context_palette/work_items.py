@@ -110,6 +110,35 @@ def parse_work_item_name(name: str) -> ParsedWorkItemName:
     )
 
 
+def work_item_matches(
+    item: DiscoveredWorkItem,
+    query: str,
+    *,
+    tags: tuple[str, ...] = (),
+    project_code: str | None = None,
+    tag: str | None = None,
+) -> bool:
+    if project_code is not None and project_code.casefold() not in {
+        code.casefold() for code in item.project_codes
+    }:
+        return False
+    if tag is not None and tag.casefold() not in {value.casefold() for value in tags}:
+        return False
+    searchable = " ".join(
+        (
+            item.display_name,
+            item.kind_code or "",
+            item.kind_name or "",
+            item.organisation or "",
+            item.subject,
+            item.source_name,
+            *item.project_codes,
+            *tags,
+        )
+    ).casefold()
+    return all(term in searchable for term in query.casefold().split())
+
+
 def discover_work_items(source: WorkItemSource) -> tuple[DiscoveredWorkItem, ...]:
     root = source.workitems_path
     if not root.exists():

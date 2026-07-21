@@ -23,6 +23,8 @@ Open it from the **⌨** button at the bottom of the main window.
 | `F5` | Reset transient screen state without changing saved actions, Focus, pins, or slots. |
 | `Up`, `Down`, `Page Up`, `Page Down`, `Home`, `End` | Navigate action results. |
 | `Enter` | Run the selected action. |
+| `Enter` in Work mode | Open the selected Work Item's exact matching `.xlsx` workbook, or its folder when no exact workbook exists. |
+| `Shift+Enter` in Work mode | Open the selected Work Item folder instead of its workbook. |
 | `Shift` + physical top-row `1`–`9` while Find is focused | Run the corresponding action slot. This uses key positions and works on AZERTY and QWERTY. |
 | Plain number-row or numpad `1`–`9` | Enter text in Find; do not run an action. |
 
@@ -37,6 +39,7 @@ AltGr-, plain number-row, and numpad input never execute action slots.
 | `Alt+T` | Open Built-in action types. |
 | `Alt+C` | Open Contexts. |
 | `Alt+B` | Open Right-side buttons. |
+| `Alt+W` | Open Work Items. |
 | `Alt+D` | Open Diagnostics. |
 | `Ctrl+Tab` | Select the next tab. |
 | `Ctrl+Shift+Tab` | Select the previous tab. |

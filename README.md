@@ -17,6 +17,8 @@ The application is under active development. It already supports the complete Ca
 - Captures clipboard material into an Inbox and converts it into Draft actions.
 - Supports attended, schema-validated AI proposals for selected action types.
 - Searches cheat sheets and promotes entries to Draft actions.
+- Finds configured local Work Item folders, filters them by text, project code,
+  and personal tags, and opens an exact matching workbook or folder fallback.
 - Stores personal data locally and writes application-managed JSON atomically.
 
 ## Requirements

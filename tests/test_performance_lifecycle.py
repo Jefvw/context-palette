@@ -92,7 +92,7 @@ class PerformanceLifecycleTests(unittest.TestCase):
     def test_unchanged_configuration_skips_full_reload(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            paths = [root / f"config-{index}.json" for index in range(7)]
+            paths = [root / f"config-{index}.json" for index in range(9)]
             for path in paths:
                 path.write_text("{}", encoding="utf-8")
             app = LauncherApp.__new__(LauncherApp)
@@ -104,6 +104,8 @@ class PerformanceLifecycleTests(unittest.TestCase):
                 app.command_surface_path,
                 app.local_command_surface_path,
                 app.palette_path,
+                app.local_work_item_sources_path,
+                app.local_work_item_metadata_path,
             ) = paths
             app.configuration_signature_cache = app._configuration_signature()
             reloads: list[bool] = []
@@ -138,11 +140,13 @@ class PerformanceLifecycleTests(unittest.TestCase):
             lambda *, render=True: events.append(("commands", render))
         )
         app._load_contexts = lambda: events.append("contexts")
+        app._load_work_item_configuration = lambda: events.append("work_items")
         app._load_palette_state = (
             lambda *, render=True: events.append(("palette", render))
         )
         app._render_command_surface = lambda: events.append("surface")
         app._refresh_results = lambda: events.append("results")
+        app._start_work_item_refresh = lambda: events.append("work_item_refresh")
         app._configuration_signature = lambda: ()
 
         app._reload()
@@ -153,9 +157,11 @@ class PerformanceLifecycleTests(unittest.TestCase):
                 "actions",
                 ("commands", False),
                 "contexts",
+                "work_items",
                 ("palette", False),
                 "surface",
                 "results",
+                "work_item_refresh",
             ],
         )
 
