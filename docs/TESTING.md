@@ -51,6 +51,30 @@ import error (investigate with the complete check).
 
 Do not document a fixed test count; it changes as coverage grows.
 
+## Harvest actions manual check
+
+Last completed: **Passed on Windows on 2026-07-21.** The attended check used
+representative Markdown, text, Word, and Excel files, including cross-format
+duplicates, unsupported and malformed links, a corrupt source, cancellation,
+an initially absent personal action store, a late duplicate, repeated
+submission, and a cold application restart. All requested workflow checks
+passed. The check also exposed and corrected clipped bulk-edit controls at the
+standard Harvest window size.
+
+1. Press `Ctrl+,`, open **Actions**, choose **Harvest documents...**, and select
+   several representative `.md`, `.txt`, `.docx`, and `.xlsx` files.
+2. Confirm progress remains responsive, Cancel stops safely, and a corrupt or
+   unavailable file reports its own failure without hiding successful sources.
+3. Check a repeated URL, conflicting labels, an existing Draft URL, an existing
+   Trusted URL, and a non-HTTP target. Verify their readiness and duplicate
+   states, provenance, and default selection.
+4. Edit one candidate and use explicit Add/Remove for Focus memberships and
+   tags. Preview the selected Drafts.
+5. Cancel the confirmation and verify the personal action file is unchanged.
+   Then confirm once and verify all selected actions appear together as Draft
+   **Open a website** actions.
+6. Repeat the launch from Inbox and verify it opens the same review workflow.
+
 Run the documentation-link check directly after moving or renaming a guide:
 
 ```powershell

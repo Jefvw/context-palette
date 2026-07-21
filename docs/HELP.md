@@ -26,6 +26,39 @@ documented in [Multi-PC development](MULTI_PC_DEVELOPMENT.md).
 Power Automate Desktop setup is documented in
 [Power Automate integration](../integrations/README.md).
 
+## Harvest actions from documents
+
+For the primary route, press `Ctrl+,`, then open **Actions** and choose
+**Harvest documents...**. You can also choose **Harvest documents...** in
+Inbox. The workflow extracts possible website actions from several documents
+at once. Supported files are Markdown (`.md`), text (`.txt`), Word (`.docx`),
+and Excel (`.xlsx`). Context Palette reads these files locally; it does not
+start Office, evaluate formulas, run macros, fetch links, or execute discovered
+content.
+
+The review window shows each source and every candidate URL with its label and
+location. Search or filter the list, inspect provenance, edit one candidate,
+select or deselect candidates, and add or remove Focus memberships and tags in
+bulk. A specific current Focus is proposed as membership; **General** remains
+implicit. Source filenames and folders are not converted into tags.
+
+Only HTTP and HTTPS targets can become actions. Existing Draft and Trusted URLs
+and repeats across the selected documents are identified before creation. Word
+hyperlinks, Excel hyperlinks, plain URL cells, and literal `HYPERLINK` formulas
+are readable; formulas are never calculated. Unsupported targets stay visible
+but cannot be selected.
+
+Choose **Preview selected Drafts**, then **Create selected Drafts**. All selected
+actions are validated again and written to the personal action file in one
+atomic operation. They always start as Drafts. Cancelling the scan or closing
+the review window creates nothing. Per-file failures do not discard successful
+results from other files, and size, compression, worksheet, cell, occurrence,
+and candidate limits keep scans bounded.
+
+Folder scanning, drag and drop, OneNote extraction, PDF/HTML/email parsing,
+recursive crawling, remote fetching, and automatic trust are not part of this
+version.
+
 ## Open and close the palette
 
 - Start once with `run-context-palette.bat`.

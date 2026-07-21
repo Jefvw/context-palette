@@ -12,6 +12,7 @@ from .actions import (
     append_action,
     configured_draft_action,
     edited_configured_action,
+    load_combined_actions,
     update_action,
     validate_context_memberships,
 )
@@ -31,6 +32,7 @@ from .command_surface import (
 from .configuration_data import save_local_command_item, save_local_context
 from .contexts import ContextDefinition, ContextError, load_combined_contexts, load_contexts
 from .diagnostics import render_safe_diagnostics, summarize_diagnostics
+from .harvest_window import HarvestWindow
 from .context_membership_field import (
     ContextMembershipField,
     TagSelectionField,
@@ -110,6 +112,7 @@ class ConfigurationWindow:
         work_item_metadata: dict[str, WorkItemMetadata],
         work_item_index: WorkItemIndex,
         on_change: Callable[[], None],
+        focus_context: str = "General",
         initial_tab: str = "actions",
         initial_action_id: str | None = None,
         initial_work_item_key: str | None = None,
@@ -127,6 +130,7 @@ class ConfigurationWindow:
         self.work_item_metadata_path = work_item_metadata_path
         self.work_item_settings_path = work_item_settings_path
         self.on_change = on_change
+        self.focus_context = focus_context
         self.contexts: list[ContextDefinition] = []
         self.groups: list[CommandGroup] = []
         self.action_filter_var = tk.StringVar()
@@ -273,12 +277,44 @@ class ConfigurationWindow:
             command=lambda: notebook.select(1),
             style="Accent.TButton",
         ).pack(side=tk.LEFT)
+        ttk.Button(
+            controls,
+            text="Harvest documents…",
+            command=self._show_harvest,
+        ).pack(side=tk.LEFT, padx=(6, 0))
         ttk.Button(controls, text="Edit selected", command=self._edit_action).pack(
             side=tk.LEFT, padx=(6, 0)
         )
         ttk.Button(controls, text="Delete selected", command=self._delete_action).pack(
             side=tk.LEFT, padx=(6, 0)
         )
+
+    def _show_harvest(self) -> None:
+        HarvestWindow(
+            self.window,
+            actions=self.actions,
+            context_names=[context.name for context in self.contexts],
+            focus_context=self.focus_context,
+            actions_path=self.local_actions_path,
+            on_change=self._harvest_changed,
+        )
+
+    def _harvest_changed(self) -> None:
+        try:
+            self.actions, self.local_action_ids = load_combined_actions(
+                self.shared_actions_path,
+                self.local_actions_path,
+            )
+        except ActionError as exc:
+            messagebox.showerror(
+                "Context Palette",
+                f"The harvested Drafts were saved, but Configure could not reload them.\n\n{exc}",
+                parent=self.window,
+            )
+            self.on_change()
+            return
+        self._reload()
+        self.on_change()
 
     def _build_types_tab(self, notebook: ttk.Notebook) -> None:
         tab = ttk.Frame(notebook, padding=10)

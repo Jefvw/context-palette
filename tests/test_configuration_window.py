@@ -82,6 +82,35 @@ class FakeNotebook:
         return value
 
 
+class HarvestRefreshTests(unittest.TestCase):
+    def test_harvest_refresh_reloads_actions_in_open_configuration_window(self):
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.shared_actions_path = Path("shared.json")
+        configuration.local_actions_path = Path("local.json")
+        configuration.actions = []
+        configuration.local_action_ids = set()
+        configuration._reload = Mock()
+        configuration.on_change = Mock()
+        harvested = Action(
+            "draft-harvested",
+            "Harvested",
+            "General",
+            "open_url",
+            "https://example.test",
+            "Draft",
+        )
+
+        with patch(
+            "context_palette.configuration_window.load_combined_actions",
+            return_value=([harvested], {harvested.id}),
+        ):
+            configuration._harvest_changed()
+
+        self.assertEqual(configuration.actions, [harvested])
+        self.assertEqual(configuration.local_action_ids, {harvested.id})
+        configuration._reload.assert_called_once_with()
+        configuration.on_change.assert_called_once_with()
+
 class FakeEntry:
     def __init__(self) -> None:
         self.focus_calls = 0

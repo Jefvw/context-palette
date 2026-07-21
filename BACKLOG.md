@@ -26,6 +26,11 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Later
 
+- Consider drag-and-drop and folder selection for Harvest actions after the
+  explicit multi-file workflow has real-use feedback.
+- Evaluate OneNote, PDF, HTML, and email harvesting only with format-specific
+  safety, provenance, and bounded-extraction designs; do not add recursive or
+  remote crawling implicitly.
 - Add reusable prompted forms with field validation.
 - Add rich HTML content with plain-text fallback.
 - Add image/visual-asset clipboard actions.

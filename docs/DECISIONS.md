@@ -1,5 +1,24 @@
 # Decisions
 
+## 2026-07-21 - Keep bulk document harvesting attended and transient
+
+**Decision:** Harvest possible actions from an explicitly selected set of
+`.md`, `.txt`, `.docx`, and `.xlsx` files into a transient review batch. Import
+only validated HTTP/HTTPS links as existing `open_url` actions, always in Draft
+state, after explicit selection and one final confirmation.
+
+**Reason:** Documents contain useful repeated links, but extracted material is
+untrusted and often ambiguous. A review-first workflow makes provenance,
+duplicate handling, names, Focus memberships, and tags visible without
+inventing a second action system or silently changing personal data.
+
+**Consequences:** Extraction is local, bounded, cancellable, and dependency-free.
+Office is never launched; formulas, macros, and links are never evaluated,
+fetched, or executed. A single atomic write creates the complete validated
+selection, while cancellation and validation failure create nothing. Folder
+scanning, drag and drop, OneNote and other formats, recursive crawling, and
+automatic trust remain deferred.
+
 ## 2026-07-21 — Render local Markdown in one constrained viewer
 
 **Decision:** Replace plain-text Help presentation with a native Tk Markdown

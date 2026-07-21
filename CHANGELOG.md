@@ -4,6 +4,12 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Added attended bulk **Harvest actions** from selected Markdown, text, Word,
+  and Excel documents. The local, bounded scan extracts explicit HTTP/HTTPS
+  links without launching Office or evaluating content, then provides source
+  status, provenance, duplicate/readiness filters, individual and bulk edits,
+  preview, cancellation, and one atomic creation of selected personal Drafts.
+
 - Rendered Help and other repository Markdown pages in a reusable in-app
   document viewer with native styling, aligned tables, search, working local
   links, a Documents menu, Back/Forward/Home navigation, and a Browser button.

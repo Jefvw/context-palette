@@ -88,6 +88,22 @@ The main-window construction is divided into focused header, results/command-sur
 
 The launcher does not implement action transformations or window matching directly. Those responsibilities live in specialized modules.
 
+### `harvest.py` and `harvest_window.py`
+
+`harvest.py` is the platform-independent bulk document-harvesting boundary. It
+defines transient source, occurrence, candidate, and batch models; bounded
+local extractors for `.md`, `.txt`, `.docx`, and `.xlsx`; conservative URL
+normalization and semantic deduplication; Draft conversion; and the background
+scan coordinator. OOXML packages are inspected as ZIP/XML without starting
+Office or evaluating formulas.
+
+`harvest_window.py` owns the attended review workflow: multi-file selection,
+progress and cancellation, source and candidate filters, provenance, individual
+and bulk edits, preview, and one atomic append to the personal action store.
+The launcher exposes the window from Inbox, while the Actions configuration tab
+is the primary route. No harvested candidate enters persistent data before the
+final confirmation.
+
 ### Discovery modes
 
 The shared discovery area has three explicit modes. Focus is never inferred or

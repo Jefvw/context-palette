@@ -53,6 +53,7 @@ from .hotkeys import (
     window_title,
 )
 from .help_window import HelpWindow
+from .harvest_window import HarvestWindow
 from .contexts import ContextDefinition, ContextError, load_combined_contexts
 from .context_membership_field import ContextMembershipField, TagSelectionField
 from .inbox import InboxError, InboxItem, append_inbox_item, create_clipboard_item, load_inbox_items
@@ -2477,6 +2478,17 @@ class LauncherApp:
             self.local_actions_path,
             self.inbox_path,
             self._reload,
+            self._show_harvest,
+        )
+
+    def _show_harvest(self) -> None:
+        HarvestWindow(
+            self.root,
+            actions=self.actions,
+            context_names=self.available_context_names,
+            focus_context=self.palette_state.focus_context,
+            actions_path=self.local_actions_path,
+            on_change=self._reload,
         )
 
     def _show_help(self) -> None:
@@ -2514,6 +2526,7 @@ class LauncherApp:
             work_item_metadata=self.work_item_metadata,
             work_item_index=self.work_item_index,
             on_change=self._reload,
+            focus_context=self.palette_state.focus_context,
             initial_tab=initial_tab,
             initial_action_id=initial_action_id,
             initial_work_item_key=initial_work_item_key,
@@ -2726,6 +2739,7 @@ class InboxWindow:
         actions_path: Path,
         inbox_path: Path,
         on_change: Callable[[], None],
+        on_harvest: Callable[[], None] | None = None,
     ) -> None:
         self.items = items
         self.actions = actions
@@ -2734,6 +2748,7 @@ class InboxWindow:
         self.actions_path = actions_path
         self.inbox_path = inbox_path
         self.on_change = on_change
+        self.on_harvest = on_harvest
         self.window = tk.Toplevel(parent)
         self.window.title("Context Palette Inbox")
         configure_standard_window(self.window)
@@ -2753,6 +2768,11 @@ class InboxWindow:
         self.convert_button.pack(side=tk.LEFT)
         self.ai_button = ttk.Button(controls, text="Ask AI", command=self._ask_ai_for_selected)
         self.ai_button.pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(
+            controls,
+            text="Harvest documents…",
+            command=self.on_harvest or (lambda: None),
+        ).pack(side=tk.LEFT, padx=(6, 0))
         ttk.Button(
             controls,
             text="Close",

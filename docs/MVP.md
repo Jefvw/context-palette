@@ -23,6 +23,7 @@ Context Palette helps a Windows user capture useful material, turn it into a con
 | Context model | Partial | General root, multiple specific memberships, tags, explicit focus, preferred actions; no supporting-context composition or activation bundle |
 | Work Items discovery | Implemented | Bounded local discovery, main-window search/opening, and guided private source/tag configuration |
 | Work Item creation | Implemented | Editable suggested name, one local generic `.xlsx` template, collision-safe folder/workbook creation, optional tags |
+| Bulk action harvesting | Implemented | Attended local extraction of HTTP/HTTPS candidates from selected `.md`, `.txt`, `.docx`, and `.xlsx` files; review and atomic Draft creation |
 | External automation | Partial by design | Show/context/search only; no action execution API |
 | Clipboard transactions | Deferred | No automatic preservation/restoration |
 | Safe action sequences | Deferred | No multi-step sequence language |
@@ -41,6 +42,9 @@ The MVP baseline is satisfied when:
 6. Shared and personal data remain separated and recoverable from interrupted writes.
 7. Invalid configuration and action inputs fail with actionable messages.
 8. Automated checks pass and Windows-dependent behavior has a documented manual test.
+9. Several supported documents can be harvested locally, reviewed with
+   provenance and duplicate states, and committed only as explicitly selected
+   personal Draft URL actions.
 
 ## Safety boundary
 
