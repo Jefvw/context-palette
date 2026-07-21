@@ -4,16 +4,18 @@ The roadmap describes ordered product outcomes, not commitments or implemented b
 
 ## Now — make repeated actions effortless
 
-- Validate the guided Configure experience with real personal actions, contexts, and right-side button sets.
+- Validate the guided Configure experience with real personal actions, contexts, and Quick actions.
+- Complete Work Items Phase 5: representative manual Windows checks on another
+  computer/path and record the result.
 - Improve discoverability of actions and action effects without exposing technical IDs.
 - Complete manual Windows accessibility and responsive-layout checks.
 - Continue reducing `launcher.py` responsibilities through behavior-preserving extraction.
 
 ## Next — deepen safe context workflows
 
-- Add explicitly configured local Work Items discovery with bounded scanning,
-  exact workbook matching, structured project-code filtering, and personal
-  tags, following the approved [Work Items plan](WORK_ITEMS_PLAN.md).
+- Refine the implemented Work Items discovery and creation workflows only from
+  recorded validation findings; the discovery, configuration, local tags, and
+  generic-template creation foundation is complete.
 - Add richer context composition and ranking while preserving explicit focus and global search.
 - Design clipboard preservation/restoration as an explicit transaction with tests.
 - Design a small previewable linear sequence model; no loops, conditions, or arbitrary commands.

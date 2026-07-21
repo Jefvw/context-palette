@@ -4,6 +4,23 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Rendered Help and other repository Markdown pages in a reusable in-app
+  document viewer with native styling, aligned tables, search, working local
+  links, a Documents menu, Back/Forward/Home navigation, and a Browser button.
+  Existing open-file actions targeting Markdown now use this viewer; other
+  files still use their normal Windows application. Page changes discard stale
+  link bindings instead of accumulating them during a resident session.
+- Made Actions, Focus Actions, and Work Items easier to distinguish in the
+  shared discovery area. Work Items now says **Find Work Item** and **Open**,
+  hides the action-only Passwords filter, and provides mode-specific help.
+- Standardized the user-facing name **Quick actions** for the right-side button
+  area and Configure tab; its direct tab mnemonic is now `Alt+Q`.
+
+- Added an **AI → Prompts** quick-action group beside **Knowledge → Sheets**.
+  First-class Draft and Trusted **AI prompt** actions appear automatically,
+  without technical tags. Left-click loads the first prompt into Input / Output;
+  right-click lists all stored prompts and opens action management.
+
 - Added a **Work Items** Configure tab for managing local source folders,
   refreshing the index, reviewing source state, and editing private per-item
   tags. Removing a source never deletes work files, and the result context menu
@@ -35,7 +52,7 @@ This project has not published a versioned release. Changes are recorded under *
 - Prevented Ctrl/Alt-modified number keys from executing main-palette action
   slots. Plain numbers remain Find text and Shift plus the physical top row
   runs slots 1–9. Inside
-  Configure, layout-independent `Alt+A`, `Alt+T`, `Alt+C`, `Alt+B`, and `Alt+D`
+  Configure, layout-independent `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, and `Alt+D`
   select Actions, Built-in action types, Contexts, Right-side buttons, and
   Diagnostics. Their letters are underlined in the tab labels.
 - Added a safe Diagnostics tab to Configure with configuration counts, recent

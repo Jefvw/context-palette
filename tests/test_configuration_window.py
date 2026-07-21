@@ -157,7 +157,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         configuration.notebook = FakeNotebook()
 
-        for keysym, expected_tab in (("a", 0), ("t", 1), ("c", 2), ("b", 3), ("w", 4), ("d", 5)):
+        for keysym, expected_tab in (("a", 0), ("t", 1), ("c", 2), ("q", 3), ("w", 4), ("d", 5)):
             with self.subTest(keysym=keysym):
                 self.assertEqual(
                     configuration._handle_configure_keypress(

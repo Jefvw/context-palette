@@ -177,9 +177,12 @@ class LauncherSmokeTests(unittest.TestCase):
                     root.update()
                     self.assertTrue(app.work_items_mode)
                     self.assertEqual(app.actions_heading_var.get(), "Work Items")
+                    self.assertEqual(app.action_discovery_panel.find_label.cget("text"), "Find Work Item")
                     self.assertEqual(app.results_count_var.get(), "2 work items")
                     self.assertIn("Issue", app.results.get(0))
                     self.assertEqual(app.type_filter.cget("text"), "Projects ▾")
+                    self.assertEqual(app.run_button.cget("text"), "Open")
+                    self.assertFalse(app.passwords_button.winfo_manager())
                     self.assertEqual(app.work_project_filter_var.get(), "All project codes")
 
                     app._select_work_project_filter("AB9C")
@@ -195,7 +198,10 @@ class LauncherSmokeTests(unittest.TestCase):
                     root.update()
                     self.assertFalse(app.work_items_mode)
                     self.assertEqual(app.actions_heading_var.get(), "Actions")
+                    self.assertEqual(app.action_discovery_panel.find_label.cget("text"), "Find action")
                     self.assertEqual(app.type_filter.cget("text"), "Types ▾")
+                    self.assertEqual(app.run_button.cget("text"), "Run")
+                    self.assertTrue(app.passwords_button.winfo_manager())
 
                     opened_action_ids: list[str] = []
                     original_show_configuration = app._show_configuration
@@ -322,7 +328,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     ]
                     self.assertEqual(
                         [area.cget("text") for area in group_areas],
-                        ["Knowledge"] + [group.label for group in app.command_groups],
+                        ["Knowledge", "AI"] + [group.label for group in app.command_groups],
                     )
                     password_row_count = 1 if any(
                         isinstance(child, ttk.LabelFrame)
@@ -332,10 +338,12 @@ class LauncherSmokeTests(unittest.TestCase):
                     knowledge_area = group_areas[0]
                     self.assertEqual(int(knowledge_area.grid_info()["row"]), password_row_count)
                     self.assertEqual(int(knowledge_area.grid_info()["column"]), 0)
-                    self.assertEqual(int(knowledge_area.grid_info()["columnspan"]), 2)
+                    ai_area = group_areas[1]
+                    self.assertEqual(int(ai_area.grid_info()["row"]), password_row_count)
+                    self.assertEqual(int(ai_area.grid_info()["column"]), 1)
                     group_row_offset = password_row_count + 1
                     for index, (area, group) in enumerate(
-                        zip(group_areas[1:], app.command_groups)
+                        zip(group_areas[2:], app.command_groups)
                     ):
                         expected_row, expected_column = divmod(index, 2)
                         self.assertEqual(
@@ -598,7 +606,7 @@ class LauncherSmokeTests(unittest.TestCase):
                         ("a", "Actions"),
                         ("t", "Built-in action types"),
                         ("c", "Contexts"),
-                        ("b", "Right-side buttons"),
+                        ("q", "Quick actions"),
                         ("d", "Diagnostics"),
                     ):
                         diagnostic_window.event_generate(

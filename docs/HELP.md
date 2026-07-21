@@ -5,11 +5,26 @@ working contexts, captured material, and transformations.
 
 The interface uses a clean neutral surface with Segoe UI typography and a high-contrast dark teal accent. Teal is reserved for primary actions and active selections. Two light teal row shades distinguish pinned and focus-context slots, while slot numbers preserve the same meaning without relying on color alone. Native focus borders make keyboard location visible.
 
-Developers can find the current implementation architecture in `docs/ARCHITECTURE.md` and decision history in `docs/DECISIONS.md`.
+Developers can find the current implementation in
+[Architecture](ARCHITECTURE.md) and its chronological rationale in
+[Decisions](DECISIONS.md).
 
-Multi-PC cloning, GitHub publishing, portable paths, and shared/local data are documented in `docs/MULTI_PC_DEVELOPMENT.md`.
+Help is rendered as Markdown inside Context Palette. Use **Documents** in this
+window to open other project Markdown pages, or activate a rendered local
+Markdown link. Use **←**, **→**, and **Home** to move through document
+history or return to the page that opened the viewer. Choose **Browser** to
+open the current validated local Markdown file in the default browser.
+`Alt+Left`, `Alt+Right`,
+and `Alt+Home` provide the same navigation from the keyboard; `Ctrl+F` searches
+the currently displayed page. Open-file actions targeting an existing `.md`
+file use this viewer automatically. Other file actions keep their normal
+Windows behavior. The viewer never opens arbitrary commands.
 
-Power Automate Desktop setup is documented in `integrations/README.md`.
+Multi-PC cloning, GitHub publishing, portable paths, and shared/local data are
+documented in [Multi-PC development](MULTI_PC_DEVELOPMENT.md).
+
+Power Automate Desktop setup is documented in
+[Power Automate integration](../integrations/README.md).
 
 ## Open and close the palette
 
@@ -101,8 +116,10 @@ Blue rows are pinned slots 1–5. Green rows are focus-context slots 6–9. Neut
 
 ## Find and open Work Items
 
-Choose **Work** beside the action filters to use the same Find field and result
-area for configured local work-item folders. Choose **Work** again to return to
+Choose **Work** in the Actions rail to use the same result area for configured
+local work-item folders. The heading changes to **Work Items**, Find becomes
+**Find Work Item**, action-only **Passwords** is hidden, **Types** becomes
+**Projects**, and **Run** becomes **Open**. Choose **Work** again to return to
 Actions. Existing action filters and Focus slots are preserved while Work Items
 is active.
 
@@ -163,7 +180,7 @@ behavior.
 - Tab to a quick action and press Enter or Space to run its primary action.
 - Every item uses the same selected text, Input / Output, clipboard, and safe action executor as the search list.
 - Configure shared groups in `data/command_surface.json` and private groups in `data/local_command_surface.json`.
-- Press `Ctrl+,`, then use **Right-side buttons** to add or edit personal groups
+- Press `Ctrl+,`, then use **Quick actions** to add or edit personal groups
   and buttons without editing JSON. Choose existing actions from lists; stable
   IDs are generated from the visible names when left blank.
 - Groups remain in configured order across two columns. Subjects remain in
@@ -181,13 +198,13 @@ Choose **Manage focus → Manage focuses…** for Focus configuration. Choose
   explains that its Git-tracked change can affect other machines.
 - **Built-in action types:** inspect what each built-in type reads and does, see a concrete example, then create a validated personal Draft.
 - **Contexts:** add or edit personal contexts and assign actions to slots 6–9.
-- **Right-side buttons:** add or edit personal button groups and assign existing actions. Technical IDs are generated automatically and are not shown in the normal form.
+- **Quick actions:** add or edit personal button groups and assign existing actions. These are stored as right-side button records; technical IDs are generated automatically and are not shown in the normal form.
 - **Diagnostics:** review a safe summary of loaded configuration, recent error
   counts, and automatic-paste outcomes. Use **Refresh** after reproducing a
   problem or **Copy safe summary** when asking for help. Raw log messages,
   pasted text, credentials, action values, paths, and window titles are not
-  included. `Alt+A`, `Alt+T`, `Alt+C`, `Alt+B`, and `Alt+D` directly select
-  Actions, Built-in action types, Contexts, Right-side buttons, and Diagnostics.
+  included. `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, and `Alt+D` directly select
+  Actions, Built-in action types, Contexts, Quick actions, and Diagnostics.
   `Ctrl+Tab` cycles through all Configure tabs. Both paths move focus into the
   selected tab's main content.
 
@@ -223,7 +240,7 @@ button is removed when it has no action left. Deleting a shared action adds a
 warning because the action and affected shared configuration are tracked by
 Git and can reach other machines after commit and push.
 
-The Actions, Contexts, and Right-side buttons tables select their first useful
+The Actions, Contexts, and Quick actions tables select their first useful
 row automatically. Use the arrow keys to move, then press Enter to edit the
 selected personal item. Double-click provides the same action with a mouse.
 
@@ -231,7 +248,7 @@ Changes are saved atomically. Personal changes use ignored local files. Shared
 action changes use the Git-tracked project action file and can therefore reach
 other machines or collaborators after commit and push. Never store personal
 paths, secrets, or private work details in a shared action. Shared contexts and
-right-side buttons remain reference-only. New actions always begin as Drafts
+shared Quick-action records remain reference-only. New actions always begin as Drafts
 and still require testing before they can be marked Trusted.
 
 Context slots and button assignments show human-readable action names and contexts. Internal IDs remain stored for stable references but are not part of the normal editing workflow. Successful saves appear in the Configure footer without interrupting work with a confirmation dialog.
@@ -361,6 +378,20 @@ visible before the configurable groups; those groups retain their configured
 order and continue scrolling when needed. Individual cheat-sheet entries can
 be promoted to Draft actions.
 
+### AI prompts
+
+The **AI** group appears beside **Knowledge**. Left-click **Prompts** to load
+the first stored prompt into Input / Output for review; the reusable-template
+action also copies it to the clipboard. Right-click **Prompts** to choose any
+stored prompt or open **Manage AI prompts…**.
+
+Stored prompts reuse the normal action lifecycle. In Configure, choose
+**Built-in action types**, select **AI prompt**, and create a personal Draft.
+Enter the visible prompt name and prompt text; no technical tag is required.
+Draft and Trusted AI prompt actions appear automatically, while Archived
+prompts do not. Personal prompt text stays in ignored `data/local_actions.json`
+and is never written to diagnostics by the AI menu.
+
 ### Edit
 
 Edits the selected Draft copy-text action from the launcher. To edit any
@@ -485,7 +516,7 @@ The `Company Reference Prefixes` sheet documents known Archive and ServiceNow pr
 - `data/inbox.json`: ignored captures.
 - `data/palette.json`: ignored per-machine focus context, pins, and context slots.
 - `data/local_contexts.json`: ignored personal context definitions.
-- `data/local_command_surface.json`: ignored personal right-side buttons.
+- `data/local_command_surface.json`: ignored personal Quick-action button records.
 - `data/local_work_item_sources.json`: ignored machine-local Work Item sources.
 - `data/local_work_item_metadata.json`: ignored personal Work Item tags.
 - `data/local_work_item_settings.json`: ignored generic Excel template path.
@@ -516,7 +547,7 @@ Configuration reloads show a brief busy cursor and status message. Because all
 configuration is local and normally loads in under a second, Context Palette
 does not show a spinner that would flicker during ordinary use. Errors identify
 the affected area and preserve the rest of the launcher where possible. If an
-edited action, context, right-side button, or palette-state file is invalid,
+edited action, context, Quick-action record, or palette-state file is invalid,
 its last successfully loaded configuration remains available while the file is
 corrected. Palette failures retain the active pins, Focus, and context slots.
 On first start, a missing or invalid palette uses safe empty pins and slots

@@ -73,6 +73,29 @@ class FakeKeyEvent:
 
 
 class LauncherInteractionTests(unittest.TestCase):
+    def test_markdown_file_action_opens_in_document_viewer(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        with tempfile.TemporaryDirectory() as temporary:
+            document = Path(temporary) / "guide.md"
+            document.write_text("# Guide", encoding="utf-8")
+            action = Action("guide", "Open guide", "General", "open_file", str(document))
+
+            with patch("context_palette.launcher.HelpWindow") as viewer:
+                app._open_action_target(action)
+
+            viewer.assert_called_once_with(app.root, document, title="Guide")
+
+    def test_non_markdown_file_action_keeps_standard_opener(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        action = Action("text", "Open text", "General", "open_file", "C:/guide.txt")
+
+        with patch("context_palette.launcher.open_action_target") as opener:
+            app._open_action_target(action)
+
+        opener.assert_called_once_with(action)
+
     def test_missing_work_item_folder_keeps_folder_target_semantics(self):
         app = LauncherApp.__new__(LauncherApp)
         app.root = Mock()

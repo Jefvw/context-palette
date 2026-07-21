@@ -25,7 +25,7 @@ class DocumentationNavigationTests(unittest.TestCase):
             "Manage focus → Configure actions and buttons",
             button_guide,
         )
-        self.assertIn("Right-side buttons", button_guide)
+        self.assertIn("Quick actions", button_guide)
         self.assertIn("press `Ctrl+,`, then open **Actions**", help_document)
         self.assertIn(
             "Manage focus → Configure actions and buttons",

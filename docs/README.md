@@ -20,7 +20,7 @@ This directory separates current behavior, durable direction, historical rationa
   also available from the app's **⌨** button.
 - [Action types](ACTION_TYPES.md) — generated catalogue of supported actions.
 - [Context configuration](CONTEXT_CONFIGURATION.md) — guided configuration and JSON reference.
-- [Right-side buttons](COMMAND_SURFACE_CONFIGURATION.md) — guided configuration and JSON reference.
+- [Quick actions](COMMAND_SURFACE_CONFIGURATION.md) — guided configuration and JSON record reference.
 - [Cheat-sheet format](CHEATSHEET_FORMAT.md) — sheet authoring and promotion.
 - [Multi-PC use](MULTI_PC_DEVELOPMENT.md) — cloning and private-data boundaries.
 - [Power Automate integration](../integrations/README.md) — attended show,

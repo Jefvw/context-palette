@@ -14,6 +14,7 @@ from context_palette.command_surface import CommandGroup, CommandItem, CommandSu
 from context_palette.launcher import (
     BUILTIN_QUICK_COMMAND_OPEN_SHEETS,
     LauncherApp,
+    ai_prompt_actions,
     execute_builtin_quick_command,
 )
 
@@ -50,6 +51,11 @@ class FakeMenu:
         self.commands.append(command)
         self.states.append(state)
 
+    def add_separator(self) -> None:
+        self.labels.append("---")
+        self.commands.append(None)
+        self.states.append(None)
+
     def index(self, _marker: object) -> int | None:
         return None if not self.labels else len(self.labels) - 1
 
@@ -61,6 +67,46 @@ class FakeMenu:
 
 
 class LauncherCommandSurfaceTests(unittest.TestCase):
+    def test_ai_prompts_are_active_first_class_prompt_actions(self):
+        actions = [
+            Action("one", "First prompt", "General", "ai_prompt", "Review this", "Draft"),
+            Action("two", "Second prompt", "General", "ai_prompt", "Explain this", "Trusted"),
+            Action("template", "Not a prompt", "General", "workspace_template", "text", "Trusted"),
+            Action("old", "Archived", "General", "ai_prompt", "old", "Archived"),
+        ]
+
+        self.assertEqual([action.id for action in ai_prompt_actions(actions)], ["one", "two"])
+
+    def test_ai_prompt_primary_loads_first_prompt_and_menu_lists_all(self):
+        app = self._app()
+        app.actions = [
+            Action("first", "Review text", "General", "ai_prompt", "Review", "Draft"),
+            Action("second", "Explain code", "General", "ai_prompt", "Explain", "Draft"),
+        ]
+        app._show_configuration = lambda **options: setattr(app, "configuration_options", options)
+
+        self.assertEqual(app._execute_ai_prompt_primary(), "break")
+        self.assertEqual(app._execute_action_calls, ["first"])
+        with patch("context_palette.launcher.tk.Menu", FakeMenu):
+            self.assertEqual(app._show_ai_prompt_menu(FakeEvent()), "break")
+
+        menu = FakeMenu.last_instance
+        self.assertEqual(
+            menu.labels,
+            ["Review text", "Explain code", "---", "Manage AI prompts…"],
+        )
+        menu.commands[1]()
+        self.assertEqual(app._execute_action_calls, ["first", "second"])
+        menu.commands[-1]()
+        self.assertEqual(app.configuration_options, {"initial_tab": "actions"})
+
+    def test_empty_ai_prompt_group_explains_how_to_configure_it(self):
+        app = self._app()
+
+        self.assertEqual(app._execute_ai_prompt_primary(), "break")
+
+        self.assertIn("AI prompt action", app.status_var.value)
+
     def test_builtin_quick_command_allow_list_opens_only_sheets(self):
         calls: list[str] = []
 

@@ -75,6 +75,45 @@ honest failure feedback when the Windows clipboard is unavailable.
 
 ## Manual Windows smoke test
 
+### Verification record
+
+Use this record for every manual pass. Do not replace **Not tested** with a
+result until the check was actually performed on Windows.
+
+| Field | Value |
+| --- | --- |
+| Date | Not tested |
+| Tester | Not tested |
+| Commit/working tree | Not tested |
+| Computer and Windows version | Not tested |
+| Display scale and resolution | Not tested |
+| Keyboard layout | Not tested |
+| Python version | Not tested |
+| Work Item source/path used | Not tested |
+| Excel version | Not tested |
+| Overall result | **Not tested** |
+| Notes/issues | Not tested |
+
+Record each numbered check below as **Pass**, **Fail**, **Blocked**, or **Not
+tested**, with a short note for any result other than Pass. Automated tests may
+support the record but must never be entered as a manual Pass.
+
+### Work Items Phase 5 result — 2026-07-21
+
+User-reported manual checks on the primary Windows computer:
+
+| Check | Result | Notes |
+| --- | --- | --- |
+| Open an exact matching workbook in Excel | Pass | Opened successfully in real Excel. |
+| Fall back to the Work Item folder when the exact workbook is absent | Pass | Folder fallback worked. |
+| Unavailable or network source | Not tested | Requires a suitable unavailable or network location. |
+| Keyboard navigation and Work Item context menu | Pass | Keyboard and context-menu opening worked. |
+| Different computer with a different absolute source path | Not tested | Requires the second development computer. |
+| Display scaling and responsive layout | Pass | User confirmed the interface remained usable; scale percentage and resolution were not recorded. |
+
+This is a partial manual result, not completion of Phase 5. The unavailable
+source and different-computer/path checks remain outstanding.
+
 Run this when launcher behavior, styling, hotkeys, clipboard handling, or configuration windows change:
 
 1. Start with `run-context-palette.bat`; verify only one resident instance is created.
@@ -106,7 +145,7 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    an action from another Focus, verify the flat results remain global, change
    Focus while Find is non-empty, then clear Find and verify the new Focus list
    returns. Confirm only slots 6–9 change and pins 1–5 remain stable.
-8. Tab to a right-side button and run its primary action with Enter or Space.
+8. Tab to a Quick action and run its primary action with Enter or Space.
 9. Create and edit a disposable personal Draft, context, and button; reload and
    confirm persistence. Assign the action to a pin, Focus slot, context
    preference, and quick button. Choose **Delete selected**, verify the
@@ -144,8 +183,8 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
     titles are absent. Open it directly with `Ctrl+Shift+D` from the focused
     main palette and cycle with `Ctrl+Tab`; verify focus enters the Diagnostics
     summary and each other tab's primary control. On QWERTY and AZERTY, verify
-    `Alt+A`, `Alt+T`, `Alt+C`, `Alt+B`, and `Alt+D` directly select the five
-    corresponding tabs without closing Configure. With the main palette focused,
+    `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, and `Alt+D` directly select the five
+    corresponding tabs—including **Quick actions** for `Alt+Q`—without closing Configure. With the main palette focused,
     verify `Ctrl+2` and `Ctrl+3` neither close/hide it nor execute action slots;
     plain `2` and `3` must retain their existing slot behavior.
 

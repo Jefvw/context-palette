@@ -1,5 +1,54 @@
 # Decisions
 
+## 2026-07-21 — Render local Markdown in one constrained viewer
+
+**Decision:** Replace plain-text Help presentation with a native Tk Markdown
+viewer shared by Help, Shortcuts, and other repository Markdown documents.
+Support local Markdown links and a Documents menu, but constrain navigation to
+`.md` files beneath the project root.
+
+**Reason:** Rendered structure makes long help pages substantially easier to
+scan, while one reusable local viewer avoids a browser dependency and gives
+other project documentation the same searchable reading experience.
+
+**Consequences:** The renderer deliberately supports the Markdown constructs
+used by this repository rather than attempting full browser-grade Markdown or
+opening external links. It owns Back/Forward/Home history. The launcher routes
+existing `.md` open-file actions into it while delegating every other file type
+to the unchanged constrained platform opener. A Browser button may hand the
+current validated local file URI to the default browser; it does not accept an
+arbitrary URL. Dynamic link bindings are page-scoped and removed on navigation.
+
+## 2026-07-21 — Make discovery modes and Quick actions explicit
+
+**Decision:** Keep Actions, Focus Actions, and Work Items as explicit modes in
+one discovery area. Adapt its labels, filters, and primary verb to the active
+mode without changing global action-search or explicit-Focus policy. Use
+**Quick actions** as the user-facing name for the right-side button records and
+use `Alt+Q` for its Configure tab.
+
+**Reason:** Sharing one compact area is efficient, but action-only controls and
+mixed terminology made Work Items and Quick actions harder to recognize.
+
+**Consequences:** Work Items hides Passwords, labels Find and Open for Work
+Items, and retains Projects, Tags, Work, and Help. The earlier `Alt+B` Configure
+mnemonic decision remains historical and is superseded by `Alt+Q`; persisted
+command-surface JSON and callbacks do not change.
+
+## 2026-07-21 — Reuse actions for stored AI prompts
+
+**Decision:** Render an AI quick-action group beside Knowledge and introduce a
+first-class `ai_prompt` action type. Left-click runs the first active prompt and
+right-click lists all. Default execution loads the prompt into Input / Output
+through the existing constrained executor and also copies it.
+
+**Why:** Prompts need the existing Draft, Trusted, editing, local/shared, and
+testing lifecycle, but their semantics may evolve independently from generic
+templates. A separate prompt file format would still duplicate configuration.
+
+**Consequence:** No prompt content is bundled automatically. Users create
+personal AI prompt actions, and ordering follows normal action order.
+
 ## 2026-07-21 — Create Work Items from one generic local Excel template
 
 **Decision:** Start with one machine-local generic `.xlsx` template. Suggest a
@@ -64,6 +113,11 @@ this decision. The phased design and acceptance criteria live in
 [Work Items discovery plan](WORK_ITEMS_PLAN.md).
 
 ## 2026-07-20 - Isolate current Focus policy before context redesign
+
+> Historical implementation note: the Technology/Task hierarchy described in
+> this entry and the related 2026-07-19 Focus browser decision was superseded
+> by **2026-07-20 — Make General the root and replace fixed classification with
+> tags**. The current Focus Actions view is a flat explicit-membership list.
 
 **Decision:** Move the pure Focus-to-action hierarchy rule from the Tk launcher
 into `focus_model.py`, with dedicated characterization tests. Keep context

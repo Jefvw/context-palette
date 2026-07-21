@@ -70,6 +70,15 @@ ACTION_TYPES = {
             "Portable when the template contains no private information.",
         ),
         _definition(
+            "ai_prompt",
+            "AI prompt",
+            "AI assistance",
+            "Place a stored AI prompt in the editable workspace and clipboard for review before use.",
+            "No runtime input.",
+            "Replaces Input / Output and clipboard text; never submits the prompt.",
+            "Portable only when the prompt contains no private or organization-specific information.",
+        ),
+        _definition(
             "open_url",
             "Open a website",
             "Open target",

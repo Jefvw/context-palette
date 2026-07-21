@@ -68,6 +68,7 @@ class Action:
         inferred_command = {
             "copy_text": "Copy",
             "workspace_template": "Copy",
+            "ai_prompt": "Load",
             "transform_list_csv": "Convert",
             "open_url": "Open",
             "open_file": "Open",
@@ -477,13 +478,17 @@ def execute_action(
             raise ActionError("Protected credential paste is unavailable.")
         return credential_paster(action)
 
-    if action.type == "workspace_template":
+    if action.type in {"workspace_template", "ai_prompt"}:
         expanded = expanded_action(action, clipboard_getter=clipboard_getter)
         if output_setter is not None:
             output_setter(expanded.value)
         if clipboard_setter is not None:
             clipboard_setter(expanded.value)
-        return "Loaded the template into Input / Output and copied it."
+        return (
+            "Loaded the AI prompt into Input / Output and copied it."
+            if action.type == "ai_prompt"
+            else "Loaded the template into Input / Output and copied it."
+        )
 
     if action.type == "transform_list_csv":
         result = list_to_comma_separated(input_text or "", sql_strings=action.value == "sql_strings")

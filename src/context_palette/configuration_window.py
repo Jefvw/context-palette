@@ -46,6 +46,7 @@ from .work_item_storage import WorkItemMetadata
 ACTION_TYPE_EXAMPLES = {
     "copy_text": "Example: Paste “Kind regards,” into the application you came from.",
     "workspace_template": "Example: Put a reusable meeting-notes outline in Input / Output.",
+    "ai_prompt": "Example: Load a stored review prompt into Input / Output before using it with an AI assistant.",
     "open_url": "Example: Open https://docs.python.org/ in the default browser.",
     "open_file": r"Example: Open %PROJECT_ROOT%\README.md in its associated application.",
     "open_folder": r"Example: Open %PROJECT_ROOT%\docs in File Explorer.",
@@ -210,7 +211,7 @@ class ConfigurationWindow:
             "a": 0,
             "t": 1,
             "c": 2,
-            "b": 3,
+            "q": 3,
             "w": 4,
             "d": 5,
         }.get(str(getattr(event, "keysym", "")).casefold())
@@ -336,7 +337,7 @@ class ConfigurationWindow:
 
     def _build_buttons_tab(self, notebook: ttk.Notebook) -> None:
         tab = ttk.Frame(notebook, padding=10)
-        notebook.add(tab, text="Right-side buttons", underline=11)
+        notebook.add(tab, text="Quick actions", underline=0)
         ttk.Label(
             tab,
             text="Buttons safely reference existing actions; they never contain commands.",

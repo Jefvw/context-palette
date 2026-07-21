@@ -166,6 +166,14 @@ def execute_builtin_quick_command(command_id: str, *, open_sheets: Callable[[], 
     raise ValueError(f"Unknown built-in quick command: {command_id}")
 
 
+def ai_prompt_actions(actions: list[Action]) -> list[Action]:
+    return [
+        action
+        for action in actions
+        if action.type == "ai_prompt" and action.state != "Archived"
+    ]
+
+
 def _warn_if_slow(
     operation: str,
     started_at: float,
@@ -1255,6 +1263,7 @@ class LauncherApp:
                 )
             group_row_offset = 1
         self._render_knowledge_quick_action(group_row_offset)
+        self._render_ai_quick_action(group_row_offset)
         group_row_offset += 1
         for index, group in enumerate(self.command_groups):
             row, column = divmod(index, 2)
@@ -1307,7 +1316,6 @@ class LauncherApp:
         knowledge_area.grid(
             row=row,
             column=0,
-            columnspan=2,
             sticky=tk.NSEW,
             padx=2,
             pady=2,
@@ -1340,6 +1348,68 @@ class LauncherApp:
                 BUILTIN_QUICK_COMMAND_OPEN_SHEETS
             ),
         )
+
+    def _render_ai_quick_action(self, row: int) -> None:
+        ai_area = ttk.LabelFrame(
+            self.command_tiles_frame,
+            text="AI",
+            padding=4,
+        )
+        ai_area.grid(row=row, column=1, sticky=tk.NSEW, padx=2, pady=2)
+        ai_area.columnconfigure(0, weight=1)
+        prompts_control = ttk.Label(
+            ai_area,
+            text="Prompts ▾",
+            style="SurfaceMenu.TLabel",
+            anchor=tk.W,
+            relief=tk.SOLID,
+            cursor="hand2",
+            takefocus=True,
+        )
+        prompts_control.grid(row=0, column=0, sticky=tk.EW, padx=1, pady=1)
+        self._command_surface_tooltip(
+            prompts_control,
+            "Prompts — Load the first stored AI prompt into Input / Output. Right-click chooses another prompt.",
+        )
+        self._bind_surface_menu_control(
+            prompts_control,
+            on_click=lambda _event: self._execute_ai_prompt_primary(),
+            on_menu=self._show_ai_prompt_menu,
+            on_keyboard=lambda _event: self._execute_ai_prompt_primary(),
+        )
+
+    def _execute_ai_prompt_primary(self) -> str:
+        prompts = ai_prompt_actions(self.actions)
+        if not prompts:
+            self.status_var.set(
+                "No AI prompts configured. Create an AI prompt action in Configure."
+            )
+            return "break"
+        self._execute_action(prompts[0])
+        return "break"
+
+    def _show_ai_prompt_menu(self, event: tk.Event) -> str:
+        menu = tk.Menu(self.root, tearoff=False)
+        prompts = ai_prompt_actions(self.actions)
+        if prompts:
+            for action in prompts:
+                menu.add_command(
+                    label=action.title,
+                    command=lambda selected=action: self._execute_action(selected),
+                )
+            menu.add_separator()
+        else:
+            menu.add_command(label="No stored AI prompts", state=tk.DISABLED)
+            menu.add_separator()
+        menu.add_command(
+            label="Manage AI prompts…",
+            command=lambda: self._show_configuration(initial_tab="actions"),
+        )
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+        return "break"
 
     def _execute_builtin_quick_command(self, command_id: str) -> None:
         execute_builtin_quick_command(command_id, open_sheets=self._show_cheatsheets)
@@ -1929,6 +1999,7 @@ class LauncherApp:
                     selected,
                     destination,
                 ),
+                opener=self._open_action_target,
             )
             if action.type == "copy_text":
                 message = self._paste_saved_text_if_destination(destination)
@@ -1937,6 +2008,23 @@ class LauncherApp:
             self.status_var.set("Action failed")
             messagebox.showerror("Context Palette", str(exc))
             LOGGER.exception("Action failed: id=%s type=%s", action.id, action.type)
+
+    def _open_action_target(self, action: Action) -> None:
+        """Open Markdown actions in-app and delegate every other safe target."""
+        if action.type == "open_file":
+            target = Path(action.value).expanduser()
+            if not target.is_absolute():
+                target = Path.cwd() / target
+            if target.suffix.casefold() == ".md":
+                if not target.is_file():
+                    raise ActionError(f"File does not exist: {target}")
+                HelpWindow(
+                    self.root,
+                    target,
+                    title=target.stem.replace("_", " ").title(),
+                )
+                return
+        open_action_target(action)
 
     def _paste_saved_text_if_destination(
         self,

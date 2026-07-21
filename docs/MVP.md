@@ -19,7 +19,7 @@ Context Palette helps a Windows user capture useful material, turn it into a con
 | Protected credential paste | Implemented with limitations | Exact standard Windows or generic credential target; Trusted, confirmed, hotkey-originated paste only |
 | Input / Output transformations | Implemented | Selection or full field; result copied |
 | Cheat sheets and promotion | Implemented | Structured local JSON sheets |
-| Attended AI assistance | Partial | Manual clipboard handoff; `copy_text` and `open_url` proposals only |
+| Attended AI assistance | Partial | Reviewable stored prompt templates and manual clipboard handoff; `copy_text` and `open_url` proposals only |
 | Context model | Partial | General root, multiple specific memberships, tags, explicit focus, preferred actions; no supporting-context composition or activation bundle |
 | Work Items discovery | Implemented | Bounded local discovery, main-window search/opening, and guided private source/tag configuration |
 | Work Item creation | Implemented | Editable suggested name, one local generic `.xlsx` template, collision-safe folder/workbook creation, optional tags |
@@ -35,7 +35,7 @@ The MVP baseline is satisfied when:
 
 1. A fresh clone can be set up on supported Windows with user-level permissions.
 2. The resident palette opens, searches, and runs constrained actions predictably.
-3. Personal actions, contexts, and right-side buttons can be configured without editing technical IDs.
+3. Personal actions, contexts, and Quick actions can be configured without editing technical IDs.
 4. Captured material can enter the Inbox and become a reviewable Draft.
 5. Draft actions can be tested, edited where supported by the relevant UI, and promoted explicitly.
 6. Shared and personal data remain separated and recoverable from interrupted writes.

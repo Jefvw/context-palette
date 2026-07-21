@@ -1,6 +1,6 @@
 # Work Items discovery plan
 
-Status: **Approved — Phases 1–4 implemented; Phase 5 not implemented**
+Status: **Approved — Phases 1–4 implemented; Phase 5 partially automated and awaiting manual validation**
 
 This document records the agreed product design and implementation plan for
 finding local work-item folders and their matching Excel starting files.
@@ -106,7 +106,7 @@ Only direct non-marker folders are eligible work items.
 A discovered work item is a transient indexed resource, not an entry in
 `actions.json`.
 
-Proposed fields:
+Implemented indexed fields:
 
 ```text
 source_id
@@ -153,13 +153,12 @@ The main window keeps its current dimensions and Input / Output area.
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-Proposed behavior:
+Implemented behavior:
 
 - A compact **Work items** control activates the source without enlarging the
   main window.
-- Empty Find may group results by parsed kind. Visual marker folders never
-  appear as headings or rows.
-- Non-empty Find shows a flat matching list.
+- Empty and non-empty Find show one flat matching list. Visual marker folders
+  never appear as headings or rows.
 - The existing Tags filter applies personal tags.
 - Project codes have a structured filter group and remain searchable directly.
 - One row represents one work item; workbook and folder are not duplicate rows.
@@ -181,7 +180,7 @@ Default: Open workbook
 
 ## Configuration layout
 
-Add a proposed **Work Items** tab to Configure:
+The implemented **Work Items** tab in Configure follows this layout:
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
@@ -225,7 +224,7 @@ Personal tags
 
 ## Local storage and privacy
 
-Proposed ignored files:
+Implemented ignored files:
 
 ```text
 data/local_work_item_sources.json
@@ -253,7 +252,7 @@ index in memory rather than persist a cache containing work information.
 
 - Build the index at startup without blocking the main window.
 - Refresh when Work Items is opened and the index is stale.
-- Support explicit refresh from Configure and the proposed Work Items menu.
+- Support explicit refresh from Configure.
   `F5` remains reserved for resetting the main palette to its startup view.
 - Never rescan after each Find keystroke.
 - Keep successful results from other sources when one source is unavailable.
@@ -319,14 +318,24 @@ refresh, discovery summaries, and private comma-separated tags. The main result
 context menu deep-links to the selected Work Item. All writes use ignored local
 storage, and removing a source never changes work files.
 
-### Phase 5 — Verification and documentation
+### Phase 5 — Verification and documentation — Partially complete
 
-- Add launcher integration and accessibility tests.
+- Launcher integration, keyboard, storage, refresh, and opening tests are in
+  place, together with current Architecture, Help, MVP, configuration, and
+  Changelog documentation.
 - Run performance measurements against representative source sizes.
 - Perform manual Windows checks for opening, missing workbooks, unavailable
   drives, keyboard navigation, and different paths on another computer.
-- Update Architecture, Help, MVP, configuration reference, Changelog, and
-  privacy checks only when implementation exists.
+
+Manual checks remain explicitly unverified until recorded in
+[Testing](TESTING.md); automated coverage is not a substitute for real Windows
+Explorer and Excel behavior.
+
+The 2026-07-21 primary-computer pass confirmed real Excel opening, missing-file
+folder fallback, keyboard/context-menu operation, and responsive display
+scaling. Unavailable/network-source behavior and a different absolute path on a
+second computer remain untested; see the Phase 5 result in
+[Testing](TESTING.md).
 
 ## Acceptance criteria
 

@@ -692,6 +692,21 @@ class ActionTests(unittest.TestCase):
         self.assertEqual(copied, output)
         self.assertRegex(output[0], r"Date: \d{4}")
 
+    def test_ai_prompt_updates_output_and_clipboard_without_submission(self):
+        copied = []
+        output = []
+        action = Action("prompt", "Review", "General", "ai_prompt", "Review this text")
+
+        result = execute_action(
+            action,
+            clipboard_setter=copied.append,
+            output_setter=output.append,
+        )
+
+        self.assertEqual(copied, ["Review this text"])
+        self.assertEqual(output, ["Review this text"])
+        self.assertIn("AI prompt", result)
+
     def test_append_draft_copy_text_action(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "actions.json"

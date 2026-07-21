@@ -38,13 +38,13 @@ AltGr-, plain number-row, and numpad input never execute action slots.
 | `Alt+A` | Open Actions. |
 | `Alt+T` | Open Built-in action types. |
 | `Alt+C` | Open Contexts. |
-| `Alt+B` | Open Right-side buttons. |
+| `Alt+Q` | Open Quick actions. |
 | `Alt+W` | Open Work Items. |
 | `Alt+D` | Open Diagnostics. |
 | `Ctrl+Tab` | Select the next tab. |
 | `Ctrl+Shift+Tab` | Select the previous tab. |
 | `Ctrl+F` | Focus Find actions. |
-| `Enter` | Edit the selected action, context, or right-side button. |
+| `Enter` | Edit the selected action, context, or Quick action. |
 | `Esc` | Close Configure. |
 
 ### Work Items in Configure
@@ -78,6 +78,9 @@ AltGr-, plain number-row, and numpad input never execute action slots.
 | `Ctrl+A` | Select all text in Input / Output. |
 | `Ctrl+F` | Focus search in Help. |
 | `Enter` in Help search | Find the next match. |
+| `Alt+Left` in document viewer | Open the previous document in history. |
+| `Alt+Right` in document viewer | Open the next document in history. |
+| `Alt+Home` in document viewer | Return to the Help, Shortcuts, or action document that opened the viewer. |
 | `Esc` | Close Help, Sheets, Inbox, and editing windows. |
 
 ## Scope

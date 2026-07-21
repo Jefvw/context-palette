@@ -22,6 +22,11 @@ Context Palette is optimized for:
 6. Incremental context authoring through Inbox, Draft, Trusted, and Archived states.
 7. Standard-library implementation where practical.
 
+It is intentionally a personal, single-user desktop application. There are no
+accounts, roles, team workspaces, or concurrent-editing guarantees. That narrow
+boundary does not relax validation, privacy, lifecycle, or constrained-execution
+requirements.
+
 ## Runtime overview
 
 ```text
@@ -82,6 +87,24 @@ Presentation and application orchestration.
 The main-window construction is divided into focused header, results/command-surface, shortcut, workspace, and footer builders. Inbox and Draft windows still live in this module and are the next safe extraction boundary; this is documented in `TECHNICAL_REVIEW.md`.
 
 The launcher does not implement action transformations or window matching directly. Those responsibilities live in specialized modules.
+
+### Discovery modes
+
+The shared discovery area has three explicit modes. Focus is never inferred or
+changed automatically, and action Find remains global regardless of Focus.
+
+| State | Heading/results | Rail | Primary action |
+| --- | --- | --- | --- |
+| Actions, empty Find | Ordinary actions, including slots 1–9 | Passwords, Work, Types, Tags, Help | Run |
+| Focus Actions, empty Find | Flat actions explicitly belonging to the selected Focus | Same action rail | Run |
+| Action Find or filter active | Flat global action matches; changing Focus does not filter them | Same action rail | Run |
+| Find cleared after Focus Actions | Restores the selected Focus's flat membership list | Same action rail | Run |
+| Work Items | Indexed Work Item folders, never action records | Work, Projects, Tags, Help; action-only Passwords is hidden | Open |
+
+The heading, count, empty state, selection preview, rail labels, status, and
+primary verb must all describe the active mode. `ActionDiscoveryPanel` owns
+those widgets; `LauncherApp` owns mode policy and the constrained Run/Open
+callbacks. Both `?` controls continue to open the same general Help document.
 
 ### `actions.py`
 
@@ -178,8 +201,8 @@ includes a concrete example for every type. Every personal and shared action
 type is editable. Editing a shared action requires acknowledging that its file
 is tracked by Git and can affect other machines; the warning also prohibits
 personal paths, secrets, and private work details. Personal contexts can assign
-slots 6–9, and personal right-side buttons can reference existing actions
-without exposing technical IDs. Shared contexts and right-side buttons remain
+slots 6–9, and personal Quick actions can reference existing actions without
+exposing technical IDs. Shared contexts and Quick-action records remain
 read-only. Writes use the same atomic JSON replacement path as the rest of the
 application.
 
@@ -220,9 +243,18 @@ Owns the shared native ttk theme, Segoe UI font policy, grey/teal/aqua palette, 
 
 ### `help_window.py`
 
-Owns construction and in-document search for searchable documentation windows.
-`launcher.py` opens the complete Help document and the authoritative Keyboard
-Shortcuts page through the same component with distinct titles.
+Owns the reusable in-app Markdown document viewer. It renders the project's
+headings, emphasis, code, lists, quotes, separators, and tables with native Tk
+text styles; provides in-document search; opens local Markdown links in place;
+offers a Documents menu for repository Markdown pages; and maintains explicit
+Back, Forward, and Home history. Navigation is restricted to `.md` files
+beneath the viewer's local document root. `launcher.py` opens Help and the
+authoritative Keyboard Shortcuts page through this component and injects an
+opener into the normal action dispatcher so existing `.md` open-file actions
+use the same viewer. The Browser control hands only the current validated local
+file URI to the default browser. Each page render removes obsolete dynamic link
+tags and bindings so navigation cannot accumulate them in the resident process.
+Non-Markdown file actions retain the platform opener.
 
 ### `cheat_sheet_window.py`
 
@@ -549,9 +581,12 @@ independent filters rather than structural ownership.
 Quick actions remain action-ID configuration. Built-in application commands are
 not configurable strings or method names: the launcher contains a closed,
 testable allow-list whose sole member is `open_sheets`, which invokes the
-existing Sheets window. Its compact Knowledge group is rendered as a stable
-full-width built-in row before the configurable two-column groups, whose
-relative order remains unchanged.
+existing Sheets window. Knowledge and AI are stable built-in groups in the
+first two-column row before configurable groups. AI prompt discovery is a pure
+filter over active first-class `ai_prompt` actions; execution still uses the
+ordinary constrained action path. Its initial executor intentionally shares
+review-first workspace/clipboard behavior with templates while retaining a
+separate type identity for future prompt-specific evolution.
 
 Focus and pin changes are applied in memory only after the updated palette state
 has been persisted successfully. A write failure keeps the prior state visible
@@ -648,7 +683,7 @@ The main launcher routes `Ctrl+Shift+D` directly to this tab. Configure enables
 native `Ctrl+Tab` notebook traversal, then moves focus into the selected tab's
 primary interactive or readable control. The Diagnostics summary remains
 read-only but participates in keyboard focus for selection and screen-reader
-access. Configure routes `Alt+A`, `Alt+T`, `Alt+C`, `Alt+B`, and `Alt+D` through
+access. Configure routes `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, and `Alt+D` through
 one generic key-event handler instead of Tk's unreliable symbolic Alt bindings.
 This uses semantic letters and remains independent of QWERTY/AZERTY number-row
 differences. The main launcher's global slot handler accepts only unmodified

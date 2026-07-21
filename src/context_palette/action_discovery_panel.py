@@ -60,12 +60,15 @@ class ActionDiscoveryPanel:
 
         search_row = ttk.Frame(self.frame)
         search_row.pack(fill=tk.X, pady=(0, 5))
-        find_label = ttk.Label(search_row, text="Find action", style="Heading.TLabel")
-        find_label.pack(anchor=tk.W)
-        tooltip_adder(
-            find_label,
-            "Type any tag, context, action name, type, or content.",
+        self.find_label = ttk.Label(
+            search_row, text="Find action", style="Heading.TLabel"
         )
+        self.find_label.pack(anchor=tk.W)
+        tooltip_adder(
+            self.find_label,
+            lambda: self.find_help_text,
+        )
+        self.find_help_text = "Type any tag, context, action name, type, or content."
         self.search_entry = ttk.Entry(
             search_row,
             textvariable=search_var,
@@ -151,7 +154,10 @@ class ActionDiscoveryPanel:
         self.run_button.pack(fill=tk.X, pady=(12, 0))
         tooltip_adder(
             self.run_button,
-            "Execute the highlighted action. Its input and effect appear in Action info below.",
+            lambda: self.primary_help_text,
+        )
+        self.primary_help_text = (
+            "Execute the highlighted action. Its input and effect appear in Action info below."
         )
         self.help_button = ttk.Button(
             self.tool_rail,
@@ -163,7 +169,10 @@ class ActionDiscoveryPanel:
         self.help_button.pack(fill=tk.X, pady=(5, 0))
         tooltip_adder(
             self.help_button,
-            "Search globally across tags, contexts, action names, types, and content.",
+            lambda: self.mode_help_text,
+        )
+        self.mode_help_text = (
+            "Search globally across tags, contexts, action names, types, and content."
         )
 
         self.list_frame = ttk.Frame(body)
@@ -223,7 +232,19 @@ class ActionDiscoveryPanel:
             style="Accent.TButton" if enabled else "Compact.TButton"
         )
         if enabled:
+            self.passwords_button.pack_forget()
+            self.find_label.configure(text="Find Work Item")
             self.type_filter.configure(text="Projects ▾")
+            self.run_button.configure(text="Open")
+            self.find_help_text = (
+                "Find by Work Item name, kind, organisation, subject, source, project code, or tag."
+            )
+            self.primary_help_text = (
+                "Open the highlighted Work Item's exact matching workbook, or its folder when none exists."
+            )
+            self.mode_help_text = (
+                "Work Items are indexed folders, not actions. Choose Work again to return to Actions."
+            )
             self._set_project_menu(project_codes)
             self.set_tags(
                 tags,
@@ -232,7 +253,18 @@ class ActionDiscoveryPanel:
                 empty_label="All work tags",
             )
         else:
+            if not self.passwords_button.winfo_manager():
+                self.passwords_button.pack(fill=tk.X, before=self.work_items_button)
+            self.find_label.configure(text="Find action")
             self.type_filter.configure(text="Types ▾")
+            self.run_button.configure(text="Run")
+            self.find_help_text = "Type any tag, context, action name, type, or content."
+            self.primary_help_text = (
+                "Execute the highlighted action. Its input and effect appear in Action info below."
+            )
+            self.mode_help_text = (
+                "Search globally across tags, contexts, action names, types, and content."
+            )
             self._set_action_type_menu()
             self.set_tags(tags)
 

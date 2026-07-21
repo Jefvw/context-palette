@@ -12,11 +12,12 @@ The application is under active development. It already supports the complete Ca
 - Runs the constrained, allow-listed [standard action types](docs/ACTION_TYPES.md)
   without an arbitrary shell-command action.
 - Pastes Trusted Windows or generic credentials without storing passwords in action JSON.
-- Provides compact, configurable right-side buttons for repeated actions.
+- Provides compact, configurable Quick actions for repeated actions.
 - Configures personal actions, contexts, and buttons through a guided window.
 - Captures clipboard material into an Inbox and converts it into Draft actions.
 - Supports attended, schema-validated AI proposals for selected action types.
 - Searches cheat sheets and promotes entries to Draft actions.
+- Loads stored AI prompt templates into Input / Output from a compact quick-action menu.
 - Finds configured local Work Item folders, filters them by text, project code,
   and personal tags, and opens an exact matching workbook or folder fallback.
 - Creates a Work Item folder and exact-name workbook from one configured local
@@ -83,7 +84,7 @@ After the application starts:
 2. Type in **Find**, select an action, and press `Enter`.
 3. Choose a **Focus** context to change slots 6–9.
 4. Choose **Manage focus → Configure actions and buttons…**, or press `Ctrl+,`,
-   to add personal actions, contexts, or right-side buttons. **Manage focuses…**
+   to add personal actions, contexts, or Quick actions. **Manage focuses…**
    opens the relevant context tab directly.
 5. Use **Capture** when material should enter the Inbox before becoming an action.
 
@@ -114,7 +115,7 @@ Portable, reviewed examples are tracked:
 | --- | --- |
 | `data/actions.json` | Shared actions |
 | `data/contexts.json` | Shared context definitions |
-| `data/command_surface.json` | Shared right-side button groups |
+| `data/command_surface.json` | Shared Quick-action button records |
 | `data/cheatsheets/*.json` | Shared reference sheets |
 
 Personal and runtime files are ignored by Git:
@@ -123,7 +124,7 @@ Personal and runtime files are ignored by Git:
 | --- | --- |
 | `data/local_actions.json` | Personal or machine-specific actions |
 | `data/local_contexts.json` | Personal contexts |
-| `data/local_command_surface.json` | Personal right-side buttons |
+| `data/local_command_surface.json` | Personal Quick-action button records |
 | `data/inbox.json` | Captured material |
 | `data/palette.json` | Focus, pins, and per-machine slot choices |
 | `data/context-palette.log*` | Bounded local diagnostics |
