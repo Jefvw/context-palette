@@ -12,6 +12,8 @@ This project has not published a versioned release. Changes are recorded under *
   scans run in the background, and edits made during a scan queue one latest
   refresh instead of freezing the window or being silently missed. Closing
   Configure safely ignores late scan results without retaining destroyed UI.
+  Keyboard setup now starts in the first source field and supports F6 pane
+  switching plus list-local Insert, Delete, F5, and Enter commands.
 - Added Work Items discovery to the main Actions workspace. The compact Work
   button reuses Find and the result list, with structured project-code and
   personal-tag filters, background refresh, clear unavailable/empty states,

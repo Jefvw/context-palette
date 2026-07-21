@@ -131,6 +131,11 @@ source with the same stable ID restores them.
 Source paths and tags remain in ignored local files on this computer. Configure
 does not alter the Work Item folders or their Excel files.
 
+For keyboard setup, `F6` switches between the Sources and Discovered Work Items
+lists. In Sources, use `Insert` to add and `Delete` to remove; `F5` refreshes
+from either list and Enter edits the selected row. Source dialogs place focus in
+the Source name field automatically.
+
 ## Quick-action surface
 
 The wider right side of the action console contains global configurable

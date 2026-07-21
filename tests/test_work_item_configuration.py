@@ -31,6 +31,37 @@ class WorkItemConfigurationTests(unittest.TestCase):
     def test_stable_source_id_is_generated_from_friendly_name(self) -> None:
         self.assertEqual(_stable_source_id(" CAP40 Product & Support "), "cap40-product-support")
 
+    def test_f6_switches_between_work_item_lists(self) -> None:
+        panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)
+        panel.source_tree = Mock()
+        panel.item_tree = Mock()
+
+        self.assertEqual(
+            panel._focus_other_list(Mock(widget=panel.source_tree)),
+            "break",
+        )
+        panel.item_tree.focus_set.assert_called_once_with()
+
+        self.assertEqual(
+            panel._focus_other_list(Mock(widget=panel.item_tree)),
+            "break",
+        )
+        panel.source_tree.focus_set.assert_called_once_with()
+
+    def test_work_item_list_shortcut_helpers_run_one_command(self) -> None:
+        panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)
+        panel.add_source = Mock()
+        panel.remove_source = Mock()
+        panel.refresh = Mock()
+
+        self.assertEqual(panel._add_source_from_key(), "break")
+        self.assertEqual(panel._remove_source_from_key(), "break")
+        self.assertEqual(panel._refresh_from_key(), "break")
+
+        panel.add_source.assert_called_once_with()
+        panel.remove_source.assert_called_once_with()
+        panel.refresh.assert_called_once_with()
+
     def test_new_source_is_saved_locally_and_refreshes_panel(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

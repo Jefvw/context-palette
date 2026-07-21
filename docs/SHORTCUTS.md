@@ -47,6 +47,17 @@ AltGr-, plain number-row, and numpad input never execute action slots.
 | `Enter` | Edit the selected action, context, or right-side button. |
 | `Esc` | Close Configure. |
 
+### Work Items in Configure
+
+| Shortcut | Result |
+| --- | --- |
+| `F6` | Switch focus between the Sources and Discovered Work Items lists. |
+| `Insert` in Sources | Add a Work Item source. |
+| `Delete` in Sources | Remove the selected source after confirmation. |
+| `F5` in either list | Refresh the Work Item index. |
+| `Enter` in Sources | Edit the selected source. |
+| `Enter` in Discovered Work Items | Edit personal tags for the selected item. |
+
 ## Action forms
 
 | Shortcut | Result |

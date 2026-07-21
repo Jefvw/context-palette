@@ -64,6 +64,10 @@ class WorkItemsConfigurationPanel:
         self.source_tree.pack(fill=tk.X)
         self.source_tree.bind("<Double-1>", lambda _event: self.edit_source())
         self.source_tree.bind("<Return>", lambda _event: self.edit_source())
+        self.source_tree.bind("<Insert>", lambda _event: self._add_source_from_key())
+        self.source_tree.bind("<Delete>", lambda _event: self._remove_source_from_key())
+        self.source_tree.bind("<F5>", lambda _event: self._refresh_from_key())
+        self.source_tree.bind("<F6>", self._focus_other_list)
 
         source_controls = ttk.Frame(parent)
         source_controls.pack(fill=tk.X, pady=(6, 10))
@@ -91,6 +95,8 @@ class WorkItemsConfigurationPanel:
         self.item_tree.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
         self.item_tree.bind("<Double-1>", lambda _event: self.edit_tags())
         self.item_tree.bind("<Return>", lambda _event: self.edit_tags())
+        self.item_tree.bind("<F5>", lambda _event: self._refresh_from_key())
+        self.item_tree.bind("<F6>", self._focus_other_list)
         item_controls = ttk.Frame(parent)
         item_controls.pack(fill=tk.X, pady=(6, 0))
         ttk.Button(item_controls, text="Edit personal tags", command=self.edit_tags).pack(side=tk.LEFT)
@@ -100,6 +106,23 @@ class WorkItemsConfigurationPanel:
 
     def focus(self) -> None:
         self.source_tree.focus_set()
+
+    def _focus_other_list(self, event: tk.Event) -> str:
+        target = self.item_tree if event.widget == self.source_tree else self.source_tree
+        target.focus_set()
+        return "break"
+
+    def _add_source_from_key(self) -> str:
+        self.add_source()
+        return "break"
+
+    def _remove_source_from_key(self) -> str:
+        self.remove_source()
+        return "break"
+
+    def _refresh_from_key(self) -> str:
+        self.refresh()
+        return "break"
 
     def _handle_destroy(self, event: tk.Event) -> None:
         if event.widget == self.parent:
@@ -330,7 +353,7 @@ class SourceDialog:
         self.name = tk.StringVar(value=source.name if source else "")
         self.path = tk.StringVar(value=str(source.workitems_path) if source else "")
         self.source_id = tk.StringVar(value=source.id if source else "")
-        self._field(outer, "Source name", self.name)
+        self.name_entry = self._field(outer, "Source name", self.name)
         path_row = ttk.Frame(outer)
         path_row.pack(fill=tk.X, pady=4)
         ttk.Label(path_row, text="Workitems folder", width=18).pack(side=tk.LEFT)
@@ -347,6 +370,7 @@ class SourceDialog:
         self.name.trace_add("write", self._suggest_id)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
         self.window.bind("<Return>", lambda _event: self._save())
+        self.window.after_idle(self.name_entry.focus_set)
 
     def _field(self, parent: ttk.Frame, label: str, variable: tk.StringVar) -> ttk.Entry:
         row = ttk.Frame(parent)
