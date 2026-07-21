@@ -19,6 +19,12 @@ Power Automate Desktop setup is documented in `integrations/README.md`.
 - Press `Esc`, click `Hide`, or close the window to hide it.
 - Press `Ctrl+L` or `Ctrl+K` to return keyboard focus to Find.
 - Press `Ctrl+I` to capture clipboard text, `Ctrl+,` to open Configure, or `F1` to open Help.
+- Press `Ctrl+Shift+D` to open Configure directly on the safe Diagnostics tab.
+- Click the **⌨** footer button for the authoritative keyboard-shortcut page.
+- Press `F5` while the main palette is focused to clear transient screen state
+  and return to the startup view. Find, type/tag filters, Focus Actions mode,
+  captured selection, and Input / Output are cleared. Saved Focus, pins,
+  context slots, actions, and configuration are preserved.
 - Choose **Manage focus → Configure actions and buttons…** for a visible route
   to the complete personal-configuration workspace.
 - Click `Quit` to stop the resident process completely.
@@ -76,8 +82,17 @@ Search matches tags, contexts, Action name, type, and content.
   clear it. Find text, type, and tag filters work together.
 - Use Up/Down, Page Up/Page Down, Home, and End to navigate.
 - Press Enter, double-click, or click **Run**.
-- Numpad 1 through 9 executes the corresponding fixed slot.
-- Number-row 1 through 9 executes slots only while Find has focus.
+- A saved-text action opened through `F9` or `Ctrl+Alt+P` copies its text,
+  returns to the captured application, and pastes automatically. When Context
+  Palette has no fresh destination, the text remains on the clipboard and the
+  status asks you to paste manually with `Ctrl+V`.
+- Right-click an action row to open the Actions tab in Configure with that
+  exact action highlighted. Personal actions can then be edited, including
+  name, contexts, tags, type-specific value, and supported launch settings.
+  Shared project actions can also be edited after acknowledging their warning.
+- Plain number-row and numpad digits remain ordinary Find text.
+- Shift plus a physical top-row number key executes slots 1 through 9 only
+  while Find has focus. This positional rule works on AZERTY and QWERTY.
 - Selecting an action updates the slim communication line at the bottom.
 
 The Actions heading shows the current match count. When nothing matches, the list explains how to clear Find or create an action instead of presenting a blank pane.
@@ -110,12 +125,21 @@ Choose **Manage focus → Manage focuses…** for Focus configuration. Choose
 **Manage focus → Configure actions and buttons…**, or use the shortcut
 (`Ctrl+,`), for the complete guided personal-configuration workspace:
 
-- **Actions:** edit every kind of personal action, including URLs, files,
-  folders, applications, credentials, URL builders, and transformations.
-  Shared actions remain read-only.
+- **Actions:** edit every kind of personal or shared action, including URLs,
+  files, folders, applications, credentials, URL builders, and
+  transformations. Before a shared action opens for editing, Context Palette
+  explains that its Git-tracked change can affect other machines.
 - **Built-in action types:** inspect what each built-in type reads and does, see a concrete example, then create a validated personal Draft.
 - **Contexts:** add or edit personal contexts and assign actions to slots 6–9.
 - **Right-side buttons:** add or edit personal button groups and assign existing actions. Technical IDs are generated automatically and are not shown in the normal form.
+- **Diagnostics:** review a safe summary of loaded configuration, recent error
+  counts, and automatic-paste outcomes. Use **Refresh** after reproducing a
+  problem or **Copy safe summary** when asking for help. Raw log messages,
+  pasted text, credentials, action values, paths, and window titles are not
+  included. `Alt+A`, `Alt+T`, `Alt+C`, `Alt+B`, and `Alt+D` directly select
+  Actions, Built-in action types, Contexts, Right-side buttons, and Diagnostics.
+  `Ctrl+Tab` cycles through all Configure tabs. Both paths move focus into the
+  selected tab's main content.
 
 Configure opens with keyboard focus on the action list. Action, context, and button dialogs focus and select their first editable field, so typing can begin immediately.
 
@@ -142,11 +166,23 @@ In **Actions**, use **Find actions** or press `Ctrl+F` to filter by action name,
 built-in type, context, tag, state, or source. Multiple words must
 all match. Press Enter on the selected result to edit it.
 
+Use **Delete selected** to remove an action. The confirmation identifies how
+many saved references will also be removed. Pins, Focus slots, context
+preferences, and quick-button assignments are cleaned automatically. A quick
+button is removed when it has no action left. Deleting a shared action adds a
+warning because the action and affected shared configuration are tracked by
+Git and can reach other machines after commit and push.
+
 The Actions, Contexts, and Right-side buttons tables select their first useful
 row automatically. Use the arrow keys to move, then press Enter to edit the
 selected personal item. Double-click provides the same action with a mouse.
 
-Changes are saved atomically to ignored local files. Shared project examples are shown for reference but cannot be changed in this window. New actions always begin as Drafts and still require testing before they can be marked Trusted.
+Changes are saved atomically. Personal changes use ignored local files. Shared
+action changes use the Git-tracked project action file and can therefore reach
+other machines or collaborators after commit and push. Never store personal
+paths, secrets, or private work details in a shared action. Shared contexts and
+right-side buttons remain reference-only. New actions always begin as Drafts
+and still require testing before they can be marked Trusted.
 
 Context slots and button assignments show human-readable action names and contexts. Internal IDs remain stored for stable references but are not part of the normal editing workflow. Successful saves appear in the Configure footer without interrupting work with a confirmation dialog.
 
@@ -217,6 +253,21 @@ name first, followed by the complete existing explanation.
 
 Executes the highlighted action. The exact effect appears in the bottom communication line when selected.
 
+For **Paste saved text**, Run directly pastes into the application from which
+the palette was opened by hotkey. Every action attempt consumes that captured
+destination, including a cancelled or failed action, so a later paste cannot
+reuse an old window accidentally. If the destination disappeared, Context
+Palette returns and explains that the text is still available on the clipboard.
+The same recovery occurs if Windows restores the window but cannot send the
+paste command: ordinary text remains available for manual `Ctrl+V`; protected
+credential content is cleared instead of being left behind.
+
+For troubleshooting, `data/context-palette.log` records whether automatic paste
+succeeded, used clipboard-only fallback, found an unavailable destination, was
+cancelled, or encountered a Windows dispatch error. These events contain only
+the paste category and outcome reason; they do not contain pasted text,
+credential targets, usernames, passwords, or destination window titles.
+
 ### Capture
 
 Copies current clipboard text into the Inbox after asking for a title. Captures are stored locally in `data/inbox.json`.
@@ -237,6 +288,10 @@ Select an Inbox item and click **Ask AI** for an attended AI-guidance workflow:
 To test the workflow without sending captured material anywhere, click **Insert test response** and then **Review proposals**. Context Palette creates that example locally from the selected capture. If a multi-proposal AI response contains both valid and invalid proposals, valid proposals remain selectable and each rejected proposal is reported separately.
 
 The response must be plain JSON in the displayed format. Context Palette also accepts exactly one complete `json` Markdown fence because many AI tools add it automatically; surrounding commentary, multiple fences, and malformed envelopes remain invalid. Context Palette does not send data to an AI automatically, store an API key, accept shell commands, or create Trusted actions. Created proposals are saved in local actions and must still be tested and refined.
+
+AI responses larger than 1,000,000 characters are rejected before parsing or
+replacing the current response field. This protects the resident application
+from accidentally or maliciously oversized untrusted responses.
 
 The standard action catalogue and current AI eligibility are documented in `docs/ACTION_TYPES.md`. The first AI-enabled types are `copy_text` and `open_url`. Website proposals require a complete HTTP or HTTPS address and remain Drafts until reviewed and tested.
 
@@ -293,11 +348,11 @@ Contexts | Tags | Action name
 Example:
 
 ```text
-Product lookup | browser, commercial product ID | Open Colruyt product ID
+Product lookup | colruyt, cart | Open colruyt.be cart
 ```
 
 To keep the launcher fast to scan, result rows show `Command → subject`, for
-example `Open → Colruyt product ID`. Contexts and tags remain fully searchable
+example `Open → colruyt.be cart`. Contexts and tags remain fully searchable
 and appear in the row's hover tooltip and the bottom communication line.
 
 The main palette keeps its compact width. Its nine management commands use the

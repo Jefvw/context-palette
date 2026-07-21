@@ -4,6 +4,46 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Added a dedicated, searchable Keyboard Shortcuts page exposed through the
+  main-window **⌨** button. Guided action-form mnemonics now use the same
+  layout-independent Alt handling as Configure. Only Shift plus a physical
+  top-row number key executes slots 1–9 while Find is focused; plain number-row
+  and numpad input remain ordinary Find text.
+- Prevented Ctrl/Alt/Shift-modified number keys from executing main-palette
+  action slots. Plain `1`–`9` still run slots, while combinations such as
+  `Ctrl+2` and `Ctrl+3` are left available to focused controls. Inside
+  Configure, layout-independent `Alt+A`, `Alt+T`, `Alt+C`, `Alt+B`, and `Alt+D`
+  select Actions, Built-in action types, Contexts, Right-side buttons, and
+  Diagnostics. Their letters are underlined in the tab labels.
+- Added a safe Diagnostics tab to Configure with configuration counts, recent
+  automatic-paste outcomes, error counts, Refresh, and Copy safe summary. It
+  never displays raw log messages or sensitive action, clipboard, credential,
+  or window content. `Ctrl+Shift+D` opens it directly from the focused main
+  palette, and native `Ctrl+Tab` cycles Configure tabs with focus entering the
+  selected tab's primary content.
+- Changed saved-text actions to paste directly into a freshly captured hotkey
+  destination after copying. Without a safe destination they remain
+  clipboard-only and explicitly request manual `Ctrl+V`; a vanished destination
+  restores the palette without losing the copied text. Every action attempt now
+  consumes its captured destination so a later paste cannot reuse a stale
+  window. Windows paste-dispatch failures also restore the palette with useful
+  recovery guidance; protected credential content is cleared immediately.
+  Content-free outcome events now distinguish success, clipboard fallback,
+  unavailable destinations, cancellation, and input-dispatch failure.
+- Added `F5` as a main-window startup-view reset that clears transient search,
+  filters, Focus Actions mode, captured selection, and Input / Output while
+  preserving saved Focus, pins, slots, actions, and configuration.
+- Added direct right-click routing from ordinary and Focus action rows to the
+  existing Configure Actions workspace, with the clicked action highlighted
+  for editing. Shared actions are now editable after a warning explains that
+  their tracked changes can affect other machines and must not contain private
+  or machine-specific information.
+- Added safe action deletion to Configure. The confirmation reports saved
+  references, removes pins, Focus slots, context preferences, and quick-button
+  references, and gives shared actions an additional Git-impact warning.
+- Bounded attended AI responses to 1,000,000 characters before clipboard
+  insertion or JSON parsing, preventing oversized untrusted responses from
+  unnecessarily consuming resident UI and parser memory.
 - Replaced fixed Technology/Task action classification with reusable tags and
   optional multi-context membership. General now acts as a virtual root
   containing every action; Focus Actions is a flat membership list, and Tags

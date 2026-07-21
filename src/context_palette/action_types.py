@@ -48,11 +48,11 @@ ACTION_TYPES = {
     for item in (
         _definition(
             "copy_text",
-            "Copy saved text",
+            "Paste saved text",
             "Saved content",
-            "Copy a reviewed reusable text value to the clipboard.",
-            "No runtime input.",
-            "Replaces clipboard text; Input / Output is unchanged.",
+            "Paste a reviewed reusable text value into the captured destination, or copy it when no safe destination is available.",
+            "A fresh destination captured by F9 or Ctrl+Alt+P is optional.",
+            "Replaces clipboard text, then pastes into a fresh destination when available; Input / Output is unchanged.",
             "Portable when the saved text contains no private information.",
             ai_proposable=True,
             ai_guidance=(

@@ -8,9 +8,15 @@ from .window_geometry import configure_standard_window
 
 
 class HelpWindow:
-    def __init__(self, parent: tk.Tk, help_path: Path) -> None:
+    def __init__(
+        self,
+        parent: tk.Tk,
+        help_path: Path,
+        *,
+        title: str = "Context Palette Help",
+    ) -> None:
         self.window = tk.Toplevel(parent)
-        self.window.title("Context Palette Help")
+        self.window.title(title)
         configure_standard_window(self.window)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
         self.search_var = tk.StringVar()
@@ -35,7 +41,7 @@ class HelpWindow:
 
         header = ttk.Frame(outer)
         header.pack(fill=tk.X, pady=(0, 8))
-        ttk.Label(header, text="Context Palette Help", style="Heading.TLabel").pack(side=tk.LEFT)
+        ttk.Label(header, text=title, style="Heading.TLabel").pack(side=tk.LEFT)
         search = ttk.Entry(header, textvariable=self.search_var, width=28)
         search.pack(side=tk.RIGHT, padx=(6, 0))
         search.bind("<Return>", lambda _event: self._find_next())

@@ -34,6 +34,8 @@ class ActionDiscoveryPanel:
         show_help: Callable[[], None],
         result_tooltip_text: Callable[[int], str],
         focus_tree_tooltip_text: Callable[[str], str],
+        configure_flat_action: Callable[[tk.Event], object],
+        configure_focus_action: Callable[[tk.Event], object],
     ) -> None:
         self.frame = ttk.Frame(parent)
         parent.add(self.frame, weight=1)
@@ -174,6 +176,7 @@ class ActionDiscoveryPanel:
         self.results.bind("<<ListboxSelect>>", lambda _event: update_preview())
         self.results.bind("<Double-Button-1>", lambda _event: execute_selected())
         self.results.bind("<Return>", lambda _event: execute_selected())
+        self.results.bind("<Button-3>", configure_flat_action)
         self.results_tooltip = ListboxItemTooltip(
             self.results,
             result_tooltip_text,
@@ -187,6 +190,7 @@ class ActionDiscoveryPanel:
         self.focus_tree.bind("<<TreeviewSelect>>", lambda _event: update_preview())
         self.focus_tree.bind("<Double-Button-1>", lambda _event: execute_selected())
         self.focus_tree.bind("<Return>", lambda _event: execute_selected())
+        self.focus_tree.bind("<Button-3>", configure_focus_action)
         self.focus_tree_tooltip = TreeviewItemTooltip(
             self.focus_tree,
             focus_tree_tooltip_text,

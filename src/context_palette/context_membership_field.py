@@ -41,6 +41,7 @@ class CommaSeparatedPickerField:
     ) -> None:
         self.variable = variable
         self.names = tuple(names)
+        self.mnemonic = mnemonic.casefold()
         self.selected_vars: dict[str, tk.BooleanVar] = {}
         self._syncing = False
 
@@ -86,8 +87,8 @@ class CommaSeparatedPickerField:
         self.picker.bind("<Alt-Down>", self._post_picker)
         self.picker.bind("<F4>", self._post_picker)
         self.frame.winfo_toplevel().bind(
-            f"<Alt-{mnemonic.casefold()}>",
-            self._focus_entry,
+            "<KeyPress>",
+            self._handle_mnemonic_keypress,
             add="+",
         )
         self.variable.trace_add("write", self._text_changed)
@@ -96,6 +97,14 @@ class CommaSeparatedPickerField:
     def _focus_entry(self, _event: tk.Event | None = None) -> str:
         self.entry.focus_set()
         return "break"
+
+    def _handle_mnemonic_keypress(self, event: tk.Event) -> str | None:
+        state = int(getattr(event, "state", 0) or 0)
+        if not state & 0x20000 or state & 0x0004:
+            return None
+        if str(getattr(event, "keysym", "")).casefold() != self.mnemonic:
+            return None
+        return self._focus_entry(event)
 
     def _post_picker(self, _event: tk.Event | None = None) -> str:
         if str(self.picker.cget("state")) == tk.DISABLED:

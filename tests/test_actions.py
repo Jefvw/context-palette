@@ -294,7 +294,7 @@ class ActionTests(unittest.TestCase):
         )
         self.assertEqual(
             actions["colruyt-open-product"].title,
-            "Open Colruyt product ID",
+            "Open colruyt.be cart",
         )
         self.assertEqual(
             actions["general-open-python-docs"].effective_tags,

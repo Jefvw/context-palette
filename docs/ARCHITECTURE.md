@@ -71,6 +71,8 @@ Presentation and application orchestration.
 - Owns Input / Output, the communication line, systematic widget tooltips, Inbox, sheets, Help, and action editors.
 - Connects platform-independent action execution to Windows-specific callbacks.
 - Ensures Tk operations stay on the Tk main thread.
+- Resets transient presentation state through the main-window `F5` shortcut
+  without changing persisted Focus, pins, slots, actions, or configuration.
 
 The main-window construction is divided into focused header, results/command-surface, shortcut, workspace, and footer builders. Inbox and Draft windows still live in this module and are the next safe extraction boundary; this is documented in `TECHNICAL_REVIEW.md`.
 
@@ -122,6 +124,13 @@ policy, action ranking, filtering, Focus membership, selection meaning, and exec
 `launcher.py` and are supplied through narrow callbacks. Compatibility aliases
 allow existing launcher orchestration to migrate incrementally.
 
+Right-click callbacks preserve the clicked flat or Focus row as the current
+selection, then route its stable action ID into the existing Configure Actions
+workspace. `configuration_window.py` highlights that action after rendering;
+personal actions persist to the ignored local action file. Shared actions may
+also be edited after an explicit risk warning and persist to the Git-tracked
+shared action file.
+
 ### `context_membership_field.py`
 
 Provides reusable comma-separated picker fields used by Configure, Inbox
@@ -158,7 +167,27 @@ only; it does not inspect credential secrets or delete legacy snapshot files.
 
 ### `configuration_window.py` and `configuration_data.py`
 
-Provide the guided personal-configuration workspace and its persistence operations. Action creation starts from the executable built-in action catalogue, which includes a concrete example for every type. All personal action types are editable. Personal contexts can assign slots 6–9, and personal right-side buttons can reference existing actions without exposing technical IDs. Shared records are visible but read-only. Writes use the same atomic JSON replacement path as the rest of the application.
+Provide the guided configuration workspace and its persistence operations.
+Action creation starts from the executable built-in action catalogue, which
+includes a concrete example for every type. Every personal and shared action
+type is editable. Editing a shared action requires acknowledging that its file
+is tracked by Git and can affect other machines; the warning also prohibits
+personal paths, secrets, and private work details. Personal contexts can assign
+slots 6–9, and personal right-side buttons can reference existing actions
+without exposing technical IDs. Shared contexts and right-side buttons remain
+read-only. Writes use the same atomic JSON replacement path as the rest of the
+application.
+
+### `action_deletion.py`
+
+Owns dependency-aware action removal. It validates and inventories context,
+quick-button, pin, and Focus-slot references before the UI asks for
+confirmation. On acceptance it removes those references before deleting the
+action, so an interrupted multi-file update is more likely to leave an unused
+action than a broken reference. Every changed file still uses atomic
+replacement and its local backup behavior. A quick button with no remaining
+action is removed; a deleted primary action falls back to the button's next
+configured action.
 
 ### `palette_state.py`
 
@@ -186,7 +215,9 @@ Owns the shared native ttk theme, Segoe UI font policy, grey/teal/aqua palette, 
 
 ### `help_window.py`
 
-Owns construction and in-document search for the searchable Help window. `launcher.py` retains orchestration responsibility and opens this focused secondary view with the project Help path.
+Owns construction and in-document search for searchable documentation windows.
+`launcher.py` opens the complete Help document and the authoritative Keyboard
+Shortcuts page through the same component with distinct titles.
 
 ### `cheat_sheet_window.py`
 
@@ -247,6 +278,10 @@ The Inbox creation UI supports guided `copy_text` and URL-builder Drafts. URL te
 ### `ai_guidance.py` and `ai_guidance_window.py`
 
 `ai_guidance.py` builds a user-previewable request from an Inbox capture, a constrained prompt variation, and catalogue-owned type guidance. It parses plain versioned JSON or exactly one complete JSON Markdown fence without surrounding commentary. It accepts only the variation's catalogue-enabled action types, rejects unknown fields, and creates actions through type-specific Draft constructors. Envelope errors reject the response; proposal errors are reported individually so valid siblings remain reviewable. A local example response supports evaluation without contacting an AI.
+
+Untrusted AI response text has a 1,000,000-character ceiling enforced before
+JSON parsing. The clipboard handoff applies the same limit before replacing the
+response widget, avoiding unnecessary UI and parser memory amplification.
 
 `ai_guidance_window.py` owns the attended clipboard handoff: choose guidance, review and copy the request, paste an AI response, validate and select proposals, and explicitly create local Draft actions. It also exposes the local test-response path and per-proposal validation status. Selected proposals are batch-validated before the local action file is written. The window does not contact an AI provider, store credentials, or promote actions to Trusted.
 
@@ -410,10 +445,21 @@ Input / Output workspace <---- Paste / manual edit
         |
         +-- transformation -> replace workspace + copy result
         +-- URL builder -> consume workspace -> copy/open URL
-        `-- copy-only action -> clipboard, workspace unchanged
+        `-- saved-text action -> clipboard -> fresh captured destination, or manual-paste fallback
 
 Windows Credential Manager -- exact target --> protected clipboard --> captured destination
 ```
+
+Destination paste callbacks treat focus restoration and input dispatch as
+separate failure points. Both restore the hidden palette. Ordinary saved text
+remains on the clipboard for manual recovery, while protected credential data
+is cleared immediately. Sequence-aware cleanup ignores an obsolete delayed
+callback after an earlier failure has already cleared the protected item.
+Automatic-paste observability uses a fixed event schema containing only
+category, outcome, and reason. It never accepts action values, clipboard text,
+credential targets, usernames, passwords, or window titles. Successful and
+clipboard-only outcomes use informational logging, unavailable destinations use
+warning logging, and dispatch failures retain their exception at error level.
 
 Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `workspace_panel.py` owns selection ranges, one-step Undo grouping, clipboard updates, and menus. The launcher injects clipboard and status callbacks and retains orchestration delegates. Action explanations and application status share a slim bottom communication line.
 
@@ -530,7 +576,28 @@ widgets once. Standalone loader calls keep immediate rendering by default.
 
 ## Diagnostics
 
-The standard-library logging system writes bounded local diagnostics to ignored `data/context-palette.log`. The file rotates at 512 KB and keeps two backups. Logging setup failure does not prevent application startup. Clipboard and Input / Output contents are not written deliberately. Slow configuration reload warnings include safe per-stage durations, but never file paths or configured content.
+The standard-library logging system writes bounded local diagnostics to ignored
+`data/context-palette.log`. The file rotates at 512 KB and keeps two backups.
+Logging setup failure does not prevent application startup. Clipboard and Input
+/ Output contents are not written deliberately. Slow configuration reload
+warnings include safe per-stage durations, but never file paths or configured
+content.
+
+The Configure Diagnostics tab uses `diagnostics.py` to render a separate safe
+summary rather than exposing the raw log. It reports loaded configuration
+counts, error count and last-error timestamp, and allow-listed automatic-paste
+category/outcome/reason events. Unknown or malformed event values are ignored.
+The rendered and copied summary never includes raw error messages, action
+values, clipboard content, credential fields, paths, or window titles.
+The main launcher routes `Ctrl+Shift+D` directly to this tab. Configure enables
+native `Ctrl+Tab` notebook traversal, then moves focus into the selected tab's
+primary interactive or readable control. The Diagnostics summary remains
+read-only but participates in keyboard focus for selection and screen-reader
+access. Configure routes `Alt+A`, `Alt+T`, `Alt+C`, `Alt+B`, and `Alt+D` through
+one generic key-event handler instead of Tk's unreliable symbolic Alt bindings.
+This uses semantic letters and remains independent of QWERTY/AZERTY number-row
+differences. The main launcher's global slot handler accepts only unmodified
+number keys, leaving modified numbers to the focused control.
 
 Complete result refreshes slower than 100 ms and configuration reloads slower than 500 ms write a warning containing only elapsed time and action count. Search text and action content are deliberately excluded.
 
@@ -556,7 +623,7 @@ Detailed help is stored once in `docs/HELP.md` and displayed by the in-app searc
 - Never enumerate or write Windows credentials. Credential actions store only
   exact target names and are unavailable to AI proposal and external execution paths.
 - Require explicit user action for launches and trust promotion.
-- Treat captured text and AI responses as untrusted data. AI requests are previewed and copied manually; responses must pass the versioned proposal schema and existing action validation before selected proposals become local Drafts.
+- Treat captured text and AI responses as untrusted data. AI requests are previewed and copied manually; responses must remain within the bounded size limit and pass the versioned proposal schema and existing action validation before selected proposals become local Drafts.
 
 ## Testing strategy
 

@@ -62,6 +62,17 @@ class DocumentationNavigationTests(unittest.TestCase):
         self.assertIn(r".\develop-context-palette.bat", change_guide)
         self.assertIn("git diff --check", change_guide)
 
+    def test_shortcut_page_is_linked_and_covers_primary_scopes(self):
+        documentation_index = (ROOT / "docs" / "README.md").read_text(
+            encoding="utf-8"
+        )
+        shortcuts = (ROOT / "docs" / "SHORTCUTS.md").read_text(encoding="utf-8")
+
+        self.assertIn("SHORTCUTS.md", documentation_index)
+        for shortcut in ("F9", "Ctrl+Alt+P", "Ctrl+,", "Alt+A", "Alt+C", "F4"):
+            self.assertIn(shortcut, shortcuts)
+        self.assertIn("AZERTY", shortcuts)
+
 
 if __name__ == "__main__":
     unittest.main()

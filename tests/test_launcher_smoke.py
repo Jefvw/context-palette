@@ -127,12 +127,32 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app.type_filter.cget("text"), "Types ▾")
                     self.assertEqual(app.run_button.cget("text"), "Run")
                     self.assertEqual(app.action_help_button.cget("text"), "?")
+                    self.assertTrue(root.bind("<F5>"))
+                    self.assertTrue(root.bind("<Control-Shift-D>"))
                     self.assertIs(app.search_entry.tk_focusNext(), app.passwords_button)
                     self.assertIs(app.passwords_button.tk_focusNext(), app.type_filter)
                     self.assertIs(app.type_filter.tk_focusNext(), app.tag_filter)
                     self.assertIs(app.tag_filter.tk_focusNext(), app.run_button)
                     self.assertIs(app.run_button.tk_focusNext(), app.action_help_button)
                     self.assertIs(app.action_help_button.tk_focusNext(), app.results)
+
+                    opened_action_ids: list[str] = []
+                    original_show_configuration = app._show_configuration
+                    app._show_configuration = lambda **options: opened_action_ids.append(
+                        options["initial_action_id"]
+                    )
+                    flat_index = 1
+                    expected_flat_action = app.displayed_actions[flat_index].id
+                    flat_bounds = app.results.bbox(flat_index)
+                    self.assertIsNotNone(flat_bounds)
+                    app.results.event_generate(
+                        "<Button-3>",
+                        x=flat_bounds[0] + 3,
+                        y=flat_bounds[1] + 3,
+                    )
+                    root.update()
+                    self.assertEqual(opened_action_ids, [expected_flat_action])
+                    self.assertEqual(app.results.curselection(), (flat_index,))
 
                     app.passwords_button.invoke()
                     self.assertEqual(app.action_type_filter, "paste_credential")
@@ -176,6 +196,22 @@ class LauncherSmokeTests(unittest.TestCase):
                         {action.id for action in app.focus_tree_actions.values()},
                         {"general-first", "general-second", "database-only"},
                     )
+                    focus_item = app.focus_tree.get_children()[1]
+                    expected_focus_action = app.focus_tree_actions[focus_item].id
+                    focus_bounds = app.focus_tree.bbox(focus_item)
+                    self.assertTrue(focus_bounds)
+                    app.focus_tree.event_generate(
+                        "<Button-3>",
+                        x=focus_bounds[0] + 3,
+                        y=focus_bounds[1] + 3,
+                    )
+                    root.update()
+                    self.assertEqual(
+                        opened_action_ids,
+                        [expected_flat_action, expected_focus_action],
+                    )
+                    self.assertEqual(app.focus_tree.selection(), (focus_item,))
+                    app._show_configuration = original_show_configuration
                     app._show_flat_results()
                     app._render_focus_actions()
                     self.assertEqual(app._selected_action().id, "general-first")
@@ -299,7 +335,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     ]
                     self.assertEqual(
                         [button.cget("text") for button in icon_buttons],
-                        ["+", "▣", "✎", "⌖", "✓", "?", "−", "×"],
+                        ["+", "▣", "✎", "⌖", "✓", "?", "⌨", "−", "×"],
                     )
                     tooltips = {
                         tooltip.widget: tooltip.text
@@ -313,6 +349,7 @@ class LauncherSmokeTests(unittest.TestCase):
                         "Pin",
                         "Trust",
                         "Help",
+                        "Keyboard shortcuts",
                         "Hide",
                         "Quit",
                     )
@@ -460,6 +497,77 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     self.assertEqual(app.manage_focus_menu.type(1), "separator")
 
+                    root.focus_force()
+                    root.event_generate("<Control-Shift-KeyPress-d>")
+                    root.update()
+                    diagnostic_windows = [
+                        child
+                        for child in root.winfo_children()
+                        if isinstance(child, tk.Toplevel)
+                        and child.title() == "Configure Context Palette"
+                    ]
+                    self.assertEqual(len(diagnostic_windows), 1)
+                    diagnostic_window = diagnostic_windows[0]
+                    diagnostic_notebook = next(
+                        child
+                        for child in self._descendants(diagnostic_window)
+                        if isinstance(child, ttk.Notebook)
+                    )
+                    self.assertEqual(
+                        diagnostic_notebook.tab(
+                            diagnostic_notebook.select(),
+                            "text",
+                        ),
+                        "Diagnostics",
+                    )
+                    diagnostic_text = next(
+                        child
+                        for child in self._descendants(diagnostic_window)
+                        if isinstance(child, tk.Text)
+                        and "Context Palette diagnostics"
+                        in child.get("1.0", tk.END)
+                    )
+                    self.assertIs(diagnostic_window.focus_get(), diagnostic_text)
+
+                    diagnostic_text.event_generate("<Control-KeyPress-Escape>")
+                    root.update()
+                    self.assertTrue(diagnostic_window.winfo_exists())
+
+                    for keysym, expected_tab in (
+                        ("a", "Actions"),
+                        ("t", "Built-in action types"),
+                        ("c", "Contexts"),
+                        ("b", "Right-side buttons"),
+                        ("d", "Diagnostics"),
+                    ):
+                        diagnostic_window.event_generate(
+                            "<KeyPress>",
+                            state=0x20000,
+                            keysym=keysym,
+                        )
+                        root.update()
+                        self.assertTrue(diagnostic_window.winfo_exists())
+                        self.assertEqual(
+                            diagnostic_notebook.tab(
+                                diagnostic_notebook.select(),
+                                "text",
+                            ),
+                            expected_tab,
+                        )
+
+                    diagnostic_text.event_generate("<Control-KeyPress-Tab>")
+                    root.update()
+                    self.assertEqual(
+                        diagnostic_notebook.tab(
+                            diagnostic_notebook.select(),
+                            "text",
+                        ),
+                        "Actions",
+                    )
+
+                    diagnostic_window.destroy()
+                    root.update()
+
                     for menu_index, expected_tab in ((0, "Contexts"), (2, "Actions")):
                         app.manage_focus_menu.invoke(menu_index)
                         root.update()
@@ -479,6 +587,39 @@ class LauncherSmokeTests(unittest.TestCase):
                             notebook.tab(notebook.select(), "text"),
                             expected_tab,
                         )
+                        tab_names = [
+                            notebook.tab(tab_id, "text")
+                            for tab_id in notebook.tabs()
+                        ]
+                        self.assertIn("Diagnostics", tab_names)
+                        diagnostics_tab_id = notebook.tabs()[
+                            tab_names.index("Diagnostics")
+                        ]
+                        diagnostics_tab = notebook.nametowidget(diagnostics_tab_id)
+                        diagnostics_widgets = self._descendants(diagnostics_tab)
+                        diagnostics_text = next(
+                            child
+                            for child in diagnostics_widgets
+                            if isinstance(child, tk.Text)
+                        )
+                        self.assertEqual(
+                            str(diagnostics_text.cget("state")),
+                            str(tk.DISABLED),
+                        )
+                        self.assertTrue(bool(diagnostics_text.cget("takefocus")))
+                        self.assertIn(
+                            "Configuration loaded",
+                            diagnostics_text.get("1.0", tk.END),
+                        )
+                        diagnostic_button_labels = {
+                            child.cget("text")
+                            for child in diagnostics_widgets
+                            if isinstance(child, ttk.Button)
+                        }
+                        self.assertTrue(
+                            {"Refresh", "Copy safe summary"}
+                            <= diagnostic_button_labels
+                        )
                         configuration_windows[0].destroy()
                         root.update()
 
@@ -497,6 +638,24 @@ class LauncherSmokeTests(unittest.TestCase):
                         self.assertEqual(len(help_windows), 1)
                         help_windows[0].destroy()
                         root.update()
+
+                    app._show_shortcuts()
+                    root.update()
+                    shortcut_windows = [
+                        child
+                        for child in root.winfo_children()
+                        if isinstance(child, tk.Toplevel)
+                        and child.title() == "Context Palette Keyboard Shortcuts"
+                    ]
+                    self.assertEqual(len(shortcut_windows), 1)
+                    shortcut_text = next(
+                        child
+                        for child in self._descendants(shortcut_windows[0])
+                        if isinstance(child, tk.Text)
+                    )
+                    self.assertIn("Alt+A", shortcut_text.get("1.0", tk.END))
+                    shortcut_windows[0].destroy()
+                    root.update()
 
                     app._show_cheatsheets()
                     root.update()

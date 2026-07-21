@@ -16,6 +16,8 @@ This directory separates current behavior, durable direction, historical rationa
 ### Users
 
 - [Help](HELP.md) — complete operation and troubleshooting.
+- [Keyboard shortcuts](SHORTCUTS.md) — authoritative shortcut reference,
+  also available from the app's **⌨** button.
 - [Action types](ACTION_TYPES.md) — generated catalogue of supported actions.
 - [Context configuration](CONTEXT_CONFIGURATION.md) — guided configuration and JSON reference.
 - [Right-side buttons](COMMAND_SURFACE_CONFIGURATION.md) — guided configuration and JSON reference.
@@ -40,6 +42,8 @@ This directory separates current behavior, durable direction, historical rationa
 - [Product vision](PRODUCT_VISION.md) — durable direction; proposals are labeled.
 - [Roadmap](ROADMAP.md) — ordered outcomes.
 - [Backlog](../BACKLOG.md) — actionable work items.
+- [Work Items discovery plan](WORK_ITEMS_PLAN.md) — approved proposal and
+  phased plan; not implemented.
 - [Decisions](DECISIONS.md) — append-only rationale.
 - [Changelog](../CHANGELOG.md) — user-visible history.
 - [Technical review](TECHNICAL_REVIEW.md) and [performance audit](PERFORMANCE_AUDIT.md) — dated audits, including completed findings.

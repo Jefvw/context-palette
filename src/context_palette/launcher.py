@@ -77,6 +77,24 @@ from .workspace_panel import WorkspacePanel
 
 LOGGER = logging.getLogger("context_palette.launcher")
 LOGGER.addHandler(logging.NullHandler())
+DOCUMENTATION_DIR = Path(__file__).resolve().parents[2] / "docs"
+
+
+def _log_automatic_paste(
+    category: str,
+    outcome: str,
+    reason: str,
+    *,
+    level: int = logging.INFO,
+) -> None:
+    """Record paste control flow without action, clipboard, or window content."""
+    LOGGER.log(
+        level,
+        "Automatic paste: category=%s outcome=%s reason=%s",
+        category,
+        outcome,
+        reason,
+    )
 
 SLOW_RESULT_REFRESH_SECONDS = 0.100
 SLOW_CONFIGURATION_RELOAD_SECONDS = 0.500
@@ -457,6 +475,8 @@ class LauncherApp:
             show_help=self._show_help,
             result_tooltip_text=self._result_tooltip_text,
             focus_tree_tooltip_text=self._focus_tree_tooltip_text,
+            configure_flat_action=self._configure_flat_action_from_event,
+            configure_focus_action=self._configure_focus_action_from_event,
         )
         discovery = self.action_discovery_panel
         self.search_entry = discovery.search_entry
@@ -563,12 +583,42 @@ class LauncherApp:
     def _bind_main_shortcuts(self) -> None:
 
         self.root.bind("<KeyPress>", self._handle_keypress)
-        self.root.bind("<Escape>", lambda _event: self.hide_window())
+        self.root.bind("<Escape>", self._hide_on_plain_escape)
         self.root.bind("<Control-l>", lambda _event: self.focus_search())
         self.root.bind("<Control-k>", lambda _event: self.focus_search())
         self.root.bind("<Control-i>", lambda _event: self._capture_clipboard())
         self.root.bind("<Control-comma>", lambda _event: self._show_configuration())
+        self.root.bind(
+            "<Control-Shift-D>",
+            lambda _event: self._show_configuration(initial_tab="diagnostics"),
+        )
         self.root.bind("<F1>", lambda _event: self._show_help())
+        self.root.bind("<F5>", self._reset_main_window)
+
+    def _reset_main_window(self, _event: tk.Event | None = None) -> str:
+        """Restore the transient main-window state used by a fresh startup."""
+        self.focus_actions_mode = False
+        self.action_type_filter = None
+        self.action_tag_filter = None
+        self.action_type_filter_var.set("All types")
+        self.action_tag_filter_var.set("All tags")
+        if self.passwords_button is not None:
+            self.passwords_button.configure(style="Compact.TButton")
+        self.captured_selection = None
+        self.source_foreground_handle = None
+        self._set_workspace_text("")
+        self.search_var.set("")
+        self._reload_if_changed()
+        self._refresh_results()
+        self.focus_search()
+        self.status_var.set("Reset to the startup view.")
+        return "break"
+
+    def _hide_on_plain_escape(self, event: tk.Event) -> str:
+        if int(event.state) & 0x0004:
+            return "break"
+        self.hide_window()
+        return "break"
 
     def _build_workspace(self, outer: ttk.Frame) -> None:
         self.workspace_component = WorkspacePanel(
@@ -600,7 +650,7 @@ class LauncherApp:
 
         controls = ttk.Frame(outer)
         controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
-        for column in range(8):
+        for column in range(9):
             controls.columnconfigure(column, weight=1, uniform="controls")
 
         button_specs = (
@@ -610,6 +660,7 @@ class LauncherApp:
             ("⌖", "Pin — Pin or unpin the selected action in stable slots 1–5.", self._toggle_selected_pin),
             ("✓", "Trust — Mark the selected reviewed Draft action as Trusted after confirmation.", self._mark_selected_trusted),
             ("?", "Help — Open the complete local Context Palette help document.", self._show_help),
+            ("⌨", "Keyboard shortcuts — Open the complete shortcut reference.", self._show_shortcuts),
             ("−", "Hide — Hide the palette but keep it resident. Reopen with Ctrl+Alt+P.", self.hide_window),
             ("×", "Quit — Stop Context Palette completely and release Ctrl+Alt+P.", self.quit_app),
         )
@@ -625,7 +676,7 @@ class LauncherApp:
                 row=0,
                 column=column,
                 sticky=tk.EW,
-                padx=(0 if column == 0 else 2, 0 if column == 7 else 2),
+                padx=(0 if column == 0 else 2, 0 if column == 8 else 2),
             )
             self._tooltip(control, tooltip)
 
@@ -1574,6 +1625,8 @@ class LauncherApp:
         self._execute_action(action)
 
     def _execute_action(self, action: Action) -> None:
+        destination = self.source_foreground_handle
+        self.source_foreground_handle = None
         try:
             message = execute_action(
                 action,
@@ -1583,17 +1636,85 @@ class LauncherApp:
                 selected_text=self._workspace_text() or self.captured_selection,
                 input_text=self._workspace_text(),
                 output_setter=self._set_workspace_text,
-                credential_paster=self._paste_credential_action,
+                credential_paster=lambda selected: self._paste_credential_action(
+                    selected,
+                    destination,
+                ),
             )
+            if action.type == "copy_text":
+                message = self._paste_saved_text_if_destination(destination)
             self.status_var.set(message)
         except ActionError as exc:
             self.status_var.set("Action failed")
             messagebox.showerror("Context Palette", str(exc))
             LOGGER.exception("Action failed: id=%s type=%s", action.id, action.type)
 
-    def _paste_credential_action(self, action: Action) -> str:
-        destination = self.source_foreground_handle
+    def _paste_saved_text_if_destination(
+        self,
+        destination: int | None = None,
+    ) -> str:
         if destination is None:
+            destination = self.source_foreground_handle
+        self.source_foreground_handle = None
+        if destination is None:
+            _log_automatic_paste("saved_text", "clipboard_only", "no_destination")
+            return "Copied text. No fresh destination was captured; paste manually with Ctrl+V."
+        self.root.withdraw()
+
+        def paste_into_destination() -> None:
+            if not focus_window(destination):
+                _log_automatic_paste(
+                    "saved_text",
+                    "failed",
+                    "destination_unavailable",
+                    level=logging.WARNING,
+                )
+                self.show_window()
+                self.status_var.set("Text copied, but automatic paste failed.")
+                messagebox.showerror(
+                    "Text copied, but not pasted",
+                    "The captured destination window is no longer available. "
+                    "The text remains on the clipboard; paste it manually with Ctrl+V.",
+                    parent=self.root,
+                )
+                return
+            try:
+                send_paste_shortcut()
+            except Exception as exc:
+                LOGGER.exception(
+                    "Automatic paste: category=saved_text outcome=failed "
+                    "reason=dispatch_error",
+                )
+                self.show_window()
+                self.status_var.set("Text copied, but automatic paste failed.")
+                messagebox.showerror(
+                    "Text copied, but not pasted",
+                    "Windows could not send the paste command. The text remains "
+                    "on the clipboard; paste it manually with Ctrl+V.\n\n"
+                    f"Technical detail: {exc}",
+                    parent=self.root,
+                )
+                return
+            _log_automatic_paste("saved_text", "success", "dispatched")
+
+        self.root.after(120, paste_into_destination)
+        return "Text copied; returning to the captured destination to paste it."
+
+    def _paste_credential_action(
+        self,
+        action: Action,
+        destination: int | None = None,
+    ) -> str:
+        if destination is None:
+            destination = self.source_foreground_handle
+        self.source_foreground_handle = None
+        if destination is None:
+            _log_automatic_paste(
+                "protected_credential",
+                "failed",
+                "no_destination",
+                level=logging.WARNING,
+            )
             raise ActionError(
                 "Open Context Palette with F9 or Ctrl+Alt+P from the destination password field."
             )
@@ -1608,18 +1729,28 @@ class LauncherApp:
             ),
             parent=self.root,
         ):
+            _log_automatic_paste(
+                "protected_credential",
+                "cancelled",
+                "user_cancelled",
+            )
             return "Credential paste cancelled."
         try:
             secret = read_windows_credential(action.value)
             sequence = set_protected_clipboard_text(secret.password)
         except CredentialAccessError as exc:
             raise ActionError(str(exc)) from exc
-        self.source_foreground_handle = None
         self.protected_clipboard_sequence = sequence
         self.root.withdraw()
 
         def paste_into_destination() -> None:
             if not focus_window(destination):
+                _log_automatic_paste(
+                    "protected_credential",
+                    "failed",
+                    "destination_unavailable",
+                    level=logging.WARNING,
+                )
                 self._clear_protected_clipboard(sequence)
                 self.show_window()
                 messagebox.showerror(
@@ -1628,7 +1759,29 @@ class LauncherApp:
                     parent=self.root,
                 )
                 return
-            send_paste_shortcut()
+            try:
+                send_paste_shortcut()
+            except Exception as exc:
+                LOGGER.exception(
+                    "Automatic paste: category=protected_credential outcome=failed "
+                    "reason=dispatch_error",
+                )
+                self._clear_protected_clipboard(sequence)
+                self.show_window()
+                self.status_var.set("Protected credential paste was cancelled.")
+                messagebox.showerror(
+                    "Credential paste cancelled",
+                    "Windows could not send the paste command. The protected "
+                    "clipboard item was cleared.\n\n"
+                    f"Technical detail: {exc}",
+                    parent=self.root,
+                )
+                return
+            _log_automatic_paste(
+                "protected_credential",
+                "success",
+                "dispatched",
+            )
 
         self.root.after(
             15_000,
@@ -1761,7 +1914,10 @@ class LauncherApp:
         except ActionError:
             pass
         if action.type == "copy_text":
-            return action.value
+            return (
+                action.value
+                + "\n\nRuns as direct paste after a hotkey capture; otherwise copies to the clipboard."
+            )
         if action.type == "open_url":
             return f"Open URL:\n{action.value}"
         if action.type == "open_file":
@@ -1823,6 +1979,8 @@ class LauncherApp:
 
     def _clear_protected_clipboard(self, sequence: int | None = None) -> None:
         current = self.protected_clipboard_sequence
+        if sequence is not None and current != sequence:
+            return
         target = sequence if sequence is not None else current
         if target is None:
             return
@@ -1904,21 +2062,69 @@ class LauncherApp:
         )
 
     def _show_help(self) -> None:
-        HelpWindow(self.root, self.actions_path.parent.parent / "docs" / "HELP.md")
+        HelpWindow(self.root, DOCUMENTATION_DIR / "HELP.md")
 
-    def _show_configuration(self, *, initial_tab: str = "actions") -> None:
+    def _show_shortcuts(self) -> None:
+        HelpWindow(
+            self.root,
+            DOCUMENTATION_DIR / "SHORTCUTS.md",
+            title="Context Palette Keyboard Shortcuts",
+        )
+
+    def _show_configuration(
+        self,
+        *,
+        initial_tab: str = "actions",
+        initial_action_id: str | None = None,
+    ) -> None:
         ConfigurationWindow(
             self.root,
             actions=self.actions,
             local_action_ids=self.local_action_ids,
+            shared_actions_path=self.actions_path,
             local_actions_path=self.local_actions_path,
             contexts_path=self.contexts_path,
             local_contexts_path=self.local_contexts_path,
             command_surface_path=self.command_surface_path,
             local_command_surface_path=self.local_command_surface_path,
+            palette_path=self.palette_path,
             on_change=self._reload,
             initial_tab=initial_tab,
+            initial_action_id=initial_action_id,
         )
+
+    def _show_action_configuration(self, action: Action) -> None:
+        self._show_configuration(
+            initial_tab="actions",
+            initial_action_id=action.id,
+        )
+
+    def _configure_flat_action_from_event(self, event: tk.Event) -> str:
+        index = self.results.nearest(event.y)
+        bounds = self.results.bbox(index)
+        if (
+            bounds is None
+            or not (bounds[1] <= event.y < bounds[1] + bounds[3])
+            or index >= len(self.displayed_actions)
+        ):
+            return "break"
+        self.results.selection_clear(0, tk.END)
+        self.results.selection_set(index)
+        self.results.activate(index)
+        self._update_preview()
+        self._show_action_configuration(self.displayed_actions[index])
+        return "break"
+
+    def _configure_focus_action_from_event(self, event: tk.Event) -> str:
+        item_id = self.focus_tree.identify_row(event.y)
+        action = self.focus_tree_actions.get(item_id)
+        if action is None:
+            return "break"
+        self.focus_tree.selection_set(item_id)
+        self.focus_tree.focus(item_id)
+        self._update_preview()
+        self._show_action_configuration(action)
+        return "break"
 
     def _show_focus_configuration(self) -> None:
         self._show_configuration(initial_tab="contexts")
@@ -1963,36 +2169,38 @@ class LauncherApp:
         return self._execute_slot(slot, event)
 
     def _slot_from_key(self, event: tk.Event) -> int | None:
-        keysym = str(event.keysym)
+        state = int(getattr(event, "state", 0) or 0)
+        if not state & 0x0001 or state & (0x0004 | 0x20000):
+            return None
+
+        # Tk's Windows event fields vary with keyboard layout and driver. Try
+        # the produced digit first, then the AZERTY key name, then the common
+        # Windows virtual-key code. Numpad input remains Find text.
         keycode = int(getattr(event, "keycode", 0) or 0)
         if 97 <= keycode <= 105:
-            return keycode - 96
-
-        if keysym.isdigit():
-            slot = int(keysym)
-            return slot if 1 <= slot <= 9 else None
-        if keysym.startswith("KP_"):
-            keypad_names = {
-                "KP_1": 1,
-                "KP_2": 2,
-                "KP_3": 3,
-                "KP_4": 4,
-                "KP_5": 5,
-                "KP_6": 6,
-                "KP_7": 7,
-                "KP_8": 8,
-                "KP_9": 9,
-                "KP_End": 1,
-                "KP_Down": 2,
-                "KP_Next": 3,
-                "KP_Left": 4,
-                "KP_Begin": 5,
-                "KP_Right": 6,
-                "KP_Home": 7,
-                "KP_Up": 8,
-                "KP_Prior": 9,
-            }
-            return keypad_names.get(keysym)
+            return None
+        keysym = str(getattr(event, "keysym", "")).casefold()
+        character = str(getattr(event, "char", ""))
+        for candidate in (character, keysym):
+            if candidate.isdigit():
+                slot = int(candidate)
+                if 1 <= slot <= 9:
+                    return slot
+        azerty_slots = {
+            "ampersand": 1,
+            "eacute": 2,
+            "quotedbl": 3,
+            "apostrophe": 4,
+            "parenleft": 5,
+            "minus": 6,
+            "egrave": 7,
+            "underscore": 8,
+            "ccedilla": 9,
+        }
+        if keysym in azerty_slots:
+            return azerty_slots[keysym]
+        if 49 <= keycode <= 57:
+            return keycode - 48
         return None
 
     def _plain_number_from_text_input(self, event: tk.Event) -> bool:

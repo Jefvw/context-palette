@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 import tkinter as tk
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +19,7 @@ from context_palette.configuration_window import (
     select_first_tree_item,
     _focus_entry,
 )
+from context_palette.action_deletion import ActionDeletionReport
 from context_palette.actions import Action
 
 
@@ -28,6 +29,9 @@ class FakeVariable:
 
     def get(self) -> str:
         return self.value
+
+    def set(self, value: str) -> None:
+        self.value = value
 
 
 class FakeText:
@@ -41,9 +45,20 @@ class FakeText:
 class FakeWindow:
     def __init__(self) -> None:
         self.destroy_calls = 0
+        self.clipboard_value = ""
+        self.update_calls = 0
 
     def destroy(self) -> None:
         self.destroy_calls += 1
+
+    def clipboard_clear(self) -> None:
+        self.clipboard_value = ""
+
+    def clipboard_append(self, value: str) -> None:
+        self.clipboard_value += value
+
+    def update(self) -> None:
+        self.update_calls += 1
 
 
 class FakeFocusWindow:
@@ -52,6 +67,19 @@ class FakeFocusWindow:
 
     def after_idle(self, callback: object) -> None:
         self.callbacks.append(callback)
+
+
+class FakeNotebook:
+    def __init__(self, selected: int = 0) -> None:
+        self.selected = selected
+
+    def select(self, value: int | None = None) -> int:
+        if value is not None:
+            self.selected = value
+        return self.selected
+
+    def index(self, value: int) -> int:
+        return value
 
 
 class FakeEntry:
@@ -64,6 +92,13 @@ class FakeEntry:
 
     def selection_range(self, start: object, end: object) -> None:
         self.selection = (start, end)
+
+
+class FakeEvent:
+    def __init__(self, state: int = 0, keycode: int = 0, keysym: str = "") -> None:
+        self.state = state
+        self.keycode = keycode
+        self.keysym = keysym
 
 
 class FakeTree:
@@ -87,7 +122,134 @@ class FakeTree:
         self.focused = item
 
 
+class FakeActionTree(FakeTree):
+    def __init__(self) -> None:
+        super().__init__(())
+        self.inserted: list[str] = []
+        self.seen: str | None = None
+
+    def delete(self, *_items: str) -> None:
+        self.inserted.clear()
+
+    def insert(self, _parent: str, _position: str, *, iid: str, **_options: object) -> None:
+        self.inserted.append(iid)
+
+    def tag_configure(self, _tag: str, **_options: object) -> None:
+        return
+
+    def see(self, item: str) -> None:
+        self.seen = item
+
+
+class FakeSelectedActionTree:
+    def __init__(self, item: str) -> None:
+        self.item = item
+
+    def selection(self) -> tuple[str, ...]:
+        return (self.item,)
+
+
 class ConfigurationDialogTests(unittest.TestCase):
+    def test_alt_mnemonics_select_configure_tabs(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.notebook = FakeNotebook()
+
+        for keysym, expected_tab in (("a", 0), ("t", 1), ("c", 2), ("b", 3), ("d", 4)):
+            with self.subTest(keysym=keysym):
+                self.assertEqual(
+                    configuration._handle_configure_keypress(
+                        FakeEvent(state=0x20000, keysym=keysym),
+                    ),
+                    "break",
+                )
+                self.assertEqual(configuration.notebook.selected, expected_tab)
+
+    def test_configure_closes_only_for_plain_escape(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.window = FakeWindow()
+
+        self.assertEqual(
+            configuration._close_on_plain_escape(FakeEvent(state=0x0004)),
+            "break",
+        )
+        self.assertEqual(configuration.window.destroy_calls, 0)
+
+        self.assertEqual(
+            configuration._close_on_plain_escape(FakeEvent()),
+            "break",
+        )
+        self.assertEqual(configuration.window.destroy_calls, 1)
+
+    def test_diagnostics_shortcut_selects_tab_and_focuses_summary(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.notebook = FakeNotebook()
+        configuration.window = FakeFocusWindow()
+        configuration.action_tree = FakeEntry()
+        configuration.type_list = FakeEntry()
+        configuration.context_tree = FakeEntry()
+        configuration.button_tree = FakeEntry()
+        configuration.diagnostics_text = FakeEntry()
+
+        result = configuration._show_diagnostics_tab()
+        callback = configuration.window.callbacks.pop()
+        callback()
+
+        self.assertEqual(result, "break")
+        self.assertEqual(configuration.notebook.selected, 4)
+        self.assertEqual(configuration.diagnostics_text.focus_calls, 1)
+
+    def test_diagnostics_tab_change_moves_focus_into_read_only_summary(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.notebook = FakeNotebook(selected=4)
+        configuration.action_tree = FakeEntry()
+        configuration.type_list = FakeEntry()
+        configuration.context_tree = FakeEntry()
+        configuration.button_tree = FakeEntry()
+        configuration.diagnostics_text = FakeEntry()
+
+        configuration._focus_current_tab()
+
+        self.assertEqual(configuration.diagnostics_text.focus_calls, 1)
+        self.assertEqual(configuration.action_tree.focus_calls, 0)
+
+    def test_copy_diagnostics_copies_only_rendered_safe_summary(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.window = FakeWindow()
+        configuration.diagnostics_summary = (
+            "Context Palette diagnostics\nSuccessful: 2\nPrivacy: content excluded"
+        )
+        configuration.feedback_var = FakeVariable()
+        configuration.feedback_label = Mock()
+
+        configuration._copy_diagnostics()
+
+        self.assertEqual(
+            configuration.window.clipboard_value,
+            configuration.diagnostics_summary,
+        )
+        self.assertEqual(configuration.window.update_calls, 1)
+        self.assertEqual(
+            configuration.feedback_var.value,
+            "Copied the safe diagnostics summary.",
+        )
+
+    def test_copy_diagnostics_reports_clipboard_failure_without_success(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.window = FakeWindow()
+        configuration.window.clipboard_clear = Mock(
+            side_effect=tk.TclError("clipboard busy")
+        )
+        configuration.diagnostics_summary = "Safe summary"
+        configuration.feedback_var = FakeVariable("unchanged")
+        configuration.feedback_label = Mock()
+
+        with patch("context_palette.configuration_window.messagebox.showerror") as error:
+            configuration._copy_diagnostics()
+
+        self.assertIn("could not be copied", error.call_args.args[1])
+        self.assertEqual(configuration.feedback_var.value, "unchanged")
+        configuration.feedback_label.configure.assert_not_called()
+
     def test_first_nested_button_is_selected_for_keyboard_navigation(self) -> None:
         tree = FakeTree(("group-0",), {"group-0": ("button-0-0", "button-0-1")})
 
@@ -130,6 +292,111 @@ class ConfigurationDialogTests(unittest.TestCase):
         self.assertTrue(action_matches_filter(action, "website draft", personal=True))
         self.assertTrue(action_matches_filter(action, "personal reference", personal=True))
         self.assertFalse(action_matches_filter(action, "shared", personal=True))
+
+    def test_initial_action_is_selected_when_actions_are_rendered(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.actions = [
+            Action("first", "First", "General", "copy_text", "one"),
+            Action("requested", "Requested", "General", "copy_text", "two"),
+        ]
+        configuration.local_action_ids = {"first", "requested"}
+        configuration.initial_action_id = "REQUESTED"
+        configuration.action_filter_var = FakeVariable()
+        configuration.action_filter_count_var = FakeVariable()
+        configuration.action_tree = FakeActionTree()
+
+        configuration._render_actions()
+
+        self.assertEqual(configuration.action_tree.selected, "action-1")
+        self.assertEqual(configuration.action_tree.focused, "action-1")
+        self.assertEqual(configuration.action_tree.seen, "action-1")
+
+    def test_editing_shared_action_warns_and_saves_to_shared_file(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        action = Action("shared", "Shared", "General", "copy_text", "one")
+        configuration.actions = [action]
+        configuration.local_action_ids = set()
+        configuration.shared_actions_path = Path("shared-actions.json")
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.action_tree = FakeSelectedActionTree("action-0")
+        configuration.contexts = []
+        configuration.window = FakeWindow()
+        configuration.action_filter_var = FakeVariable()
+        configuration.feedback_var = FakeVariable()
+        configuration.feedback_label = Mock()
+        configuration.on_change = Mock()
+        configuration._render_actions = Mock()
+
+        with (
+            patch(
+                "context_palette.configuration_window.messagebox.askokcancel",
+                return_value=True,
+            ) as warning,
+            patch("context_palette.configuration_window.ActionDraftDialog") as dialog,
+            patch("context_palette.configuration_window.update_action") as update,
+        ):
+            configuration._edit_action()
+            save_callback = dialog.call_args.args[3]
+            self.assertTrue(save_callback(action))
+
+        warning.assert_called_once()
+        self.assertIn("tracked by Git", warning.call_args.args[1])
+        update.assert_called_once_with(Path("shared-actions.json"), action)
+
+    def test_cancelling_shared_action_warning_does_not_open_editor(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.actions = [
+            Action("shared", "Shared", "General", "copy_text", "one")
+        ]
+        configuration.local_action_ids = set()
+        configuration.action_tree = FakeSelectedActionTree("action-0")
+        configuration.contexts = []
+        configuration.window = FakeWindow()
+
+        with (
+            patch(
+                "context_palette.configuration_window.messagebox.askokcancel",
+                return_value=False,
+            ),
+            patch("context_palette.configuration_window.ActionDraftDialog") as dialog,
+        ):
+            configuration._edit_action()
+
+        dialog.assert_not_called()
+
+    def test_cancelling_shared_action_deletion_preserves_action(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.actions = [
+            Action("shared", "Shared", "General", "copy_text", "one")
+        ]
+        configuration.local_action_ids = set()
+        configuration.action_tree = FakeSelectedActionTree("action-0")
+        configuration.contexts_path = Path("contexts.json")
+        configuration.local_contexts_path = Path("local-contexts.json")
+        configuration.command_surface_path = Path("commands.json")
+        configuration.local_command_surface_path = Path("local-commands.json")
+        configuration.palette_path = Path("palette.json")
+        configuration.window = FakeWindow()
+
+        with (
+            patch(
+                "context_palette.configuration_window.inspect_action_references",
+                return_value=ActionDeletionReport(3, 1, 2),
+            ),
+            patch(
+                "context_palette.configuration_window.messagebox.askyesno",
+                return_value=False,
+            ) as confirmation,
+            patch(
+                "context_palette.configuration_window.delete_action_and_references"
+            ) as delete,
+        ):
+            configuration._delete_action()
+
+        self.assertIn("3 saved reference(s)", confirmation.call_args.args[1])
+        self.assertIn("shared action", confirmation.call_args.args[1])
+        delete.assert_not_called()
+        self.assertEqual([action.id for action in configuration.actions], ["shared"])
 
     def test_focus_entry_schedules_focus_and_selects_existing_text(self) -> None:
         window = FakeFocusWindow()

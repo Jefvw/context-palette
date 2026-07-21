@@ -1,5 +1,37 @@
 # Decisions
 
+## 2026-07-20 - Plan bounded local Work Items discovery
+
+**Status:** Proposed; not implemented.
+
+**Decision:** Model work items as transient resources discovered from explicitly
+configured local `workitems` sources rather than persisted actions. Omit visual
+marker folders ending in at least five hyphens and do not enumerate anything
+beneath them. Consider only direct non-marker children; never recurse. Open only
+an exact case-insensitive
+`<folder-name>.xlsx` match and otherwise open the folder.
+
+Parse the known Case, Issue, Track, Question, and Project kind codes plus the
+organisational unit. Automatically detect zero or more project-code tokens that
+are four characters long with `9` as the third character. Keep project codes
+as structured searchable/filterable metadata, separate from open-ended
+personal tags. Store source paths and personal metadata only in ignored local
+files and do not modify work folders.
+
+**Reason:** The user maintains work in folder-based items whose starting
+workbook follows a reliable exact-name convention, while absolute locations
+differ between computers. Dynamic bounded discovery avoids maintaining one
+action per folder, exact matching avoids opening the wrong workbook, and
+structured project codes plus personal tags support fast retrieval without
+overloading the action taxonomy.
+
+**Consequences:** The main window must retain its current size and show one row
+per work item. Visual markers are not results or headings. There is no general
+or marker-child scan, workbook-content inspection, guessed workbook, arbitrary
+command execution, tracked work metadata, or implementation authorization in
+this decision. The phased design and acceptance criteria live in
+[Work Items discovery plan](WORK_ITEMS_PLAN.md).
+
 ## 2026-07-20 - Isolate current Focus policy before context redesign
 
 **Decision:** Move the pure Focus-to-action hierarchy rule from the Tk launcher
@@ -909,3 +941,75 @@ personal data safely without silently rewriting ignored files.
 Specific context membership may be shared. Tags are normalized
 case-insensitively and remain filters rather than hierarchy. Supporting-context
 composition and automatic focus inference remain future work.
+
+## 2026-07-20 - Make saved text a direct-paste action when safely invoked
+
+**Decision:** Keep `copy_text` as the stable stored action type, but present it
+as **Paste saved text**. After `F9` or `Ctrl+Alt+P` captures a fresh source
+window, the next action attempt takes and clears that destination before
+dispatch. A saved-text action then replaces the clipboard, hides the palette,
+restores the window, and sends one paste shortcut. Without a captured
+destination it remains a clipboard-only action and explicitly requests manual
+`Ctrl+V`. If the captured window disappears, restore the palette and retain the
+copied text. Success, cancellation, and failure of any other action all leave no
+destination behind for a later paste. If Windows focus succeeds but input
+dispatch fails, restore the palette and retain ordinary copied text for manual
+paste. For credentials, clear the protected clipboard immediately and make the
+existing delayed cleanup callback a no-op. Record each automatic-paste outcome
+using fixed category, outcome, and reason fields only; never pass action,
+clipboard, credential, or window content into those log events.
+
+**Reason:** The dominant launcher workflow is inserting reusable text into the
+field from which the palette was opened. Stopping after the necessary clipboard
+write made every ordinary greeting or template require an avoidable focus
+switch and manual paste. Requiring a fresh captured destination prevents an old
+window handle from silently receiving text, while clipboard fallback preserves
+use from normal application launches and integrations.
+
+## 2026-07-20 - Expose diagnostics through a sanitized summary
+
+**Decision:** Add a Diagnostics tab to Configure that shows configuration
+counts, recent automatic-paste outcomes, and error counts/timestamps. Parse only
+the fixed allow-listed paste event schema and never display raw log lines.
+Provide Refresh and Copy safe summary, but no raw-log shortcut.
+
+**Reason:** A non-developer needs enough information to report whether loading
+and automatic paste are healthy without navigating project files or sharing
+tracebacks. Raw logs can contain technical paths or future exception details;
+an intentionally lossy summary is safer to understand, copy, and share.
+
+**Accessibility:** Provide `Ctrl+Shift+D` from the focused launcher and native
+`Ctrl+Tab` traversal inside Configure. Whenever a tab is selected, move focus
+into its primary content so keyboard and screen-reader users do not remain
+stranded on a previous tab's control. Ctrl+number shortcuts are unsuitable for
+AZERTY and Windows/Tk can translate them into legacy control characters.
+Provide semantic `Alt+A`, `Alt+T`, `Alt+C`, `Alt+B`, and `Alt+D` mnemonics via a
+generic key-event handler rather than unreliable symbolic Alt bindings. The
+launcher's global `1`–`9` action-slot routing must reject Ctrl, Alt, and Shift
+states so it cannot execute an action that hides the palette.
+
+## 2026-07-21 - Make keyboard behavior discoverable and layout-aware
+
+**Decision:** Maintain `docs/SHORTCUTS.md` as the authoritative shortcut page
+and expose it through a compact main-window keyboard button. Use generic
+Alt-state handling for both Configure tabs and guided context/tag fields.
+Permit Shift-produced digit keysyms for slots while Find is focused, because
+AZERTY requires Shift to enter number-row digits; continue rejecting Ctrl,
+Alt, and AltGr number combinations.
+
+**Reason:** Shortcut behavior was duplicated across Help, code, and discussion,
+and symbolic Tk Alt bindings plus QWERTY-only number assumptions failed on the
+user's AZERTY keyboard. One visible reference and shared event policy make the
+behavior easier to discover, test, and maintain.
+
+## 2026-07-21 - Reserve Shift plus the top number row for action slots
+
+**Decision:** Plain number-row and numpad input always remains Find text. Only
+Shift plus one of the nine physical top-row number keys may execute a slot, and
+only while Find is focused. Resolve the slot from the stable Windows virtual
+keycode rather than the layout-dependent character.
+
+**Reason:** Mixing plain digits with action execution made Find unpredictable,
+and numpad shortcuts did not work reliably on the user's keyboard. A single
+explicit modifier provides a visible distinction between searching and running
+while physical key positions make the command consistent on AZERTY and QWERTY.

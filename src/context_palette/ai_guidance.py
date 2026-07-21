@@ -12,6 +12,7 @@ from .inbox import InboxItem
 
 RESPONSE_FORMAT = "context-palette-action-proposals"
 RESPONSE_VERSION = 2
+MAX_AI_RESPONSE_CHARACTERS = 1_000_000
 PROPOSAL_FIELDS = {
     "title",
     "contexts",
@@ -181,6 +182,11 @@ def parse_ai_proposals(response: str, variation: PromptVariation) -> list[Action
 
 
 def review_ai_proposals(response: str, variation: PromptVariation) -> AIProposalReview:
+    if len(response) > MAX_AI_RESPONSE_CHARACTERS:
+        raise AIGuidanceError(
+            "AI response is too large to review safely "
+            f"(maximum {MAX_AI_RESPONSE_CHARACTERS:,} characters)."
+        )
     try:
         data = json.loads(_response_json_text(response))
     except json.JSONDecodeError as exc:

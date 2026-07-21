@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.ai_guidance import (
     AIGuidanceError,
+    MAX_AI_RESPONSE_CHARACTERS,
     PROMPT_VARIATIONS,
     build_ai_request,
     build_example_response,
@@ -28,6 +29,15 @@ ITEM = InboxItem(
 
 
 class AIGuidanceTests(unittest.TestCase):
+    def test_oversized_response_is_rejected_before_json_parsing(self):
+        response = "{" + (" " * MAX_AI_RESPONSE_CHARACTERS) + "}"
+
+        with self.assertRaisesRegex(
+            AIGuidanceError,
+            "too large to review safely",
+        ):
+            review_ai_proposals(response, PROMPT_VARIATIONS[0])
+
     def test_request_delimits_capture_and_constrains_the_response(self):
         request = build_ai_request(ITEM, PROMPT_VARIATIONS[0], ["General", "Email"])
 

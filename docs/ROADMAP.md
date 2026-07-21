@@ -11,6 +11,9 @@ The roadmap describes ordered product outcomes, not commitments or implemented b
 
 ## Next — deepen safe context workflows
 
+- Add explicitly configured local Work Items discovery with bounded scanning,
+  exact workbook matching, structured project-code filtering, and personal
+  tags, following the approved [Work Items plan](WORK_ITEMS_PLAN.md).
 - Add richer context composition and ranking while preserving explicit focus and global search.
 - Design clipboard preservation/restoration as an explicit transaction with tests.
 - Design a small previewable linear sequence model; no loops, conditions, or arbitrary commands.

@@ -8,6 +8,7 @@ from .actions import Action
 from .ai_guidance import (
     AIGuidanceError,
     ActionProposal,
+    MAX_AI_RESPONSE_CHARACTERS,
     PROMPT_VARIATIONS,
     PromptVariation,
     build_ai_request,
@@ -154,6 +155,16 @@ class AIGuidanceWindow:
         except tk.TclError:
             messagebox.showerror(
                 "Context Palette", "The clipboard does not contain text.", parent=self.window
+            )
+            return
+        if len(text) > MAX_AI_RESPONSE_CHARACTERS:
+            messagebox.showerror(
+                "AI response is too large",
+                (
+                    "The clipboard response is too large to review safely "
+                    f"(maximum {MAX_AI_RESPONSE_CHARACTERS:,} characters)."
+                ),
+                parent=self.window,
             )
             return
         self.response.delete("1.0", tk.END)

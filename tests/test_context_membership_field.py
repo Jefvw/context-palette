@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 import tkinter as tk
+from types import SimpleNamespace
 import unittest
 
 
@@ -85,9 +86,18 @@ class ContextMembershipFieldTests(unittest.TestCase):
             field.entry.focus_set = lambda: focus_requests.append(True)
             try:
                 self.assertEqual(field._focus_entry(), "break")
+                self.assertEqual(focus_requests, [True])
+
+                focus_requests.clear()
+                self.assertEqual(
+                    field._handle_mnemonic_keypress(
+                        SimpleNamespace(state=0x20000, keysym="c"),
+                    ),
+                    "break",
+                )
+                self.assertEqual(focus_requests, [True])
             finally:
                 field.entry.focus_set = original_focus_set
-            self.assertEqual(focus_requests, [True])
 
             calls: list[tuple[object, ...]] = []
             original_tk = field.picker.tk

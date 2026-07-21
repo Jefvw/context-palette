@@ -15,6 +15,11 @@ from .actions import (
     update_action,
     validate_context_memberships,
 )
+from .action_deletion import (
+    ActionDeletionError,
+    delete_action_and_references,
+    inspect_action_references,
+)
 from .action_types import ACTION_TYPES
 from .command_surface import (
     CommandGroup,
@@ -25,6 +30,7 @@ from .command_surface import (
 )
 from .configuration_data import save_local_command_item, save_local_context
 from .contexts import ContextDefinition, ContextError, load_combined_contexts, load_contexts
+from .diagnostics import render_safe_diagnostics, summarize_diagnostics
 from .context_membership_field import (
     ContextMembershipField,
     TagSelectionField,
@@ -34,7 +40,7 @@ from .window_geometry import configure_standard_window
 
 
 ACTION_TYPE_EXAMPLES = {
-    "copy_text": "Example: Copy “Kind regards,” to the clipboard.",
+    "copy_text": "Example: Paste “Kind regards,” into the application you came from.",
     "workspace_template": "Example: Put a reusable meeting-notes outline in Input / Output.",
     "open_url": "Example: Open https://docs.python.org/ in the default browser.",
     "open_file": r"Example: Open %PROJECT_ROOT%\README.md in its associated application.",
@@ -59,7 +65,7 @@ def action_matches_filter(action: Action, query: str, *, personal: bool) -> bool
             *action.effective_contexts,
             *action.effective_tags,
             action.state,
-            "Personal" if personal else "Shared read-only",
+            "Personal" if personal else "Shared",
         )
     ).casefold()
     return all(term in searchable for term in terms)
@@ -85,38 +91,45 @@ class ConfigurationWindow:
         *,
         actions: list[Action],
         local_action_ids: set[str],
+        shared_actions_path: Path,
         local_actions_path: Path,
         contexts_path: Path,
         local_contexts_path: Path,
         command_surface_path: Path,
         local_command_surface_path: Path,
+        palette_path: Path,
         on_change: Callable[[], None],
         initial_tab: str = "actions",
+        initial_action_id: str | None = None,
     ) -> None:
         self.actions = actions
         self.local_action_ids = local_action_ids
+        self.shared_actions_path = shared_actions_path
         self.local_actions_path = local_actions_path
         self.contexts_path = contexts_path
         self.local_contexts_path = local_contexts_path
         self.command_surface_path = command_surface_path
         self.local_command_surface_path = local_command_surface_path
+        self.palette_path = palette_path
         self.on_change = on_change
         self.contexts: list[ContextDefinition] = []
         self.groups: list[CommandGroup] = []
         self.action_filter_var = tk.StringVar()
         self.action_filter_count_var = tk.StringVar()
         self.initial_tab = initial_tab
+        self.initial_action_id = initial_action_id
 
         self.window = tk.Toplevel(parent)
         self.window.title("Configure Context Palette")
         configure_standard_window(self.window)
-        self.window.bind("<Escape>", lambda _event: self.window.destroy())
+        self.window.bind("<Escape>", self._close_on_plain_escape)
+        self.window.bind("<KeyPress>", self._handle_configure_keypress, add="+")
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
         footer = ttk.Frame(outer)
         footer.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
         self.feedback_var = tk.StringVar(
-            value="Shared project examples are visible but read-only."
+            value="Personal and shared actions are editable; shared changes are tracked by Git."
         )
         self.feedback_label = ttk.Label(
             footer,
@@ -136,29 +149,57 @@ class ConfigurationWindow:
             text="Create repeated actions, organize them by context, then place them in slots or quick-action buttons.",
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(2, 10))
-        notebook = ttk.Notebook(outer)
-        notebook.pack(fill=tk.BOTH, expand=True)
-        self._build_actions_tab(notebook)
-        self._build_types_tab(notebook)
-        self._build_contexts_tab(notebook)
-        self._build_buttons_tab(notebook)
-        tab_indexes = {"actions": 0, "types": 1, "contexts": 2, "buttons": 3}
-        notebook.select(tab_indexes.get(self.initial_tab, 0))
+        self.notebook = ttk.Notebook(outer)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+        self.notebook.enable_traversal()
+        self._build_actions_tab(self.notebook)
+        self._build_types_tab(self.notebook)
+        self._build_contexts_tab(self.notebook)
+        self._build_buttons_tab(self.notebook)
+        self._build_diagnostics_tab(self.notebook)
+        tab_indexes = {
+            "actions": 0,
+            "types": 1,
+            "contexts": 2,
+            "buttons": 3,
+            "diagnostics": 4,
+        }
+        self.notebook.select(tab_indexes.get(self.initial_tab, 0))
+        self.notebook.bind("<<NotebookTabChanged>>", self._focus_selected_tab)
         self.window.bind("<Control-f>", self._focus_action_filter)
         self._reload()
         self.window.transient(parent)
         self.window.lift()
-        if self.initial_tab == "contexts":
-            self.window.after_idle(self.context_tree.focus_set)
-        else:
-            self.window.after_idle(self.action_tree.focus_set)
+        self.window.after_idle(self._focus_current_tab)
+
+    def _close_on_plain_escape(self, event: tk.Event) -> str:
+        if int(event.state) & 0x0004:
+            return "break"
+        self.window.destroy()
+        return "break"
+
+    def _handle_configure_keypress(self, event: tk.Event) -> str | None:
+        state = int(getattr(event, "state", 0) or 0)
+        if not state & 0x20000:
+            return None
+        tab_index = {
+            "a": 0,
+            "t": 1,
+            "c": 2,
+            "b": 3,
+            "d": 4,
+        }.get(str(getattr(event, "keysym", "")).casefold())
+        if tab_index is None:
+            return None
+        self.notebook.select(tab_index)
+        return "break"
 
     def _build_actions_tab(self, notebook: ttk.Notebook) -> None:
         tab = ttk.Frame(notebook, padding=10)
-        notebook.add(tab, text="Actions")
+        notebook.add(tab, text="Actions", underline=0)
         ttk.Label(
             tab,
-            text="Every personal action type is editable. Shared actions remain read-only.",
+            text="All action types are editable. Shared changes affect the tracked project file.",
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(0, 6))
         filter_row = ttk.Frame(tab)
@@ -209,10 +250,13 @@ class ConfigurationWindow:
         ttk.Button(controls, text="Edit selected", command=self._edit_action).pack(
             side=tk.LEFT, padx=(6, 0)
         )
+        ttk.Button(controls, text="Delete selected", command=self._delete_action).pack(
+            side=tk.LEFT, padx=(6, 0)
+        )
 
     def _build_types_tab(self, notebook: ttk.Notebook) -> None:
         tab = ttk.Frame(notebook, padding=10)
-        notebook.add(tab, text="Built-in action types")
+        notebook.add(tab, text="Built-in action types", underline=16)
         panes = ttk.Panedwindow(tab, orient=tk.HORIZONTAL)
         panes.pack(fill=tk.BOTH, expand=True)
         self.type_ids = list(ACTION_TYPES)
@@ -242,7 +286,7 @@ class ConfigurationWindow:
 
     def _build_contexts_tab(self, notebook: ttk.Notebook) -> None:
         tab = ttk.Frame(notebook, padding=10)
-        notebook.add(tab, text="Contexts")
+        notebook.add(tab, text="Contexts", underline=0)
         ttk.Label(
             tab,
             text="Choose up to four preferred actions for slots 6–9.",
@@ -267,7 +311,7 @@ class ConfigurationWindow:
 
     def _build_buttons_tab(self, notebook: ttk.Notebook) -> None:
         tab = ttk.Frame(notebook, padding=10)
-        notebook.add(tab, text="Right-side buttons")
+        notebook.add(tab, text="Right-side buttons", underline=11)
         ttk.Label(
             tab,
             text="Buttons safely reference existing actions; they never contain commands.",
@@ -289,6 +333,60 @@ class ConfigurationWindow:
         controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0), before=self.button_tree)
         ttk.Button(controls, text="Add personal button", command=self._add_button).pack(side=tk.LEFT)
         ttk.Button(controls, text="Edit selected", command=self._edit_button).pack(side=tk.LEFT, padx=(6, 0))
+
+    def _build_diagnostics_tab(self, notebook: ttk.Notebook) -> None:
+        tab = ttk.Frame(notebook, padding=10)
+        notebook.add(tab, text="Diagnostics", underline=0)
+        ttk.Label(
+            tab,
+            text="Safe summary only. Use Ctrl+Tab to move between Configure tabs.",
+            style="Muted.TLabel",
+        ).pack(anchor=tk.W, pady=(0, 6))
+        self.diagnostics_text = tk.Text(
+            tab,
+            wrap=tk.WORD,
+            height=18,
+            padx=8,
+            pady=8,
+            takefocus=True,
+        )
+        self.diagnostics_text.pack(fill=tk.BOTH, expand=True)
+        self.diagnostics_text.configure(state=tk.DISABLED)
+        controls = ttk.Frame(tab)
+        controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0), before=self.diagnostics_text)
+        ttk.Button(
+            controls,
+            text="Refresh",
+            command=self._refresh_diagnostics,
+            style="Accent.TButton",
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            controls,
+            text="Copy safe summary",
+            command=self._copy_diagnostics,
+        ).pack(side=tk.LEFT, padx=(6, 0))
+
+    def _show_diagnostics_tab(self, _event: tk.Event | None = None) -> str:
+        return self._show_config_tab(4)
+
+    def _show_config_tab(self, tab_index: int) -> str:
+        self.notebook.select(tab_index)
+        self.window.after_idle(self._focus_current_tab)
+        return "break"
+
+    def _focus_selected_tab(self, _event: tk.Event | None = None) -> None:
+        self.window.after_idle(self._focus_current_tab)
+
+    def _focus_current_tab(self) -> None:
+        selected = self.notebook.index(self.notebook.select())
+        targets = (
+            self.action_tree,
+            self.type_list,
+            self.context_tree,
+            self.button_tree,
+            self.diagnostics_text,
+        )
+        targets[selected].focus_set()
 
     def _show_type(self) -> None:
         selected = self.type_list.curselection()
@@ -392,11 +490,43 @@ class ConfigurationWindow:
                 )
         self.button_tree.tag_configure("shared", foreground="#666666")
         select_first_tree_item(self.button_tree, descend=True)
+        self._refresh_diagnostics()
+
+    def _refresh_diagnostics(self) -> None:
+        summary = summarize_diagnostics(
+            self.shared_actions_path.parent / "context-palette.log"
+        )
+        self.diagnostics_summary = render_safe_diagnostics(
+            summary,
+            action_count=len(self.actions),
+            personal_action_count=len(self.local_action_ids),
+            context_count=len(self.contexts),
+            button_group_count=len(self.groups),
+        )
+        self.diagnostics_text.configure(state=tk.NORMAL)
+        self.diagnostics_text.replace("1.0", tk.END, self.diagnostics_summary)
+        self.diagnostics_text.configure(state=tk.DISABLED)
+
+    def _copy_diagnostics(self) -> None:
+        try:
+            self.window.clipboard_clear()
+            self.window.clipboard_append(self.diagnostics_summary)
+            self.window.update()
+        except tk.TclError as exc:
+            messagebox.showerror(
+                "Context Palette",
+                f"The safe diagnostics summary could not be copied.\n\n{exc}",
+                parent=self.window,
+            )
+            return
+        self.feedback_var.set("Copied the safe diagnostics summary.")
+        self.feedback_label.configure(style="Success.TLabel")
 
     def _render_actions(self) -> None:
         self.action_tree.delete(*self.action_tree.get_children())
         query = self.action_filter_var.get()
         matching_iids: list[str] = []
+        requested_iid: str | None = None
         for index, action in enumerate(self.actions):
             local = action.id in self.local_action_ids
             if not action_matches_filter(action, query, personal=local):
@@ -411,12 +541,17 @@ class ConfigurationWindow:
                     ACTION_TYPES[action.type].label,
                     ", ".join(action.effective_contexts) or "General only",
                     ", ".join(action.effective_tags),
-                    "Personal" if local else "Shared (read-only)",
+                    "Personal" if local else "Shared",
                     action.state,
                 ),
                 tags=("local",) if local else ("shared",),
             )
             matching_iids.append(iid)
+            if (
+                self.initial_action_id is not None
+                and action.id.casefold() == self.initial_action_id.casefold()
+            ):
+                requested_iid = iid
         self.action_tree.tag_configure("shared", foreground="#666666")
         self.action_filter_count_var.set(
             f"{len(matching_iids)} of {len(self.actions)}"
@@ -424,33 +559,40 @@ class ConfigurationWindow:
             else f"{len(self.actions)} actions"
         )
         if matching_iids:
-            self.action_tree.selection_set(matching_iids[0])
-            self.action_tree.focus(matching_iids[0])
+            selected_iid = requested_iid or matching_iids[0]
+            self.action_tree.selection_set(selected_iid)
+            self.action_tree.focus(selected_iid)
+            self.action_tree.see(selected_iid)
 
     def _edit_action(self) -> None:
         selection = self.action_tree.selection()
         if not selection:
             return
         action = self.actions[int(selection[0].split("-")[1])]
-        if action.id not in self.local_action_ids:
-            messagebox.showinfo(
-                "Context Palette",
-                "Shared actions are read-only. Create a personal action instead.",
+        local = action.id in self.local_action_ids
+        if not local and not messagebox.askokcancel(
+                "Edit shared action?",
+                "This action is stored in the shared project file tracked by Git.\n\n"
+                "Changing it can affect other machines or collaborators after the "
+                "change is committed and pushed. Do not put personal paths, secrets, "
+                "or private work details in a shared action.\n\n"
+                "Continue editing this shared action?",
                 parent=self.window,
-            )
+            ):
             return
+        target_path = self.local_actions_path if local else self.shared_actions_path
         ActionDraftDialog(
             self.window,
             action.type,
             self.actions,
-            self._save_edited_action,
+            lambda edited: self._save_edited_action(edited, target_path),
             action=action,
             context_names=[context.name for context in self.contexts],
         )
 
-    def _save_edited_action(self, action: Action) -> bool:
+    def _save_edited_action(self, action: Action, target_path: Path) -> bool:
         try:
-            update_action(self.local_actions_path, action)
+            update_action(target_path, action)
         except ActionError as exc:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
             return False
@@ -465,6 +607,78 @@ class ConfigurationWindow:
         self.feedback_var.set(f"Saved action: {action.display_text}")
         self.feedback_label.configure(style="Success.TLabel")
         return True
+
+    def _delete_action(self) -> None:
+        selection = self.action_tree.selection()
+        if not selection:
+            return
+        action = self.actions[int(selection[0].split("-")[1])]
+        local = action.id in self.local_action_ids
+        try:
+            usage = inspect_action_references(
+                action.id,
+                context_paths=(self.contexts_path, self.local_contexts_path),
+                command_surface_paths=(
+                    self.command_surface_path,
+                    self.local_command_surface_path,
+                ),
+                palette_path=self.palette_path,
+            )
+        except (ActionDeletionError, OSError) as exc:
+            messagebox.showerror("Context Palette", str(exc), parent=self.window)
+            return
+
+        impact = (
+            f"{usage.references_removed} saved reference(s) will also be removed."
+            if usage.references_removed
+            else "No saved pins, Focus slots, contexts, or quick buttons reference it."
+        )
+        if usage.buttons_removed:
+            impact += (
+                f"\n{usage.buttons_removed} quick button(s) with no remaining "
+                "action will be removed."
+            )
+        shared_warning = ""
+        if not local:
+            shared_warning = (
+                "\n\nThis is a shared action. Its deletion and any shared-reference "
+                "changes are tracked by Git and can affect other machines or "
+                "collaborators after commit and push."
+            )
+        if not messagebox.askyesno(
+            "Delete action?",
+            f'Delete “{action.title}”?\n\n{impact}{shared_warning}\n\n'
+            "This cannot be undone inside Context Palette.",
+            icon=messagebox.WARNING,
+            parent=self.window,
+        ):
+            return
+
+        action_path = self.local_actions_path if local else self.shared_actions_path
+        try:
+            report = delete_action_and_references(
+                action_path,
+                action.id,
+                context_paths=(self.contexts_path, self.local_contexts_path),
+                command_surface_paths=(
+                    self.command_surface_path,
+                    self.local_command_surface_path,
+                ),
+                palette_path=self.palette_path,
+            )
+        except (ActionDeletionError, OSError) as exc:
+            messagebox.showerror("Context Palette", str(exc), parent=self.window)
+            return
+        self.actions[:] = [existing for existing in self.actions if existing.id != action.id]
+        self.local_action_ids.discard(action.id)
+        self.initial_action_id = None
+        self.on_change()
+        self._reload()
+        self.feedback_var.set(
+            f"Deleted action: {action.title}. "
+            f"Removed {report.references_removed} saved reference(s)."
+        )
+        self.feedback_label.configure(style="Success.TLabel")
 
     def _add_context(self) -> None:
         ContextDialog(self.window, None, self.actions, self._save_context)

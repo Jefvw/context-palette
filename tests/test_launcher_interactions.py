@@ -54,7 +54,95 @@ class FakeRoot:
         self.after_callbacks.append(callback)
 
 
+class FakeKeyEvent:
+    def __init__(
+        self,
+        state: int = 0,
+        *,
+        keysym: str = "",
+        keycode: int = 0,
+        char: str = "",
+        widget: object | None = None,
+    ) -> None:
+        self.state = state
+        self.keysym = keysym
+        self.keycode = keycode
+        self.char = char
+        self.widget = widget
+
+
 class LauncherInteractionTests(unittest.TestCase):
+    def test_shift_number_executes_slot_for_azerty_find_input(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.search_entry = object()
+        app.root = Mock()
+        app.root.focus_get.return_value = app.search_entry
+        app._execute_slot = Mock(return_value="break")
+        event = FakeKeyEvent(state=0x0001, keysym="2", keycode=50)
+
+        self.assertEqual(app._handle_keypress(event), "break")
+        app._execute_slot.assert_called_once_with(2, event)
+
+    def test_shift_azerty_key_names_execute_slots_without_assumed_keycodes(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.search_entry = object()
+        app.root = Mock()
+        app.root.focus_get.return_value = app.search_entry
+        app._execute_slot = Mock(return_value="break")
+
+        for keysym, expected_slot in (
+            ("ampersand", 1),
+            ("eacute", 2),
+            ("quotedbl", 3),
+            ("apostrophe", 4),
+            ("parenleft", 5),
+            ("minus", 6),
+            ("egrave", 7),
+            ("underscore", 8),
+            ("ccedilla", 9),
+        ):
+            event = FakeKeyEvent(state=0x0001, keysym=keysym)
+            with self.subTest(keysym=keysym):
+                self.assertEqual(app._handle_keypress(event), "break")
+                app._execute_slot.assert_called_with(expected_slot, event)
+
+    def test_plain_number_and_numpad_remain_find_input(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app._execute_slot = Mock(return_value="break")
+
+        for event in (
+            FakeKeyEvent(state=0, keysym="2", keycode=50),
+            FakeKeyEvent(state=0, keysym="2", keycode=98),
+        ):
+            with self.subTest(keycode=event.keycode):
+                self.assertIsNone(app._handle_keypress(event))
+
+        app._execute_slot.assert_not_called()
+
+    def test_control_number_does_not_execute_an_action_slot(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app._execute_slot = Mock(return_value="break")
+
+        result = app._handle_keypress(
+            FakeKeyEvent(state=0x0004, keysym="2", keycode=50),
+        )
+
+        self.assertIsNone(result)
+        app._execute_slot.assert_not_called()
+
+    def test_main_palette_hides_only_for_plain_escape(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.hide_window = Mock()
+
+        self.assertEqual(
+            app._hide_on_plain_escape(FakeKeyEvent(state=0x0004)),
+            "break",
+        )
+        app.hide_window.assert_not_called()
+
+        self.assertEqual(app._hide_on_plain_escape(FakeKeyEvent()), "break")
+        app.hide_window.assert_called_once()
+
     def test_sash_position_protects_both_panes_from_extreme_ratios(self):
         self.assertEqual(bounded_sash_position(800, 0.0, 220, 320), 220)
         self.assertEqual(bounded_sash_position(800, 1.0, 220, 320), 480)
@@ -115,6 +203,48 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertEqual(app.passwords_button.options["style"], "Compact.TButton")
         self.assertEqual(refreshes, [True])
 
+    def test_f5_reset_clears_transient_state_but_preserves_palette_state(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.focus_actions_mode = True
+        app.action_type_filter = "open_url"
+        app.action_tag_filter = "database"
+        app.action_type_filter_var = FakeVariable()
+        app.action_tag_filter_var = FakeVariable()
+        app.passwords_button = FakeButton()
+        app.captured_selection = "captured"
+        app.source_foreground_handle = 123
+        app.search_var = FakeVariable()
+        app.search_var.value = "query"
+        app.status_var = FakeVariable()
+        app.palette_state = PaletteState(("pinned",), "Database", {})
+        workspace_values: list[str] = []
+        reloads: list[bool] = []
+        refreshes: list[bool] = []
+        focus_requests: list[bool] = []
+        app._set_workspace_text = workspace_values.append
+        app._reload_if_changed = lambda: reloads.append(True)
+        app._refresh_results = lambda: refreshes.append(True)
+        app.focus_search = lambda: focus_requests.append(True) or "break"
+
+        result = app._reset_main_window()
+
+        self.assertEqual(result, "break")
+        self.assertFalse(app.focus_actions_mode)
+        self.assertIsNone(app.action_type_filter)
+        self.assertIsNone(app.action_tag_filter)
+        self.assertEqual(app.action_type_filter_var.value, "All types")
+        self.assertEqual(app.action_tag_filter_var.value, "All tags")
+        self.assertEqual(app.passwords_button.options["style"], "Compact.TButton")
+        self.assertIsNone(app.captured_selection)
+        self.assertIsNone(app.source_foreground_handle)
+        self.assertEqual(app.search_var.value, "")
+        self.assertEqual(workspace_values, [""])
+        self.assertEqual(reloads, [True])
+        self.assertEqual(refreshes, [True])
+        self.assertEqual(focus_requests, [True])
+        self.assertEqual(app.palette_state, PaletteState(("pinned",), "Database", {}))
+        self.assertEqual(app.status_var.value, "Reset to the startup view.")
+
     def test_protected_clipboard_is_never_synchronized_into_workspace(self):
         app = LauncherApp.__new__(LauncherApp)
         synchronizations: list[bool] = []
@@ -140,6 +270,95 @@ class LauncherInteractionTests(unittest.TestCase):
 
         self.assertEqual(app.protected_clipboard_sequence, 42)
 
+    def test_saved_text_pastes_into_fresh_hotkey_destination(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = FakeRoot()
+        app.source_foreground_handle = 123
+
+        with (
+            patch("context_palette.launcher.focus_window", return_value=True) as focus,
+            patch("context_palette.launcher.send_paste_shortcut") as paste,
+        ):
+            message = app._paste_saved_text_if_destination()
+            callback = app.root.after_callbacks.pop()
+            with self.assertLogs("context_palette.launcher", level="INFO") as logs:
+                callback()
+
+        self.assertIsNone(app.source_foreground_handle)
+        self.assertEqual(app.root.withdraw_calls, 1)
+        focus.assert_called_once_with(123)
+        paste.assert_called_once()
+        self.assertIn("returning", message)
+        self.assertIn(
+            "category=saved_text outcome=success reason=dispatched",
+            "\n".join(logs.output),
+        )
+
+    def test_saved_text_without_destination_remains_on_clipboard(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = FakeRoot()
+        app.source_foreground_handle = None
+
+        with self.assertLogs("context_palette.launcher", level="INFO") as logs:
+            message = app._paste_saved_text_if_destination()
+
+        self.assertEqual(app.root.withdraw_calls, 0)
+        self.assertEqual(app.root.after_callbacks, [])
+        self.assertIn("paste manually", message)
+        self.assertIn("reason=no_destination", "\n".join(logs.output))
+
+    def test_unavailable_saved_text_destination_restores_palette(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = FakeRoot()
+        app.source_foreground_handle = 123
+        app.status_var = FakeVariable()
+        app.show_window = Mock()
+
+        with (
+            patch("context_palette.launcher.focus_window", return_value=False),
+            patch("context_palette.launcher.send_paste_shortcut") as paste,
+            patch("context_palette.launcher.messagebox.showerror") as error,
+        ):
+            app._paste_saved_text_if_destination()
+            callback = app.root.after_callbacks.pop()
+            with self.assertLogs("context_palette.launcher", level="WARNING") as logs:
+                callback()
+
+        app.show_window.assert_called_once()
+        paste.assert_not_called()
+        self.assertIn("remains on the clipboard", error.call_args.args[1])
+        self.assertIn("reason=destination_unavailable", "\n".join(logs.output))
+
+    def test_saved_text_dispatch_failure_restores_palette_and_keeps_clipboard(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = FakeRoot()
+        app.source_foreground_handle = 123
+        app.status_var = FakeVariable()
+        app.show_window = Mock()
+
+        with (
+            patch("context_palette.launcher.focus_window", return_value=True),
+            patch(
+                "context_palette.launcher.send_paste_shortcut",
+                side_effect=RuntimeError("Windows input failed"),
+            ),
+            patch("context_palette.launcher.messagebox.showerror") as error,
+        ):
+            app._paste_saved_text_if_destination()
+            callback = app.root.after_callbacks.pop()
+            with self.assertLogs("context_palette.launcher", level="ERROR") as logs:
+                callback()
+
+        app.show_window.assert_called_once()
+        self.assertIn("remains on the clipboard", error.call_args.args[1])
+        self.assertEqual(
+            app.status_var.value,
+            "Text copied, but automatic paste failed.",
+        )
+        logged = "\n".join(logs.output)
+        self.assertIn("reason=dispatch_error", logged)
+        self.assertNotIn("Hello private greeting", logged)
+
     def test_external_show_invalidates_captured_credential_destination(self):
         app = LauncherApp.__new__(LauncherApp)
         app.source_foreground_handle = 123
@@ -148,6 +367,48 @@ class LauncherInteractionTests(unittest.TestCase):
         app._handle_external_request({"command": "show"})
 
         self.assertIsNone(app.source_foreground_handle)
+
+    def test_every_action_attempt_consumes_captured_destination(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.source_foreground_handle = 123
+        app.status_var = FakeVariable()
+        app.captured_selection = None
+        app._workspace_text = lambda: ""
+        app._set_clipboard = Mock()
+        app._get_clipboard_text = Mock()
+        app._ask_for_action_input = Mock()
+        app._set_workspace_text = Mock()
+        action = Action("website", "Website", "General", "open_url", "https://example.com")
+
+        with patch("context_palette.launcher.execute_action", return_value="Opened"):
+            app._execute_action(action)
+
+        self.assertIsNone(app.source_foreground_handle)
+        self.assertEqual(app.status_var.value, "Opened")
+
+    def test_failed_action_attempt_also_consumes_captured_destination(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.source_foreground_handle = 123
+        app.status_var = FakeVariable()
+        app.captured_selection = None
+        app._workspace_text = lambda: ""
+        app._set_clipboard = Mock()
+        app._get_clipboard_text = Mock()
+        app._ask_for_action_input = Mock()
+        app._set_workspace_text = Mock()
+        action = Action("broken", "Broken", "General", "open_url", "https://example.com")
+
+        with (
+            patch(
+                "context_palette.launcher.execute_action",
+                side_effect=ActionError("failed"),
+            ),
+            patch("context_palette.launcher.messagebox.showerror"),
+        ):
+            app._execute_action(action)
+
+        self.assertIsNone(app.source_foreground_handle)
+        self.assertEqual(app.status_var.value, "Action failed")
 
     def test_credential_paste_confirms_destination_and_clears_conditionally(self):
         app = LauncherApp.__new__(LauncherApp)
@@ -178,11 +439,12 @@ class LauncherInteractionTests(unittest.TestCase):
                 return_value=True,
             ) as clear,
         ):
-            result = app._paste_credential_action(action)
-            clear_callback = app.root.after_callbacks.pop(0)
-            paste_callback = app.root.after_callbacks.pop(0)
-            paste_callback()
-            clear_callback()
+            with self.assertLogs("context_palette.launcher", level="INFO") as logs:
+                result = app._paste_credential_action(action)
+                clear_callback = app.root.after_callbacks.pop(0)
+                paste_callback = app.root.after_callbacks.pop(0)
+                paste_callback()
+                clear_callback()
 
         title.assert_called_once_with(123)
         self.assertNotIn("do-not-show", confirm.call_args.args[1])
@@ -193,6 +455,10 @@ class LauncherInteractionTests(unittest.TestCase):
         clear.assert_called_once_with(42)
         self.assertIsNone(app.protected_clipboard_sequence)
         self.assertIn("approved", result)
+        logged = "\n".join(logs.output)
+        self.assertIn("category=protected_credential outcome=success", logged)
+        self.assertNotIn("do-not-show", logged)
+        self.assertNotIn("ContextPalette/example-login", logged)
 
     def test_credential_paste_requires_fresh_hotkey_destination(self):
         app = LauncherApp.__new__(LauncherApp)
@@ -214,6 +480,8 @@ class LauncherInteractionTests(unittest.TestCase):
         app.root = FakeRoot()
         app.source_foreground_handle = 123
         app.protected_clipboard_sequence = None
+        app.status_var = FakeVariable()
+        app.show_window = Mock()
         action = Action(
             "credential",
             "Paste login",
@@ -240,17 +508,24 @@ class LauncherInteractionTests(unittest.TestCase):
                 "context_palette.launcher.clear_clipboard_if_unchanged",
                 return_value=True,
             ) as clear,
+            patch("context_palette.launcher.messagebox.showerror") as error,
         ):
             app._paste_credential_action(action)
             cleanup_callback = app.root.after_callbacks.pop(0)
             paste_callback = app.root.after_callbacks.pop(0)
 
-            with self.assertRaisesRegex(RuntimeError, "Windows input failed"):
-                paste_callback()
+            paste_callback()
             cleanup_callback()
 
         clear.assert_called_once_with(42)
         self.assertIsNone(app.protected_clipboard_sequence)
+        app.show_window.assert_called_once()
+        self.assertIn("was cleared", error.call_args.args[1])
+        self.assertNotIn("do-not-show", error.call_args.args[1])
+        self.assertEqual(
+            app.status_var.value,
+            "Protected credential paste was cancelled.",
+        )
 
     def test_successful_focus_change_persists_before_applying_and_refreshes(self):
         previous = PaletteState(("existing",), "General", {})
