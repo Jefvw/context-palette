@@ -42,6 +42,13 @@ select or deselect candidates, and add or remove Focus memberships and tags in
 bulk. A specific current Focus is proposed as membership; **General** remains
 implicit. Source filenames and folders are not converted into tags.
 
+The workflow is keyboard-operable. Use `Ctrl+O` to add documents, `Ctrl+F` to
+focus candidate search, and `F5` to rescan. In Sources, `Delete` removes the
+highlighted source. In Candidates, `Space` changes inclusion and `Enter` edits
+one highlighted candidate. Focus moves to the candidate results when a scan
+finishes, or to Sources when the scan has no candidates. The Draft preview has
+an explicit Close button and closes with `Esc`.
+
 Only HTTP and HTTPS targets can become actions. Existing Draft and Trusted URLs
 and repeats across the selected documents are identified before creation. Word
 hyperlinks, Excel hyperlinks, plain URL cells, and literal `HYPERLINK` formulas

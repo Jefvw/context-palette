@@ -62,6 +62,8 @@ The MVP:
 ## Not required for the MVP
 
 - Installer, administrator rights, service, or mandatory tray integration.
+- Application-provided speech and dedicated screen-reader conformance testing.
+  Ordinary keyboard operation and clear native control labels remain required.
 - Cloud synchronization or accounts.
 - Arbitrary scripts, loops, conditions, or unattended workflows.
 - Automatic application-aware context switching.

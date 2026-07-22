@@ -83,6 +83,18 @@ AltGr-, plain number-row, and numpad input never execute action slots.
 | `Alt+Home` in document viewer | Return to the Help, Shortcuts, or action document that opened the viewer. |
 | `Esc` | Close Help, Sheets, Inbox, and editing windows. |
 
+### Harvest actions
+
+| Shortcut | Result |
+| --- | --- |
+| `Ctrl+O` | Add one or more documents. |
+| `Ctrl+F` | Focus and select the candidate search text. |
+| `F5` | Scan or rescan the selected documents. |
+| `Delete` in Sources | Remove the selected source from the transient batch. |
+| `Space` in Candidates | Select or deselect the highlighted candidates for Draft creation. |
+| `Enter` in Candidates | Edit the single highlighted candidate. |
+| `Esc` | Close the Harvest or Draft preview window. An active scan is cancelled safely. |
+
 ## Scope
 
 Only `F9` and `Ctrl+Alt+P` are system-wide. All other shortcuts require the

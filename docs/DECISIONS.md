@@ -1,5 +1,21 @@
 # Decisions
 
+## 2026-07-22 - Keep spoken and screen-reader-specific behavior out of scope
+
+**Decision:** Context Palette does not provide speech and does not require
+dedicated Narrator or NVDA conformance testing. Continue supporting complete
+keyboard operation, predictable focus, clear native control names, readable
+contrast, and other accessibility improvements that benefit ordinary use.
+
+**Reason:** Spoken interaction is not part of the intended product. Treating a
+screen-reader audit as unfinished application work would expand scope without
+an identified user requirement, while keyboard accessibility remains valuable
+to all users.
+
+**Consequences:** Do not add speech dependencies, screen-reader integrations,
+or NVDA-specific adaptations. A future explicit user requirement may revisit
+this boundary through a new decision.
+
 ## 2026-07-21 - Keep bulk document harvesting attended and transient
 
 **Decision:** Harvest possible actions from an explicitly selected set of

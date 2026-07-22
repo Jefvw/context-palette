@@ -9,6 +9,9 @@ This project has not published a versioned release. Changes are recorded under *
   links without launching Office or evaluating content, then provides source
   status, provenance, duplicate/readiness filters, individual and bulk edits,
   preview, cancellation, and one atomic creation of selected personal Drafts.
+- Made Harvest actions keyboard-operable with predictable post-scan focus,
+  search/add/rescan shortcuts, list-level edit/remove/toggle keys, and an
+  explicit keyboard-accessible Draft-preview Close control.
 
 - Rendered Help and other repository Markdown pages in a reusable in-app
   document viewer with native styling, aligned tables, search, working local

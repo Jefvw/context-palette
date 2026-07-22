@@ -61,6 +61,13 @@ submission, and a cold application restart. All requested workflow checks
 passed. The check also exposed and corrected clipped bulk-edit controls at the
 standard Harvest window size.
 
+Keyboard accessibility check: **Passed on Windows on 2026-07-22.** Physical
+Windows key input verified `Ctrl+F` candidate search, `F5` rescan with focus
+returning to Candidates, `Space` inclusion toggling, and `Enter` candidate
+editing. The isolated check created no personal action store. The remaining
+bindings, Draft-preview Close control, and focus-restoration callbacks are
+covered by real-Tk and focused unit tests.
+
 1. Press `Ctrl+,`, open **Actions**, choose **Harvest documents...**, and select
    several representative `.md`, `.txt`, `.docx`, and `.xlsx` files.
 2. Confirm progress remains responsive, Cancel stops safely, and a corrupt or

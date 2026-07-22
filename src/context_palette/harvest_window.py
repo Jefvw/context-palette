@@ -51,6 +51,9 @@ class HarvestWindow:
         self.window.minsize(760, 560)
         self.window.protocol("WM_DELETE_WINDOW", self._close)
         self.window.bind("<Escape>", lambda _event: self._close())
+        self.window.bind("<Control-f>", self._focus_search)
+        self.window.bind("<Control-o>", self._add_documents_from_key)
+        self.window.bind("<F5>", self._scan_from_key)
 
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
@@ -77,7 +80,8 @@ class HarvestWindow:
             style="Accent.TButton",
         )
         self.create_button.pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(footer, text="Close", command=self._close).pack(side=tk.RIGHT)
+        self.close_button = ttk.Button(footer, text="Close", command=self._close)
+        self.close_button.pack(side=tk.RIGHT)
 
         panes = ttk.Panedwindow(outer, orient=tk.VERTICAL)
         panes.pack(fill=tk.BOTH, expand=True)
@@ -94,7 +98,12 @@ class HarvestWindow:
         header = ttk.Frame(frame)
         header.pack(fill=tk.X, pady=(0, 5))
         ttk.Label(header, text="Sources", style="Heading.TLabel").pack(side=tk.LEFT)
-        ttk.Button(header, text="Add documents…", command=self.add_documents).pack(side=tk.LEFT, padx=(10, 4))
+        self.add_documents_button = ttk.Button(
+            header,
+            text="Add documents…",
+            command=self.add_documents,
+        )
+        self.add_documents_button.pack(side=tk.LEFT, padx=(10, 4))
         self.remove_source_button = ttk.Button(header, text="Remove", command=self.remove_source)
         self.remove_source_button.pack(side=tk.LEFT, padx=4)
         self.scan_button = ttk.Button(header, text="Scan / Rescan", command=self.scan, style="Accent.TButton")
@@ -118,6 +127,8 @@ class HarvestWindow:
         self.source_tree.column("findings", width=80, stretch=False, anchor=tk.E)
         self.source_tree.pack(fill=tk.BOTH, expand=True)
         self.source_tree.bind("<<TreeviewSelect>>", lambda _event: self._show_source_status())
+        self.source_tree.bind("<Delete>", self._remove_source_from_key)
+        self.source_tree.bind("<F5>", self._scan_from_key)
 
     def _build_candidates(self, panes: ttk.Panedwindow) -> None:
         frame = ttk.Frame(panes, padding=(0, 6, 0, 0))
@@ -126,8 +137,8 @@ class HarvestWindow:
         filters.pack(fill=tk.X, pady=(0, 5))
         ttk.Label(filters, text="Candidates", style="Heading.TLabel").pack(side=tk.LEFT)
         self.search_var = tk.StringVar()
-        search = ttk.Entry(filters, textvariable=self.search_var, width=24)
-        search.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(10, 5))
+        self.search_entry = ttk.Entry(filters, textvariable=self.search_var, width=24)
+        self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(10, 5))
         self.status_filter = ttk.Combobox(filters, state="readonly", width=17)
         self.status_filter["values"] = ("All readiness", "Ready", "Needs attention", "Unsupported", "Existing Draft", "Already available")
         self.status_filter.set("All readiness")
@@ -167,6 +178,8 @@ class HarvestWindow:
         self.candidate_tree.bind("<<TreeviewSelect>>", lambda _event: self._selection_changed())
         self.candidate_tree.bind("<Double-1>", lambda _event: self.toggle_selected_candidates())
         self.candidate_tree.bind("<space>", lambda _event: self.toggle_selected_candidates())
+        self.candidate_tree.bind("<Return>", self._edit_candidate_from_key)
+        self.candidate_tree.bind("<F5>", self._scan_from_key)
 
         detail = ttk.Frame(candidate_area, padding=(10, 0, 0, 0))
         candidate_area.add(detail, weight=2)
@@ -188,11 +201,13 @@ class HarvestWindow:
         self.context_value = tk.StringVar()
         self.tag_value = tk.StringVar()
         ttk.Label(bulk, text="Contexts").grid(row=0, column=0, sticky=tk.W)
-        ttk.Entry(bulk, textvariable=self.context_value, width=25).grid(row=0, column=1, sticky=tk.EW, padx=(5, 3))
+        self.context_entry = ttk.Entry(bulk, textvariable=self.context_value, width=25)
+        self.context_entry.grid(row=0, column=1, sticky=tk.EW, padx=(5, 3))
         ttk.Button(bulk, text="Add", command=lambda: self.bulk_edit("contexts", "add")).grid(row=0, column=2, padx=2)
         ttk.Button(bulk, text="Remove", command=lambda: self.bulk_edit("contexts", "remove")).grid(row=0, column=3, padx=2)
         ttk.Label(bulk, text="Tags").grid(row=1, column=0, sticky=tk.W, pady=(4, 0))
-        ttk.Entry(bulk, textvariable=self.tag_value, width=25).grid(row=1, column=1, sticky=tk.EW, padx=(5, 3), pady=(4, 0))
+        self.tag_entry = ttk.Entry(bulk, textvariable=self.tag_value, width=25)
+        self.tag_entry.grid(row=1, column=1, sticky=tk.EW, padx=(5, 3), pady=(4, 0))
         ttk.Button(bulk, text="Add", command=lambda: self.bulk_edit("tags", "add")).grid(row=1, column=2, padx=2, pady=(4, 0))
         ttk.Button(bulk, text="Remove", command=lambda: self.bulk_edit("tags", "remove")).grid(row=1, column=3, padx=2, pady=(4, 0))
         bulk.columnconfigure(1, weight=1)
@@ -221,6 +236,30 @@ class HarvestWindow:
         self._render_sources()
         if selected:
             self.scan()
+        else:
+            self.add_documents_button.focus_set()
+
+    def _focus_search(self, _event: tk.Event | None = None) -> str:
+        self.search_entry.focus_set()
+        self.search_entry.selection_range(0, tk.END)
+        return "break"
+
+    def _add_documents_from_key(self, _event: tk.Event | None = None) -> str:
+        if not self.coordinator.running:
+            self.add_documents()
+        return "break"
+
+    def _scan_from_key(self, _event: tk.Event | None = None) -> str:
+        self.scan()
+        return "break"
+
+    def _remove_source_from_key(self, _event: tk.Event | None = None) -> str:
+        self.remove_source()
+        return "break"
+
+    def _edit_candidate_from_key(self, _event: tk.Event | None = None) -> str:
+        self.edit_candidate()
+        return "break"
 
     def remove_source(self) -> None:
         selected = self.source_tree.selection()
@@ -231,6 +270,7 @@ class HarvestWindow:
         self.batch.sources = [item for item in self.batch.sources if item.path != path]
         self._rebuild_candidates()
         self._render_sources()
+        self.source_tree.focus_set()
 
     def scan(self) -> None:
         if not self.source_paths or self.coordinator.running:
@@ -242,6 +282,7 @@ class HarvestWindow:
             self.coordinator.start(self.source_paths)
         except (HarvestError, OSError) as exc:
             messagebox.showerror("Harvest actions", str(exc), parent=self.window)
+            self.scan_button.focus_set()
             return
         self.scan_button.configure(state=tk.DISABLED)
         self.cancel_button.configure(state=tk.NORMAL)
@@ -281,8 +322,11 @@ class HarvestWindow:
             f"{len(self.batch.sources)} source(s) scanned · {len(self.batch.candidates)} candidate(s) · {failures} failed"
             + (" · cancelled" if self.batch.cancelled else "")
         )
+        target = self.candidate_tree if self.candidate_tree.get_children() else self.source_tree
+        target.focus_set()
 
     def _render_sources(self) -> None:
+        selected = self.source_tree.selection()
         existing = {source.path: source for source in self.batch.sources}
         self.source_tree.delete(*self.source_tree.get_children())
         for path in self.source_paths:
@@ -298,6 +342,11 @@ class HarvestWindow:
                     len(source.occurrences) if source else 0,
                 ),
             )
+        retained = [item for item in selected if self.source_tree.exists(item)]
+        if retained:
+            self.source_tree.selection_set(retained)
+        elif self.source_tree.get_children():
+            self.source_tree.selection_set(self.source_tree.get_children()[0])
 
     def _rebuild_candidates(self) -> None:
         self.batch.candidates = build_candidates(
@@ -471,6 +520,7 @@ class HarvestWindow:
             candidate.warnings = [str(exc)]
             candidate.selected = False
         self._render_candidates()
+        self.candidate_tree.focus_set()
 
     def _show_provenance(self) -> None:
         selected = self._selected_candidates()
@@ -539,7 +589,15 @@ class HarvestWindow:
         preview = tk.Toplevel(self.window)
         preview.title("Harvest Draft preview")
         configure_standard_window(preview)
-        text = tk.Text(preview, wrap=tk.WORD, padx=12, pady=10)
+        def close_preview() -> None:
+            preview.destroy()
+            self.window.after_idle(self.candidate_tree.focus_set)
+
+        preview.protocol("WM_DELETE_WINDOW", close_preview)
+        preview.bind("<Escape>", lambda _event: close_preview())
+        outer = ttk.Frame(preview, padding=10)
+        outer.pack(fill=tk.BOTH, expand=True)
+        text = tk.Text(outer, wrap=tk.WORD, padx=12, pady=10)
         text.pack(fill=tk.BOTH, expand=True)
         for action in actions:
             text.insert(
@@ -548,6 +606,10 @@ class HarvestWindow:
                 f"Contexts: {', '.join(action.effective_contexts)}\nTags: {', '.join(action.effective_tags) or '(none)'}\n\n",
             )
         text.configure(state=tk.DISABLED)
+        ttk.Button(outer, text="Close", command=close_preview).pack(anchor=tk.E, pady=(8, 0))
+        preview.transient(self.window)
+        preview.lift()
+        preview.after_idle(text.focus_set)
 
     def _create(self) -> None:
         if self.submitting:

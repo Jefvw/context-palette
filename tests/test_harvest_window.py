@@ -237,6 +237,11 @@ class HarvestWindowSmokeTests(unittest.TestCase):
                     "Create selected Drafts",
                 ):
                     self.assertIn(label, button_labels)
+                for sequence in ("<Control-f>", "<Control-o>", "<F5>"):
+                    self.assertTrue(window.window.bind(sequence))
+                self.assertTrue(window.source_tree.bind("<Delete>"))
+                self.assertTrue(window.candidate_tree.bind("<Return>"))
+                self.assertTrue(window.candidate_tree.bind("<space>"))
                 window.window.update_idletasks()
                 window_bottom = window.window.winfo_rooty() + window.window.winfo_height()
                 entries = [
@@ -254,6 +259,91 @@ class HarvestWindowSmokeTests(unittest.TestCase):
                 window._close()
         finally:
             root.destroy()
+
+    def test_preview_has_keyboard_close_and_restores_candidate_focus(self):
+        try:
+            root = tk.Tk()
+        except tk.TclError as exc:
+            self.skipTest(f"Tk display unavailable: {exc}")
+        root.geometry("1x1+0+0")
+        try:
+            with tempfile.TemporaryDirectory() as temporary, patch(
+                "context_palette.harvest_window.filedialog.askopenfilenames",
+                return_value=(),
+            ):
+                actions_path = Path(temporary) / "actions.json"
+                actions_path.write_text(json.dumps({"actions": []}), encoding="utf-8")
+                window = HarvestWindow(
+                    root,
+                    actions=[],
+                    context_names=("General",),
+                    focus_context="General",
+                    actions_path=actions_path,
+                    on_change=lambda: None,
+                )
+                root.update()
+                action = ready_candidate()
+                window.batch.candidates = [action]
+                with patch.object(window, "_drafts", return_value=[]):
+                    window._preview()
+                root.update()
+
+                preview = next(
+                    child
+                    for child in window.window.winfo_children()
+                    if isinstance(child, tk.Toplevel)
+                )
+                self.assertTrue(preview.bind("<Escape>"))
+                close = next(
+                    child
+                    for child in descendants(preview)
+                    if isinstance(child, ttk.Button) and child.cget("text") == "Close"
+                )
+                with patch.object(window.candidate_tree, "focus_set") as focus_candidates:
+                    close.invoke()
+                    root.update()
+                    focus_candidates.assert_called_once_with()
+                self.assertFalse(preview.winfo_exists())
+                window._close()
+        finally:
+            root.destroy()
+
+
+class HarvestKeyboardCommandTests(unittest.TestCase):
+    def test_focus_search_selects_text_and_stops_event_propagation(self):
+        window = HarvestWindow.__new__(HarvestWindow)
+        window.search_entry = Mock()
+
+        result = window._focus_search()
+
+        self.assertEqual(result, "break")
+        window.search_entry.focus_set.assert_called_once_with()
+        window.search_entry.selection_range.assert_called_once_with(0, tk.END)
+
+    def test_scan_and_edit_keyboard_commands_delegate_once(self):
+        window = HarvestWindow.__new__(HarvestWindow)
+        window.scan = Mock()
+        window.edit_candidate = Mock()
+
+        self.assertEqual(window._scan_from_key(), "break")
+        self.assertEqual(window._edit_candidate_from_key(), "break")
+
+        window.scan.assert_called_once_with()
+        window.edit_candidate.assert_called_once_with()
+
+    def test_add_and_remove_keyboard_commands_respect_scan_state(self):
+        window = HarvestWindow.__new__(HarvestWindow)
+        window.coordinator = Mock(running=False)
+        window.add_documents = Mock()
+        window.remove_source = Mock()
+
+        self.assertEqual(window._add_documents_from_key(), "break")
+        self.assertEqual(window._remove_source_from_key(), "break")
+        window.coordinator.running = True
+        self.assertEqual(window._add_documents_from_key(), "break")
+
+        window.add_documents.assert_called_once_with()
+        window.remove_source.assert_called_once_with()
 
 
 if __name__ == "__main__":
