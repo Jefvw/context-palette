@@ -20,6 +20,7 @@ from context_palette.configuration_window import (
     LOCAL_DESTINATION,
     PROJECT_DESTINATION,
     action_matches_filter,
+    context_membership_count,
     select_first_tree_item,
     _focus_entry,
 )
@@ -116,6 +117,33 @@ class HarvestRefreshTests(unittest.TestCase):
         self.assertEqual(configuration.local_action_ids, {harvested.id})
         configuration._reload.assert_called_once_with()
         configuration.on_change.assert_called_once_with()
+
+
+class ContextMembershipCountTests(unittest.TestCase):
+    def test_explicit_context_membership_is_authoritative(self):
+        context = ContextDefinition(
+            "My work",
+            preferred_action_ids=("one",),
+            action_ids=("one", "two", "two"),
+        )
+        actions = [
+            Action("one", "One", "General", "copy_text", "1"),
+            Action("legacy", "Legacy", "My work", "copy_text", "2"),
+        ]
+
+        self.assertEqual(context_membership_count(context, actions), 2)
+
+    def test_legacy_context_membership_includes_preferred_actions_once(self):
+        context = ContextDefinition(
+            "My work",
+            preferred_action_ids=("one", "preferred-only"),
+        )
+        actions = [
+            Action("one", "One", "My work", "copy_text", "1"),
+            Action("two", "Two", "My work", "copy_text", "2"),
+        ]
+
+        self.assertEqual(context_membership_count(context, actions), 3)
 
 class FakeEntry:
     def __init__(self) -> None:
@@ -581,6 +609,47 @@ class ConfigurationDialogTests(unittest.TestCase):
         self.assertFalse(result)
         self.assertIn("only built-in actions", error.call_args.args[1])
         save.assert_not_called()
+
+    def test_delete_context_reports_context_owned_action_count(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.contexts = [
+            ContextDefinition("My work", action_ids=("one", "two"))
+        ]
+        configuration.context_tree = FakeSelectedConfigTree(
+            "context-0",
+            LOCAL_DESTINATION,
+        )
+        configuration.contexts_path = Path("contexts.json")
+        configuration.local_contexts_path = Path("local-contexts.json")
+        configuration.shared_actions_path = Path("actions.json")
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.palette_path = Path("palette.json")
+        configuration.actions = []
+        configuration.local_action_ids = set()
+        configuration.window = FakeWindow()
+        configuration.on_change = Mock()
+        configuration._reload = Mock()
+        configuration.feedback_var = FakeVariable()
+        configuration.feedback_label = Mock()
+
+        with (
+            patch(
+                "context_palette.configuration_window.messagebox.askyesno",
+                return_value=True,
+            ) as confirmation,
+            patch(
+                "context_palette.configuration_window.delete_context_and_memberships"
+            ) as delete,
+            patch(
+                "context_palette.configuration_window.load_combined_actions",
+                return_value=([], set()),
+            ),
+        ):
+            configuration._delete_context()
+
+        self.assertIn("2 action(s)", confirmation.call_args.args[1])
+        delete.assert_called_once()
+        self.assertIn("2 action(s)", configuration.feedback_var.value)
 
     def test_editing_shared_quick_action_warns_and_saves_to_shared_file(self) -> None:
         shared_path = Path("shared-commands.json")

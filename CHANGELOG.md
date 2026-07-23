@@ -4,6 +4,9 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Corrected context-deletion confirmation and success feedback to count
+  context-owned action assignments rather than only legacy classifications
+  stored inside actions.
 - Made contexts user-owned organization rather than classifications embedded in
   Built-in actions. Context definitions now store an unlimited ordered action
   membership plus up to four preferred slot actions. A My configuration context

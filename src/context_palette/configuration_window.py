@@ -96,6 +96,31 @@ def action_matches_filter(action: Action, query: str, *, personal: bool) -> bool
     return all(term in searchable for term in terms)
 
 
+def context_membership_count(
+    context: ContextDefinition,
+    actions: list[Action],
+) -> int:
+    """Count the actions that will lose membership when a context is deleted."""
+    if context.action_ids is not None:
+        return len(
+            {
+                action_id
+                for action_id in (
+                    *context.action_ids,
+                    *context.preferred_action_ids,
+                )
+                if action_id
+            }
+        )
+    member_ids = {
+        action.id
+        for action in actions
+        if action.belongs_to_context(context.name)
+    }
+    member_ids.update(context.preferred_action_ids)
+    return len(member_ids)
+
+
 def select_first_tree_item(tree: ttk.Treeview, *, descend: bool = False) -> None:
     roots = tree.get_children()
     if not roots:
@@ -1004,11 +1029,7 @@ class ConfigurationWindow:
             == LOCAL_DESTINATION
         )
         destination = self.local_contexts_path if local else self.contexts_path
-        membership_count = sum(
-            context.name.casefold()
-            in {name.casefold() for name in action.effective_contexts}
-            for action in self.actions
-        )
+        membership_count = context_membership_count(context, self.actions)
         if not messagebox.askyesno(
             "Delete context?",
             f'Delete "{context.name}" permanently?\n\n'
@@ -1021,7 +1042,7 @@ class ConfigurationWindow:
         ):
             return
         try:
-            report = delete_context_and_memberships(
+            delete_context_and_memberships(
                 destination,
                 context.name,
                 action_paths=(self.shared_actions_path, self.local_actions_path),
@@ -1048,8 +1069,8 @@ class ConfigurationWindow:
             )
         self._reload()
         self.feedback_var.set(
-            f"Deleted context: {context.name}. Removed "
-            f"{report.action_memberships_removed} action membership(s)."
+            f"Deleted context: {context.name}. Removed its assignment from "
+            f"{membership_count} action(s)."
         )
         self.feedback_label.configure(style="Success.TLabel")
 
