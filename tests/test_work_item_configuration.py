@@ -29,6 +29,38 @@ from context_palette.work_items import WorkItemSource
 
 
 class WorkItemConfigurationTests(unittest.TestCase):
+    def test_create_work_item_focuses_source_setup_when_none_exists(self) -> None:
+        panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)
+        panel.sources = []
+        panel.feedback = Mock()
+        panel.add_source_button = Mock()
+
+        panel.create_work_item()
+
+        panel.feedback.assert_called_once_with(
+            "Add a Work Item source before creating an item.",
+            False,
+        )
+        panel.add_source_button.focus_set.assert_called_once_with()
+
+    def test_create_work_item_focuses_missing_template_setup(self) -> None:
+        panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)
+        panel.sources = [Mock()]
+        panel.template_var = Mock()
+        panel.template_var.get.return_value = " "
+        panel.feedback = Mock()
+        panel.template_entry = Mock()
+        panel.save_template = Mock()
+
+        panel.create_work_item()
+
+        panel.feedback.assert_called_once_with(
+            "Choose a generic Excel template before creating a Work Item.",
+            False,
+        )
+        panel.template_entry.focus_set.assert_called_once_with()
+        panel.save_template.assert_not_called()
+
     def test_stable_source_id_is_generated_from_friendly_name(self) -> None:
         self.assertEqual(_stable_source_id(" CAP40 Product & Support "), "cap40-product-support")
 

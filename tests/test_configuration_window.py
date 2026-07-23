@@ -182,6 +182,14 @@ class FakeSelectedActionTree:
 
 
 class ConfigurationDialogTests(unittest.TestCase):
+    def test_requested_work_item_creation_uses_work_items_panel(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.work_items_panel = Mock()
+
+        configuration._start_work_item_creation()
+
+        configuration.work_items_panel.create_work_item.assert_called_once_with()
+
     def test_alt_mnemonics_select_configure_tabs(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         configuration.notebook = FakeNotebook()

@@ -83,6 +83,9 @@ Presentation and application orchestration.
   previews, and constrained open commands consume the immutable in-memory Work
   Item index; action mode state remains intact. All keyboard, default, and
   context-menu targets pass through one constrained Work Item opening boundary.
+  The mode-specific **New item** control opens the existing Configure creation
+  flow; the launcher does not duplicate template validation or filesystem
+  creation.
 
 The main-window construction is divided into focused header, results/command-surface, shortcut, workspace, and footer builders. Inbox and Draft windows still live in this module and are the next safe extraction boundary; this is documented in `TECHNICAL_REVIEW.md`.
 
@@ -115,7 +118,7 @@ changed automatically, and action Find remains global regardless of Focus.
 | Focus Actions, empty Find | Flat actions explicitly belonging to the selected Focus | Same action rail | Run |
 | Action Find or filter active | Flat global action matches; changing Focus does not filter them | Same action rail | Run |
 | Find cleared after Focus Actions | Restores the selected Focus's flat membership list | Same action rail | Run |
-| Work Items | Indexed Work Item folders, never action records | Work, Projects, Tags, Help; action-only Passwords is hidden | Open |
+| Work Items | Indexed Work Item folders, never action records | Work, New item, Projects, Tags, Help; action-only Passwords is hidden | Open |
 
 The heading, count, empty state, selection preview, rail labels, status, and
 primary verb must all describe the active mode. `ActionDiscoveryPanel` owns

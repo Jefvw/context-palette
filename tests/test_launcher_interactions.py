@@ -73,6 +73,17 @@ class FakeKeyEvent:
 
 
 class LauncherInteractionTests(unittest.TestCase):
+    def test_new_work_item_route_opens_existing_creation_flow(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app._show_configuration = Mock()
+
+        app._show_work_item_creation()
+
+        app._show_configuration.assert_called_once_with(
+            initial_tab="work_items",
+            start_work_item_creation=True,
+        )
+
     def test_markdown_file_action_opens_in_document_viewer(self):
         app = LauncherApp.__new__(LauncherApp)
         app.root = Mock()

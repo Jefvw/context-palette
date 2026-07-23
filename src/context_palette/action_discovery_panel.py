@@ -32,6 +32,7 @@ class ActionDiscoveryPanel:
         update_preview: Callable[[], None],
         toggle_password_actions: Callable[[], None],
         toggle_work_items: Callable[[], None],
+        create_work_item: Callable[[], None],
         select_action_type_filter: Callable[[str | None], None],
         select_tag_filter: Callable[[str | None], None],
         select_project_filter: Callable[[str | None], None],
@@ -111,6 +112,17 @@ class ActionDiscoveryPanel:
         tooltip_adder(
             self.work_items_button,
             "Work — Find configured work-item folders and their exact matching Excel workbook.",
+        )
+
+        self.new_work_item_button = ttk.Button(
+            self.tool_rail,
+            text="New item",
+            command=create_work_item,
+            style="Compact.TButton",
+        )
+        tooltip_adder(
+            self.new_work_item_button,
+            "New Work Item — Create a folder and exact-name Excel workbook from the configured generic template.",
         )
 
         self.type_filter = ttk.Menubutton(
@@ -233,6 +245,12 @@ class ActionDiscoveryPanel:
         )
         if enabled:
             self.passwords_button.pack_forget()
+            if not self.new_work_item_button.winfo_manager():
+                self.new_work_item_button.pack(
+                    fill=tk.X,
+                    pady=(5, 0),
+                    before=self.type_filter,
+                )
             self.find_label.configure(text="Find Work Item")
             self.type_filter.configure(text="Projects ▾")
             self.run_button.configure(text="Open")
@@ -253,6 +271,7 @@ class ActionDiscoveryPanel:
                 empty_label="All work tags",
             )
         else:
+            self.new_work_item_button.pack_forget()
             if not self.passwords_button.winfo_manager():
                 self.passwords_button.pack(fill=tk.X, before=self.work_items_button)
             self.find_label.configure(text="Find action")

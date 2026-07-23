@@ -146,6 +146,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(root.winfo_width(), 780)
                     self._assert_balanced_panes(app)
                     self.assertIs(app.passwords_button.master, app.actions_tool_rail)
+                    self.assertIs(app.new_work_item_button.master, app.actions_tool_rail)
                     self.assertIs(app.type_filter.master, app.actions_tool_rail)
                     self.assertIs(app.tag_filter.master, app.actions_tool_rail)
                     self.assertIs(app.run_button.master, app.actions_tool_rail)
@@ -153,6 +154,8 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app.actions_tool_rail.winfo_width(), 88)
                     self.assertGreaterEqual(app.results.winfo_width(), 220)
                     self.assertEqual(app.passwords_button.cget("text"), "Passwords")
+                    self.assertEqual(app.new_work_item_button.cget("text"), "New item")
+                    self.assertFalse(app.new_work_item_button.winfo_manager())
                     self.assertEqual(app.tag_filter.cget("text"), "Tags ▾")
                     self.assertEqual(app.type_filter.cget("text"), "Types ▾")
                     self.assertEqual(app.run_button.cget("text"), "Run")
@@ -183,6 +186,15 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app.type_filter.cget("text"), "Projects ▾")
                     self.assertEqual(app.run_button.cget("text"), "Open")
                     self.assertFalse(app.passwords_button.winfo_manager())
+                    self.assertTrue(app.new_work_item_button.winfo_manager())
+                    self.assertIs(
+                        app.work_items_button.tk_focusNext(),
+                        app.new_work_item_button,
+                    )
+                    self.assertIs(
+                        app.new_work_item_button.tk_focusNext(),
+                        app.type_filter,
+                    )
                     self.assertEqual(app.work_project_filter_var.get(), "All project codes")
 
                     app._select_work_project_filter("AB9C")
@@ -202,6 +214,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app.type_filter.cget("text"), "Types ▾")
                     self.assertEqual(app.run_button.cget("text"), "Run")
                     self.assertTrue(app.passwords_button.winfo_manager())
+                    self.assertFalse(app.new_work_item_button.winfo_manager())
 
                     opened_action_ids: list[str] = []
                     original_show_configuration = app._show_configuration

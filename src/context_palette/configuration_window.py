@@ -116,6 +116,7 @@ class ConfigurationWindow:
         initial_tab: str = "actions",
         initial_action_id: str | None = None,
         initial_work_item_key: str | None = None,
+        start_work_item_creation: bool = False,
     ) -> None:
         self.actions = actions
         self.local_action_ids = local_action_ids
@@ -138,6 +139,7 @@ class ConfigurationWindow:
         self.initial_tab = initial_tab
         self.initial_action_id = initial_action_id
         self.initial_work_item_key = initial_work_item_key
+        self.start_work_item_creation = start_work_item_creation
 
         self.window = tk.Toplevel(parent)
         self.window.title("Configure Context Palette")
@@ -200,6 +202,11 @@ class ConfigurationWindow:
         self.window.transient(parent)
         self.window.lift()
         self.window.after_idle(self._focus_current_tab)
+        if self.start_work_item_creation:
+            self.window.after_idle(self._start_work_item_creation)
+
+    def _start_work_item_creation(self) -> None:
+        self.work_items_panel.create_work_item()
 
     def _close_on_plain_escape(self, event: tk.Event) -> str:
         if int(event.state) & 0x0004:

@@ -552,6 +552,7 @@ class LauncherApp:
             update_preview=self._update_preview,
             toggle_password_actions=self._toggle_password_actions,
             toggle_work_items=self._toggle_work_items,
+            create_work_item=self._show_work_item_creation,
             select_action_type_filter=self._select_action_type_filter,
             select_tag_filter=self._select_tag_filter,
             select_project_filter=self._select_work_project_filter,
@@ -567,6 +568,7 @@ class LauncherApp:
         self.actions_tool_rail = discovery.tool_rail
         self.passwords_button = discovery.passwords_button
         self.work_items_button = discovery.work_items_button
+        self.new_work_item_button = discovery.new_work_item_button
         self.type_filter = discovery.type_filter
         self.tag_filter = discovery.tag_filter
         self.run_button = discovery.run_button
@@ -2507,6 +2509,7 @@ class LauncherApp:
         initial_tab: str = "actions",
         initial_action_id: str | None = None,
         initial_work_item_key: str | None = None,
+        start_work_item_creation: bool = False,
     ) -> None:
         ConfigurationWindow(
             self.root,
@@ -2530,6 +2533,13 @@ class LauncherApp:
             initial_tab=initial_tab,
             initial_action_id=initial_action_id,
             initial_work_item_key=initial_work_item_key,
+            start_work_item_creation=start_work_item_creation,
+        )
+
+    def _show_work_item_creation(self) -> None:
+        self._show_configuration(
+            initial_tab="work_items",
+            start_work_item_creation=True,
         )
 
     def _show_action_configuration(self, action: Action) -> None:

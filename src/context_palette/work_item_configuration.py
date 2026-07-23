@@ -65,7 +65,8 @@ class WorkItemsConfigurationPanel:
         self.template_var = tk.StringVar(
             value=str(self.creation_settings.template_path or "")
         )
-        ttk.Entry(template_row, textvariable=self.template_var).pack(
+        self.template_entry = ttk.Entry(template_row, textvariable=self.template_var)
+        self.template_entry.pack(
             side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 6)
         )
         ttk.Button(template_row, text="Browse…", command=self.choose_template).pack(side=tk.LEFT)
@@ -99,7 +100,12 @@ class WorkItemsConfigurationPanel:
 
         source_controls = ttk.Frame(parent)
         source_controls.pack(fill=tk.X, pady=(6, 10))
-        ttk.Button(source_controls, text="Add source", command=self.add_source).pack(side=tk.LEFT)
+        self.add_source_button = ttk.Button(
+            source_controls,
+            text="Add source",
+            command=self.add_source,
+        )
+        self.add_source_button.pack(side=tk.LEFT)
         self.create_button = ttk.Button(
             source_controls,
             text="Create Work Item",
@@ -231,6 +237,7 @@ class WorkItemsConfigurationPanel:
                 "Choose an existing .xlsx generic template.",
                 parent=self.parent,
             )
+            self.template_entry.focus_set()
             return False
         settings = WorkItemCreationSettings(template)
         try:
@@ -245,6 +252,14 @@ class WorkItemsConfigurationPanel:
     def create_work_item(self) -> None:
         if not self.sources:
             self.feedback("Add a Work Item source before creating an item.", False)
+            self.add_source_button.focus_set()
+            return
+        if not self.template_var.get().strip():
+            self.feedback(
+                "Choose a generic Excel template before creating a Work Item.",
+                False,
+            )
+            self.template_entry.focus_set()
             return
         if not self.save_template() or self.creation_settings.template_path is None:
             return

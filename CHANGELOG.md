@@ -21,7 +21,9 @@ This project has not published a versioned release. Changes are recorded under *
   link bindings instead of accumulating them during a resident session.
 - Made Actions, Focus Actions, and Work Items easier to distinguish in the
   shared discovery area. Work Items now says **Find Work Item** and **Open**,
-  hides the action-only Passwords filter, and provides mode-specific help.
+  hides the action-only Passwords filter, provides mode-specific help, and
+  exposes **New item** directly in the main Work Items view. The direct route
+  reuses the guarded template-based creation flow and focuses any missing setup.
 - Standardized the user-facing name **Quick actions** for the right-side button
   area and Configure tab; its direct tab mnemonic is now `Alt+Q`.
 

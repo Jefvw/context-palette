@@ -163,6 +163,8 @@ local work-item folders. The heading changes to **Work Items**, Find becomes
 Actions. Existing action filters and Focus slots are preserved while Work Items
 is active.
 
+- **New item** opens the guided Work Item creation flow. If setup is incomplete,
+  Configure opens on the missing source or generic Excel template first.
 - Find matches the folder name, parsed kind, organisation, subject, source
   name, detected project codes, and personal tags.
 - **Projects** filters by one detected four-character project code.
@@ -195,10 +197,12 @@ the Source name field automatically.
 
 ### Create a Work Item from the generic Excel template
 
-In **Configure**, choose **Work Items**, select one existing `.xlsx` file as the
-generic template, and save it. Choose **Create Work Item**, then select the
-source and enter a kind, organisation, subject, and optional project code. The
-suggested name is only assistance: **Final Work Item name** remains editable.
+Choose **Work**, then **New item**. On first use, add at least one source and
+select an existing `.xlsx` file as the generic template in the Work Items
+Configure page. The creation dialog then lets you select the source and enter a
+kind, organisation, subject, and optional project code. The suggested name is
+only assistance: **Final Work Item name** remains editable. **Create Work Item**
+on the Configure page opens the same creation dialog.
 
 The confirmation shows the exact folder and workbook. Context Palette refuses
 Windows-invalid or marker-style names and existing folders. It creates
