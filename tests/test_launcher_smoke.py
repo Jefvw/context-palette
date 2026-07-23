@@ -147,6 +147,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     self._assert_balanced_panes(app)
                     self.assertIs(app.passwords_button.master, app.actions_tool_rail)
                     self.assertIs(app.new_work_item_button.master, app.actions_tool_rail)
+                    self.assertIs(app.send_work_item_inbox_button.master, app.actions_tool_rail)
                     self.assertIs(app.type_filter.master, app.actions_tool_rail)
                     self.assertIs(app.tag_filter.master, app.actions_tool_rail)
                     self.assertIs(app.run_button.master, app.actions_tool_rail)
@@ -156,6 +157,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app.passwords_button.cget("text"), "Passwords")
                     self.assertEqual(app.new_work_item_button.cget("text"), "New item")
                     self.assertFalse(app.new_work_item_button.winfo_manager())
+                    self.assertFalse(app.send_work_item_inbox_button.winfo_manager())
                     self.assertEqual(app.tag_filter.cget("text"), "Tags ▾")
                     self.assertEqual(app.type_filter.cget("text"), "Types ▾")
                     self.assertEqual(app.run_button.cget("text"), "Run")
@@ -187,12 +189,17 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app.run_button.cget("text"), "Open")
                     self.assertFalse(app.passwords_button.winfo_manager())
                     self.assertTrue(app.new_work_item_button.winfo_manager())
+                    self.assertTrue(app.send_work_item_inbox_button.winfo_manager())
                     self.assertIs(
                         app.work_items_button.tk_focusNext(),
                         app.new_work_item_button,
                     )
                     self.assertIs(
                         app.new_work_item_button.tk_focusNext(),
+                        app.send_work_item_inbox_button,
+                    )
+                    self.assertIs(
+                        app.send_work_item_inbox_button.tk_focusNext(),
                         app.type_filter,
                     )
                     self.assertEqual(app.work_project_filter_var.get(), "All project codes")
@@ -215,6 +222,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app.run_button.cget("text"), "Run")
                     self.assertTrue(app.passwords_button.winfo_manager())
                     self.assertFalse(app.new_work_item_button.winfo_manager())
+                    self.assertFalse(app.send_work_item_inbox_button.winfo_manager())
 
                     opened_action_ids: list[str] = []
                     original_show_configuration = app._show_configuration
@@ -570,14 +578,7 @@ class LauncherSmokeTests(unittest.TestCase):
                         surface_tooltip_count,
                     )
 
-                    self.assertEqual(
-                        [
-                            app.manage_focus_menu.entrycget(index, "label")
-                            for index in (0, 2)
-                        ],
-                        ["Manage focuses…", "Configure actions and buttons…"],
-                    )
-                    self.assertEqual(app.manage_focus_menu.type(1), "separator")
+                    self.assertEqual(app.configure_button.cget("text"), "Configure")
 
                     root.focus_force()
                     root.event_generate("<Control-Shift-KeyPress-d>")
@@ -650,8 +651,17 @@ class LauncherSmokeTests(unittest.TestCase):
                     diagnostic_window.destroy()
                     root.update()
 
-                    for menu_index, expected_tab in ((0, "Contexts"), (2, "Actions")):
-                        app.manage_focus_menu.invoke(menu_index)
+                    configuration_routes = (
+                        (
+                            lambda: app.context_menu.invoke(
+                                app.context_menu.index("end")
+                            ),
+                            "Contexts",
+                        ),
+                        (app.configure_button.invoke, "Actions"),
+                    )
+                    for open_configuration, expected_tab in configuration_routes:
+                        open_configuration()
                         root.update()
                         configuration_windows = [
                             child

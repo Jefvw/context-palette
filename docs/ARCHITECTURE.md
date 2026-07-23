@@ -67,8 +67,9 @@ Presentation and application orchestration.
 
 - Builds the Tkinter interface.
 - Maintains the explicitly selected focus context through a compact menu launcher.
-- Exposes Focus editing and the complete configuration workspace through the
-  compact Manage focus menu without adding another permanent header control.
+- Exposes the complete configuration workspace through one direct
+  **Configure** button. The Focus selector retains a direct **Manage focuses…**
+  route to the Contexts tab.
 - Renders numbered slots, global flat search results, or an explicitly activated
   flat list of actions belonging to the selected Focus.
 - Renders a global JSON-configured quick-action surface beside search results,
@@ -352,6 +353,32 @@ refusal, and guarded template copying. It creates one new direct-child folder
 and copies the configured generic `.xlsx` to exact `<folder-name>.xlsx`. If the
 copy fails, it removes only partial output created by that attempt. The dialog
 owns confirmation and optional local-tag saving.
+
+It also owns collision-safe creation of a missing exact-name workbook inside an
+existing discovered Work Item. This narrower path copies the configured generic
+template with exclusive creation and never creates or removes the Work Item
+folder.
+
+### `work_item_inbox.py` and `integrations/Append-WorkItemInbox.ps1`
+
+Provide the constrained boundary for sending Input / Output to a selected Work
+Item's exact matching `.xlsx`. The Python layer validates and bounds one
+timestamp/text/link/source record, accepts only the exact direct-child workbook,
+optionally delegates collision-safe creation to `work_item_creation.py`, and
+runs the operation through a single-flight background coordinator. Completion
+is delivered to Tk only through main-thread polling.
+
+The fixed PowerShell integration receives size-limited JSON through standard
+input so captured content is absent from command-line history and temporary
+files. It uses installed Microsoft Excel automation, opens only `.xlsx` with
+link updates disabled, creates or selects the exact `Inbox` sheet, and appends
+columns A–D. Text and source cells are explicitly text-formatted to prevent
+formula evaluation. It does not accept script, command, worksheet, or arbitrary
+workbook targets from the user. Workbooks that Excel exposes through its
+registered automation instance remain open;
+workbooks opened by the integration are saved and closed. A workbook locked in
+another Excel instance fails safely as locked rather than opening a read-only
+copy. No third-party Python package or direct OOXML rewrite is introduced.
 
 ### `single_instance.py`
 

@@ -21,6 +21,7 @@ from context_palette.launcher import (
 )
 from context_palette.palette_state import PaletteState
 from context_palette.windows_credentials import CredentialSecret
+from context_palette.work_item_inbox import WorkItemInboxError, WorkItemInboxResult
 from context_palette.work_items import DiscoveredWorkItem
 
 
@@ -73,6 +74,108 @@ class FakeKeyEvent:
 
 
 class LauncherInteractionTests(unittest.TestCase):
+    def test_existing_workbook_inbox_send_starts_without_confirmation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory) / "ISS-CAP40-example"
+            folder.mkdir()
+            workbook = folder / "ISS-CAP40-example.xlsx"
+            workbook.write_bytes(b"xlsx")
+            item = DiscoveredWorkItem(
+                "cap40", "CAP40", folder.name, folder, folder.name,
+                "ISS", "Issue", "CAP40", "example", (), workbook,
+            )
+            app = LauncherApp.__new__(LauncherApp)
+            app.work_item_inbox = Mock(running=False)
+            app.work_item_inbox.start.return_value = True
+            app._selected_work_item = Mock(return_value=item)
+            app._workspace_text = Mock(return_value="See https://example.com")
+            app._work_item_inbox_source = Mock(return_value="Input / Output")
+            app.send_work_item_inbox_button = Mock()
+            app.status_var = FakeVariable()
+
+            with patch("context_palette.launcher.messagebox.askyesno") as confirm:
+                app._send_workspace_to_work_item_inbox()
+
+            confirm.assert_not_called()
+            app.work_item_inbox.start.assert_called_once()
+            self.assertEqual(
+                app.work_item_inbox.start.call_args.args[3].link,
+                "https://example.com",
+            )
+
+    def test_missing_workbook_offers_template_creation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            folder = root / "ISS-CAP40-example"
+            folder.mkdir()
+            template = root / "generic.xlsx"
+            template.write_bytes(b"template")
+            item = DiscoveredWorkItem(
+                "cap40", "CAP40", folder.name, folder, folder.name,
+                "ISS", "Issue", "CAP40", "example", (), None,
+            )
+            app = LauncherApp.__new__(LauncherApp)
+            app.root = Mock()
+            app.local_work_item_settings_path = root / "settings.json"
+            app.work_item_inbox = Mock(running=False)
+            app.work_item_inbox.start.return_value = True
+            app._workspace_text = Mock(return_value="note")
+            app._work_item_inbox_source = Mock(return_value="Input / Output")
+            app.send_work_item_inbox_button = Mock()
+            app.status_var = FakeVariable()
+
+            with (
+                patch(
+                    "context_palette.launcher.load_work_item_creation_settings",
+                    return_value=Mock(template_path=template),
+                ),
+                patch(
+                    "context_palette.launcher.messagebox.askyesno",
+                    return_value=True,
+                ) as confirm,
+            ):
+                app._send_workspace_to_work_item_inbox(item)
+
+            confirm.assert_called_once()
+            self.assertIsNone(app.work_item_inbox.start.call_args.args[1])
+            self.assertEqual(app.work_item_inbox.start.call_args.args[2], template)
+
+    def test_inbox_completion_reports_row_without_content(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.send_work_item_inbox_button = Mock()
+        app.status_var = FakeVariable()
+        app._start_work_item_refresh = Mock()
+        item = Mock(display_name="ISS-CAP40-example")
+        result = WorkItemInboxResult(
+            Path("C:/work/item/item.xlsx"),
+            7,
+            True,
+            False,
+        )
+
+        app._complete_work_item_inbox_send(item, result, None, False)
+
+        self.assertIn("Inbox row 7", app.status_var.value)
+        self.assertNotIn("secret", app.status_var.value)
+        app._start_work_item_refresh.assert_not_called()
+
+    def test_inbox_completion_shows_actionable_error(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.send_work_item_inbox_button = Mock()
+        app.status_var = FakeVariable()
+        app._start_work_item_refresh = Mock()
+
+        with patch("context_palette.launcher.messagebox.showerror") as showerror:
+            app._complete_work_item_inbox_send(
+                Mock(),
+                None,
+                WorkItemInboxError("Workbook is read-only."),
+                False,
+            )
+
+        self.assertIn("read-only", showerror.call_args.args[1])
+
     def test_new_work_item_route_opens_existing_creation_flow(self):
         app = LauncherApp.__new__(LauncherApp)
         app._show_configuration = Mock()

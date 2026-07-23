@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.work_item_creation import (
     WorkItemCreationError,
+    create_matching_workbook_from_template,
     create_work_item_from_template,
     suggest_work_item_name,
     validate_work_item_name,
@@ -73,6 +74,21 @@ class WorkItemCreationTests(unittest.TestCase):
 
             self.assertFalse((workitems / "new-item").exists())
             self.assertTrue(existing.is_dir())
+
+    def test_matching_workbook_can_be_added_to_existing_work_item(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            folder = root / "ISS-CAP40-existing"
+            folder.mkdir()
+            template = root / "generic.xlsx"
+            template.write_bytes(b"template")
+
+            workbook = create_matching_workbook_from_template(folder, template)
+
+            self.assertEqual(workbook, folder / "ISS-CAP40-existing.xlsx")
+            self.assertEqual(workbook.read_bytes(), b"template")
+            with self.assertRaisesRegex(WorkItemCreationError, "already exists"):
+                create_matching_workbook_from_template(folder, template)
 
 
 if __name__ == "__main__":

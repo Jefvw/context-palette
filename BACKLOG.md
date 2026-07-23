@@ -9,6 +9,12 @@ This file contains actionable future work. Completed user-visible work belongs i
   computer/path. Phases 1–4 include guided private source/tag configuration.
 - Manually verify generic-template Work Item creation with a real workbook and
   a representative network or disconnected source when back at the Windows desk.
+- Manually verify Work Item **To inbox** with a representative Excel workbook:
+  existing and missing `Inbox`, an already-open workbook, missing-workbook
+  creation, non-ASCII text, a locked workbook, and a network source.
+- Evaluate whether safe discovery across multiple separately running Excel
+  instances is worthwhile. The current integration uses Excel's registered
+  automation instance and otherwise reports a locked workbook without writing.
 - Perform and record the manual Windows UI/accessibility smoke test for the guided Configure workflow.
 - Extract secondary Inbox and Draft views from `launcher.py` incrementally
   without changing behavior. The sheet view has been extracted.

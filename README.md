@@ -22,6 +22,8 @@ The application is under active development. It already supports the complete Ca
   and personal tags, and opens an exact matching workbook or folder fallback.
 - Creates a Work Item folder and exact-name workbook from one configured local
   generic `.xlsx` template, using an editable suggested name.
+- Sends the current Input / Output text to columns A–D of a selected Work
+  Item workbook's `Inbox` sheet, creating that sheet when necessary.
 - Stores personal data locally and writes application-managed JSON atomically.
 
 ## Requirements
@@ -83,9 +85,9 @@ After the application starts:
 1. Press `F9` to capture selected text and show the palette. Use `Ctrl+Alt+P` as the fallback shortcut.
 2. Type in **Find**, select an action, and press `Enter`.
 3. Choose a **Focus** context to change slots 6–9.
-4. Choose **Manage focus → Configure actions and buttons…**, or press `Ctrl+,`,
-   to add personal actions, contexts, or Quick actions. **Manage focuses…**
-   opens the relevant context tab directly.
+4. Choose **Configure**, or press `Ctrl+,`, to add personal actions, contexts,
+   or Quick actions. **Manage focuses…** in the Focus selector opens the
+   relevant context tab directly.
 5. Use **Capture** when material should enter the Inbox before becoming an action.
 
 Close, `Esc`, and **Hide** keep the process resident. **Quit** stops it.
@@ -129,8 +131,8 @@ Personal and runtime files are ignored by Git:
 | `data/palette.json` | Focus, pins, and per-machine slot choices |
 | `data/context-palette.log*` | Bounded local diagnostics |
 
-Choose **Manage focus → Configure actions and buttons…**, or press `Ctrl+,`, to
-open **Configure** for ordinary personal configuration. The
+Choose **Configure**, or press `Ctrl+,`, to open the complete personal
+configuration workspace. The
 JSON guides are intended for advanced editing, review, and automation:
 
 - [Action types](docs/ACTION_TYPES.md)

@@ -77,9 +77,16 @@ from .windows_credentials import (
 )
 from .workspace_panel import WorkspacePanel
 from .work_item_refresh import WorkItemIndex, WorkItemRefreshCoordinator
+from .work_item_inbox import (
+    WorkItemInboxCoordinator,
+    WorkItemInboxError,
+    WorkItemInboxResult,
+    create_work_item_inbox_entry,
+)
 from .work_item_storage import (
     WorkItemMetadata,
     WorkItemStorageError,
+    load_work_item_creation_settings,
     load_work_item_metadata,
     load_work_item_sources,
     work_item_metadata_key,
@@ -247,6 +254,7 @@ class LauncherApp:
         self.work_item_metadata: dict[str, WorkItemMetadata] = {}
         self.work_item_index = WorkItemIndex()
         self.work_item_refresh = WorkItemRefreshCoordinator()
+        self.work_item_inbox = WorkItemInboxCoordinator()
         self.work_item_refresh_pending = False
         self.work_items_mode = False
         self.displayed_work_items: list[DiscoveredWorkItem] = []
@@ -286,7 +294,6 @@ class LauncherApp:
         self.search_var = tk.StringVar()
         self.context_var = tk.StringVar(value="General")
         self.focus_launcher_var = tk.StringVar(value="General ▾")
-        self.manage_focus_var = tk.StringVar(value="Manage focus ▾")
         self.actions_heading_var = tk.StringVar(value="Actions")
         self.results_count_var = tk.StringVar(value="0 actions")
         self.surface_count_var = tk.StringVar(value="0 buttons")
@@ -319,6 +326,7 @@ class LauncherApp:
             self.show_requests.put(initial_request)
         self._poll_show_requests()
         self._poll_work_item_refresh()
+        self._poll_work_item_inbox()
         self._start_work_item_refresh()
         self._audit_tooltips()
 
@@ -417,23 +425,13 @@ class LauncherApp:
             style="Compact.TButton",
         )
         focus_actions_button.pack(side=tk.LEFT, padx=(0, 6))
-        manage_focus = ttk.Menubutton(
+        configure_button = ttk.Button(
             context_panel,
-            textvariable=self.manage_focus_var,
+            text="Configure",
+            command=self._show_configuration,
             style="Compact.TButton",
         )
-        manage_focus.pack(side=tk.LEFT)
-        manage_focus_menu = tk.Menu(manage_focus, tearoff=False)
-        manage_focus_menu.add_command(
-            label="Manage focuses…",
-            command=self._show_focus_configuration,
-        )
-        manage_focus_menu.add_separator()
-        manage_focus_menu.add_command(
-            label="Configure actions and buttons…",
-            command=self._show_configuration,
-        )
-        manage_focus.configure(menu=manage_focus_menu)
+        configure_button.pack(side=tk.LEFT)
         context_help = ttk.Button(context_panel, text="?", width=3, command=self._show_help)
         context_help.pack(side=tk.RIGHT)
         self._tooltip(
@@ -445,18 +443,16 @@ class LauncherApp:
             "Show actions belonging to the active Focus. General contains every action.",
         )
         self._tooltip(
-            manage_focus,
-            "Manage focus — Edit focuses or configure actions and buttons.",
+            configure_button,
+            "Configure — Manage actions, action types, Focuses, Quick actions, Work Items, and diagnostics.",
         )
         self._tooltip(
             context_help,
             "Focus changes slots 6–9. It does not limit global search. Open Help for context configuration.",
         )
         self.global_help_button = context_help
-        self.configure_button = manage_focus
+        self.configure_button = configure_button
         self.focus_actions_button = focus_actions_button
-        self.manage_focus_button = manage_focus
-        self.manage_focus_menu = manage_focus_menu
 
     def _activate_focus_actions(self) -> None:
         self._set_work_items_mode(False)
@@ -553,6 +549,7 @@ class LauncherApp:
             toggle_password_actions=self._toggle_password_actions,
             toggle_work_items=self._toggle_work_items,
             create_work_item=self._show_work_item_creation,
+            send_work_item_inbox=self._send_workspace_to_work_item_inbox,
             select_action_type_filter=self._select_action_type_filter,
             select_tag_filter=self._select_tag_filter,
             select_project_filter=self._select_work_project_filter,
@@ -569,6 +566,7 @@ class LauncherApp:
         self.passwords_button = discovery.passwords_button
         self.work_items_button = discovery.work_items_button
         self.new_work_item_button = discovery.new_work_item_button
+        self.send_work_item_inbox_button = discovery.send_work_item_inbox_button
         self.type_filter = discovery.type_filter
         self.tag_filter = discovery.tag_filter
         self.run_button = discovery.run_button
@@ -1127,6 +1125,13 @@ class LauncherApp:
         except tk.TclError:
             return
 
+    def _poll_work_item_inbox(self) -> None:
+        try:
+            self.work_item_inbox.drain()
+            self.root.after(100, self._poll_work_item_inbox)
+        except tk.TclError:
+            return
+
     def _accept_work_item_index(self, index: WorkItemIndex) -> None:
         configured_source_ids = {
             source.id.casefold() for source in self.work_item_sources
@@ -1559,7 +1564,6 @@ class LauncherApp:
     def _refresh_focus_controls(self) -> None:
         context = self.context_var.get().strip() or "General"
         self.focus_launcher_var.set(f"{context} ▾")
-        self.manage_focus_var.set("Manage focus ▾")
         self.context_menu.delete(0, tk.END)
         for name in self.available_context_names:
             self.context_menu.add_radiobutton(
@@ -2542,6 +2546,127 @@ class LauncherApp:
             start_work_item_creation=True,
         )
 
+    def _send_workspace_to_work_item_inbox(
+        self,
+        item: DiscoveredWorkItem | None = None,
+    ) -> None:
+        selected = item or self._selected_work_item()
+        if selected is None:
+            self.status_var.set("Select a Work Item before sending to Inbox.")
+            return
+        if self.work_item_inbox.running:
+            self.status_var.set("An Inbox update is already running.")
+            return
+        text = self._workspace_text()
+        try:
+            entry = create_work_item_inbox_entry(
+                text,
+                source=self._work_item_inbox_source(text),
+            )
+        except WorkItemInboxError as exc:
+            self.status_var.set(str(exc))
+            return
+
+        expected_workbook = (
+            selected.folder_path / f"{selected.folder_path.name}.xlsx"
+        )
+        workbook = selected.matching_workbook_path
+        if workbook is not None and not workbook.is_file():
+            workbook = None
+        if workbook is None and expected_workbook.is_file():
+            workbook = expected_workbook
+
+        template: Path | None = None
+        missing_workbook = workbook is None
+        if missing_workbook:
+            try:
+                settings = load_work_item_creation_settings(
+                    self.local_work_item_settings_path
+                )
+            except WorkItemStorageError as exc:
+                messagebox.showerror(
+                    "Work Item Inbox",
+                    f"The generic template setting could not be loaded.\n\n{exc}",
+                    parent=self.root,
+                )
+                return
+            template = settings.template_path
+            if template is None or not template.is_file():
+                if messagebox.askyesno(
+                    "Generic template required",
+                    "This Work Item has no matching workbook, and no available "
+                    "generic Excel template is configured.\n\n"
+                    "Open Work Items configuration now?",
+                    parent=self.root,
+                ):
+                    self._show_configuration(initial_tab="work_items")
+                return
+            if not messagebox.askyesno(
+                "Create matching workbook?",
+                "This Work Item has no matching workbook.\n\n"
+                f"Create {expected_workbook.name} from the generic template "
+                "and send Input / Output to its Inbox?",
+                parent=self.root,
+            ):
+                self.status_var.set("Inbox send cancelled; no workbook was created.")
+                return
+
+        self.send_work_item_inbox_button.configure(state=tk.DISABLED)
+        started = self.work_item_inbox.start(
+            selected.folder_path,
+            workbook,
+            template,
+            entry,
+            lambda result, error: self._complete_work_item_inbox_send(
+                selected,
+                result,
+                error,
+                missing_workbook,
+            ),
+        )
+        if not started:
+            self.send_work_item_inbox_button.configure(state=tk.NORMAL)
+            self.status_var.set("An Inbox update is already running.")
+            return
+        self.status_var.set(f"Sending Input / Output to {selected.display_name}…")
+
+    def _work_item_inbox_source(self, text: str) -> str:
+        if self.captured_selection == text and self.source_foreground_handle:
+            title = " ".join(window_title(self.source_foreground_handle).split())
+            if title:
+                return title
+            return "Clipboard"
+        return "Input / Output"
+
+    def _complete_work_item_inbox_send(
+        self,
+        item: DiscoveredWorkItem,
+        result: WorkItemInboxResult | None,
+        error: WorkItemInboxError | None,
+        refresh_work_items: bool,
+    ) -> None:
+        self.send_work_item_inbox_button.configure(state=tk.NORMAL)
+        if error is not None:
+            self.status_var.set("The Work Item Inbox could not be updated.")
+            messagebox.showerror(
+                "Work Item Inbox could not be updated",
+                str(error),
+                parent=self.root,
+            )
+            if refresh_work_items:
+                self._start_work_item_refresh()
+            return
+        if result is None:
+            self.status_var.set("The Work Item Inbox returned no result.")
+            return
+        sheet_note = " A new Inbox sheet was created." if result.created_sheet else ""
+        self.status_var.set(
+            f"Sent Input / Output to {item.display_name}, Inbox row {result.row}."
+            f"{sheet_note}"
+        )
+        if result.created_workbook or refresh_work_items:
+            self._start_work_item_refresh()
+
     def _show_action_configuration(self, action: Action) -> None:
         self._show_configuration(
             initial_tab="actions",
@@ -2599,6 +2724,11 @@ class LauncherApp:
                 label="Open source folder",
                 command=lambda: self._open_work_item_target(item, source.workitems_path),
             )
+        menu.add_separator()
+        menu.add_command(
+            label="Send Input / Output to Inbox",
+            command=lambda: self._send_workspace_to_work_item_inbox(item),
+        )
         menu.add_separator()
         menu.add_command(
             label="Edit personal tags…",

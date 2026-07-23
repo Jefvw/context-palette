@@ -1,5 +1,32 @@
 # Decisions
 
+## 2026-07-23 - Append captured text through constrained Excel automation
+
+**Decision:** Let the user send current Input / Output to an `Inbox` sheet in
+the selected Work Item's exact matching `.xlsx`. Append Added, Text, first
+HTTP/HTTPS Link, and Source to columns A–D. Create the sheet automatically.
+Existing workbooks send without confirmation; a missing workbook may be
+created from the configured generic template only after explicit approval.
+
+**Reason:** Work Item workbooks are the user's durable working records, and a
+one-command Inbox removes repeated navigation and manual paste steps. Microsoft
+Excel automation preserves workbook features more safely than rewriting OOXML
+packages. A fixed integration avoids introducing a runtime Python dependency.
+
+**Safety boundary:** Python validates the exact discovered folder/workbook,
+cell limits, URL scheme, template, and collision behavior. One operation runs
+off the UI thread at a time. Captured content travels as UTF-8 JSON over
+standard input, is never logged, and is written as literal text. The fixed
+PowerShell script cannot accept commands, arbitrary worksheet names, macros, or
+other workbook formats. Excel link updates are disabled. Locked and read-only
+workbooks fail without claiming success.
+
+**Consequences:** Desktop Microsoft Excel and Windows PowerShell are required
+for this command. Duplicate links are allowed. The first link becomes the
+clickable Link cell while complete content remains in Text. Missing templates,
+unavailable folders, Excel failures, and oversized content remain visible,
+actionable errors.
+
 ## 2026-07-22 - Keep spoken and screen-reader-specific behavior out of scope
 
 **Decision:** Context Palette does not provide speech and does not require

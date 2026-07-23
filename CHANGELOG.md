@@ -4,6 +4,11 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Added **To inbox** in Work Items mode. It appends current Input / Output to
+  Added, Text, Link, and Source columns on the selected exact-name workbook's
+  `Inbox` sheet through constrained background Excel automation. Missing sheets
+  are created automatically; missing workbooks offer guarded creation from the
+  generic template; duplicate links are allowed.
 - Added attended bulk **Harvest actions** from selected Markdown, text, Word,
   and Excel documents. The local, bounded scan extracts explicit HTTP/HTTPS
   links without launching Office or evaluating content, then provides source
@@ -116,8 +121,9 @@ This project has not published a versioned release. Changes are recorded under *
   text, and `NULL`, quotes text, and safely escapes apostrophes.
 - Removed an obsolete date placeholder and consolidated two project-folder
   actions onto the portable `%PROJECT_ROOT%` definition.
-- Restored a visible route to the complete action and button configuration
-  workspace through the compact Manage focus menu, while retaining `Ctrl+,`.
+- Restored a visible route to the complete configuration workspace through one
+  direct **Configure** button, while retaining `Ctrl+,` and the Focus selector's
+  direct **Manage focuses…** route.
 - Preserved active pins, Focus, and context slots when the local palette file
   is temporarily locked or otherwise unreadable, with regression coverage.
 - Made compact-control names and explanations appear on keyboard focus as well

@@ -33,6 +33,7 @@ class ActionDiscoveryPanel:
         toggle_password_actions: Callable[[], None],
         toggle_work_items: Callable[[], None],
         create_work_item: Callable[[], None],
+        send_work_item_inbox: Callable[[], None],
         select_action_type_filter: Callable[[str | None], None],
         select_tag_filter: Callable[[str | None], None],
         select_project_filter: Callable[[str | None], None],
@@ -123,6 +124,17 @@ class ActionDiscoveryPanel:
         tooltip_adder(
             self.new_work_item_button,
             "New Work Item — Create a folder and exact-name Excel workbook from the configured generic template.",
+        )
+
+        self.send_work_item_inbox_button = ttk.Button(
+            self.tool_rail,
+            text="To inbox",
+            command=send_work_item_inbox,
+            style="Compact.TButton",
+        )
+        tooltip_adder(
+            self.send_work_item_inbox_button,
+            "Send to Inbox — Append Input / Output to columns A–D of the selected Work Item workbook's Inbox sheet.",
         )
 
         self.type_filter = ttk.Menubutton(
@@ -251,6 +263,12 @@ class ActionDiscoveryPanel:
                     pady=(5, 0),
                     before=self.type_filter,
                 )
+            if not self.send_work_item_inbox_button.winfo_manager():
+                self.send_work_item_inbox_button.pack(
+                    fill=tk.X,
+                    pady=(5, 0),
+                    before=self.type_filter,
+                )
             self.find_label.configure(text="Find Work Item")
             self.type_filter.configure(text="Projects ▾")
             self.run_button.configure(text="Open")
@@ -271,6 +289,7 @@ class ActionDiscoveryPanel:
                 empty_label="All work tags",
             )
         else:
+            self.send_work_item_inbox_button.pack_forget()
             self.new_work_item_button.pack_forget()
             if not self.passwords_button.winfo_manager():
                 self.passwords_button.pack(fill=tk.X, before=self.work_items_button)

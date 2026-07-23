@@ -84,5 +84,43 @@ def create_work_item_from_template(
     return CreatedWorkItem(folder, workbook)
 
 
+def create_matching_workbook_from_template(
+    folder_path: Path,
+    template_path: Path,
+) -> Path:
+    folder = Path(folder_path)
+    template = Path(template_path)
+    if not folder.is_absolute() or not folder.is_dir():
+        raise WorkItemCreationError("The selected Work Item folder is unavailable.")
+    if (
+        not template.is_absolute()
+        or not template.is_file()
+        or template.suffix.casefold() != ".xlsx"
+    ):
+        raise WorkItemCreationError("Choose an existing .xlsx generic template.")
+    workbook = folder / f"{folder.name}.xlsx"
+    created_workbook = False
+    try:
+        with template.open("rb") as source:
+            destination = workbook.open("xb")
+            created_workbook = True
+            with destination:
+                shutil.copyfileobj(source, destination)
+    except FileExistsError as exc:
+        raise WorkItemCreationError(
+            "The matching workbook already exists; nothing was overwritten."
+        ) from exc
+    except OSError as exc:
+        if created_workbook:
+            try:
+                workbook.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise WorkItemCreationError(
+            "The matching workbook could not be created from the template."
+        ) from exc
+    return workbook
+
+
 def _name_part(value: str) -> str:
     return re.sub(r"-+", "-", re.sub(r"[^A-Za-z0-9]+", "-", value.strip())).strip("-")

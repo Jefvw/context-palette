@@ -4,8 +4,8 @@ The right pane is a global quick-action surface that remains visible when Focus 
 
 ## Recommended: Configure window
 
-Choose **Manage focus → Configure actions and buttons…**, or press `Ctrl+,`,
-then open **Quick actions** to create or edit personal groups and buttons.
+Choose **Configure**, or press `Ctrl+,`, then open **Quick actions** to create
+or edit personal groups and buttons.
 The form:
 
 - lists actions by human-readable name;

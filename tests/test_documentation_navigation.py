@@ -17,20 +17,14 @@ class DocumentationNavigationTests(unittest.TestCase):
         help_document = (ROOT / "docs" / "HELP.md").read_text(encoding="utf-8")
 
         self.assertIn("Ctrl+,", readme)
-        self.assertIn("Manage focus → Configure actions and buttons", readme)
+        self.assertIn("**Configure**", readme)
         self.assertIn("Ctrl+,", context_guide)
-        self.assertIn("Manage focus", context_guide)
+        self.assertIn("Focus selector", context_guide)
         self.assertIn("Ctrl+,", button_guide)
-        self.assertIn(
-            "Manage focus → Configure actions and buttons",
-            button_guide,
-        )
+        self.assertIn("**Configure**", button_guide)
         self.assertIn("Quick actions", button_guide)
         self.assertIn("press `Ctrl+,`, then open **Actions**", help_document)
-        self.assertIn(
-            "Manage focus → Configure actions and buttons",
-            help_document,
-        )
+        self.assertIn("Choose **Configure**", help_document)
         self.assertIn(
             "Press `Ctrl+,`, then choose **Built-in action types",
             help_document,

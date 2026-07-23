@@ -80,8 +80,8 @@ version.
   and return to the startup view. Find, type/tag filters, Focus Actions mode,
   captured selection, and Input / Output are cleared. Saved Focus, pins,
   context slots, actions, and configuration are preserved.
-- Choose **Manage focus → Configure actions and buttons…** for a visible route
-  to the complete personal-configuration workspace.
+- Choose **Configure** for a visible route to the complete
+  personal-configuration workspace.
 - Click `Quit` to stop the resident process completely.
 - If a development instance becomes stuck, run `stop-context-palette.bat` and start again. The stop command targets this project's virtual-environment GUI and foreground diagnostic process trees; it does not stop unrelated Python applications or Context Palette clones in other folders.
 
@@ -95,7 +95,7 @@ This does not execute the highlighted action. Avoid passing secrets or selected 
 
 ## Focus context
 
-Use the compact active-Focus menu to switch context explicitly. Choose **Manage focus → Manage focuses…** to open the existing Context configuration area, create or edit personal contexts, and choose up to four preferred actions for slots 6 through 9. Shared definitions remain visible but read-only. Shared definitions live in `data/contexts.json`; private or work-specific definitions live in ignored `data/local_contexts.json`. The complete format and QTP-style recipes are in `docs/CONTEXT_CONFIGURATION.md`.
+Use the compact active-Focus menu to switch context explicitly. Choose **Manage focuses…** in that selector to open the existing Context configuration area, create or edit personal contexts, and choose up to four preferred actions for slots 6 through 9. Shared definitions remain visible but read-only. Shared definitions live in `data/contexts.json`; private or work-specific definitions live in ignored `data/local_contexts.json`. The complete format and QTP-style recipes are in `docs/CONTEXT_CONFIGURATION.md`.
 
 The Focus context tells Context Palette what kind of work is currently most important. It changes slots 6 through 9 and influences which actions appear first.
 
@@ -165,6 +165,8 @@ is active.
 
 - **New item** opens the guided Work Item creation flow. If setup is incomplete,
   Configure opens on the missing source or generic Excel template first.
+- **To inbox** appends the current Input / Output to the selected Work Item
+  workbook's `Inbox` sheet. The result context menu offers the same command.
 - Find matches the folder name, parsed kind, organisation, subject, source
   name, detected project codes, and personal tags.
 - **Projects** filters by one detected four-character project code.
@@ -210,6 +212,30 @@ Windows-invalid or marker-style names and existing folders. It creates
 opening or changing its contents. Optional tags stay local. If copying fails,
 only output newly created by that attempt is cleaned up.
 
+### Send Input / Output to a Work Item Inbox
+
+Choose **Work**, select a Work Item, place the material in **Input / Output**,
+and choose **To inbox**. Existing matching workbooks are updated immediately
+without confirmation. Context Palette creates an `Inbox` sheet when necessary
+and appends one row:
+
+| Column | Header | Stored value |
+| --- | --- | --- |
+| A | Added | Current date and time |
+| B | Text | Complete Input / Output text |
+| C | Link | First HTTP or HTTPS link, as a clickable hyperlink |
+| D | Source | Captured window title when known; otherwise Input / Output |
+
+Additional links remain in the complete text, and duplicate links are allowed.
+Text is stored literally rather than evaluated as an Excel formula.
+
+When the exact `<work-item-name>.xlsx` is missing, Context Palette offers to
+copy the configured generic template into the existing Work Item folder and
+then send the row. It never overwrites an existing workbook. If the template is
+missing, it offers to open Work Items configuration. Locked, read-only,
+unavailable, invalid, or oversized destinations fail with an error and do not
+report success.
+
 ## Quick-action surface
 
 The wider right side of the action console contains global configurable
@@ -232,9 +258,9 @@ behavior.
 
 ## Configure
 
-Choose **Manage focus → Manage focuses…** for Focus configuration. Choose
-**Manage focus → Configure actions and buttons…**, or use the shortcut
-(`Ctrl+,`), for the complete guided personal-configuration workspace:
+Choose **Manage focuses…** in the Focus selector for direct Focus
+configuration. Choose **Configure**, or use the shortcut (`Ctrl+,`), for the
+complete guided personal-configuration workspace:
 
 - **Actions:** edit every kind of personal or shared action, including URLs,
   files, folders, applications, credentials, URL builders, and
