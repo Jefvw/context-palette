@@ -37,17 +37,40 @@ def cleanup_retired_local_configuration(root: Path) -> RetirementCleanupReport:
         if not isinstance(actions, list):
             raise RetirementCleanupError("Local action file must contain an 'actions' list.")
         retained_actions: list[object] = []
+        actions_changed = False
         for action in actions:
             if isinstance(action, dict) and action.get("type") in RETIRED_ACTION_TYPES:
                 action_id = action.get("id")
                 if isinstance(action_id, str):
                     removed_ids.add(action_id)
                 actions_removed += 1
+                actions_changed = True
             else:
+                if (
+                    isinstance(action, dict)
+                    and action.get("state") in {"Draft", "Trusted"}
+                ):
+                    action["state"] = "Active"
+                    actions_changed = True
                 retained_actions.append(action)
-        if len(retained_actions) != len(actions):
+        if actions_changed:
             actions_data["actions"] = retained_actions
             atomic_write_json(actions_path, actions_data)
+            files_changed += 1
+
+    inbox_path = data / "inbox.json"
+    inbox_data = _read_optional_object(inbox_path)
+    if inbox_data is not None:
+        items = inbox_data.get("items")
+        if not isinstance(items, list):
+            raise RetirementCleanupError("Inbox file must contain an 'items' list.")
+        inbox_changed = False
+        for item in items:
+            if isinstance(item, dict) and item.get("state") == "Draft":
+                item["state"] = "Converted"
+                inbox_changed = True
+        if inbox_changed:
+            atomic_write_json(inbox_path, inbox_data)
             files_changed += 1
 
     for path, cleaner in (
@@ -90,12 +113,13 @@ def _clean_context_references(
     for context in contexts:
         if not isinstance(context, dict):
             continue
-        preferred = context.get("preferred_action_ids")
-        if not isinstance(preferred, list):
-            continue
-        retained = [value for value in preferred if value not in removed_ids]
-        removed += len(preferred) - len(retained)
-        context["preferred_action_ids"] = retained
+        for field in ("preferred_action_ids", "action_ids"):
+            references = context.get(field)
+            if not isinstance(references, list):
+                continue
+            retained = [value for value in references if value not in removed_ids]
+            removed += len(references) - len(retained)
+            context[field] = retained
     return data, removed
 
 

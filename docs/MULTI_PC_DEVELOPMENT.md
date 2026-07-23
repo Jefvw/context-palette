@@ -69,7 +69,11 @@ The project uses this contract:
   project check; use this as the normal development entry point.
 - Python and Tcl/Tk: installed separately on each Windows computer and used as the base for its local environment.
 
-Context Palette currently has no third-party dependencies. `requirements.txt` is present as the shared dependency contract and contains comments only.
+Context Palette has two direct, pinned runtime dependencies for its critical
+in-app documentation viewer: `markdown-it-py` for standards-based Markdown
+parsing and `tkinterweb` for HTML/CSS presentation inside Tkinter.
+`requirements.txt` is the shared dependency contract; setup also installs their
+transitive packages into each computer's own `.venv`.
 
 ### Adding a third-party library
 
@@ -135,16 +139,16 @@ belong to deliberately retired features. These migrations are idempotent and
 use the normal atomic writer, so each changed personal JSON file retains its
 previous contents in the ignored adjacent `.bak` file.
 
-## Shared versus local data
+## Built-in versus My configuration data
 
-### Shared through Git
+### Built-in through Git
 
 - Source code and tests.
 - Documentation.
-- `data/actions.json`: reviewed portable actions suitable for every computer.
-- `data/contexts.json`: reviewed portable context definitions.
+- `data/actions.json`: reviewed starter actions suitable for every computer.
+- `data/contexts.json`: starter context definitions; currently only Developing Context Palette.
 - `data/cheatsheets`: reviewed shared cheat sheets.
-- `data/command_surface.json`: reviewed shared global quick-action groups.
+- `data/command_surface.json`: reviewed Built-in global quick-action groups.
 - `data/*.example.json`: initial local-data templates.
 
 ### Local to each computer
@@ -159,7 +163,7 @@ previous contents in the ignored adjacent `.bak` file.
 
 ## Portable paths
 
-Shared actions should avoid absolute user paths. Supported environment placeholders include:
+Built-in actions should avoid absolute user paths. Supported environment placeholders include:
 
 ```text
 %PROJECT_ROOT%
@@ -182,7 +186,7 @@ Example:
 
 If an application is installed differently on each computer, keep that action in `data/local_actions.json` instead.
 
-## Sharing an action intentionally
+## Making an action Built-in intentionally
 
 New Inbox and cheat-sheet promotion actions are written to
 `data/local_actions.json` by default.
@@ -194,7 +198,7 @@ To share one across computers:
 3. Move the reviewed action object into `data/actions.json`.
 4. Give it a stable unique ID.
 5. Run tests and manually test it on another computer.
-6. Commit it as an intentional shared action.
+6. Commit it as an intentional Built-in action.
 
 ## AI-assisted development
 

@@ -4,7 +4,8 @@ The roadmap describes ordered product outcomes, not commitments or implemented b
 
 ## Now — make repeated actions effortless
 
-- Validate the guided Configure experience with real personal actions, contexts, and Quick actions.
+- Validate complete guided Configure management with real My configuration/Built-in
+  actions, context deletion, and reordered multi-entry Quick-action menus.
 - Complete Work Items Phase 5: representative manual Windows checks on another
   computer/path and record the result.
 - Improve discoverability of actions and action effects without exposing technical IDs.
@@ -25,7 +26,8 @@ The roadmap describes ordered product outcomes, not commitments or implemented b
 
 - Application-aware context suggestions that never switch focus silently.
 - Rich text, HTML, image, and character-picker actions with explicit clipboard behavior.
-- A guarded action-ID automation API only after Trusted authorization, confirmation policy, structured results, and security tests exist.
+- A guarded action-ID automation API only after explicit authorization,
+  confirmation policy, structured results, and security tests exist.
 
 ## Explicit non-goals
 

@@ -1,2 +1,3 @@
-# Context Palette currently uses only the Python standard library and Tkinter.
-# Add reviewed, portable third-party runtime dependencies here with pinned versions.
+# Reviewed, pinned runtime dependencies installed by setup-context-palette.bat.
+markdown-it-py==4.2.0
+tkinterweb==4.25.3

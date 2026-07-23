@@ -1,6 +1,9 @@
 # Cheat-sheet format
 
-Context Palette loads one structured JSON file per application, project, workflow, or topic from `data/cheatsheets/`. Sheets are searchable in the app, and an individual entry can be promoted to a personal `copy_text` Draft action.
+Context Palette loads one structured JSON file per application, project,
+workflow, or topic from `data/cheatsheets/`. Sheets are searchable in the app,
+and an individual entry can be promoted to a permanent personal `copy_text`
+action.
 
 ```json
 {
@@ -43,6 +46,9 @@ Context Palette loads one structured JSON file per application, project, workflo
 
 Search covers sheet and section metadata plus item labels, details, and tags.
 
-Promotion copies one item into `data/local_actions.json` as a Draft. It does not modify the source sheet. Review command-like text before trusting or using it; a cheat-sheet detail is reference text, not an executable shell action.
+Promotion copies one item into `data/local_actions.json` as an Active action
+after confirmation. It does not modify the source sheet. Review command-like
+text before saving or using it; a cheat-sheet detail is reference text, not an
+executable shell action.
 
 JSON is used because it supports validation, item-level search, and item-level promotion without a third-party parser. Markdown can still be used for drafting before content is converted to this structure.

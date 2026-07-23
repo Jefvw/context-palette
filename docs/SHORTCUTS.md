@@ -91,9 +91,9 @@ AltGr-, plain number-row, and numpad input never execute action slots.
 | `Ctrl+F` | Focus and select the candidate search text. |
 | `F5` | Scan or rescan the selected documents. |
 | `Delete` in Sources | Remove the selected source from the transient batch. |
-| `Space` in Candidates | Select or deselect the highlighted candidates for Draft creation. |
+| `Space` in Candidates | Select or deselect the highlighted candidates for permanent creation. |
 | `Enter` in Candidates | Edit the single highlighted candidate. |
-| `Esc` | Close the Harvest or Draft preview window. An active scan is cancelled safely. |
+| `Esc` | Close the Harvest or action-preview window. An active scan is cancelled safely. |
 
 ## Scope
 

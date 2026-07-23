@@ -39,10 +39,18 @@ def resolve_focus_state(
             configured_slots[canonical_context] = action_ids
     known_action_ids = {action.id for action in actions}
     for definition in definitions:
-        if definition.name not in configured_slots and definition.preferred_action_ids:
+        default_action_ids = tuple(
+            dict.fromkeys(
+                (
+                    *definition.preferred_action_ids,
+                    *(definition.action_ids or ()),
+                )
+            )
+        )
+        if definition.name not in configured_slots and default_action_ids:
             configured_slots[definition.name] = tuple(
                 action_id
-                for action_id in definition.preferred_action_ids
+                for action_id in default_action_ids[:4]
                 if action_id in known_action_ids
             )
 
@@ -61,11 +69,36 @@ def resolve_focus_state(
 def actions_for_context(
     actions: list[Action],
     focus_context: str,
+    definitions: list[ContextDefinition] | tuple[ContextDefinition, ...] = (),
 ) -> list[Action]:
     """Return visible actions belonging to an explicit Focus in canonical order."""
+    context_key = focus_context.casefold()
+    matching_definitions = [
+        definition
+        for definition in definitions
+        if definition.name.casefold() == context_key
+    ]
+    configured_action_ids = {
+        action_id
+        for definition in matching_definitions
+        for action_id in (
+            *(definition.action_ids or ()),
+            *definition.preferred_action_ids,
+        )
+    }
+    explicit_membership = any(
+        definition.action_ids is not None for definition in matching_definitions
+    )
     return [
         action
         for action in actions
-        if action.belongs_to_context(focus_context)
+        if (
+            (
+                action.belongs_to_context(focus_context)
+                if not explicit_membership
+                else False
+            )
+            or action.id in configured_action_ids
+        )
         and action.state in VISIBLE_STATES
     ]

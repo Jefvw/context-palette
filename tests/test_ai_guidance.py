@@ -48,7 +48,7 @@ class AIGuidanceTests(unittest.TestCase):
         self.assertIn('"type": "copy_text"', request)
         self.assertIn("Return only JSON", request)
 
-    def test_valid_proposals_become_local_draft_copy_text_actions(self):
+    def test_valid_proposals_become_active_local_copy_text_actions(self):
         response = """{
           "format": "context-palette-action-proposals",
           "version": 1,
@@ -68,8 +68,8 @@ class AIGuidanceTests(unittest.TestCase):
         self.assertEqual(len(proposals), 1)
         self.assertEqual(proposals[0].explanation, "Reusable concise response.")
         self.assertEqual(proposals[0].action.type, "copy_text")
-        self.assertEqual(proposals[0].action.state, "Draft")
-        self.assertTrue(proposals[0].action.id.startswith("draft-"))
+        self.assertEqual(proposals[0].action.state, "Active")
+        self.assertTrue(proposals[0].action.id.startswith("action-"))
 
     def test_current_proposals_accept_multiple_contexts_and_normalized_tags(self):
         response = """{
@@ -233,7 +233,7 @@ class AIGuidanceTests(unittest.TestCase):
         self.assertIn("open_url", request)
         self.assertIn("HTTP", request)
         self.assertEqual(proposals[0].action.type, "open_url")
-        self.assertEqual(proposals[0].action.state, "Draft")
+        self.assertEqual(proposals[0].action.state, "Active")
 
     def test_open_url_proposal_rejects_non_http_target(self):
         variation = next(item for item in PROMPT_VARIATIONS if item.allowed_action_types == ("open_url",))

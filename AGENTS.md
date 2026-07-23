@@ -24,7 +24,11 @@ common modifications.
 - Do not introduce a dependency without verifying portability and explaining why it is necessary.
 - Do not implement arbitrary shell-command execution.
 - Keep actions constrained, previewable, and testable.
-- Preserve the Capture -> Draft -> Test -> Refine -> Trusted lifecycle.
+- Preserve the permanent Active/Archived action lifecycle. Confirmed creation
+  and edits save immediately; do not reintroduce a Draft or Trusted gate.
+- All persisted actions, contexts, and Quick actions are user-editable. Explain
+  the Git and multi-computer impact of shared changes, but do not make shared
+  records read-only.
 
 ## Data ownership
 

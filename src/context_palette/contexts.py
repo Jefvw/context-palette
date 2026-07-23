@@ -16,6 +16,7 @@ class ContextDefinition:
     technology: str = ""
     task: str = ""
     preferred_action_ids: tuple[str, ...] = ()
+    action_ids: tuple[str, ...] | None = None
 
 
 def load_contexts(path: Path) -> list[ContextDefinition]:
@@ -61,4 +62,20 @@ def _parse_context(item: object, index: int) -> ContextDefinition:
     clean_ids = tuple(value.strip() for value in preferred if value.strip())
     if len(clean_ids) > 4:
         raise ContextError(f"Context #{index} may define at most four preferred actions.")
-    return ContextDefinition(name=name.strip(), preferred_action_ids=clean_ids, **text_fields)
+    members = item.get("action_ids")
+    if members is None:
+        clean_members = None
+    elif not isinstance(members, list) or not all(
+        isinstance(value, str) for value in members
+    ):
+        raise ContextError(f"Context #{index} has invalid action_ids.")
+    else:
+        clean_members = tuple(
+            dict.fromkeys(value.strip() for value in members if value.strip())
+        )
+    return ContextDefinition(
+        name=name.strip(),
+        preferred_action_ids=clean_ids,
+        action_ids=clean_members,
+        **text_fields,
+    )

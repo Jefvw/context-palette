@@ -439,20 +439,20 @@ class LauncherInteractionTests(unittest.TestCase):
     def test_sash_position_scales_minimums_when_window_is_too_small(self):
         self.assertEqual(bounded_sash_position(200, 0.9, 140, 140), 100)
 
-    def test_frequent_credentials_prioritize_trusted_pins_and_limit_to_four(self):
+    def test_frequent_credentials_prioritize_pins_and_limit_to_four(self):
         actions = [
-            Action("one", "One", "General", "paste_credential", "one", "Trusted"),
-            Action("two", "Two", "General", "paste_credential", "two", "Trusted"),
-            Action("draft", "Draft", "General", "paste_credential", "draft", "Draft"),
-            Action("copy", "Copy", "General", "copy_text", "text", "Trusted"),
-            Action("three", "Three", "General", "paste_credential", "three", "Trusted"),
-            Action("four", "Four", "General", "paste_credential", "four", "Trusted"),
-            Action("five", "Five", "General", "paste_credential", "five", "Trusted"),
+            Action("one", "One", "General", "paste_credential", "one"),
+            Action("two", "Two", "General", "paste_credential", "two"),
+            Action("saved", "Saved", "General", "paste_credential", "saved"),
+            Action("copy", "Copy", "General", "copy_text", "text"),
+            Action("three", "Three", "General", "paste_credential", "three"),
+            Action("four", "Four", "General", "paste_credential", "four"),
+            Action("five", "Five", "General", "paste_credential", "five"),
         ]
 
-        selected = frequent_credential_actions(actions, ("three", "two", "draft"))
+        selected = frequent_credential_actions(actions, ("three", "two", "saved"))
 
-        self.assertEqual([action.id for action in selected], ["three", "two", "one", "four"])
+        self.assertEqual([action.id for action in selected], ["three", "two", "saved", "one"])
 
     def test_password_button_toggles_exact_credential_action_filter(self):
         app = LauncherApp.__new__(LauncherApp)
@@ -709,7 +709,7 @@ class LauncherInteractionTests(unittest.TestCase):
             "General",
             "paste_credential",
             "ContextPalette/example-login",
-            "Trusted",
+            "Active",
         )
 
         with (
@@ -757,7 +757,7 @@ class LauncherInteractionTests(unittest.TestCase):
             "General",
             "paste_credential",
             "ContextPalette/example-login",
-            "Trusted",
+            "Active",
         )
 
         with self.assertRaisesRegex(ActionError, "F9"):
@@ -776,7 +776,7 @@ class LauncherInteractionTests(unittest.TestCase):
             "General",
             "paste_credential",
             "ContextPalette/example-login",
-            "Trusted",
+            "Active",
         )
 
         with (
@@ -907,7 +907,7 @@ class LauncherInteractionTests(unittest.TestCase):
                 "General",
                 "copy_text",
                 "text",
-                "Trusted",
+                "Active",
             )
         ]
         app.context_definitions = []
@@ -1039,7 +1039,7 @@ class LauncherInteractionTests(unittest.TestCase):
                                 "context": "General",
                                 "type": "copy_text",
                                 "value": "New",
-                                "state": "Draft",
+                                "state": "Active",
                             }
                         ]
                     }

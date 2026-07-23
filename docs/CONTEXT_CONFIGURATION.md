@@ -1,55 +1,66 @@
 # Context configuration
 
-A focus context gives slots 6–9 a predictable set of preferred actions while search remains global.
+A Focus context groups actions for a kind of work and gives slots 6–9 a
+predictable set of preferred actions while search remains global.
 
 ## Recommended: Configure window
 
 Choose **Manage focuses…** in the Focus selector to open **Contexts** directly,
-or choose **Configure** (or press `Ctrl+,`) and select **Contexts**. Create or edit a personal context and
-choose up to four actions. The form uses action names instead of IDs and saves
-to ignored `data/local_contexts.json`. Shared contexts are visible but
-read-only.
+or choose **Configure** (or press `Ctrl+,`) and select **Contexts**. Create,
+edit, or delete a context, choose every action that belongs to it, and select up
+to four preferred actions. The form uses action names instead of technical IDs.
+
+Normal user contexts belong in **My configuration** and stay on this PC. They
+may contain both Built-in actions and My configuration actions without editing
+the actions themselves. **Built-in** is developer-owned starter configuration
+tracked through Git. General is implicit, and **Developing Context Palette** is
+the only shipped specific context.
+
+Deletion clears saved Focus state and legacy action-side memberships before
+removing the definition.
 
 ## Advanced JSON files
 
-- `data/contexts.json`: reviewed portable contexts.
+- `data/contexts.json`: Built-in starter contexts tracked through Git.
 - `data/local_contexts.json`: personal or work-specific contexts, ignored by Git.
-- `data/actions.json`: reviewed portable actions.
+- `data/actions.json`: Built-in starter actions.
 - `data/local_actions.json`: personal or machine-specific actions, ignored by Git.
-- `data/palette.json`: per-machine focus, pins, and explicit slot overrides.
+- `data/palette.json`: per-machine Focus, pins, and explicit slot overrides.
 
-Do not put internal URLs, customer names, work paths, or personal identifiers in shared files without explicit review.
-
-```json
-{
-  "name": "Archives",
-  "description": "Build an archive URL from selected or copied text.",
-  "preferred_action_ids": ["archives-open-selected-item"]
-}
-```
-
-`name` is the stable, case-insensitively unique context identity. `preferred_action_ids` supplies up to four default actions for slots 6–9. Explicit per-machine slots in `palette.json` override those defaults.
-
-Every action belongs to the virtual **General** root. Actions may also carry a
-`contexts` list for one or more specific workspaces and a `tags` list for
-independent discovery terms. Search remains global regardless of Focus.
+Do not put internal URLs, customer names, work paths, or personal identifiers
+in Built-in files.
 
 ```json
 {
-  "id": "archives-open-selected-item",
-  "title": "Open selected archive item",
-  "contexts": ["Archives"],
-  "tags": ["browser", "archive lookup"],
-  "type": "build_url_selection_open",
-  "value": "https://example.test/archive/{selection_url}",
-  "state": "Draft"
+  "name": "Database",
+  "description": "Prepare and reuse SQL query text.",
+  "action_ids": [
+    "database-select-template",
+    "database-lines-to-sql-list",
+    "my-local-query"
+  ],
+  "preferred_action_ids": [
+    "database-select-template",
+    "database-lines-to-sql-list"
+  ]
 }
 ```
 
-Do not store General in `contexts`; it is implied for every action. Existing
-personal files using singular `context`, `technology`, and `task` remain
-readable. Saving an edited action writes the current `contexts` and `tags`
-format.
+`name` is the stable, case-insensitively unique context identity. `action_ids`
+is the ordered membership list used by **Focus actions**.
+`preferred_action_ids` supplies up to four default actions for slots 6–9 and
+should be a subset of `action_ids`. Explicit per-machine slots in
+`palette.json` override those defaults.
+
+Every action belongs to the virtual **General** root. Current context membership
+belongs in the context's `action_ids`, allowing each PC to organize Built-in
+actions without changing Git-tracked action records. Legacy action records may
+still carry a `contexts` list and remain readable. Tags remain independent
+discovery terms. Search remains global regardless of Focus.
+
+Do not create a General context definition; it is implied for every action.
+Existing personal files using singular `context`, `technology`, and `task`
+remain readable.
 
 ## Useful patterns
 
@@ -67,12 +78,15 @@ See [Action types](ACTION_TYPES.md) for fields and examples.
 
 ## External edits
 
-Keep action IDs and context names unique across shared and local files, then run:
+Keep action IDs and context names unique across Built-in and My configuration
+files, then run:
 
 ```powershell
 .\check-context-palette.bat
 ```
 
-Return to or reopen the palette after editing. It reloads files whose signatures changed; a restart is normally unnecessary.
+Return to or reopen the palette after editing. It reloads files whose signatures
+changed; a restart is normally unnecessary.
 
-Direct paste/key sequences, clipboard transactions, context activation bundles, and automatic context inference are not implemented.
+Direct paste/key sequences, clipboard transactions, context activation bundles,
+and automatic context inference are not implemented.

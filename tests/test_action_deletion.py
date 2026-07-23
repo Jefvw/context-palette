@@ -29,9 +29,9 @@ class ActionDeletionTests(unittest.TestCase):
                 {
                     "actions": [
                         {"id": "delete-me", "title": "Delete", "context": "General",
-                         "type": "copy_text", "value": "x", "state": "Draft"},
+                         "type": "copy_text", "value": "x", "state": "Active"},
                         {"id": "keep", "title": "Keep", "context": "General",
-                         "type": "copy_text", "value": "y", "state": "Draft"},
+                         "type": "copy_text", "value": "y", "state": "Active"},
                     ]
                 },
             )
@@ -39,7 +39,11 @@ class ActionDeletionTests(unittest.TestCase):
                 contexts,
                 {
                     "contexts": [
-                        {"name": "Work", "preferred_action_ids": ["delete-me", "keep"]}
+                        {
+                            "name": "Work",
+                            "preferred_action_ids": ["delete-me", "keep"],
+                            "action_ids": ["delete-me", "keep"],
+                        }
                     ]
                 },
             )
@@ -90,15 +94,19 @@ class ActionDeletionTests(unittest.TestCase):
                 palette_path=palette,
             )
 
-            self.assertEqual(usage.references_removed, 7)
+            self.assertEqual(usage.references_removed, 8)
             self.assertEqual(usage.buttons_removed, 1)
-            self.assertEqual(report.references_removed, 7)
+            self.assertEqual(report.references_removed, 8)
             self.assertEqual(
                 [item["id"] for item in self._read(actions)["actions"]],
                 ["keep"],
             )
             self.assertEqual(
                 self._read(contexts)["contexts"][0]["preferred_action_ids"],
+                ["keep"],
+            )
+            self.assertEqual(
+                self._read(contexts)["contexts"][0]["action_ids"],
                 ["keep"],
             )
             command_items = self._read(commands)["groups"][0]["items"]

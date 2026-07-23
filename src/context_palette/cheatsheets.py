@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
-from .actions import Action, draft_copy_text_action
+from .actions import Action, copy_text_action
 
 
 class CheatSheetError(Exception):
@@ -138,8 +138,8 @@ def filter_cheatsheet(sheet: CheatSheet, query: str) -> CheatSheet:
     )
 
 
-def draft_action_from_cheatsheet_item(sheet: CheatSheet, item: CheatSheetItem) -> Action:
-    return draft_copy_text_action(
+def action_from_cheatsheet_item(sheet: CheatSheet, item: CheatSheetItem) -> Action:
+    return copy_text_action(
         title=item.label,
         context=sheet.title,
         value=f"{item.label}: {item.detail}",

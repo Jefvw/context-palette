@@ -53,10 +53,10 @@ class InboxTests(unittest.TestCase):
             item = create_clipboard_item(title="Note", content="Text")
             append_inbox_item(path, item)
 
-            update_inbox_item_state(path, item.id, "Draft")
+            update_inbox_item_state(path, item.id, "Converted")
             loaded = load_inbox_items(path)
 
-        self.assertEqual(loaded[0].state, "Draft")
+        self.assertEqual(loaded[0].state, "Converted")
 
 
 if __name__ == "__main__":

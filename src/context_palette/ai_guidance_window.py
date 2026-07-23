@@ -33,7 +33,7 @@ class AIGuidanceWindow:
         self.proposals: list[ActionProposal] = []
 
         self.window = tk.Toplevel(parent)
-        self.window.title("Ask AI for Draft Action Proposals")
+        self.window.title("Ask AI for Action Proposals")
         configure_standard_window(self.window)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
 
@@ -44,7 +44,7 @@ class AIGuidanceWindow:
         footer.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
         self.create_button = ttk.Button(
             footer,
-            text="Create selected Drafts",
+            text="Create selected actions",
             command=self._create_selected,
             state=tk.DISABLED,
             style="Accent.TButton",
@@ -110,7 +110,7 @@ class AIGuidanceWindow:
             style="Muted.TLabel",
         ).pack(fill=tk.X, pady=(4, 0))
 
-        ttk.Label(outer, text="Validated Draft proposals").pack(anchor=tk.W, pady=(10, 0))
+        ttk.Label(outer, text="Validated action proposals").pack(anchor=tk.W, pady=(10, 0))
         proposal_area = ttk.Frame(outer)
         proposal_area.pack(fill=tk.BOTH, expand=True, pady=(3, 0))
         self.proposal_list = tk.Listbox(
@@ -228,7 +228,7 @@ class AIGuidanceWindow:
             text = (
                 f"{action.display_text}\n"
                 f"Type: {action.type}\n"
-                f"State: Draft\n\n"
+                f"State: Active\n\n"
                 f"Why proposed: {proposal.explanation}\n\n"
                 f"Action text:\n{action.value}"
             )
@@ -246,8 +246,8 @@ class AIGuidanceWindow:
             )
             return
         if not messagebox.askyesno(
-            "Create Draft actions",
-            f"Create {len(actions)} selected local Draft action(s)?",
+            "Create actions",
+            f"Create {len(actions)} selected permanent local action(s)?",
             parent=self.window,
         ):
             return

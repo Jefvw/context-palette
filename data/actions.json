@@ -5,10 +5,7 @@
       "title": "Copy current date and time",
       "type": "copy_text",
       "value": "%LDF% %LTF%",
-      "state": "Draft",
-      "contexts": [
-        "QTP Essentials"
-      ],
+      "state": "Active",
       "tags": [
         "windows",
         "clipboard",
@@ -20,10 +17,7 @@
       "title": "Copy URL-encoded clipboard text",
       "type": "copy_text",
       "value": "%CLIPBOARD_URL%",
-      "state": "Draft",
-      "contexts": [
-        "QTP Essentials"
-      ],
+      "state": "Active",
       "tags": [
         "clipboard",
         "encode text"
@@ -34,10 +28,7 @@
       "title": "Open selected archive item",
       "type": "build_url_selection_open",
       "value": "http://linkto/archives/{id_url}",
-      "state": "Draft",
-      "contexts": [
-        "Archives"
-      ],
+      "state": "Active",
       "tags": [
         "browser",
         "archive lookup"
@@ -48,7 +39,7 @@
       "title": "Open Python documentation",
       "type": "open_url",
       "value": "https://docs.python.org/3/",
-      "state": "Draft",
+      "state": "Active",
       "tags": [
         "browser",
         "python",
@@ -60,10 +51,7 @@
       "title": "Open colruyt.be cart",
       "type": "build_url_selection_open",
       "value": "https://www.colruyt.be/nl/producten/{id_url}",
-      "state": "Trusted",
-      "contexts": [
-        "Product lookup"
-      ],
+      "state": "Active",
       "tags": [
         "colruyt",
         "cart"
@@ -75,10 +63,7 @@
       "title": "Open bioplanet.be cart",
       "type": "build_url_selection_open",
       "value": "https://www.bioplanet.be/nl/producten/{id_url}",
-      "state": "Draft",
-      "contexts": [
-        "Product lookup"
-      ],
+      "state": "Active",
       "tags": [
         "bio-planet",
         "cart"
@@ -89,10 +74,7 @@
       "title": "Open ProductInfoScreen technical article",
       "type": "build_url_selection_open",
       "value": "https://productinfoscreen.colruyt.int/productinfoscreen/consultArticle.xhtml?technicalArticleNumber={id_url}",
-      "state": "Draft",
-      "contexts": [
-        "Product lookup"
-      ],
+      "state": "Active",
       "tags": [
         "browser",
         "productinfoscreen",
@@ -104,10 +86,7 @@
       "title": "Open FIC technical article",
       "type": "build_url_selection_open",
       "value": "https://fic.colruytgroup.com/productinfo/nl/algc/{id_url}",
-      "state": "Draft",
-      "contexts": [
-        "Product lookup"
-      ],
+      "state": "Active",
       "tags": [
         "browser",
         "fic",
@@ -119,10 +98,7 @@
       "title": "Open RTI technical article",
       "type": "build_url_selection_open",
       "value": "https://rti.colruytgroup.com/nl/product-info/{id_url}",
-      "state": "Draft",
-      "contexts": [
-        "Product lookup"
-      ],
+      "state": "Active",
       "tags": [
         "browser",
         "rti",
@@ -134,10 +110,7 @@
       "title": "Open Solucious technical article",
       "type": "build_url_selection_open",
       "value": "https://www.solucious.be/{id_url}",
-      "state": "Draft",
-      "contexts": [
-        "Product lookup"
-      ],
+      "state": "Active",
       "tags": [
         "browser",
         "solucious",
@@ -149,10 +122,7 @@
       "title": "Open MyProduct retail article",
       "type": "build_url_selection_open",
       "value": "https://myproduct.colruyt.int/#/product-entities/RETAILARTICLE/{id_url}",
-      "state": "Draft",
-      "contexts": [
-        "Product lookup"
-      ],
+      "state": "Active",
       "tags": [
         "browser",
         "myproduct",
@@ -164,10 +134,7 @@
       "title": "Open MyProduct base product",
       "type": "build_url_selection_open",
       "value": "https://myproduct.colruyt.int/#/product-entities/RETAILBASEPRODUCT/{id_url}",
-      "state": "Draft",
-      "contexts": [
-        "Product lookup"
-      ],
+      "state": "Active",
       "tags": [
         "browser",
         "myproduct",
@@ -179,10 +146,7 @@
       "title": "Open MyProduct trade item by GTIN",
       "type": "build_url_selection_open",
       "value": "https://myproduct.colruyt.int/#/product-entities/RETAILTRADEITEM/{id_url}",
-      "state": "Draft",
-      "contexts": [
-        "Product lookup"
-      ],
+      "state": "Active",
       "tags": [
         "browser",
         "myproduct",
@@ -194,10 +158,7 @@
       "title": "Open MyProduct specification sheet",
       "type": "build_url_selection_open",
       "value": "https://myproduct.colruyt.int/#/product-entities/PRODUCTSPECIFICATIONSHEET/{id_url}",
-      "state": "Draft",
-      "contexts": [
-        "Product lookup"
-      ],
+      "state": "Active",
       "tags": [
         "browser",
         "myproduct",
@@ -209,10 +170,7 @@
       "title": "Search MyProduct by any ID",
       "type": "build_url_selection_open",
       "value": "https://myproduct.colruyt.int/#/product-entities?productId={id_url}",
-      "state": "Draft",
-      "contexts": [
-        "Product lookup"
-      ],
+      "state": "Active",
       "tags": [
         "browser",
         "myproduct",
@@ -224,10 +182,7 @@
       "title": "Copy basic SELECT template",
       "type": "copy_text",
       "value": "SELECT column_name\nFROM table_name\nWHERE condition;",
-      "state": "Draft",
-      "contexts": [
-        "Database"
-      ],
+      "state": "Active",
       "tags": [
         "sql",
         "query authoring"
@@ -238,10 +193,7 @@
       "title": "Convert lines to SQL string list",
       "type": "transform_list_csv",
       "value": "sql_strings",
-      "state": "Draft",
-      "contexts": [
-        "Database"
-      ],
+      "state": "Active",
       "tags": [
         "sql",
         "prepare query input"
@@ -252,10 +204,7 @@
       "title": "Copy basic CTE template",
       "type": "copy_text",
       "value": "WITH cte_name AS (\n    SELECT column_name\n    FROM table_name\n)\nSELECT *\nFROM cte_name;",
-      "state": "Draft",
-      "contexts": [
-        "Database"
-      ],
+      "state": "Active",
       "tags": [
         "sql",
         "query authoring"
@@ -266,10 +215,7 @@
       "title": "Copy professional greeting",
       "type": "copy_text",
       "value": "Hello,\n\nThank you for your message.",
-      "state": "Draft",
-      "contexts": [
-        "Email"
-      ],
+      "state": "Active",
       "tags": [
         "mail",
         "reply writing"
@@ -280,10 +226,7 @@
       "title": "Copy follow-up template",
       "type": "copy_text",
       "value": "Hello,\n\nI wanted to follow up on the message below. Please let me know when you have a chance to review it.\n\nBest regards,",
-      "state": "Draft",
-      "contexts": [
-        "Email"
-      ],
+      "state": "Active",
       "tags": [
         "mail",
         "follow-up"
@@ -294,10 +237,7 @@
       "title": "Copy standard signature",
       "type": "copy_text",
       "value": "Best regards,\nJef",
-      "state": "Draft",
-      "contexts": [
-        "Email"
-      ],
+      "state": "Active",
       "tags": [
         "mail",
         "reply writing"
@@ -312,10 +252,7 @@
         "%PROJECT_ROOT%"
       ],
       "working_directory": "%PROJECT_ROOT%",
-      "state": "Draft",
-      "contexts": [
-        "Developing Context Palette"
-      ],
+      "state": "Active",
       "tags": [
         "vs code",
         "python",
@@ -327,10 +264,7 @@
       "title": "Open Outlook for agenda and mail",
       "type": "launch_app",
       "value": "%PROGRAMFILES%\\Microsoft Office\\root\\Office16\\OUTLOOK.EXE",
-      "state": "Draft",
-      "contexts": [
-        "Tijdsregistratie"
-      ],
+      "state": "Active",
       "tags": [
         "outlook",
         "reconstruct workday"
@@ -341,10 +275,7 @@
       "title": "Open dummy registration app",
       "type": "open_url",
       "value": "https://www.colruyt.be/nl/",
-      "state": "Draft",
-      "contexts": [
-        "Tijdsregistratie"
-      ],
+      "state": "Active",
       "tags": [
         "browser",
         "register time"
@@ -355,10 +286,7 @@
       "title": "Copy time-registration record template",
       "type": "workspace_template",
       "value": "Datum: %LDF%\nVan: \nTot: \nPauze: \nDuur: \nProject: \nTaak: \nOmschrijving: \nBron: Agenda + OneNote\nStatus: Nog te registreren",
-      "state": "Draft",
-      "contexts": [
-        "Tijdsregistratie"
-      ],
+      "state": "Active",
       "tags": [
         "text",
         "clipboard",
@@ -370,10 +298,7 @@
       "title": "Open project folder",
       "type": "open_folder",
       "value": "%PROJECT_ROOT%",
-      "state": "Draft",
-      "contexts": [
-        "Developing Context Palette"
-      ],
+      "state": "Active",
       "tags": [
         "windows explorer",
         "develop context palette"
@@ -384,10 +309,7 @@
       "title": "w11 shortuts",
       "type": "copy_text",
       "value": "Here are some of the most useful Windows 11 shortcuts people often forget:\n\nWin + V \u2014 Clipboard history (if enabled)\nWin + H \u2014 Voice typing\nWin + Shift + S \u2014 Screenshot snip (tool)\nWin + D \u2014 Show/hide desktop\nWin + M \u2014 Minimize all windows\nWin + Ctrl + Space \u2014 Switch input language/keyboard\nWin + Space \u2014 Switch keyboard layout (when multiple layouts)\nWin + . (period) \u2014 Emoji panel / symbols\nWin + Z \u2014 Snap Layouts (layout menu)\nWin + Left/Right (with window focus) \u2014 Snap window to half\nWin + G \u2014 Xbox Game Bar (if enabled)\nCtrl + Shift + Esc \u2014 Task Manager (direct)\nAlt + Tab \u2014 Switch apps (hold Alt to preview)\nCtrl + Shift + Click (on app in taskbar) \u2014 Open new instance of app",
-      "state": "Draft",
-      "contexts": [
-        "Windows 11"
-      ],
+      "state": "Active",
       "tags": [
         "windows 11",
         "shortcut reference"
@@ -398,10 +320,7 @@
       "title": "Quick Settings",
       "type": "copy_text",
       "value": "Quick Settings: Win + A",
-      "state": "Draft",
-      "contexts": [
-        "Windows 11"
-      ],
+      "state": "Active",
       "tags": [
         "windows 11",
         "quick settings"

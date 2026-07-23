@@ -11,7 +11,10 @@ This guide explains how a change moves from an idea to a verified Context Palett
 
 ## 2. Design the smallest safe change
 
-Prefer constrained action types, pure domain logic with injected platform effects, existing standard-library and Tkinter patterns, explicit validation, visible effects, and Draft-first workflows. Prefer behavior-preserving extraction to broad rewrites.
+Prefer constrained action types, pure domain logic with injected platform
+effects, existing standard-library and Tkinter patterns, explicit validation,
+visible effects, and confirmed permanent changes. Prefer behavior-preserving
+extraction to broad rewrites.
 
 Record an important or durable choice in [Decisions](DECISIONS.md) before its rationale is lost.
 

@@ -18,7 +18,7 @@ This file contains actionable future work. Completed user-visible work belongs i
 - Manually verify **Copy file** with a representative network source, a large
   file, a destination collision, and an unavailable Work Item source.
 - Perform and record the manual Windows UI/accessibility smoke test for the guided Configure workflow.
-- Extract secondary Inbox and Draft views from `launcher.py` incrementally
+- Extract secondary Inbox and action-creation views from `launcher.py` incrementally
   without changing behavior. The sheet view has been extracted.
 - Refine action discovery and effect descriptions using real repeated-work feedback.
 - Add focused tests for configuration-window keyboard order and validation recovery where Tk permits reliable automation.
@@ -46,7 +46,7 @@ This file contains actionable future work. Completed user-visible work belongs i
 - Investigate safe browser-specific URL discovery without focus or clipboard manipulation.
 - Add optional application-aware context suggestions; never switch automatically.
 - Explore a packageable tray icon and optional AutoHotkey adapter.
-- Design a Trusted-action external API before any unattended execution.
+- Design an explicit authorization policy before any unattended action execution.
 - Expand attended AI authoring only for types with adequate validation and review.
 
 ## Product questions

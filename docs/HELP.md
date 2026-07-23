@@ -20,6 +20,13 @@ the currently displayed page. Open-file actions targeting an existing `.md`
 file use this viewer automatically. Other file actions keep their normal
 Windows behavior. The viewer never opens arbitrary commands.
 
+The viewer supports normal headings, emphasis, nested lists, block quotes,
+fenced code, links, separators, strikethrough, and responsive bordered tables.
+It is a normal resizable Windows window and can be maximized from its title bar.
+For safety it treats embedded HTML as text and does not run JavaScript, submit
+forms, fetch remote content, or navigate to web links. Images are currently not
+loaded inside the viewer.
+
 Multi-PC cloning, GitHub publishing, portable paths, and shared/local data are
 documented in [Multi-PC development](MULTI_PC_DEVELOPMENT.md).
 
@@ -46,16 +53,16 @@ The workflow is keyboard-operable. Use `Ctrl+O` to add documents, `Ctrl+F` to
 focus candidate search, and `F5` to rescan. In Sources, `Delete` removes the
 highlighted source. In Candidates, `Space` changes inclusion and `Enter` edits
 one highlighted candidate. Focus moves to the candidate results when a scan
-finishes, or to Sources when the scan has no candidates. The Draft preview has
+finishes, or to Sources when the scan has no candidates. The action preview has
 an explicit Close button and closes with `Esc`.
 
-Only HTTP and HTTPS targets can become actions. Existing Draft and Trusted URLs
+Only HTTP and HTTPS targets can become actions. Existing Active URLs
 and repeats across the selected documents are identified before creation. Word
 hyperlinks, Excel hyperlinks, plain URL cells, and literal `HYPERLINK` formulas
 are readable; formulas are never calculated. Unsupported targets stay visible
 but cannot be selected.
 
-Choose **Preview selected Drafts**, then **Create selected Drafts**. All selected
+Choose **Preview selected actions**, then **Create selected actions**. All selected
 actions are validated again and written to the personal action file in one
 atomic operation. They always start as Drafts. Cancelling the scan or closing
 the review window creates nothing. Per-file failures do not discard successful
@@ -95,7 +102,22 @@ This does not execute the highlighted action. Avoid passing secrets or selected 
 
 ## Focus context
 
-Use the compact active-Focus menu to switch context explicitly. Choose **Manage focuses…** in that selector to open the existing Context configuration area, create or edit personal contexts, and choose up to four preferred actions for slots 6 through 9. Shared definitions remain visible but read-only. Shared definitions live in `data/contexts.json`; private or work-specific definitions live in ignored `data/local_contexts.json`. The complete format and QTP-style recipes are in `docs/CONTEXT_CONFIGURATION.md`.
+Use the compact active-Focus menu to switch context explicitly. Choose
+**Manage focuses…** in that selector to open the existing Context
+configuration area, create or edit any context, choose all actions belonging to
+it, and select up to four preferred actions for slots 6 through 9. **My
+configuration** definitions stay on this PC. **Built-in** definitions show a
+developer warning before editing. The only shipped specific context is
+**Developing Context Palette** in `data/contexts.json`; personal or
+work-specific definitions live in ignored
+`data/local_contexts.json`. The complete format and QTP-style recipes are in
+`docs/CONTEXT_CONFIGURATION.md`.
+
+Renaming a Focus also updates that name in existing actions, the active Focus,
+and saved Focus slots. Context Palette uses a safe intermediate state so an
+interrupted multi-file save may temporarily show both names, but does not leave
+actions assigned to an undefined Focus. Close and reopen Configure, then retry
+the rename if Windows reports a locked or unavailable file.
 
 The Focus context tells Context Palette what kind of work is currently most important. It changes slots 6 through 9 and influences which actions appear first.
 
@@ -145,7 +167,7 @@ Search matches tags, contexts, short name, description, type, and content.
   exact action highlighted. Personal actions can then be edited, including
   short name, description, contexts, tags, type-specific value, and supported
   launch settings.
-  Shared project actions can also be edited after acknowledging their warning.
+  Built-in actions can also be edited after acknowledging their developer warning.
 - Plain number-row and numpad digits remain ordinary Find text.
 - Shift plus a physical top-row number key executes slots 1 through 9 only
   while Find has focus. This positional rule works on AZERTY and QWERTY.
@@ -285,15 +307,23 @@ behavior.
 
 Choose **Manage focuses…** in the Focus selector for direct Focus
 configuration. Choose **Configure**, or use the shortcut (`Ctrl+,`), for the
-complete guided personal-configuration workspace:
+complete guided configuration workspace:
 
-- **Actions:** edit every kind of personal or shared action, including URLs,
+- **Actions:** edit every kind of My configuration or Built-in action, including URLs,
   files, folders, applications, credentials, URL builders, and
-  transformations. Before a shared action opens for editing, Context Palette
-  explains that its Git-tracked change can affect other machines.
-- **Built-in action types:** inspect what each built-in type reads and does, see a concrete example, then create a validated personal Draft.
-- **Contexts:** add or edit personal contexts and assign actions to slots 6–9.
-- **Quick actions:** add or edit personal button groups and assign existing actions. These are stored as right-side button records; technical IDs are generated automatically and are not shown in the normal form.
+  transformations. New actions default to **My configuration**; choose
+  **Built-in** only when deliberately changing shipped starter data.
+- **Built-in action types:** inspect what each built-in type reads and does, see
+  a concrete example, then create a validated permanent personal action.
+- **Contexts:** add, edit, or delete contexts, assign any built-in or personal
+  actions as members, and choose defaults for slots 6–9. My configuration
+  contexts stay on this PC.
+- **Quick actions:** create, rename, delete, and reorder groups and items.
+  Assign any number of existing actions in order. The first is the left-click
+  default; right-click shows the complete list. A preview explains both.
+  Built-in groups offer only Built-in actions, keeping starter buttons usable
+  without one PC's private files. My configuration groups may use both
+  built-in and personal actions.
 - **Diagnostics:** review a safe summary of loaded configuration, recent error
   counts, and automatic-paste outcomes. Use **Refresh** after reproducing a
   problem or **Copy safe summary** when asking for help. Raw log messages,
@@ -331,24 +361,29 @@ all match. Press Enter on the selected result to edit it.
 Use **Delete selected** to remove an action. The confirmation identifies how
 many saved references will also be removed. Pins, Focus slots, context
 preferences, and quick-button assignments are cleaned automatically. A quick
-button is removed when it has no action left. Deleting a shared action adds a
-warning because the action and affected shared configuration are tracked by
-Git and can reach other machines after commit and push.
+button is removed when it has no action left. Deleting a Built-in action adds a
+warning because it changes starter configuration tracked by Git.
 
-The Actions, Contexts, and Quick actions tables select their first useful
-row automatically. Use the arrow keys to move, then press Enter to edit the
-selected personal item. Double-click provides the same action with a mouse.
+The Actions, Contexts, and Quick actions tables select their first useful row
+automatically. Use the arrow keys to move, then press Enter to edit the selected
+item. Double-click provides the same action with a mouse. In Quick actions,
+select a group before adding an item, and use the arrow buttons to reorder the
+selected group or item.
 
 Changes are saved atomically. Personal changes use ignored local files. Shared
-action changes use the Git-tracked project action file and can therefore reach
-other machines or collaborators after commit and push. Never store personal
-paths, secrets, or private work details in a shared action. Shared contexts and
-shared Quick-action records remain reference-only. New actions always begin as Drafts
-and still require testing before they can be marked Trusted.
+configuration changes use Git-tracked project files and can therefore reach
+your other development computers after commit, push, and pull. Application
+usage remains local to the computer where Context Palette is running. Never
+store personal paths, secrets, or private work details in shared configuration.
+Confirmed creation and editing are permanent; Context Palette keeps the
+previous file as an atomic `.bak` backup.
 
 Context slots and button assignments show human-readable action names and contexts. Internal IDs remain stored for stable references but are not part of the normal editing workflow. Successful saves appear in the Configure footer without interrupting work with a confirmation dialog.
 
-If validation or file saving fails, the edit dialog stays open so the entered values can be corrected without starting over.
+If validation or file saving fails, the edit dialog stays open so the entered
+values can be corrected without starting over. A file-write error explains
+common recovery steps; the existing configuration file and loaded view remain
+unchanged.
 
 The complete JSON format is documented in `docs/COMMAND_SURFACE_CONFIGURATION.md`.
 
@@ -436,7 +471,7 @@ Copies current clipboard text into the Inbox after asking for a title. Captures 
 
 ### Inbox
 
-Shows captured items. An item can be converted into a structured Draft action
+Shows captured items. An item can be converted into a permanent structured action
 with contexts, tags, short name, optional searchable description, and a guided
 action type.
 
@@ -446,17 +481,25 @@ Select an Inbox item and click **Ask AI** for an attended AI-guidance workflow:
 2. Review the generated request, including the captured material, before sharing it.
 3. Click **Copy AI request** and paste it into the AI of your choice.
 4. Paste the AI's JSON response into Context Palette.
-5. Click **Review proposals**, inspect the validated Drafts, and select which ones to create.
+5. Click **Review proposals**, inspect the validated actions, and select which ones to create.
 
 To test the workflow without sending captured material anywhere, click **Insert test response** and then **Review proposals**. Context Palette creates that example locally from the selected capture. If a multi-proposal AI response contains both valid and invalid proposals, valid proposals remain selectable and each rejected proposal is reported separately.
 
-The response must be plain JSON in the displayed format. Context Palette also accepts exactly one complete `json` Markdown fence because many AI tools add it automatically; surrounding commentary, multiple fences, and malformed envelopes remain invalid. Context Palette does not send data to an AI automatically, store an API key, accept shell commands, or create Trusted actions. Created proposals are saved in local actions and must still be tested and refined.
+The response must be plain JSON in the displayed format. Context Palette also
+accepts exactly one complete `json` Markdown fence because many AI tools add it
+automatically; surrounding commentary, multiple fences, and malformed
+envelopes remain invalid. Context Palette does not send data to an AI
+automatically, store an API key, or accept shell commands. Selected proposals
+become permanent local actions only after confirmation.
 
 AI responses larger than 1,000,000 characters are rejected before parsing or
 replacing the current response field. This protects the resident application
 from accidentally or maliciously oversized untrusted responses.
 
-The standard action catalogue and current AI eligibility are documented in `docs/ACTION_TYPES.md`. The first AI-enabled types are `copy_text` and `open_url`. Website proposals require a complete HTTP or HTTPS address and remain Drafts until reviewed and tested.
+The standard action catalogue and current AI eligibility are documented in
+`docs/ACTION_TYPES.md`. The first AI-enabled types are `copy_text` and
+`open_url`. Website proposals require a complete HTTP or HTTPS address and are
+validated again before permanent creation.
 
 For a URL built from selected or copied text, choose **Build URL — open from selected or copied ID** and use a template such as:
 
@@ -472,7 +515,7 @@ Open **Quick actions → Knowledge → Sheets** to open searchable local cheat
 sheets. Knowledge stays directly below Frequent passwords so Sheets remains
 visible before the configurable groups; those groups retain their configured
 order and continue scrolling when needed. Individual cheat-sheet entries can
-be promoted to Draft actions.
+be promoted to permanent Active actions.
 
 ### AI prompts
 
@@ -482,25 +525,21 @@ action also copies it to the clipboard. Right-click **Prompts** to choose any
 stored prompt or open **Manage AI prompts…**.
 
 Stored prompts reuse the normal action lifecycle. In Configure, choose
-**Built-in action types**, select **AI prompt**, and create a personal Draft.
+**Built-in action types**, select **AI prompt**, and create a personal action.
 Enter the visible prompt name and prompt text; no technical tag is required.
-Draft and Trusted AI prompt actions appear automatically, while Archived
+Active AI prompt actions appear automatically, while Archived
 prompts do not. Personal prompt text stays in ignored `data/local_actions.json`
 and is never written to diagnostics by the AI menu.
 
 ### Edit
 
-Edits the selected Draft copy-text action from the launcher. To edit any
-personal built-in action type, press `Ctrl+,`, then open **Actions**. Shared
-actions and Trusted actions remain read-only in the launcher edit flow.
+Opens the selected action in Configure. Every supported personal or Built-in
+action type can be edited; Built-in actions first show a developer-impact
+warning.
 
 ### Pin
 
 Adds the selected action to the next free pinned slot from 1 to 5. If already pinned, it removes the pin. When all five slots are occupied, unpin another action first.
-
-### Trust
-
-Promotes a Draft action to Trusted after confirmation. Trusted means the action has been manually reviewed and tested.
 
 ### Help
 
@@ -548,7 +587,7 @@ Other commands retain a short text cue. The complete built-in action type and
 description remain available in hover help and Action info, so the symbols do
 not replace accessible explanations.
 
-The main palette keeps its compact width. Its nine management commands use the
+The main palette keeps its compact width. Its eight management commands use the
 single character strip documented above, keeping every command directly
 available without reducing the action console or transformation workspace.
 Hover over a compact control, or move keyboard focus to it with `Tab`, to see
@@ -562,14 +601,13 @@ actions. The highlighted button remains active while ordinary Find text
 narrows that password list; choose **Passwords** again to return to all
 actions.
 
-Up to four Trusted credential actions also appear under **Frequent passwords**
+Up to four Active credential actions also appear under **Frequent passwords**
 as direct buttons. Selecting one starts its destination confirmation
 immediately. Pinned credential actions appear first in pin order; remaining
-positions use other Trusted credential actions. Draft credentials are never
-shown as direct-paste buttons.
+positions use other Active credential actions.
 
 Press `Ctrl+,`, then choose **Built-in action types → Paste a Windows
-credential** to create a personal Draft. The action stores only an exact target
+credential** to create a permanent personal action. The action stores only an exact target
 from the **Windows Credentials** or **Generic Credentials** section of
 Credential Manager; it never stores the username or password.
 
@@ -582,13 +620,13 @@ Set up the credential first:
    `ContextPalette/example-login`.
 4. Enter the username and password there.
 5. In Context Palette, use that exact target name as the action value.
-6. Review the Draft and mark it Trusted.
+6. Save the action after reviewing the target name.
 
 To paste:
 
 1. Focus the destination password field.
 2. Press `F9` or `Ctrl+Alt+P`.
-3. Run the Trusted credential action.
+3. Run the credential action.
 4. Verify the credential target and captured destination in the confirmation.
 5. Confirm to return focus and paste.
 
@@ -610,15 +648,18 @@ software already running as the same Windows user.
 
 ## Product and reference lookups
 
-Choose the `Product lookup` focus context, select or copy an identifier, then run a destination action. The action URL-encodes the identifier, copies the complete URL, and opens it in the default browser. Shared actions are available for Colruyt, Bio-Planet, ProductInfoScreen, FIC, RTI, Solucious, and the supported MyProduct entity types.
+If you create or retain a `Product lookup` context in My configuration, select
+or copy an identifier, then run a destination action. The action URL-encodes the
+identifier, copies the complete URL, and opens it in the default browser.
+Built-in actions are available for Colruyt, Bio-Planet, ProductInfoScreen, FIC,
+RTI, Solucious, and the supported MyProduct entity types.
 
 The `Company Reference Prefixes` sheet documents known Archive and ServiceNow prefixes. Archive references can already be opened with `Open selected archive item`. ServiceNow is reference-only until its complete URL template is configured.
 
-## Action maturity
+## Action lifecycle
 
 - Inbox: captured but not yet structured.
-- Draft: editable and still being tested.
-- Trusted: manually reviewed and accepted.
+- Active: permanent, editable, and visible in normal action discovery.
 - Archived: hidden from normal launcher results.
 
 ## Local data
@@ -647,7 +688,10 @@ The configuration report identifies the owning context, command item, or palette
 
 ## Safety boundaries
 
-Context Palette uses constrained action types. It does not execute arbitrary shell command strings. Draft actions should be previewed and tested before they are marked Trusted. Browser URLs and application paths remain visible in local files.
+Context Palette uses constrained action types. It does not execute arbitrary
+shell command strings. Confirmed creation and edits are permanent, so review
+paths, URLs, and effects before saving. Browser URLs and application paths
+remain visible in local files.
 
 Website actions require a complete HTTP or HTTPS address with a clear hostname.
 For privacy and anti-spoofing safety, addresses containing embedded usernames or

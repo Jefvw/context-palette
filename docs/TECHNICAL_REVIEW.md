@@ -38,7 +38,12 @@ application opening.
 
 ### Medium: continue splitting `launcher.py`
 
-The UI construction is now divided into header, results/command surface, shortcuts, workspace, and footer methods. Tooltip behaviour lives in `tooltips.py`; Help and Cheat Sheet windows now have focused modules. A later maintenance pass should move Inbox and Draft editor/creator windows into one or more focused UI modules. Do this mechanically; do not introduce a UI framework or redesign the screens during extraction.
+The UI construction is now divided into header, results/command surface,
+shortcuts, workspace, and footer methods. Tooltip behaviour lives in
+`tooltips.py`; Help and Cheat Sheet windows now have focused modules. A later
+maintenance pass should move Inbox and action-creation windows into one or more
+focused UI modules. Do this mechanically; do not introduce a UI framework or
+redesign the screens during extraction.
 
 ### Medium: make action input/output effects explicit
 

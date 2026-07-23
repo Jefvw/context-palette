@@ -2,7 +2,10 @@
 
 Context Palette is a portable Windows launcher for finding, running, and organizing reusable actions around the work context that matters now. It is built with Python and Tkinter, runs without administrator rights, and keeps configuration in inspectable local files.
 
-The application is under active development. It already supports the complete Capture → Draft → Test → Refine → Trusted lifecycle, but some longer-term workflow capabilities remain proposals. See [MVP](docs/MVP.md) for the exact implementation boundary.
+The application is under active development. Captured, harvested, configured,
+and AI-proposed actions become permanent Active actions as soon as the user
+confirms creation; Archived actions remain outside normal retrieval. See
+[MVP](docs/MVP.md) for the exact implementation boundary.
 
 ## What it does today
 
@@ -11,12 +14,13 @@ The application is under active development. It already supports the complete Ca
 - Keeps five global pinned slots and four slots for the selected focus context.
 - Runs the constrained, allow-listed [standard action types](docs/ACTION_TYPES.md)
   without an arbitrary shell-command action.
-- Pastes Trusted Windows or generic credentials without storing passwords in action JSON.
-- Provides compact, configurable Quick actions for repeated actions.
-- Configures personal actions, contexts, and buttons through a guided window.
-- Captures clipboard material into an Inbox and converts it into Draft actions.
+- Pastes Windows or generic credentials without storing passwords in action JSON.
+- Provides compact, fully configurable Quick-action groups and ordered menus.
+- Configures My configuration or Built-in actions, contexts, groups, and menu items through
+  a guided window without exposing technical IDs.
+- Captures clipboard material into an Inbox and converts it into permanent actions.
 - Supports attended, schema-validated AI proposals for selected action types.
-- Searches cheat sheets and promotes entries to Draft actions.
+- Searches cheat sheets and promotes entries to permanent actions.
 - Loads stored AI prompt templates into Input / Output from a compact quick-action menu.
 - Finds configured local Work Item folders, filters them by text, project code,
   and personal tags, and opens an exact matching workbook or folder fallback.
@@ -34,7 +38,10 @@ The application is under active development. It already supports the complete Ca
 - Python 3.12 with Tcl/Tk support.
 - A user-writable folder; administrator rights are not required.
 
-The application uses the Python standard library. `requirements.txt` intentionally contains no runtime packages.
+The application primarily uses the Python standard library and Tkinter. Its
+in-app documentation viewer uses pinned Markdown and HTML-rendering libraries;
+`setup-context-palette.bat` installs the exact declared versions into the local
+`.venv`.
 
 ## Quick start
 
@@ -92,12 +99,18 @@ After the application starts:
    relevant context tab directly.
 5. Use **Capture** when material should enter the Inbox before becoming an action.
 
+Configure supports adding, editing, deleting, and ordering actions, contexts,
+Quick-action groups, and menu items. Normal user records default to **My
+configuration**, which stays on this PC. **Built-in** is the starter
+configuration tracked through Git and is intended for deliberate developer
+changes.
+
 Close, `Esc`, and **Hide** keep the process resident. **Quit** stops it.
 
 ## Core model
 
 ```text
-Capture → Draft → Test → Refine → Trusted
+Capture or configure → Confirm → Active → Archived
 ```
 
 Every action belongs to the virtual **General** root. An action can additionally
@@ -109,7 +122,9 @@ General (all actions)
 └── Tags (independent discovery filters)
 ```
 
-`Trusted` records an explicit user review; it is not a security sandbox or a guarantee that an external target still exists.
+Creation and editing are permanent after confirmation. Context Palette keeps
+atomic backups, but the user owns the consequences of shared or machine-specific
+configuration changes.
 
 ## Configuration and data ownership
 
@@ -117,9 +132,9 @@ Portable, reviewed examples are tracked:
 
 | Path | Purpose |
 | --- | --- |
-| `data/actions.json` | Shared actions |
-| `data/contexts.json` | Shared context definitions |
-| `data/command_surface.json` | Shared Quick-action button records |
+| `data/actions.json` | Built-in starter actions |
+| `data/contexts.json` | Built-in context definitions; currently only Developing Context Palette |
+| `data/command_surface.json` | Built-in Quick-action button records |
 | `data/cheatsheets/*.json` | Shared reference sheets |
 
 Personal and runtime files are ignored by Git:
@@ -133,7 +148,7 @@ Personal and runtime files are ignored by Git:
 | `data/palette.json` | Focus, pins, and per-machine slot choices |
 | `data/context-palette.log*` | Bounded local diagnostics |
 
-Choose **Configure**, or press `Ctrl+,`, to open the complete personal
+Choose **Configure**, or press `Ctrl+,`, to open the complete guided
 configuration workspace. The
 JSON guides are intended for advanced editing, review, and automation:
 

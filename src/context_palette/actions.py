@@ -16,7 +16,10 @@ from .persistence import atomic_write_json
 from .action_types import SUPPORTED_ACTION_TYPES
 
 
-VISIBLE_STATES = {"Draft", "Trusted"}
+ACTIVE_STATE = "Active"
+ARCHIVED_STATE = "Archived"
+VISIBLE_STATES = {ACTIVE_STATE}
+LEGACY_ACTIVE_STATES = {"Draft", "Trusted"}
 class ActionError(Exception):
     """Raised when an action cannot be loaded or executed safely."""
 
@@ -28,7 +31,7 @@ class Action:
     context: str
     type: str
     value: str
-    state: str = "Draft"
+    state: str = ACTIVE_STATE
     arguments: tuple[str, ...] = ()
     working_directory: str | None = None
     technology: str = ""
@@ -214,7 +217,7 @@ def update_action(path: Path, updated_action: Action) -> None:
     atomic_write_json(path, data)
 
 
-def draft_copy_text_action(
+def copy_text_action(
     *,
     title: str,
     context: str,
@@ -234,12 +237,12 @@ def draft_copy_text_action(
         raise ActionError("Action text cannot be empty.")
 
     return Action(
-        id=f"draft-{uuid4().hex[:12]}",
+        id=f"action-{uuid4().hex[:12]}",
         title=clean_title,
         context=clean_contexts[0] if clean_contexts else "General",
         type="copy_text",
         value=clean_value,
-        state="Draft",
+        state=ACTIVE_STATE,
         technology=technology.strip(),
         task=task.strip(),
         contexts=clean_contexts,
@@ -248,7 +251,7 @@ def draft_copy_text_action(
     )
 
 
-def draft_open_url_action(
+def open_url_action(
     *,
     title: str,
     context: str,
@@ -266,12 +269,12 @@ def draft_open_url_action(
         raise ActionError("Action title cannot be empty.")
     validate_http_url(clean_value, label="Action URL")
     return Action(
-        id=f"draft-{uuid4().hex[:12]}",
+        id=f"action-{uuid4().hex[:12]}",
         title=clean_title,
         context=clean_contexts[0] if clean_contexts else "General",
         type="open_url",
         value=clean_value,
-        state="Draft",
+        state=ACTIVE_STATE,
         technology=technology.strip(),
         task=task.strip(),
         contexts=clean_contexts,
@@ -280,7 +283,7 @@ def draft_open_url_action(
     )
 
 
-def draft_build_url_action(
+def build_url_action(
     *,
     title: str,
     context: str,
@@ -302,12 +305,12 @@ def draft_build_url_action(
         raise ActionError("Action title cannot be empty.")
     build_url(clean_template, "example")
     return Action(
-        id=f"draft-{uuid4().hex[:12]}",
+        id=f"action-{uuid4().hex[:12]}",
         title=clean_title,
         context=clean_contexts[0] if clean_contexts else "General",
         type=action_type,
         value=clean_template,
-        state="Draft",
+        state=ACTIVE_STATE,
         technology=technology.strip(),
         task=task.strip(),
         contexts=clean_contexts,
@@ -316,7 +319,7 @@ def draft_build_url_action(
     )
 
 
-def configured_draft_action(
+def configured_action(
     *,
     title: str,
     context: str,
@@ -330,7 +333,7 @@ def configured_draft_action(
     working_directory: str = "",
     description: str = "",
 ) -> Action:
-    """Create a validated local Draft from the built-in action catalogue."""
+    """Create a validated active action from the built-in action catalogue."""
     clean_title = title.strip()
     clean_value = value.strip()
     if not clean_title:
@@ -341,12 +344,12 @@ def configured_draft_action(
     clean_contexts = normalize_contexts((*contexts, context))
 
     return Action(
-        id=f"draft-{uuid4().hex[:12]}",
+        id=f"action-{uuid4().hex[:12]}",
         title=clean_title,
         context=clean_contexts[0] if clean_contexts else "General",
         type=action_type,
         value=clean_value,
-        state="Draft",
+        state=ACTIVE_STATE,
         arguments=tuple(argument.strip() for argument in arguments if argument.strip()),
         working_directory=working_directory.strip() or None,
         technology=technology.strip(),
@@ -373,7 +376,7 @@ def edited_configured_action(
     description: str = "",
 ) -> Action:
     """Validate edits while preserving an action's stable identity and maturity."""
-    validated = configured_draft_action(
+    validated = configured_action(
         title=title,
         context=context,
         action_type=action_type,
@@ -413,8 +416,8 @@ def edited_copy_text_action(
     tags: Iterable[str] = (),
     description: str | None = None,
 ) -> Action:
-    if action.type != "copy_text" or action.state != "Draft":
-        raise ActionError("Only draft copy-text actions can be edited right now.")
+    if action.type != "copy_text":
+        raise ActionError("This editor supports saved-text actions only.")
 
     clean_title = title.strip()
     clean_contexts = normalize_contexts((*contexts, context))
@@ -436,27 +439,6 @@ def edited_copy_text_action(
         contexts=clean_contexts,
         tags=normalize_tags(tags),
         description=action.description if description is None else description.strip(),
-    )
-
-
-def trusted_action(action: Action) -> Action:
-    if action.state != "Draft":
-        raise ActionError("Only draft actions can be marked Trusted.")
-
-    return Action(
-        id=action.id,
-        title=action.title,
-        context=action.context,
-        type=action.type,
-        value=action.value,
-        state="Trusted",
-        arguments=action.arguments,
-        working_directory=action.working_directory,
-        technology=action.technology,
-        task=action.task,
-        contexts=action.contexts,
-        tags=action.tags,
-        description=action.description,
     )
 
 
@@ -497,8 +479,6 @@ def execute_action(
 ) -> str:
     if action.type == "paste_credential":
         validate_credential_target(action.value)
-        if action.state != "Trusted":
-            raise ActionError("Credential actions must be marked Trusted before use.")
         if credential_paster is None:
             raise ActionError("Protected credential paste is unavailable.")
         return credential_paster(action)
@@ -943,9 +923,16 @@ def _parse_action(item: object, index: int) -> Action:
     except ActionError as exc:
         raise ActionError(f"Action #{index}: {exc}") from exc
 
-    state = item.get("state", "Draft")
+    state = item.get("state", ACTIVE_STATE)
     if not isinstance(state, str):
         raise ActionError(f"Action #{index} has an invalid state.")
+    if state in LEGACY_ACTIVE_STATES:
+        state = ACTIVE_STATE
+    if state not in {ACTIVE_STATE, ARCHIVED_STATE}:
+        raise ActionError(
+            f"Action #{index} has unsupported state: {state}. "
+            f"Use {ACTIVE_STATE} or {ARCHIVED_STATE}."
+        )
 
     arguments = item.get("arguments", [])
     if not isinstance(arguments, list) or not all(isinstance(arg, str) for arg in arguments):

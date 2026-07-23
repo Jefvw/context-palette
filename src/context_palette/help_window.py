@@ -1,105 +1,173 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from html import escape
 from pathlib import Path
 import re
 import tkinter as tk
 from tkinter import ttk
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 import webbrowser
+
+from markdown_it import MarkdownIt
+from tkinterweb import HtmlFrame
 
 from .style import COLORS
 from .window_geometry import configure_standard_window
 
 
-_INLINE_MARKUP = re.compile(
-    r"\[([^\]]+)\]\(([^)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|(?<!\*)\*([^*]+)\*(?!\*)"
+_MARKDOWN = (
+    MarkdownIt(
+        "commonmark",
+        {
+            "html": False,
+            "linkify": False,
+            "typographer": False,
+        },
+    )
+    .enable("table")
+    .enable("strikethrough")
 )
-_TABLE_DIVIDER = re.compile(r"^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$")
+
+_DOCUMENT_CSS = f"""
+html {{
+    background: {COLORS["surface"]};
+    color: {COLORS["text"]};
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 10pt;
+}}
+body {{
+    margin: 18px 22px 28px 22px;
+    line-height: 1.48;
+}}
+h1, h2, h3, h4, h5, h6 {{
+    color: {COLORS["text"]};
+    font-weight: 600;
+    margin-top: 1.2em;
+    margin-bottom: 0.45em;
+}}
+h1 {{
+    font-size: 21pt;
+    border-bottom: 1px solid {COLORS["border"]};
+    padding-bottom: 0.25em;
+}}
+h2 {{
+    font-size: 17pt;
+    border-bottom: 1px solid {COLORS["topic_header"]};
+    padding-bottom: 0.2em;
+}}
+h3 {{ font-size: 14pt; }}
+h4 {{ font-size: 12pt; }}
+h5 {{ font-size: 10.5pt; }}
+h6 {{
+    font-size: 10pt;
+    color: {COLORS["muted_text"]};
+}}
+p, ul, ol, blockquote, pre, table {{
+    margin-top: 0.55em;
+    margin-bottom: 0.9em;
+}}
+ul, ol {{
+    padding-left: 2em;
+}}
+li {{
+    margin-top: 0.2em;
+    margin-bottom: 0.2em;
+}}
+a {{
+    color: {COLORS["focus"]};
+    text-decoration: underline;
+}}
+code {{
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 9pt;
+    background: {COLORS["topic_header"]};
+    padding: 2px 4px;
+}}
+pre {{
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 9pt;
+    line-height: 1.35;
+    background: {COLORS["topic_header"]};
+    border: 1px solid {COLORS["border"]};
+    padding: 10px 12px;
+    white-space: pre-wrap;
+}}
+pre code {{
+    padding: 0;
+}}
+blockquote {{
+    color: {COLORS["muted_text"]};
+    border-left: 4px solid {COLORS["border"]};
+    margin-left: 0;
+    padding: 3px 12px;
+}}
+table {{
+    width: 100%;
+    border-collapse: collapse;
+}}
+th, td {{
+    border: 1px solid {COLORS["border"]};
+    padding: 7px 9px;
+    text-align: left;
+    vertical-align: top;
+}}
+th {{
+    background: {COLORS["topic_header"]};
+    font-weight: 600;
+}}
+tr:nth-child(even) td {{
+    background: {COLORS["background"]};
+}}
+hr {{
+    border: 0;
+    border-top: 1px solid {COLORS["border"]};
+    margin: 1.4em 0;
+}}
+"""
 
 
-@dataclass(frozen=True)
-class MarkdownLine:
-    kind: str
-    text: str = ""
-    level: int = 0
+def render_markdown_html(markdown: str, *, title: str = "Document") -> str:
+    """Render trusted local Markdown with raw HTML and automatic URL fetching disabled."""
+    body = _MARKDOWN.render(markdown)
+    return (
+        "<!doctype html><html><head>"
+        '<meta charset="utf-8">'
+        f"<title>{escape(title)}</title>"
+        f"<style>{_DOCUMENT_CSS}</style>"
+        "</head><body>"
+        f"{body}"
+        "</body></html>"
+    )
 
 
-@dataclass(frozen=True)
-class InlineSpan:
-    text: str
-    style: str = ""
-    target: str = ""
-
-
-def parse_markdown(markdown: str) -> tuple[MarkdownLine, ...]:
-    """Parse the small presentation subset used by local project documents."""
-    lines: list[MarkdownLine] = []
-    in_code = False
-    raw_lines = markdown.splitlines()
-    for index, raw_line in enumerate(raw_lines):
-        stripped = raw_line.strip()
-        if stripped.startswith("```"):
-            in_code = not in_code
-            continue
-        if in_code:
-            lines.append(MarkdownLine("code", raw_line))
-            continue
-        heading = re.match(r"^(#{1,6})\s+(.+)$", raw_line)
-        if heading:
-            lines.append(MarkdownLine("heading", heading.group(2), len(heading.group(1))))
-        elif _TABLE_DIVIDER.match(raw_line):
-            continue
-        elif stripped.startswith("|") and stripped.endswith("|"):
-            cells = [cell.strip() for cell in stripped.strip("|").split("|")]
-            next_is_divider = (
-                index + 1 < len(raw_lines)
-                and _TABLE_DIVIDER.match(raw_lines[index + 1]) is not None
-            )
-            lines.append(
-                MarkdownLine(
-                    "table_header" if next_is_divider else "table",
-                    "\t".join(cells),
-                )
-            )
-        elif re.match(r"^\s*[-*+]\s+", raw_line):
-            text = re.sub(r"^\s*[-*+]\s+", "", raw_line)
-            lines.append(MarkdownLine("bullet", text))
-        elif re.match(r"^\s*\d+[.)]\s+", raw_line):
-            lines.append(MarkdownLine("number", stripped))
-        elif stripped.startswith(">"):
-            lines.append(MarkdownLine("quote", stripped.lstrip(">").strip()))
-        elif re.match(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$", raw_line):
-            lines.append(MarkdownLine("rule"))
-        elif not stripped:
-            lines.append(MarkdownLine("blank"))
-        else:
-            lines.append(MarkdownLine("paragraph", raw_line.strip()))
-    return tuple(lines)
-
-
-def parse_inline(text: str) -> tuple[InlineSpan, ...]:
-    spans: list[InlineSpan] = []
-    cursor = 0
-    for match in _INLINE_MARKUP.finditer(text):
-        if match.start() > cursor:
-            spans.append(InlineSpan(text[cursor : match.start()]))
-        if match.group(1) is not None:
-            spans.append(InlineSpan(match.group(1), "link", match.group(2)))
-        elif match.group(3) is not None:
-            spans.append(InlineSpan(match.group(3), "code"))
-        elif match.group(4) is not None:
-            spans.append(InlineSpan(match.group(4), "bold"))
-        else:
-            spans.append(InlineSpan(match.group(5), "italic"))
-        cursor = match.end()
-    if cursor < len(text):
-        spans.append(InlineSpan(text[cursor:]))
-    return tuple(spans)
+def resolve_local_markdown_link(
+    target: str,
+    *,
+    current_path: Path,
+    project_root: Path,
+) -> tuple[Path | None, str]:
+    """Resolve a clicked link while retaining the viewer's local-Markdown boundary."""
+    parsed = urlparse(target)
+    if parsed.scheme and parsed.scheme.casefold() != "file":
+        return None, ""
+    if parsed.scheme.casefold() == "file":
+        path_text = unquote(parsed.path)
+        if re.match(r"^/[A-Za-z]:/", path_text):
+            path_text = path_text[1:]
+        candidate = Path(path_text).resolve()
+    else:
+        path_text = unquote(parsed.path)
+        candidate = current_path if not path_text else (current_path.parent / path_text).resolve()
+    if (
+        candidate.suffix.casefold() != ".md"
+        or not candidate.is_relative_to(project_root.resolve())
+    ):
+        return None, ""
+    return candidate, unquote(parsed.fragment)
 
 
 class HelpWindow:
-    """Searchable, rendered viewer for local Context Palette Markdown pages."""
+    """Searchable, high-fidelity viewer for local Context Palette Markdown pages."""
 
     def __init__(
         self,
@@ -111,6 +179,7 @@ class HelpWindow:
         self.window = tk.Toplevel(parent)
         self.window.title(title)
         configure_standard_window(self.window)
+        self.window.resizable(True, True)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
         self.search_var = tk.StringVar()
         self.search_status_var = tk.StringVar(value="Ctrl+F focuses search · Enter finds next")
@@ -121,19 +190,32 @@ class HelpWindow:
         self.home_title = title
         self.history: list[Path] = []
         self.history_index = -1
-        self.link_counter = 0
+        self.search_match_index = 0
 
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
 
         footer = ttk.Frame(outer)
         footer.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
-        ttk.Label(footer, textvariable=self.search_status_var, style="Status.TLabel").pack(side=tk.LEFT)
-        ttk.Button(footer, text="Close", command=self.window.destroy, style="Compact.TButton").pack(side=tk.RIGHT)
+        ttk.Label(
+            footer,
+            textvariable=self.search_status_var,
+            style="Status.TLabel",
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            footer,
+            text="Close",
+            command=self.window.destroy,
+            style="Compact.TButton",
+        ).pack(side=tk.RIGHT)
 
         header = ttk.Frame(outer)
         header.pack(fill=tk.X, pady=(0, 8))
-        ttk.Label(header, textvariable=self.document_title_var, style="Heading.TLabel").pack(side=tk.LEFT)
+        ttk.Label(
+            header,
+            textvariable=self.document_title_var,
+            style="Heading.TLabel",
+        ).pack(side=tk.LEFT)
         self.back_button = ttk.Button(
             header,
             text="←",
@@ -164,40 +246,35 @@ class HelpWindow:
             style="Compact.TButton",
         )
         self.browser_button.pack(side=tk.LEFT, padx=(6, 0))
-        search = ttk.Entry(header, textvariable=self.search_var, width=24)
+        search = ttk.Entry(header, textvariable=self.search_var, width=20)
         search.pack(side=tk.RIGHT, padx=(6, 0))
         search.bind("<Return>", lambda _event: self._find_next())
+        search.bind("<KeyRelease>", self._reset_search)
         self.window.bind("<Control-f>", lambda _event: self._focus_search(search))
         self.window.bind("<Alt-Left>", lambda _event: self._go_back())
         self.window.bind("<Alt-Right>", lambda _event: self._go_forward())
         self.window.bind("<Alt-Home>", lambda _event: self._go_home())
         ttk.Button(header, text="Find next", command=self._find_next).pack(side=tk.RIGHT)
-        self.documents_button = ttk.Menubutton(header, text="Documents ▾")
+        self.documents_button = ttk.Menubutton(header, text="Documents")
         self.documents_button.pack(side=tk.RIGHT, padx=(0, 8))
         self._build_documents_menu()
 
-        content_frame = ttk.Frame(outer)
-        content_frame.pack(fill=tk.BOTH, expand=True)
-        scrollbar = ttk.Scrollbar(content_frame, orient=tk.VERTICAL)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.content = tk.Text(
-            content_frame,
-            wrap=tk.WORD,
-            font=("Segoe UI", 10),
-            padx=14,
-            pady=10,
-            spacing1=2,
-            spacing3=4,
-            yscrollcommand=scrollbar.set,
-            cursor="arrow",
+        self.content = HtmlFrame(
+            outer,
+            messages_enabled=False,
+            on_link_click=self._open_link,
+            selection_enabled=True,
+            images_enabled=False,
+            forms_enabled=False,
+            objects_enabled=False,
+            javascript_enabled=False,
+            threading_enabled=False,
+            horizontal_scrollbar=False,
+            textwrap=True,
         )
-        self.content.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.content.bind("<KeyPress>", self._block_content_edit)
-        scrollbar.configure(command=self.content.yview)
-        self._configure_tags()
+        self.content.pack(fill=tk.BOTH, expand=True)
         self._load_document(self.current_path, initial_title=title)
 
-        self.window.transient(parent)
         self.window.lift()
         search.focus_set()
 
@@ -212,54 +289,23 @@ class HelpWindow:
             directory = self.project_root / folder
             if directory.is_dir():
                 candidates.extend(directory.rglob("*.md"))
-        return tuple(sorted({path.resolve() for path in candidates}, key=lambda path: str(path).casefold()))
+        return tuple(
+            sorted(
+                {path.resolve() for path in candidates},
+                key=lambda path: str(path).casefold(),
+            )
+        )
 
     def _build_documents_menu(self) -> None:
         menu = tk.Menu(self.documents_button, tearoff=False)
         for path in self._documentation_paths():
             label = str(path.relative_to(self.project_root)).replace("\\", " / ")
-            menu.add_command(label=label, command=lambda selected=path: self._load_document(selected))
+            menu.add_command(
+                label=label,
+                command=lambda selected=path: self._load_document(selected),
+            )
         self.documents_button.configure(menu=menu)
         self.documents_menu = menu
-
-    def _configure_tags(self) -> None:
-        self.content.tag_configure("found", background="#fff2a8")
-        self.content.tag_configure("h1", font=("Segoe UI Semibold", 18), foreground=COLORS["text"], spacing1=12, spacing3=8)
-        self.content.tag_configure("h2", font=("Segoe UI Semibold", 15), foreground=COLORS["text"], spacing1=10, spacing3=6)
-        self.content.tag_configure("h3", font=("Segoe UI Semibold", 12), foreground=COLORS["text"], spacing1=8, spacing3=4)
-        self.content.tag_configure("bold", font=("Segoe UI Semibold", 10))
-        self.content.tag_configure("italic", font=("Segoe UI", 10, "italic"))
-        self.content.tag_configure("inline_code", font=("Consolas", 9), background=COLORS["topic_header"])
-        self.content.tag_configure("code_block", font=("Consolas", 9), background=COLORS["topic_header"], lmargin1=14, lmargin2=14)
-        self.content.tag_configure("bullet", lmargin1=18, lmargin2=32)
-        self.content.tag_configure("number", lmargin1=12, lmargin2=32)
-        self.content.tag_configure("quote", foreground=COLORS["muted_text"], lmargin1=18, lmargin2=18)
-        table_tabs = (170, 340, 510, 680)
-        self.content.tag_configure(
-            "table",
-            font=("Segoe UI", 9),
-            background=COLORS["surface"],
-            lmargin1=8,
-            lmargin2=8,
-            rmargin=8,
-            tabs=table_tabs,
-            spacing1=3,
-            spacing3=3,
-        )
-        self.content.tag_configure(
-            "table_header",
-            font=("Segoe UI Semibold", 9),
-            background=COLORS["topic_header"],
-            foreground=COLORS["text"],
-            lmargin1=8,
-            lmargin2=8,
-            rmargin=8,
-            tabs=table_tabs,
-            spacing1=5,
-            spacing3=5,
-        )
-        self.content.tag_configure("rule", foreground=COLORS["border"], justify=tk.CENTER)
-        self.content.tag_configure("link", foreground=COLORS["focus"], underline=True)
 
     def _load_document(
         self,
@@ -267,6 +313,7 @@ class HelpWindow:
         *,
         initial_title: str | None = None,
         record_history: bool = True,
+        anchor: str = "",
     ) -> None:
         resolved = path.resolve()
         if resolved.suffix.casefold() != ".md" or not resolved.is_relative_to(self.project_root):
@@ -286,24 +333,18 @@ class HelpWindow:
         self.window.title(
             self.home_title
             if resolved == self.home_path
-            else f"Context Palette — {self.document_title_var.get()}"
+            else f"Context Palette — {displayed_title}"
         )
-        self.content.configure(state=tk.NORMAL)
-        self.content.delete("1.0", tk.END)
-        self._clear_link_tags()
-        self._render(markdown)
-        self.content.mark_set(tk.INSERT, "1.0")
-        self.content.see("1.0")
+        self.content.load_html(
+            render_markdown_html(markdown, title=displayed_title),
+            base_url=resolved.parent.as_uri() + "/",
+            fragment=anchor or None,
+        )
+        self.search_match_index = 0
         self.search_status_var.set("Ctrl+F focuses search · Enter finds next")
         if record_history:
             self._record_history(resolved)
         self._update_navigation_buttons()
-
-    def _clear_link_tags(self) -> None:
-        for tag_name in self.content.tag_names():
-            if str(tag_name).startswith("doc_link_"):
-                self.content.tag_delete(tag_name)
-        self.link_counter = 0
 
     def _record_history(self, path: Path) -> None:
         if self.history_index >= 0 and self.history[self.history_index] == path:
@@ -350,111 +391,55 @@ class HelpWindow:
             else "The default browser did not accept this document."
         )
 
-    def _render(self, markdown: str) -> None:
-        for line in parse_markdown(markdown):
-            if line.kind == "blank":
-                self.content.insert(tk.END, "\n")
-                continue
-            if line.kind == "rule":
-                self.content.insert(tk.END, "─" * 48 + "\n", "rule")
-                continue
-            prefix = "•  " if line.kind == "bullet" else ""
-            line_tag = {
-                "heading": f"h{min(line.level, 3)}",
-                "code": "code_block",
-                "bullet": "bullet",
-                "number": "number",
-                "quote": "quote",
-                "table": "table",
-                "table_header": "table_header",
-            }.get(line.kind, "")
-            self.content.insert(tk.END, prefix, line_tag)
-            if line.kind == "code":
-                self.content.insert(tk.END, line.text, line_tag)
-            else:
-                for span in parse_inline(line.text):
-                    self._insert_span(span, line_tag)
-            self.content.insert(tk.END, "\n", line_tag)
-
-    def _insert_span(self, span: InlineSpan, line_tag: str) -> None:
-        tags = [line_tag] if line_tag else []
-        if span.style == "code":
-            tags.append("inline_code")
-        elif span.style in {"bold", "italic"}:
-            tags.append(span.style)
-        elif span.style == "link":
-            self.link_counter += 1
-            link_tag = f"doc_link_{self.link_counter}"
-            tags.extend(("link", link_tag))
-            self.content.tag_bind(link_tag, "<Button-1>", lambda _event, target=span.target: self._open_link(target))
-            self.content.tag_bind(link_tag, "<Enter>", lambda _event: self.content.configure(cursor="hand2"))
-            self.content.tag_bind(link_tag, "<Leave>", lambda _event: self.content.configure(cursor="arrow"))
-        self.content.insert(tk.END, span.text, tuple(tags))
-
     def _open_link(self, target: str) -> None:
-        path_target, separator, anchor = target.partition("#")
-        clean_target = unquote(path_target)
-        candidate = (
-            self.current_path
-            if not clean_target
-            else (self.current_path.parent / clean_target).resolve()
+        candidate, anchor = resolve_local_markdown_link(
+            target,
+            current_path=self.current_path,
+            project_root=self.project_root,
         )
-        if candidate.suffix.casefold() == ".md" and candidate.is_relative_to(self.project_root):
-            self._load_document(candidate)
-            if separator and anchor:
-                self._show_anchor(unquote(anchor))
-        else:
+        if candidate is None:
             self.search_status_var.set("Only local Markdown links open in this viewer.")
-
-    def _show_anchor(self, anchor: str) -> None:
-        heading = re.sub(r"[-_]+", " ", anchor).strip()
-        position = self.content.search(heading, "1.0", stopindex=tk.END, nocase=True)
-        if not position:
-            self.search_status_var.set(f'Section “{heading}” was not found in this document.')
             return
-        self.content.see(position)
-        self.content.mark_set(tk.INSERT, position)
-        self.search_status_var.set(f'Opened section “{heading}”.')
+        self._load_document(candidate, anchor=anchor)
 
-    @staticmethod
-    def _block_content_edit(event: tk.Event) -> str | None:
-        keysym = str(getattr(event, "keysym", ""))
-        state = int(getattr(event, "state", 0) or 0)
-        if keysym in {
-            "Left",
-            "Right",
-            "Up",
-            "Down",
-            "Home",
-            "End",
-            "Prior",
-            "Next",
-        }:
-            return None
-        if state & 0x0004 and keysym.casefold() in {"a", "c", "f"}:
-            return None
-        return "break"
+    def _reset_search(self, _event: tk.Event | None = None) -> None:
+        self.search_match_index = 0
 
     def _find_next(self) -> None:
         query = self.search_var.get().strip()
         if not query:
+            self.content.find_text("")
+            self.search_match_index = 0
             self.search_status_var.set("Type a word or phrase to search this document.")
             return
-        self.content.tag_remove("found", "1.0", tk.END)
-        start = self.content.index(f"{self.content.index(tk.INSERT)} +1c")
-        position = self.content.search(query, start, stopindex=tk.END, nocase=True)
-        if not position:
-            position = self.content.search(query, "1.0", stopindex=tk.END, nocase=True)
-        if not position:
+        self.search_match_index += 1
+        try:
+            count = self.content.find_text(
+                re.escape(query),
+                select=self.search_match_index,
+                ignore_case=True,
+                highlight_all=True,
+            )
+        except (re.error, tk.TclError):
+            count = 0
+        if count and self.search_match_index > count:
+            self.search_match_index = 1
+            count = self.content.find_text(
+                re.escape(query),
+                select=1,
+                ignore_case=True,
+                highlight_all=True,
+            )
+        if not count:
+            self.search_match_index = 0
             self.search_status_var.set(f'No result for “{query}” in this document.')
             return
-        end = f"{position}+{len(query)}c"
-        self.content.tag_add("found", position, end)
-        self.content.see(position)
-        self.content.mark_set(tk.INSERT, end)
-        self.search_status_var.set(f'Found “{query}”. Press Enter for the next result.')
+        self.search_status_var.set(
+            f'Found “{query}” · result {self.search_match_index} of {count}.'
+        )
 
-    def _focus_search(self, search: ttk.Entry) -> str:
+    @staticmethod
+    def _focus_search(search: ttk.Entry) -> str:
         search.focus_set()
         search.selection_range(0, tk.END)
         return "break"

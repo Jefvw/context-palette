@@ -16,11 +16,11 @@ from context_palette.actions import (
     append_action,
     append_actions,
     build_url,
-    configured_draft_action,
+    configured_action,
     edited_configured_action,
-    draft_build_url_action,
-    draft_copy_text_action,
-    draft_open_url_action,
+    build_url_action,
+    copy_text_action,
+    open_url_action,
     edited_copy_text_action,
     execute_action,
     expand_template,
@@ -31,7 +31,6 @@ from context_palette.actions import (
     open_action_target,
     search_actions,
     transform_text,
-    trusted_action,
     update_action,
     validate_credential_target,
     validate_context_memberships,
@@ -57,28 +56,16 @@ class ActionTests(unittest.TestCase):
                 ("General", "Mail"),
             )
 
-    def test_credential_action_requires_trust_and_dedicated_paster(self):
-        draft = Action(
+    def test_credential_action_uses_dedicated_paster(self):
+        action = Action(
             "credential",
             "Paste login",
             "General",
             "paste_credential",
             "ContextPalette/example-login",
-            "Draft",
-        )
-        with self.assertRaises(ActionError):
-            execute_action(draft, credential_paster=lambda _action: "pasted")
-
-        trusted = Action(
-            draft.id,
-            draft.title,
-            draft.context,
-            draft.type,
-            draft.value,
-            "Trusted",
         )
         self.assertEqual(
-            execute_action(trusted, credential_paster=lambda _action: "pasted"),
+            execute_action(action, credential_paster=lambda _action: "pasted"),
             "pasted",
         )
 
@@ -92,13 +79,13 @@ class ActionTests(unittest.TestCase):
             "General",
             "paste_credential",
             "ContextPalette/login\nDestination: attacker",
-            "Trusted",
+            "Active",
         )
         with self.assertRaises(ActionError):
             execute_action(action, credential_paster=lambda _action: "pasted")
 
-    def test_configured_draft_action_uses_built_in_type_and_validates_value(self):
-        action = configured_draft_action(
+    def test_configured_action_uses_built_in_type_and_validates_value(self):
+        action = configured_action(
             title="Open documentation",
             context="Developing",
             action_type="open_url",
@@ -107,11 +94,11 @@ class ActionTests(unittest.TestCase):
         )
 
         self.assertEqual(action.type, "open_url")
-        self.assertEqual(action.state, "Draft")
+        self.assertEqual(action.state, "Active")
         self.assertEqual(action.technology, "Python")
 
         with self.assertRaises(ActionError):
-            configured_draft_action(
+            configured_action(
                 title="Broken URL",
                 context="General",
                 action_type="open_url",
@@ -120,7 +107,7 @@ class ActionTests(unittest.TestCase):
 
     def test_guided_creation_and_json_loading_reject_invalid_list_conversion_mode(self):
         with self.assertRaisesRegex(ActionError, "csv or sql_strings"):
-            configured_draft_action(
+            configured_action(
                 title="Broken conversion",
                 context="General",
                 action_type="transform_list_csv",
@@ -157,14 +144,14 @@ class ActionTests(unittest.TestCase):
         with self.assertRaisesRegex(ActionError, r"Action #1: .*cannot be empty"):
             load_actions(path)
 
-    def test_edited_configured_action_preserves_identity_and_maturity(self):
+    def test_edited_configured_action_preserves_identity_and_active_state(self):
         original = Action(
             id="personal-docs",
             title="Open old docs",
             context="General",
             type="open_url",
             value="https://example.com/old",
-            state="Trusted",
+            state="Active",
         )
 
         edited = edited_configured_action(
@@ -176,7 +163,7 @@ class ActionTests(unittest.TestCase):
         )
 
         self.assertEqual(edited.id, "personal-docs")
-        self.assertEqual(edited.state, "Trusted")
+        self.assertEqual(edited.state, "Active")
         self.assertEqual(edited.title, "Open current docs")
         self.assertEqual(edited.context, "Developing")
 
@@ -301,8 +288,8 @@ class ActionTests(unittest.TestCase):
             ("browser", "python", "technical reference"),
         )
 
-    def test_draft_build_url_action_validates_and_preserves_metadata(self):
-        action = draft_build_url_action(
+    def test_build_url_action_validates_and_preserves_metadata(self):
+        action = build_url_action(
             title="Open archive",
             technology="Browser",
             task="Archive lookup",
@@ -313,11 +300,11 @@ class ActionTests(unittest.TestCase):
         self.assertEqual(action.type, "build_url_selection_open")
         self.assertEqual(action.value, "http://linkto/archives/{id_url}")
         self.assertEqual(action.technology, "Browser")
-        self.assertEqual(action.state, "Draft")
+        self.assertEqual(action.state, "Active")
 
-    def test_draft_build_url_action_rejects_template_without_input_placeholder(self):
+    def test_build_url_action_rejects_template_without_input_placeholder(self):
         with self.assertRaises(ActionError):
-            draft_build_url_action(
+            build_url_action(
                 title="Open archive",
                 context="Archives",
                 template="http://linkto/archives/",
@@ -327,12 +314,12 @@ class ActionTests(unittest.TestCase):
         path = self._write_actions(
             [
                 {
-                    "id": "draft",
-                    "title": "Draft action",
+                    "id": "active",
+                    "title": "Active action",
                     "context": "General",
                     "type": "copy_text",
                     "value": "hello",
-                    "state": "Draft",
+                    "state": "Active",
                 },
                 {
                     "id": "archived",
@@ -347,7 +334,48 @@ class ActionTests(unittest.TestCase):
 
         actions = load_actions(path)
 
-        self.assertEqual([action.id for action in actions], ["draft"])
+        self.assertEqual([action.id for action in actions], ["active"])
+
+    def test_load_actions_normalizes_legacy_visible_states_to_active(self):
+        path = self._write_actions(
+            [
+                {
+                    "id": "legacy-one",
+                    "title": "Legacy one",
+                    "type": "copy_text",
+                    "value": "one",
+                    "state": "Draft",
+                },
+                {
+                    "id": "legacy-two",
+                    "title": "Legacy two",
+                    "type": "copy_text",
+                    "value": "two",
+                    "state": "Trusted",
+                },
+            ]
+        )
+
+        self.assertEqual(
+            [action.state for action in load_actions(path)],
+            ["Active", "Active"],
+        )
+
+    def test_load_actions_rejects_unknown_state(self):
+        path = self._write_actions(
+            [
+                {
+                    "id": "unknown",
+                    "title": "Unknown",
+                    "type": "copy_text",
+                    "value": "text",
+                    "state": "Pending",
+                }
+            ]
+        )
+
+        with self.assertRaisesRegex(ActionError, "unsupported state"):
+            load_actions(path)
 
     def test_combined_actions_allow_missing_local_file(self):
         shared = self._write_actions(
@@ -500,7 +528,7 @@ class ActionTests(unittest.TestCase):
     def test_action_description_round_trips_without_affecting_legacy_files(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "actions.json"
-            described = draft_copy_text_action(
+            described = copy_text_action(
                 title="Greeting",
                 context="Email",
                 value="Hello",
@@ -610,9 +638,9 @@ class ActionTests(unittest.TestCase):
         value = "https://user:secret@example.com/private"
 
         with self.assertRaises(ActionError):
-            draft_open_url_action(title="Unsafe", context="General", value=value)
+            open_url_action(title="Unsafe", context="General", value=value)
         with self.assertRaises(ActionError):
-            configured_draft_action(
+            configured_action(
                 title="Unsafe",
                 context="General",
                 action_type="open_url",
@@ -752,10 +780,10 @@ class ActionTests(unittest.TestCase):
         self.assertEqual(output, ["Review this text"])
         self.assertIn("AI prompt", result)
 
-    def test_append_draft_copy_text_action(self):
+    def test_append_copy_text_action(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "actions.json"
-            action = draft_copy_text_action(title=" Greeting ", context=" Email ", value=" Hello ")
+            action = copy_text_action(title=" Greeting ", context=" Email ", value=" Hello ")
 
             append_action(path, action)
             loaded = load_actions(path)
@@ -764,7 +792,7 @@ class ActionTests(unittest.TestCase):
         self.assertEqual(loaded[0].title, "Greeting")
         self.assertEqual(loaded[0].context, "Email")
         self.assertEqual(loaded[0].value, "Hello")
-        self.assertEqual(loaded[0].state, "Draft")
+        self.assertEqual(loaded[0].state, "Active")
 
     def test_append_action_rejects_duplicate_id(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -806,7 +834,7 @@ class ActionTests(unittest.TestCase):
             self.assertEqual([action.id for action in load_actions(path)], ["one", "two"])
 
     def test_legacy_technology_and_task_are_effective_tags(self):
-        action = draft_copy_text_action(
+        action = copy_text_action(
             title="Open item",
             technology="Browser",
             task="Product lookup",
@@ -820,10 +848,10 @@ class ActionTests(unittest.TestCase):
         )
         self.assertEqual(action.effective_tags, ("browser", "product lookup"))
 
-    def test_update_draft_copy_text_action(self):
+    def test_update_copy_text_action(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "actions.json"
-            action = draft_copy_text_action(title="Old", context="General", value="Old text")
+            action = copy_text_action(title="Old", context="General", value="Old text")
             append_action(path, action)
 
             updated = edited_copy_text_action(
@@ -840,25 +868,19 @@ class ActionTests(unittest.TestCase):
         self.assertEqual(loaded[0].context, "Email")
         self.assertEqual(loaded[0].value, "New text")
 
-    def test_only_draft_copy_text_actions_can_be_edited(self):
-        action = Action("trusted", "Trusted", "General", "copy_text", "Text", state="Trusted")
+    def test_active_copy_text_actions_can_be_edited(self):
+        action = Action("active", "Active", "General", "copy_text", "Text")
 
-        with self.assertRaises(ActionError):
-            edited_copy_text_action(action, title="New", context="General", value="Text")
+        edited = edited_copy_text_action(
+            action,
+            title="New",
+            context="General",
+            value="Updated",
+        )
 
-    def test_draft_action_can_be_marked_trusted(self):
-        action = Action("draft", "Draft", "General", "copy_text", "Text", state="Draft")
-
-        trusted = trusted_action(action)
-
-        self.assertEqual(trusted.id, action.id)
-        self.assertEqual(trusted.state, "Trusted")
-
-    def test_only_draft_actions_can_be_marked_trusted(self):
-        action = Action("trusted", "Trusted", "General", "copy_text", "Text", state="Trusted")
-
-        with self.assertRaises(ActionError):
-            trusted_action(action)
+        self.assertEqual(edited.title, "New")
+        self.assertEqual(edited.value, "Updated")
+        self.assertEqual(edited.state, "Active")
 
     def test_load_action_supports_fixed_launch_arguments(self):
         path = self._write_actions(
@@ -871,7 +893,7 @@ class ActionTests(unittest.TestCase):
                     "value": "C:\\Program Files\\App\\App.exe",
                     "arguments": ["C:\\Project"],
                     "working_directory": "C:\\Project",
-                    "state": "Draft",
+                    "state": "Active",
                 }
             ]
         )
@@ -890,7 +912,7 @@ class ActionTests(unittest.TestCase):
                     "context": "Work",
                     "type": "build_url_open",
                     "value": "https://example.com/items/{id_url}",
-                    "state": "Draft",
+                    "state": "Active",
                 }
             ]
         )
@@ -906,7 +928,7 @@ class ActionTests(unittest.TestCase):
                     "context": "General",
                     "type": "open_url",
                     "value": "https://user:secret@example.com/private",
-                    "state": "Draft",
+                    "state": "Active",
                 }
             ]
         )
@@ -923,7 +945,7 @@ class ActionTests(unittest.TestCase):
                     "context": "General",
                     "type": "shell",
                     "value": "dir",
-                    "state": "Draft",
+                    "state": "Active",
                 }
             ]
         )

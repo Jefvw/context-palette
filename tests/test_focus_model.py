@@ -116,6 +116,47 @@ class FocusModelTests(unittest.TestCase):
         )
         self.assertEqual([action.id for action in other], ["two"])
 
+    def test_context_definition_can_assign_built_in_action_without_editing_it(self):
+        actions = [
+            Action("built-in", "Built in", "General", "copy_text", "1"),
+            Action("local", "Local", "General", "copy_text", "2"),
+            Action("other", "Other", "General", "copy_text", "3"),
+        ]
+        definitions = [
+            ContextDefinition(
+                "My work",
+                preferred_action_ids=("built-in",),
+                action_ids=("built-in", "local"),
+            )
+        ]
+
+        focused = actions_for_context(actions, "My work", definitions)
+        resolved = resolve_focus_state(
+            actions,
+            definitions,
+            PaletteState(focus_context="My work"),
+        )
+
+        self.assertEqual([action.id for action in focused], ["built-in", "local"])
+        self.assertEqual(
+            resolved.palette_state.context_slots["My work"],
+            ("built-in", "local"),
+        )
+
+    def test_explicit_context_membership_replaces_legacy_action_classification(self):
+        actions = [
+            Action("kept", "Kept", "My work", "copy_text", "1"),
+            Action("removed", "Removed", "My work", "copy_text", "2"),
+        ]
+
+        focused = actions_for_context(
+            actions,
+            "My work",
+            [ContextDefinition("My work", action_ids=("kept",))],
+        )
+
+        self.assertEqual([action.id for action in focused], ["kept"])
+
 
 if __name__ == "__main__":
     unittest.main()

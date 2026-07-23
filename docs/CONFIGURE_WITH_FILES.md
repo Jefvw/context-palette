@@ -6,11 +6,11 @@ Use this when you want a repeatable, reviewable setup through source control rat
 
 ## 1. Configuration files and ownership
 
-Shared files (tracked in Git):
+Built-in starter files (tracked in Git):
 
-- `data/contexts.json`: shared context definitions.
-- `data/actions.json`: shared action definitions.
-- `data/command_surface.json`: shared quick-action surface groups/items.
+- `data/contexts.json`: Built-in context definitions.
+- `data/actions.json`: Built-in action definitions.
+- `data/command_surface.json`: Built-in quick-action surface groups/items.
 
 Local files (ignored by Git):
 
@@ -19,8 +19,9 @@ Local files (ignored by Git):
 - `data/local_command_surface.json`: personal quick-action groups/items.
 - `data/palette.json`: per-machine state (focus context, pins, optional explicit slots).
 
-Use shared files for team-safe, portable configuration.
-Use local files for private URLs, local paths, and machine-specific behavior.
+Use Built-in files only for reviewed starter configuration intended to ship
+with Context Palette. Use My configuration files for the user's actual
+organization, private URLs, local paths, and machine-specific behavior.
 
 ## 2. Safe edit cycle
 
@@ -44,7 +45,8 @@ unnecessary.
 
 ## 3. Define contexts
 
-Add contexts to `data/contexts.json` (shared) or `data/local_contexts.json` (local).
+Normally add contexts to `data/local_contexts.json` (My configuration). Change
+`data/contexts.json` only when deliberately changing Built-in starter contexts.
 
 Minimal example:
 
@@ -52,6 +54,10 @@ Minimal example:
 {
   "name": "Database",
   "description": "Data quality and SQL operations",
+  "action_ids": [
+    "db-open-dashboard",
+    "db-copy-default-query"
+  ],
   "preferred_action_ids": [
     "db-open-dashboard",
     "db-copy-default-query"
@@ -61,7 +67,8 @@ Minimal example:
 
 Notes:
 
-- `name` must be unique across shared and local context files.
+- `name` must be unique across Built-in and My configuration context files.
+- `action_ids` owns every action shown by Focus Actions for this context.
 - `preferred_action_ids` maps up to 4 defaults to slots `6-9`.
 - If `data/palette.json` has explicit slot assignments, those explicit local assignments win.
 
@@ -82,7 +89,7 @@ Example `copy_text` action:
   "tags": ["sql", "data quality"],
   "type": "copy_text",
   "value": "select * from dq_issues where created_at >= current_date - interval '7 day';",
-  "state": "Draft"
+  "state": "Active"
 }
 ```
 
@@ -97,7 +104,7 @@ Example URL-builder action from selected/copied text:
   "tags": ["dashboard", "lookup"],
   "type": "build_url_selection_open",
   "value": "https://example.company/dashboards/{id_url}",
-  "state": "Draft"
+  "state": "Active"
 }
 ```
 
@@ -152,8 +159,7 @@ Full format: `docs/COMMAND_SURFACE_CONFIGURATION.md`.
 2. Create/update actions that reference that context.
 3. Optionally expose key actions in command-surface JSON.
 4. Validate with `check-context-palette.bat`.
-5. Restart the app and test Draft actions.
-6. Promote to Trusted only after manual verification.
+5. Restart the app and test the Active actions.
 
 ## 7. Troubleshooting
 
@@ -170,6 +176,6 @@ Full format: `docs/COMMAND_SURFACE_CONFIGURATION.md`.
 ## 8. Privacy and sharing rules
 
 - Keep internal URLs, local paths, and private identifiers in local files.
-- Keep shared files reviewable and portable.
+- Keep Built-in files reviewable and portable.
 - Do not commit personal runtime files like `data/inbox.json` or
   `data/palette.json`.

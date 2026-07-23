@@ -6,7 +6,7 @@ import re
 from typing import Iterable
 
 from .action_types import ACTION_TYPES
-from .actions import Action, ActionError, draft_copy_text_action, draft_open_url_action
+from .actions import Action, ActionError, copy_text_action, open_url_action
 from .inbox import InboxItem
 
 
@@ -260,8 +260,8 @@ def _parse_proposal(
             raise AIGuidanceError(f"Proposal #{index} explanation cannot be empty.")
         try:
             constructor = {
-                "copy_text": draft_copy_text_action,
-                "open_url": draft_open_url_action,
+                "copy_text": copy_text_action,
+                "open_url": open_url_action,
             }[raw["type"]]
             if version == 1:
                 action = constructor(

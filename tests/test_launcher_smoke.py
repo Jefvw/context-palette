@@ -41,7 +41,7 @@ class LauncherSmokeTests(unittest.TestCase):
                             "task": "Reusable text",
                             "type": "copy_text",
                             "value": "First",
-                            "state": "Trusted",
+                            "state": "Active",
                         },
                         {
                             "id": "database-only",
@@ -51,7 +51,7 @@ class LauncherSmokeTests(unittest.TestCase):
                             "task": "Lookup",
                             "type": "copy_text",
                             "value": "Database",
-                            "state": "Trusted",
+                            "state": "Active",
                         },
                         {
                             "id": "general-second",
@@ -61,7 +61,7 @@ class LauncherSmokeTests(unittest.TestCase):
                             "task": "",
                             "type": "copy_text",
                             "value": "Second",
-                            "state": "Draft",
+                            "state": "Active",
                         },
                     ]
                 },
@@ -455,7 +455,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     ]
                     self.assertEqual(
                         [button.cget("text") for button in icon_buttons],
-                        ["+", "▣", "✎", "⌖", "✓", "?", "⌨", "−", "×"],
+                        ["+", "▣", "✎", "⌖", "?", "⌨", "−", "×"],
                     )
                     tooltips = {
                         tooltip.widget: tooltip.text
@@ -467,7 +467,6 @@ class LauncherSmokeTests(unittest.TestCase):
                         "Inbox",
                         "Edit",
                         "Pin",
-                        "Trust",
                         "Help",
                         "Keyboard shortcuts",
                         "Hide",
@@ -770,12 +769,12 @@ class LauncherSmokeTests(unittest.TestCase):
                         and child.title() == "Context Palette Keyboard Shortcuts"
                     ]
                     self.assertEqual(len(shortcut_windows), 1)
-                    shortcut_text = next(
+                    shortcut_document = next(
                         child
                         for child in self._descendants(shortcut_windows[0])
-                        if isinstance(child, tk.Text)
+                        if callable(getattr(child, "get_page_text", None))
                     )
-                    self.assertIn("Alt+A", shortcut_text.get("1.0", tk.END))
+                    self.assertIn("Alt+A", shortcut_document.get_page_text())
                     shortcut_windows[0].destroy()
                     root.update()
 
@@ -808,11 +807,20 @@ class LauncherSmokeTests(unittest.TestCase):
         root.after(60, root.quit)
         root.mainloop()
 
-    def _descendants(self, widget: tk.Misc) -> list[tk.Misc]:
+    def _descendants(
+        self,
+        widget: tk.Misc,
+        seen: set[str] | None = None,
+    ) -> list[tk.Misc]:
+        seen = seen or set()
         descendants: list[tk.Misc] = []
         for child in widget.winfo_children():
+            identity = str(child)
+            if identity in seen:
+                continue
+            seen.add(identity)
             descendants.append(child)
-            descendants.extend(self._descendants(child))
+            descendants.extend(self._descendants(child, seen))
         return descendants
 
     def _assert_balanced_panes(self, app: LauncherApp) -> None:

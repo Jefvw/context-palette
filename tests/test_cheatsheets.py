@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.cheatsheets import (
-    draft_action_from_cheatsheet_item,
+    action_from_cheatsheet_item,
     filter_cheatsheet,
     load_cheatsheet,
     load_cheatsheets,
@@ -79,16 +79,16 @@ class CheatSheetTests(unittest.TestCase):
 
         self.assertEqual(filtered.sections, ())
 
-    def test_draft_action_from_cheatsheet_item(self):
+    def test_action_from_cheatsheet_item(self):
         sheet = load_cheatsheet(self._write_sheet())
         item = sheet.sections[0].items[0]
 
-        action = draft_action_from_cheatsheet_item(sheet, item)
+        action = action_from_cheatsheet_item(sheet, item)
 
         self.assertEqual(action.title, "Clipboard history")
         self.assertEqual(action.context, "Windows 11")
         self.assertEqual(action.value, "Clipboard history: Win + V")
-        self.assertEqual(action.state, "Draft")
+        self.assertEqual(action.state, "Active")
 
     def _write_sheet(self):
         directory = tempfile.TemporaryDirectory()

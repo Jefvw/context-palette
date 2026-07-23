@@ -27,7 +27,7 @@ def valid_project(root: Path) -> None:
                     "context": "General",
                     "type": "copy_text",
                     "value": "one",
-                    "state": "Draft",
+                    "state": "Active",
                 }
             ]
         },
@@ -107,6 +107,85 @@ class ConfigurationCheckTests(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertTrue(any("Actions:" in error and "valid JSON" in error for error in report.errors))
         self.assertEqual(report.counts["contexts"], 1)
+
+    def test_project_quick_action_cannot_reference_local_only_action(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            valid_project(root)
+            write_json(
+                root / "data" / "local_actions.json",
+                {
+                    "actions": [
+                        {
+                            "id": "local-only",
+                            "title": "Local",
+                            "context": "General",
+                            "type": "copy_text",
+                            "value": "local",
+                            "state": "Active",
+                        }
+                    ]
+                },
+            )
+            command_path = root / "data" / "command_surface.json"
+            command_data = json.loads(command_path.read_text(encoding="utf-8"))
+            command_data["groups"][0]["items"][0]["action_ids"].append(
+                "local-only"
+            )
+            write_json(command_path, command_data)
+
+            report = validate_project_configuration(root)
+
+        self.assertFalse(report.ok)
+        self.assertTrue(
+            any(
+                "Built-in Quick action" in error
+                and "local-only action: local-only" in error
+                for error in report.errors
+            )
+        )
+
+    def test_built_in_context_cannot_reference_my_configuration_action(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            valid_project(root)
+            write_json(
+                root / "data" / "local_actions.json",
+                {
+                    "actions": [
+                        {
+                            "id": "local-only",
+                            "title": "Local",
+                            "context": "General",
+                            "type": "copy_text",
+                            "value": "local",
+                            "state": "Active",
+                        }
+                    ]
+                },
+            )
+            write_json(
+                root / "data" / "contexts.json",
+                {
+                    "contexts": [
+                        {
+                            "name": "Developing",
+                            "action_ids": ["copy-one", "local-only"],
+                        }
+                    ]
+                },
+            )
+
+            report = validate_project_configuration(root)
+
+        self.assertFalse(report.ok)
+        self.assertTrue(
+            any(
+                "Built-in context 'Developing'" in error
+                and "My configuration action: local-only" in error
+                for error in report.errors
+            )
+        )
 
 
 if __name__ == "__main__":

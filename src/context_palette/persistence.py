@@ -7,8 +7,13 @@ import shutil
 import tempfile
 
 
-def atomic_write_json(path: Path, data: object) -> None:
-    """Write JSON through a flushed sibling file, preserving the previous file as .bak."""
+def atomic_write_json(
+    path: Path,
+    data: object,
+    *,
+    preserve_previous: bool = True,
+) -> None:
+    """Atomically write JSON, optionally preserving the previous file as .bak."""
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path: Path | None = None
     try:
@@ -27,7 +32,7 @@ def atomic_write_json(path: Path, data: object) -> None:
             temporary.flush()
             os.fsync(temporary.fileno())
 
-        if path.exists():
+        if preserve_previous and path.exists():
             shutil.copy2(path, path.with_name(path.name + ".bak"))
         os.replace(temporary_path, path)
         temporary_path = None

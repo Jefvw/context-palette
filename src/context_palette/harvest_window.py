@@ -13,7 +13,7 @@ from .harvest import (
     HarvestScanCoordinator,
     HarvestSourceResult,
     build_candidates,
-    candidate_to_draft,
+    candidate_to_action,
     normalize_url_for_comparison,
     update_candidate_values,
 )
@@ -60,7 +60,7 @@ class HarvestWindow:
         ttk.Label(outer, text="Harvest actions", style="Title.TLabel").pack(anchor=tk.W)
         ttk.Label(
             outer,
-            text="Extract explicit links locally, review them, then create selected personal Draft actions.",
+            text="Extract explicit links locally, review them, then create selected permanent personal actions.",
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(2, 8))
 
@@ -70,11 +70,11 @@ class HarvestWindow:
         )
         footer = ttk.Frame(outer)
         footer.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
-        self.preview_button = ttk.Button(footer, text="Preview selected Drafts", command=self._preview)
+        self.preview_button = ttk.Button(footer, text="Preview selected actions", command=self._preview)
         self.preview_button.pack(side=tk.LEFT)
         self.create_button = ttk.Button(
             footer,
-            text="Create selected Drafts",
+            text="Create selected actions",
             command=self._create,
             state=tk.DISABLED,
             style="Accent.TButton",
@@ -140,11 +140,11 @@ class HarvestWindow:
         self.search_entry = ttk.Entry(filters, textvariable=self.search_var, width=24)
         self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(10, 5))
         self.status_filter = ttk.Combobox(filters, state="readonly", width=17)
-        self.status_filter["values"] = ("All readiness", "Ready", "Needs attention", "Unsupported", "Existing Draft", "Already available")
+        self.status_filter["values"] = ("All readiness", "Ready", "Needs attention", "Unsupported", "Already available")
         self.status_filter.set("All readiness")
         self.status_filter.pack(side=tk.LEFT, padx=3)
         self.duplicate_filter = ttk.Combobox(filters, state="readonly", width=18)
-        self.duplicate_filter["values"] = ("All duplicates", "New", "Repeated in sources", "Existing Draft", "Already available", "Unsupported")
+        self.duplicate_filter["values"] = ("All duplicates", "New", "Repeated in sources", "Already available", "Unsupported")
         self.duplicate_filter.set("All duplicates")
         self.duplicate_filter.pack(side=tk.LEFT, padx=3)
         self.source_filter = ttk.Combobox(filters, state="readonly", width=20)
@@ -487,7 +487,7 @@ class HarvestWindow:
         )
         candidate.warnings.clear()
         try:
-            candidate_to_draft(candidate)
+            candidate_to_action(candidate)
             candidate.comparison_key = normalize_url_for_comparison(candidate.target)
             collision = next(
                 (
@@ -503,7 +503,7 @@ class HarvestWindow:
                     for action in self.actions
                     if action.type == "open_url"
                     and normalize_url_for_comparison(action.value) == candidate.comparison_key
-                    and action.state in {"Draft", "Trusted"}
+                    and action.state == "Active"
                 ),
                 None,
             )
@@ -511,7 +511,7 @@ class HarvestWindow:
                 candidate.duplicate_state = "Repeated in sources"
                 raise HarvestError(f'The edited target duplicates candidate "{collision.name}".')
             if existing_state is not None:
-                candidate.classification = "Existing Draft" if existing_state == "Draft" else "Already available"
+                candidate.classification = "Already available"
                 candidate.duplicate_state = candidate.classification
                 candidate.selected = False
         except (ActionError, HarvestError) as exc:
@@ -548,7 +548,7 @@ class HarvestWindow:
         self.provenance.insert("1.0", text)
         self.provenance.configure(state=tk.DISABLED)
 
-    def _drafts(self) -> list[Action]:
+    def _actions_to_create(self) -> list[Action]:
         candidates = [candidate for candidate in self.batch.candidates if candidate.selected]
         if not candidates:
             raise HarvestError("Select at least one Ready or reviewed candidate.")
@@ -560,7 +560,7 @@ class HarvestWindow:
         existing_keys = {
             normalize_url_for_comparison(action.value)
             for action in current_actions
-            if action.type == "open_url" and action.state in {"Draft", "Trusted"}
+            if action.type == "open_url" and action.state == "Active"
         }
         actions: list[Action] = []
         issues: list[str] = []
@@ -569,25 +569,25 @@ class HarvestWindow:
             try:
                 key = normalize_url_for_comparison(candidate.target)
                 if key in existing_keys:
-                    raise HarvestError("A Draft or Trusted action already uses this URL.")
+                    raise HarvestError("An action already uses this URL.")
                 if key in batch_keys:
                     raise HarvestError("Another selected candidate uses this URL.")
                 batch_keys.add(key)
-                actions.append(candidate_to_draft(candidate))
+                actions.append(candidate_to_action(candidate))
             except (ActionError, HarvestError, ValueError) as exc:
                 issues.append(f"{candidate.name}: {exc}")
         if issues:
-            raise HarvestError("No Drafts were created. Correct these candidates:\n\n" + "\n".join(issues))
+            raise HarvestError("No actions were created. Correct these candidates:\n\n" + "\n".join(issues))
         return actions
 
     def _preview(self) -> None:
         try:
-            actions = self._drafts()
+            actions = self._actions_to_create()
         except HarvestError as exc:
             messagebox.showerror("Harvest actions", str(exc), parent=self.window)
             return
         preview = tk.Toplevel(self.window)
-        preview.title("Harvest Draft preview")
+        preview.title("Harvest action preview")
         configure_standard_window(preview)
         def close_preview() -> None:
             preview.destroy()
@@ -602,7 +602,7 @@ class HarvestWindow:
         for action in actions:
             text.insert(
                 tk.END,
-                f"{action.title}\nType: Open a website\nState: Draft\nTarget: {action.value}\n"
+                f"{action.title}\nType: Open a website\nState: Active\nTarget: {action.value}\n"
                 f"Contexts: {', '.join(action.effective_contexts)}\nTags: {', '.join(action.effective_tags) or '(none)'}\n\n",
             )
         text.configure(state=tk.DISABLED)
@@ -615,22 +615,22 @@ class HarvestWindow:
         if self.submitting:
             return
         try:
-            actions = self._drafts()
+            actions = self._actions_to_create()
         except HarvestError as exc:
             messagebox.showerror("Harvest actions", str(exc), parent=self.window)
             return
         if not messagebox.askyesno(
-            "Create harvested Drafts",
-            f"Create {len(actions)} selected personal Draft action(s) in one atomic write?",
+            "Create harvested actions",
+            f"Create {len(actions)} selected permanent personal action(s) in one atomic write?",
             parent=self.window,
         ):
             return
         try:
-            actions = self._drafts()
+            actions = self._actions_to_create()
         except HarvestError as exc:
             messagebox.showerror(
                 "Harvest actions",
-                "The selected Drafts changed while confirmation was open.\n\n" + str(exc),
+                "The selected actions changed while confirmation was open.\n\n" + str(exc),
                 parent=self.window,
             )
             return
@@ -647,10 +647,10 @@ class HarvestWindow:
         selected = [candidate for candidate in self.batch.candidates if candidate.selected]
         for candidate in selected:
             candidate.selected = False
-            candidate.classification = "Created Draft"
-            candidate.duplicate_state = "Existing Draft"
-        self.status_var.set(f"Created {len(actions)} personal Draft action(s).")
-        messagebox.showinfo("Harvest actions", f"Created {len(actions)} personal Draft action(s).", parent=self.window)
+            candidate.classification = "Created"
+            candidate.duplicate_state = "Already available"
+        self.status_var.set(f"Created {len(actions)} permanent personal action(s).")
+        messagebox.showinfo("Harvest actions", f"Created {len(actions)} permanent personal action(s).", parent=self.window)
         self._render_candidates()
 
     def _update_create_state(self) -> None:

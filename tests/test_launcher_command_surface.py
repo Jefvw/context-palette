@@ -69,9 +69,9 @@ class FakeMenu:
 class LauncherCommandSurfaceTests(unittest.TestCase):
     def test_ai_prompts_are_active_first_class_prompt_actions(self):
         actions = [
-            Action("one", "First prompt", "General", "ai_prompt", "Review this", "Draft"),
-            Action("two", "Second prompt", "General", "ai_prompt", "Explain this", "Trusted"),
-            Action("template", "Not a prompt", "General", "workspace_template", "text", "Trusted"),
+            Action("one", "First prompt", "General", "ai_prompt", "Review this", "Active"),
+            Action("two", "Second prompt", "General", "ai_prompt", "Explain this", "Active"),
+            Action("template", "Not a prompt", "General", "workspace_template", "text", "Active"),
             Action("old", "Archived", "General", "ai_prompt", "old", "Archived"),
         ]
 
@@ -80,8 +80,8 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
     def test_ai_prompt_primary_loads_first_prompt_and_menu_lists_all(self):
         app = self._app()
         app.actions = [
-            Action("first", "Review text", "General", "ai_prompt", "Review", "Draft"),
-            Action("second", "Explain code", "General", "ai_prompt", "Explain", "Draft"),
+            Action("first", "Review text", "General", "ai_prompt", "Review", "Active"),
+            Action("second", "Explain code", "General", "ai_prompt", "Explain", "Active"),
         ]
         app._show_configuration = lambda **options: setattr(app, "configuration_options", options)
 
@@ -157,7 +157,7 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
                 context="General",
                 type="open_url",
                 value="https://example.com",
-                state="Trusted",
+                state="Active",
             ),
             Action(
                 id="secondary",
@@ -165,7 +165,7 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
                 context="General",
                 type="open_url",
                 value="https://example.org",
-                state="Trusted",
+                state="Active",
             ),
         ]
         app.command_groups = []

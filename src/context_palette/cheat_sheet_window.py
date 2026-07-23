@@ -9,7 +9,7 @@ from .actions import ActionError, append_action
 from .cheatsheets import (
     CheatSheet,
     CheatSheetItem,
-    draft_action_from_cheatsheet_item,
+    action_from_cheatsheet_item,
     filter_cheatsheet,
 )
 from .style import COLORS
@@ -73,7 +73,7 @@ class CheatSheetWindow:
         self.search_entry = search
         search.pack(side=tk.LEFT, fill=tk.X, expand=True)
         search.bind("<Escape>", lambda _event: self.window.destroy())
-        ttk.Button(search_row, text="Promote to Draft", command=self._promote_selected).pack(
+        ttk.Button(search_row, text="Create action", command=self._promote_selected).pack(
             side=tk.LEFT, padx=(8, 0)
         )
 
@@ -199,13 +199,13 @@ class CheatSheetWindow:
 
         sheet, _section_title, item = selected
         try:
-            action = draft_action_from_cheatsheet_item(sheet, item)
+            action = action_from_cheatsheet_item(sheet, item)
             append_action(self.actions_path, action)
             self.on_change()
             self.status_var.set(f"Promoted: {item.label}")
             messagebox.showinfo(
                 "Context Palette",
-                f"Created draft action:\n\n{sheet.title} > {item.label}",
+                f"Created permanent action:\n\n{sheet.title} > {item.label}",
                 parent=self.window,
             )
         except ActionError as exc:

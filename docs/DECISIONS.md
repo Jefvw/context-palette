@@ -1,5 +1,102 @@
 # Decisions
 
+## 2026-07-23 - Make contexts user-owned and rename storage choices
+
+**Decision:** Use **My configuration** for records that stay on one PC and
+**Built-in** for developer-owned starter records tracked through Git. General
+remains an implicit root. Ship only one specific context, **Developing Context
+Palette**.
+
+Move specific action membership into context definitions through an unlimited
+ordered `action_ids` field. A My configuration context may include both
+Built-in and personal actions without modifying either action. Keep legacy
+action-side context memberships readable during migration. Up to four
+`preferred_action_ids` continue supplying default slots 6–9.
+
+**Reason:** Context is user organization, not an intrinsic classification of a
+Built-in action. Storing membership in Git-tracked actions prevented users from
+organizing those actions differently on each PC and made “Project via Git”
+sound like ordinary user data.
+
+**Consequences:** Built-in contexts and Quick actions may reference only
+Built-in actions. My configuration contexts and Quick actions may compose both
+storage locations. The configuration checker enforces that boundary. Existing
+work-specific context definitions on the current PC are preserved in the
+ignored local context file; a fresh installation starts with only General and
+Developing Context Palette.
+
+## 2026-07-23 - Make stored UI configuration fully manageable in Configure
+
+**Decision:** Treat actions, contexts, Quick-action groups, Quick-action items,
+their ordering, and every assigned Quick-action menu entry as first-class
+editable records. Creation explicitly chooses **My configuration** or
+**Built-in**. Quick-action menus accept an ordered list of any supported length;
+the first action is the left-click default and the complete list is the
+right-click menu. Context deletion removes its action memberships and saved
+Focus state before removing the definition.
+
+Keep application-owned editing commands and safety-critical Work Item commands
+in code. They are program controls rather than user configuration.
+
+**Reason:** The owner should not need technical IDs or JSON editing for ordinary
+maintenance. The previous four-action form, implicit group creation, and
+missing delete/reorder operations made the visible UI less capable than the
+underlying files and could discard menu entries beyond the fourth.
+
+**Consequences:** Configure is the authoritative normal editor. Stable IDs and
+the JSON format remain unchanged, writes remain atomic with backups, and project
+configuration moves between development computers only through Git. A Built-in
+Quick action may reference only Built-in actions; a My configuration Quick
+action may compose both Built-in and local actions. The editor, persistence boundary, and
+configuration checker enforce this rule.
+
+## 2026-07-23 - Replace Draft/Trusted with permanent Active actions
+
+**Decision:** Use only Active and Archived as current action states. Confirmed
+creation, harvesting, Inbox conversion, cheat-sheet promotion, and AI proposal
+selection create permanent Active actions immediately. Remove Trust promotion
+and credential trust gating. Normalize legacy Draft and Trusted records to
+Active during loading and migrate ignored local action files atomically during
+setup/application startup.
+
+All persisted actions, contexts, and Quick actions are editable. Shared records
+show a warning explaining that the permanent Git-tracked change can affect
+other computers, but the user may continue. Computed summaries, generated
+suggestions, stable IDs, and constrained selection controls remain non-editable
+because they are not independent configuration records.
+
+**Reason:** The owner prefers direct responsibility and immediate permanent
+configuration over a review-state workflow. Keeping inactive safety gates would
+make creation paths and editing rules inconsistent with that product decision.
+
+**Consequences:** The previous Draft/Trusted decisions below are historical and
+superseded. Atomic replacement and `.bak` files provide recovery, but there is
+no in-app undo for confirmed edits. External unattended execution remains out
+of scope and would need an independent authorization design.
+
+## 2026-07-23 - Treat Markdown rendering as critical infrastructure
+
+**Decision:** Supersede the original handwritten Tk text renderer with pinned
+`markdown-it-py` CommonMark parsing and an embedded `tkinterweb` HTML frame.
+Enable tables and strikethrough, while disabling source HTML, JavaScript, forms,
+objects, image/resource loading, remote navigation, and automatic linkification.
+Continue resolving every clicked link through Context Palette's existing
+local-project `.md` boundary.
+
+**Reason:** Help, shortcuts, architectural documentation, and Markdown file
+actions are now important application surfaces. Fixed tab stops and a
+line-oriented regular-expression parser cannot render tables, nested blocks, or
+document typography reliably. Extending that parser would create a second
+Markdown implementation that the project would need to maintain indefinitely.
+Two reviewed, pinned dependencies provide substantially higher fidelity with a
+smaller and more testable application boundary.
+
+**Consequences:** Setup requires package installation when dependencies change,
+and each computer receives a platform-compatible Tkhtml package transitively
+through `tkinterweb`. The application remains portable because dependencies are
+declared in Git and installed into the disposable machine-local `.venv`.
+Markdown rendering does not gain a network or arbitrary-execution path.
+
 ## 2026-07-23 - Prevent application Quit during active Work Item writes
 
 **Decision:** Refuse complete process termination while **Copy file** or
@@ -1234,3 +1331,17 @@ Separating those responsibilities improves retrieval without widening the
 launcher or migrating existing action files. Unicode text symbols scale with
 Windows and avoid an image-asset dependency, while the accompanying semantic
 type text preserves discoverability and accessibility.
+
+## 2026-07-23 - Make context renaming dependency-aware
+
+**Decision:** Treat a context rename as a multi-file configuration operation.
+For a materially different name, first add the new definition beside the old
+one, then update project and local action memberships plus palette Focus state,
+and finally remove the old definition. Keep the original context file as the
+operation's `.bak` rather than backing up the temporary dual-name state.
+
+**Reason:** Editing only the context definition silently left actions and saved
+Focus settings attached to an undefined old name. No filesystem transaction can
+atomically replace several independent JSON files. Temporarily defining both
+names ensures that interruption can leave a harmless unused alias, but never an
+orphaned action membership.

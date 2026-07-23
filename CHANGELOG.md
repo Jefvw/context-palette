@@ -4,6 +4,47 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Made contexts user-owned organization rather than classifications embedded in
+  Built-in actions. Context definitions now store an unlimited ordered action
+  membership plus up to four preferred slot actions. A My configuration context
+  can group both Built-in and personal actions without modifying either action.
+  General remains implicit, and Developing Context Palette is now the only
+  shipped specific context. Existing work-specific contexts on this PC were
+  migrated into the ignored local context file.
+- Renamed the visible storage choices to **My configuration** and **Built-in**.
+  Normal creation defaults to My configuration, while Built-in clearly denotes
+  developer-owned starter data tracked through Git.
+- Rebuilt guided configuration around complete ownership of stored UI records.
+  Actions, contexts, and Quick-action groups now choose **My configuration** or
+  **Built-in** when created. Contexts can be deleted with automatic
+  action-membership and Focus cleanup. Renaming a context now updates action
+  memberships, the active Focus, and saved Focus slots through a safe
+  interruption-tolerant sequence that retains the true pre-rename backup.
+  Quick-action groups and items can be
+  created, renamed, deleted, and moved, while each item supports an unlimited
+  ordered action menu with a visible left-click/default preview. Editing no
+  longer truncates menus after four actions or moves an edited item to the end.
+  Built-in Quick actions can no longer depend on local-only actions; the editor,
+  save boundary, and configuration checker all enforce this multi-computer
+  portability rule.
+- Replaced the Draft/Trusted workflow with permanent Active actions. All
+  confirmed creation paths now save Active actions immediately, legacy local
+  states migrate atomically, credential execution no longer requires Trust,
+  and the obsolete Trust command is removed. Built-in actions, contexts, and
+  Quick actions can all be edited after a Git/multi-computer impact warning;
+  Built-in context and Quick-action editors explicitly identify their permanent
+  starter destination.
+- Kept Configure dialogs open with actionable recovery guidance when Windows
+  cannot save an action, context, or Quick action. Failed atomic replacements
+  leave the existing configuration and in-memory view unchanged.
+- Made the in-app Markdown document viewer a normal resizable and maximizable
+  Windows window while preserving its safe local navigation boundary.
+- Replaced the limited handwritten Help parser and fixed-tab table simulation
+  with pinned CommonMark and embedded HTML rendering. Repository Markdown now
+  has responsive bordered tables, nested lists, fenced code, complete heading
+  levels, safer rendered search, and consistent spacing while local-link
+  boundaries and navigation remain unchanged. Raw HTML, scripts, forms,
+  objects, remote content, and images remain disabled.
 - Recovered safely from unexpected Work Item refresh and Excel Inbox background
   failures. Both operations now return to an idle state, preserve last-known
   Work Item rows where possible, and provide an actionable error instead of
@@ -111,12 +152,12 @@ This project has not published a versioned release. Changes are recorded under *
   preserving saved Focus, pins, slots, actions, and configuration.
 - Added direct right-click routing from ordinary and Focus action rows to the
   existing Configure Actions workspace, with the clicked action highlighted
-  for editing. Shared actions are now editable after a warning explains that
+  for editing. Built-in actions are now editable after a warning explains that
   their tracked changes can affect other machines and must not contain private
   or machine-specific information.
 - Added safe action deletion to Configure. The confirmation reports saved
   references, removes pins, Focus slots, context preferences, and quick-button
-  references, and gives shared actions an additional Git-impact warning.
+  references, and gives Built-in actions an additional Git-impact warning.
 - Bounded attended AI responses to 1,000,000 characters before clipboard
   insertion or JSON parsing, preventing oversized untrusted responses from
   unnecessarily consuming resident UI and parser memory.

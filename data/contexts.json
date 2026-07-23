@@ -1,88 +1,16 @@
 {
-    "contexts": [
-        {
-            "name": "General",
-            "description": "Reusable actions that are useful in any application.",
-            "preferred_action_ids": [
-                "qtp-copy-date-time",
-                "developing-open-project-folder",
-                "general-open-python-docs"
-            ]
-        },
-        {
-            "name": "QTP Essentials",
-            "description": "The most useful QuickTextPaste-style text, clipboard, URL, and list operations.",
-            "preferred_action_ids": [
-                "qtp-copy-date-time",
-                "qtp-copy-url-encoded-clipboard",
-                "database-lines-to-sql-list",
-                "archives-open-selected-item"
-            ]
-        },
-        {
-            "name": "Archives",
-            "description": "Build an archive URL from selected, workspace, or clipboard text.",
-            "preferred_action_ids": [
-                "archives-open-selected-item"
-            ]
-        },
-        {
-            "name": "Product lookup",
-            "description": "Open a selected product identifier in commercial and internal product-information systems.",
-            "preferred_action_ids": [
-                "colruyt-open-product",
-                "product-lookup-productinfoscreen",
-                "product-lookup-myproduct-any-id",
-                "product-lookup-rti"
-            ]
-        },
-        {
-            "name": "ServiceNow",
-            "description": "ServiceNow reference recognition. Executable URL actions will be added when the complete base URL is available.",
-            "preferred_action_ids": []
-        },
-        {
-            "name": "Tijdsregistratie",
-            "description": "Reconstruct the workday and prepare time-registration input.",
-            "preferred_action_ids": [
-                "time-registration-open-outlook",
-                "time-registration-open-dummy-app",
-                "time-registration-copy-record-template"
-            ]
-        },
-        {
-            "name": "Database",
-            "description": "Prepare and reuse SQL query text and query input.",
-            "preferred_action_ids": [
-                "database-select-template",
-                "database-lines-to-sql-list",
-                "database-cte-template"
-            ]
-        },
-        {
-            "name": "Email",
-            "description": "Write and reuse common email content.",
-            "preferred_action_ids": [
-                "email-greeting",
-                "email-follow-up",
-                "email-signature"
-            ]
-        },
-        {
-            "name": "Developing Context Palette",
-            "description": "Develop, inspect, and maintain the Context Palette application.",
-            "preferred_action_ids": [
-                "developing-open-project-folder",
-                "developing-open-vscode"
-            ]
-        },
-        {
-            "name": "Windows 11",
-            "description": "Reuse Windows 11 shortcuts and productivity references.",
-            "preferred_action_ids": [
-                "draft-8ed62547f42e",
-                "draft-feba1aeda53f"
-            ]
-        }
-    ]
+  "contexts": [
+    {
+      "name": "Developing Context Palette",
+      "description": "Develop, inspect, and maintain the Context Palette application.",
+      "preferred_action_ids": [
+        "developing-open-project-folder",
+        "developing-open-vscode"
+      ],
+      "action_ids": [
+        "developing-open-project-folder",
+        "developing-open-vscode"
+      ]
+    }
+  ]
 }

@@ -91,20 +91,20 @@ Keyboard accessibility check: **Passed on Windows on 2026-07-22.** Physical
 Windows key input verified `Ctrl+F` candidate search, `F5` rescan with focus
 returning to Candidates, `Space` inclusion toggling, and `Enter` candidate
 editing. The isolated check created no personal action store. The remaining
-bindings, Draft-preview Close control, and focus-restoration callbacks are
+bindings, action-preview Close control, and focus-restoration callbacks are
 covered by real-Tk and focused unit tests.
 
 1. Press `Ctrl+,`, open **Actions**, choose **Harvest documents...**, and select
    several representative `.md`, `.txt`, `.docx`, and `.xlsx` files.
 2. Confirm progress remains responsive, Cancel stops safely, and a corrupt or
    unavailable file reports its own failure without hiding successful sources.
-3. Check a repeated URL, conflicting labels, an existing Draft URL, an existing
-   Trusted URL, and a non-HTTP target. Verify their readiness and duplicate
+3. Check a repeated URL, conflicting labels, an existing Active URL, and a
+   non-HTTP target. Verify their readiness and duplicate
    states, provenance, and default selection.
 4. Edit one candidate and use explicit Add/Remove for Focus memberships and
-   tags. Preview the selected Drafts.
+   tags. Preview the selected actions.
 5. Cancel the confirmation and verify the personal action file is unchanged.
-   Then confirm once and verify all selected actions appear together as Draft
+   Then confirm once and verify all selected actions appear together as Active
    **Open a website** actions.
 6. Repeat the launch from Inbox and verify it opens the same review workflow.
 
@@ -194,21 +194,28 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    usernames, passwords, and window titles are absent from every event.
 6. Right-click a personal action in ordinary results and in Focus Actions.
    Verify Configure opens on Actions with the clicked row highlighted and its
-   name, contexts, and tags editable. Repeat with a disposable shared action,
+   name, contexts, and tags editable. Repeat with a disposable Built-in action,
    verify the Git/private-data warning appears, cancel once, then accept and
-   verify the shared file receives the reviewed edit. Revert that disposable
+   verify the Built-in file receives the reviewed edit. Revert that disposable
    edit afterward.
 7. Activate Focus Actions and verify keyboard focus enters its list. Search for
    an action from another Focus, verify the flat results remain global, change
    Focus while Find is non-empty, then clear Find and verify the new Focus list
    returns. Confirm only slots 6–9 change and pins 1–5 remain stable.
 8. Tab to a Quick action and run its primary action with Enter or Space.
-9. Create and edit a disposable personal Draft, context, and button; reload and
-   confirm persistence. Assign the action to a pin, Focus slot, context
-   preference, and quick button. Choose **Delete selected**, verify the
+9. Create disposable actions and contexts in both **My configuration** and
+   **Built-in**; reload and confirm each uses the selected file. In a My
+   configuration context, assign both a Built-in action and a personal action,
+   then verify both appear in Focus Actions without editing either action. Create
+   two Quick-action groups, add more than four ordered actions to one item,
+   change its default, move the item and groups, and verify left-click and
+   right-click match the preview. Rename and delete an item and group. Delete a
+   disposable context and verify its action memberships and Focus state clear.
+   Assign an action to a pin, Focus slot, context preference, and Quick action.
+   Choose **Delete selected**, verify the
    confirmation reports its references, cancel once, then accept and verify the
    action and all references disappear. Repeat the warning check with a
-   disposable shared action, revert tracked test changes, and remove the
+   disposable Built-in action, revert tracked test changes, and remove the
    remaining disposable records afterward.
 10. In an action form, verify `Alt+C` focuses Specific contexts and `Alt+T`
    focuses Tags. From each field, verify `Alt+Down` or `F4` opens **Choose…**,
@@ -231,8 +238,10 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
     folder, and source-folder routes. Temporarily make one source unavailable
     and verify other sources refresh while its last successful rows remain.
 13. Trigger a validation error and confirm the message identifies the field without losing the form contents.
-14. Capture an Inbox item, convert it to a Draft, test it, and promote it only after confirmation.
-15. Open Help and verify in-document search.
+14. Capture an Inbox item, confirm conversion, and verify the resulting Active
+    action is immediately editable and persists after restart.
+15. Open Help, verify in-document search, resize it, maximize it, restore it,
+    and confirm responsive tables remain readable.
 16. Open Configure → Diagnostics. Verify configuration counts are current,
     Refresh updates recent automatic-paste outcomes, and Copy safe summary
     places the visible report on the clipboard. Confirm raw error messages,

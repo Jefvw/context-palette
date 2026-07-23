@@ -15,17 +15,14 @@ from .actions import (
     append_action,
     append_actions,
     build_url,
-    draft_build_url_action,
-    draft_copy_text_action,
-    edited_copy_text_action,
+    build_url_action,
+    copy_text_action,
     execute_action,
     expanded_action,
     load_combined_actions,
     load_actions,
     open_action_target,
     search_actions,
-    trusted_action,
-    update_action,
     validate_context_memberships,
 )
 from .action_discovery_panel import ActionDiscoveryPanel
@@ -156,7 +153,7 @@ def frequent_credential_actions(
     eligible = {
         action.id: action
         for action in actions
-        if action.type == "paste_credential" and action.state == "Trusted"
+        if action.type == "paste_credential"
     }
     selected = [
         eligible[action_id]
@@ -758,15 +755,14 @@ class LauncherApp:
 
         controls = ttk.Frame(outer)
         controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
-        for column in range(9):
+        for column in range(8):
             controls.columnconfigure(column, weight=1, uniform="controls")
 
         button_specs = (
             ("+", "Capture — Save current clipboard text to Inbox after asking for a title.", self._capture_clipboard),
-            ("▣", "Inbox — Review captures and convert them into structured Draft actions.", self._show_inbox),
-            ("✎", "Edit — Edit the selected Draft copy-text action. Other action types are currently read-only.", self._edit_selected),
+            ("▣", "Inbox — Review captures and convert them into permanent actions.", self._show_inbox),
+            ("✎", "Edit — Configure the selected action, including shared actions.", self._edit_selected),
             ("⌖", "Pin — Pin or unpin the selected action in stable slots 1–5.", self._toggle_selected_pin),
-            ("✓", "Trust — Mark the selected reviewed Draft action as Trusted after confirmation.", self._mark_selected_trusted),
             ("?", "Help — Open the complete local Context Palette help document.", self._show_help),
             ("⌨", "Keyboard shortcuts — Open the complete shortcut reference.", self._show_shortcuts),
             ("−", "Hide — Hide the palette but keep it resident. Reopen with Ctrl+Alt+P.", self.hide_window),
@@ -1532,7 +1528,7 @@ class LauncherApp:
                     context="Configuration",
                     type="open_file",
                     value=str(path.resolve()),
-                    state="Trusted",
+                    state="Active",
                     contexts=("Configuration",),
                     tags=("json", "configure quick actions"),
                 )
@@ -1874,6 +1870,7 @@ class LauncherApp:
         focused_actions = actions_for_context(
             self.actions,
             self.palette_state.focus_context,
+            self.context_definitions,
         )
         for index, action in enumerate(focused_actions):
             item_id = f"action:{index}:{action.id}"
@@ -2223,49 +2220,7 @@ class LauncherApp:
         if action is None:
             self.status_var.set("No action selected")
             return
-        if action.type != "copy_text" or action.state != "Draft":
-            messagebox.showinfo(
-                "Context Palette",
-                "Only draft copy-text actions can be edited right now.",
-            )
-            return
-
-        DraftActionEditor(
-            self.root,
-            action,
-            self.available_context_names,
-            tuple(
-                sorted(
-                    {tag for item in self.actions for tag in item.effective_tags},
-                    key=str.casefold,
-                )
-            ),
-            self._save_edited_action,
-        )
-
-    def _mark_selected_trusted(self) -> None:
-        action = self._selected_action()
-        if action is None:
-            self.status_var.set("No action selected")
-            return
-        if action.state != "Draft":
-            messagebox.showinfo("Context Palette", "Only draft actions can be marked Trusted.")
-            return
-
-        if not messagebox.askyesno(
-            "Mark Trusted",
-            f"Mark this action as Trusted?\n\n{action.display_text}",
-            parent=self.root,
-        ):
-            return
-
-        try:
-            updated = trusted_action(action)
-            update_action(self._action_storage_path(action), updated)
-            self._reload()
-            self.status_var.set(f"Marked Trusted: {updated.title}")
-        except ActionError as exc:
-            messagebox.showerror("Context Palette", str(exc))
+        self._show_configuration(initial_action_id=action.id)
 
     def _execute_slot(self, slot: int, event: tk.Event) -> str | None:
         action = self.slot_actions.get(slot)
@@ -2417,7 +2372,7 @@ class LauncherApp:
             return (
                 "Paste a protected Windows credential.\n"
                 f"Credential target: {action.value}\n"
-                "Requires Trusted state and a fresh hotkey invocation from the destination field."
+                "Requires a fresh hotkey invocation from the destination field."
             )
         if action.type == "build_url_copy":
             return f"Ask for an ID, then copy this URL:\n{action.value}"
@@ -2477,30 +2432,6 @@ class LauncherApp:
 
     def _ask_for_action_input(self, prompt: str) -> str | None:
         return simpledialog.askstring("Build URL", prompt, parent=self.root)
-
-    def _save_edited_action(
-        self,
-        action: Action,
-        title: str,
-        description: str,
-        contexts: tuple[str, ...],
-        tags: tuple[str, ...],
-        value: str,
-    ) -> None:
-        try:
-            updated = edited_copy_text_action(
-                action,
-                title=title,
-                description=description,
-                contexts=contexts,
-                tags=tags,
-                value=value,
-            )
-            update_action(self._action_storage_path(action), updated)
-            self._reload()
-            self.status_var.set(f"Saved draft action: {updated.title}")
-        except ActionError as exc:
-            messagebox.showerror("Context Palette", str(exc))
 
     def _capture_clipboard(self) -> None:
         try:
@@ -2884,7 +2815,7 @@ class LauncherApp:
                     "General",
                     action_type,
                     str(target),
-                    "Trusted",
+                    "Active",
                 )
             )
         except ActionError as exc:
@@ -3025,7 +2956,7 @@ class InboxWindow:
         controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
         self.convert_button = ttk.Button(
             controls,
-            text="Convert to Draft Action",
+            text="Create action",
             command=self._convert_selected,
             style="Accent.TButton",
         )
@@ -3047,7 +2978,7 @@ class InboxWindow:
         ttk.Label(outer, text="Capture Inbox", style="Title.TLabel").pack(anchor=tk.W)
         ttk.Label(
             outer,
-            text=f"{len(items)} captured item{'s' if len(items) != 1 else ''} · turn useful material into a Draft action",
+            text=f"{len(items)} captured item{'s' if len(items) != 1 else ''} · turn useful material into an action",
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(2, 8))
 
@@ -3114,7 +3045,7 @@ class InboxWindow:
         if item is None:
             return
 
-        DraftActionCreator(
+        ActionCreator(
             self.window,
             item,
             self.actions,
@@ -3143,13 +3074,13 @@ class InboxWindow:
     def _save_ai_actions(self, item: InboxItem, actions: list[Action]) -> None:
         try:
             append_actions(self.actions_path, actions)
-            update_inbox_item_state(self.inbox_path, item.id, "Draft")
+            update_inbox_item_state(self.inbox_path, item.id, "Converted")
             self.items = load_inbox_items(self.inbox_path)
             self._load_items()
             self.on_change()
             messagebox.showinfo(
                 "Context Palette",
-                f"Created {len(actions)} local Draft action(s).",
+                f"Created {len(actions)} permanent local action(s).",
                 parent=self.window,
             )
         except (ActionError, InboxError) as exc:
@@ -3158,7 +3089,7 @@ class InboxWindow:
     def _save_created_action(self, item: InboxItem, action: Action) -> None:
         try:
             append_action(self.actions_path, action)
-            update_inbox_item_state(self.inbox_path, item.id, "Draft")
+            update_inbox_item_state(self.inbox_path, item.id, "Converted")
             self.items = load_inbox_items(self.inbox_path)
             self._load_items()
             self.on_change()
@@ -3166,7 +3097,7 @@ class InboxWindow:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
 
 
-class DraftActionCreator:
+class ActionCreator:
     ACTION_TYPES = {
         "Copy captured text": "copy_text",
         "Build URL — open from selected or copied ID": "build_url_selection_open",
@@ -3187,7 +3118,7 @@ class DraftActionCreator:
         self.on_save = on_save
         self.context_names = tuple(context_names)
         self.window = tk.Toplevel(parent)
-        self.window.title("Create Draft Action")
+        self.window.title("Create Action")
         configure_standard_window(self.window)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
 
@@ -3210,7 +3141,7 @@ class DraftActionCreator:
 
         controls = ttk.Frame(outer)
         controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
-        ttk.Button(controls, text="Create Draft", command=self._save).pack(side=tk.LEFT)
+        ttk.Button(controls, text="Create action", command=self._save).pack(side=tk.LEFT)
         ttk.Button(controls, text="Cancel", command=self.window.destroy).pack(side=tk.RIGHT)
 
         form = ttk.Frame(outer)
@@ -3369,12 +3300,12 @@ class DraftActionCreator:
                 ),
             }
             if action_type == "copy_text":
-                action = draft_copy_text_action(
+                action = copy_text_action(
                     **common,
                     value=self.content.get("1.0", "end-1c"),
                 )
             else:
-                action = draft_build_url_action(
+                action = build_url_action(
                     **common,
                     template=self.content.get("1.0", "end-1c"),
                     action_type=action_type,
@@ -3383,96 +3314,6 @@ class DraftActionCreator:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
             return
         self.on_save(self.item, action)
-        self.window.destroy()
-
-
-class DraftActionEditor:
-    def __init__(
-        self,
-        parent: tk.Tk,
-        action: Action,
-        context_names: list[str],
-        tag_names: tuple[str, ...],
-        on_save: Callable[
-            [Action, str, str, tuple[str, ...], tuple[str, ...], str],
-            None,
-        ],
-    ) -> None:
-        self.action = action
-        self.on_save = on_save
-        self.context_names = tuple(context_names)
-        self.tag_names = tag_names
-        self.window = tk.Toplevel(parent)
-        self.window.title("Edit Draft Action")
-        configure_standard_window(self.window)
-        self.window.bind("<Escape>", lambda _event: self.window.destroy())
-
-        outer = ttk.Frame(self.window, padding=12)
-        outer.pack(fill=tk.BOTH, expand=True)
-
-        controls = ttk.Frame(outer)
-        controls.pack(side=tk.BOTTOM, fill=tk.X)
-        ttk.Button(controls, text="Save", command=self._save).pack(side=tk.LEFT)
-        ttk.Button(controls, text="Cancel", command=self.window.destroy).pack(side=tk.RIGHT)
-
-        ttk.Label(outer, text="Short name").pack(anchor=tk.W)
-        self.title_var = tk.StringVar(value=action.title)
-        ttk.Entry(outer, textvariable=self.title_var).pack(fill=tk.X, pady=(4, 8))
-
-        ttk.Label(
-            outer,
-            text="Description (optional; searchable, not shown in the action list)",
-        ).pack(anchor=tk.W)
-        self.description_var = tk.StringVar(value=action.description)
-        ttk.Entry(outer, textvariable=self.description_var).pack(
-            fill=tk.X,
-            pady=(4, 8),
-        )
-
-        self.contexts_var = tk.StringVar(value=", ".join(action.effective_contexts))
-        self.context_field = ContextMembershipField(
-            outer,
-            self.contexts_var,
-            self.context_names,
-        )
-
-        self.tags_var = tk.StringVar(value=", ".join(action.effective_tags))
-        self.tag_field = TagSelectionField(
-            outer,
-            self.tags_var,
-            self.tag_names,
-        )
-
-        ttk.Label(outer, text="Text").pack(anchor=tk.W)
-        self.text = tk.Text(outer, wrap=tk.WORD)
-        self.text.pack(fill=tk.BOTH, expand=True, pady=(4, 8))
-        self.text.insert("1.0", action.value)
-
-    def _save(self) -> None:
-        try:
-            contexts = validate_context_memberships(
-                (
-                    part.strip()
-                    for part in self.contexts_var.get().split(",")
-                    if part.strip()
-                ),
-                self.context_names,
-            )
-        except ActionError as exc:
-            messagebox.showerror("Context Palette", str(exc), parent=self.window)
-            return
-        self.on_save(
-            self.action,
-            self.title_var.get(),
-            self.description_var.get(),
-            contexts,
-            tuple(
-                part.strip()
-                for part in self.tags_var.get().split(",")
-                if part.strip()
-            ),
-            self.text.get("1.0", tk.END),
-        )
         self.window.destroy()
 
 

@@ -147,12 +147,13 @@ def _remove_context_references(
     for context in contexts:
         if not isinstance(context, dict):
             continue
-        preferred = context.get("preferred_action_ids")
-        if not isinstance(preferred, list):
-            continue
-        retained = [value for value in preferred if value != action_id]
-        removed += len(preferred) - len(retained)
-        context["preferred_action_ids"] = retained
+        for field in ("preferred_action_ids", "action_ids"):
+            references = context.get(field)
+            if not isinstance(references, list):
+                continue
+            retained = [value for value in references if value != action_id]
+            removed += len(references) - len(retained)
+            context[field] = retained
     return removed
 
 

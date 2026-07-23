@@ -14,7 +14,7 @@ from context_palette.harvest import (
     HarvestCandidate,
     HarvestScanCoordinator,
     build_candidates,
-    candidate_to_draft,
+    candidate_to_action,
     extract_source,
     normalize_url_for_comparison,
     update_candidate_values,
@@ -271,28 +271,28 @@ class HarvestCandidateTests(unittest.TestCase):
         self.assertEqual(candidates[0].classification, "Needs attention")
         self.assertEqual(candidates[0].contexts, {"Database"})
 
-    def test_existing_states_and_default_selection_are_distinct(self):
+    def test_existing_active_actions_and_default_selection_are_distinct(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "links.txt"
             path.write_text(
-                "https://example.test/draft https://example.test/trusted https://example.test/new",
+                "https://example.test/one https://example.test/two https://example.test/new",
                 encoding="utf-8",
             )
             source = extract_source(path, 0)
         existing = [
-            Action("draft", "Draft", "General", "open_url", "https://example.test/draft", "Draft"),
-            Action("trusted", "Trusted", "General", "open_url", "https://example.test/trusted", "Trusted"),
+            Action("one", "One", "General", "open_url", "https://example.test/one"),
+            Action("two", "Two", "General", "open_url", "https://example.test/two"),
         ]
 
         candidates = build_candidates([source], existing)
         by_target = {candidate.target: candidate for candidate in candidates}
 
-        self.assertEqual(by_target["https://example.test/draft"].classification, "Existing Draft")
-        self.assertEqual(by_target["https://example.test/trusted"].classification, "Already available")
+        self.assertEqual(by_target["https://example.test/one"].classification, "Already available")
+        self.assertEqual(by_target["https://example.test/two"].classification, "Already available")
         self.assertTrue(by_target["https://example.test/new"].selected)
-        self.assertFalse(by_target["https://example.test/draft"].selected)
+        self.assertFalse(by_target["https://example.test/one"].selected)
 
-    def test_archived_url_does_not_block_a_new_draft(self):
+    def test_archived_url_does_not_block_a_new_action(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "links.txt"
             path.write_text("https://example.test/archived", encoding="utf-8")
@@ -325,7 +325,7 @@ class HarvestCandidateTests(unittest.TestCase):
         self.assertEqual(len(candidates), 2)
         self.assertEqual({candidate.target for candidate in candidates}, {"https://example.test/one", "https://example.test/two"})
 
-    def test_unsupported_scheme_is_inert_and_cannot_become_draft(self):
+    def test_unsupported_scheme_is_inert_and_cannot_become_action(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "links.md"
             path.write_text("[Run](javascript:powershell())", encoding="utf-8")
@@ -333,7 +333,7 @@ class HarvestCandidateTests(unittest.TestCase):
 
         self.assertEqual(candidates[0].classification, "Unsupported")
         with self.assertRaisesRegex(ValueError, "not importable"):
-            candidate_to_draft(candidates[0])
+            candidate_to_action(candidates[0])
 
     def test_bulk_add_and_remove_preserve_other_values(self):
         candidate = HarvestCandidate("id", "Name", "https://example.test", "key", [])
@@ -347,7 +347,7 @@ class HarvestCandidateTests(unittest.TestCase):
         self.assertEqual(candidate.contexts, {"Database", "Web"})
         self.assertEqual(candidate.tags, {"urgent"})
 
-    def test_candidate_maps_only_to_personal_draft_url_action(self):
+    def test_candidate_maps_only_to_personal_active_url_action(self):
         candidate = HarvestCandidate(
             "id",
             "Open guide",
@@ -358,10 +358,10 @@ class HarvestCandidateTests(unittest.TestCase):
             tags={"docs"},
         )
 
-        action = candidate_to_draft(candidate)
+        action = candidate_to_action(candidate)
 
         self.assertEqual(action.type, "open_url")
-        self.assertEqual(action.state, "Draft")
+        self.assertEqual(action.state, "Active")
         self.assertIn("Database", action.effective_contexts)
         self.assertEqual(action.effective_tags, ("docs",))
 

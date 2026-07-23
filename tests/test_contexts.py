@@ -12,19 +12,23 @@ from context_palette.contexts import ContextError, load_combined_contexts, load_
 
 
 class ContextTests(unittest.TestCase):
-    def test_shared_product_lookup_context_has_four_existing_preferred_actions(self):
-        contexts = {context.name: context for context in load_contexts(ROOT / "data" / "contexts.json")}
+    def test_only_shipped_specific_context_is_developing_context_palette(self):
+        contexts = load_contexts(ROOT / "data" / "contexts.json")
         action_ids = {
             item["id"]
             for item in json.loads((ROOT / "data" / "actions.json").read_text(encoding="utf-8"))["actions"]
         }
 
-        preferred = contexts["Product lookup"].preferred_action_ids
+        self.assertEqual(
+            [context.name for context in contexts],
+            ["Developing Context Palette"],
+        )
+        context = contexts[0]
+        self.assertEqual(len(context.preferred_action_ids), 2)
+        self.assertTrue(set(context.preferred_action_ids) <= action_ids)
+        self.assertTrue(set(context.action_ids) <= action_ids)
 
-        self.assertEqual(len(preferred), 4)
-        self.assertTrue(set(preferred) <= action_ids)
-
-    def test_loads_context_with_preferred_actions(self):
+    def test_loads_context_with_members_and_preferred_actions(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "contexts.json"
             path.write_text(
@@ -35,6 +39,7 @@ class ContextTests(unittest.TestCase):
                                 "name": "Archives",
                                 "description": "Archive lookup",
                                 "preferred_action_ids": ["open-archive"],
+                                "action_ids": ["open-archive", "copy-archive", "open-archive"],
                             }
                         ]
                     }
@@ -44,6 +49,26 @@ class ContextTests(unittest.TestCase):
             context = load_contexts(path)[0]
         self.assertEqual(context.name, "Archives")
         self.assertEqual(context.preferred_action_ids, ("open-archive",))
+        self.assertEqual(context.action_ids, ("open-archive", "copy-archive"))
+
+    def test_missing_and_empty_action_ids_have_distinct_meanings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "contexts.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "contexts": [
+                            {"name": "Legacy"},
+                            {"name": "Explicitly empty", "action_ids": []},
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            legacy, empty = load_contexts(path)
+
+        self.assertIsNone(legacy.action_ids)
+        self.assertEqual(empty.action_ids, ())
 
     def test_rejects_more_than_four_preferred_actions(self):
         with tempfile.TemporaryDirectory() as directory:

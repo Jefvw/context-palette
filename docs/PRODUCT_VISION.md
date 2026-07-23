@@ -15,10 +15,11 @@ Context Palette is a portable Windows application that organizes reusable work a
 The intended experience has two equally important modes:
 
 - **Use:** choose a focus, find an action, understand its effect, and run it quickly.
-- **Build:** capture useful material during real work, turn it into a Draft, test and refine it, then mark it Trusted deliberately.
+- **Build:** capture useful material during real work, confirm a constrained
+  action, and edit it directly whenever the workflow changes.
 
 ```text
-Capture → Draft → Test → Refine → Trusted
+Capture or configure → Confirm → Active → Archived
 ```
 
 Archived material leaves normal retrieval without being silently destroyed.
@@ -36,9 +37,11 @@ The long-term context model has four dimensions:
 
 One context is the explicit focus. Supporting contexts may contribute knowledge or ranking in the future, but they must not make action retrieval unpredictable or switch focus silently.
 
-Every action is available through the General root and may belong to one or
-more specific contexts. Free-form tags provide quick cross-context discovery
-without turning classification into a fixed hierarchy.
+Every action is available through the General root. Specific context membership
+is owned by the user's context definitions, so each PC can organize both
+Built-in and personal actions without editing shipped action records. Free-form
+tags provide quick cross-context discovery without turning classification into
+a fixed hierarchy.
 
 ## Explicit effects
 
@@ -66,17 +69,24 @@ Only the first family and constrained window preparation are currently implement
 
 ## Knowledge and cheat sheets
 
-Searchable structured cheat sheets are implemented. They keep shortcuts, reference notes, and procedures available without opening a browser, and individual entries can become Draft actions.
+Searchable structured cheat sheets are implemented. They keep shortcuts,
+reference notes, and procedures available without opening a browser, and
+individual entries can become permanent Active actions after confirmation.
 
-Future work may add richer context knowledge, maintenance queues, and attended AI-assisted drafting. AI assistance must remain reviewable: the user sees what leaves the application, responses are treated as untrusted, and created actions begin as Drafts.
+Future work may add richer context knowledge, maintenance queues, and attended
+AI assistance. AI assistance remains reviewable: the user sees what leaves the
+application, responses are treated as untrusted, and selected actions are saved
+permanently only after confirmation.
 
 ## Product principles
 
 1. **Fast first:** repeated use must feel immediate.
 2. **Contextual, not hidden:** explicit focus improves relevance without silent automation.
 3. **Constrained effects:** no arbitrary shell-command action.
-4. **Local ownership:** configuration and captured material remain inspectable local files.
-5. **Draft before trust:** generation and capture never imply approval.
+4. **Local ownership:** ordinary user organization lives in My configuration
+   files on one PC; Built-in files contain only reviewed starter data.
+5. **Confirm before persistence:** generation and capture never save an action
+   until the user confirms it.
 6. **Portable by default:** user-writable Windows folders, no administrator requirement.
 7. **Progressive complexity:** ordinary configuration uses names and guided forms; advanced JSON remains reviewable.
 8. **Recoverable changes:** persistence and future multi-step behavior should define failure recovery.

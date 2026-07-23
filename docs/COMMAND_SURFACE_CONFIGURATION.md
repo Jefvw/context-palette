@@ -4,18 +4,24 @@ The right pane is a global quick-action surface that remains visible when Focus 
 
 ## Recommended: Configure window
 
-Choose **Configure**, or press `Ctrl+,`, then open **Quick actions** to create
-or edit personal groups and buttons.
+Choose **Configure**, or press `Ctrl+,`, then open **Quick actions** to manage
+the complete right-side surface.
 The form:
 
-- lists actions by human-readable name;
-- generates stable group and button IDs;
-- saves to ignored `data/local_command_surface.json`;
-- keeps reviewed shared groups visible but read-only.
+- creates, renames, deletes, and reorders groups and Quick actions;
+- assigns an unlimited ordered list of actions by human-readable name;
+- uses the first assigned action for left-click and the complete list for the
+  right-click menu;
+- previews both behaviors before saving;
+- generates stable group and Quick-action IDs;
+- explicitly stores new groups in **My configuration** or **Built-in**;
+- keeps existing Built-in groups editable after a developer-impact warning;
+- limits Built-in groups to Built-in actions so starter configuration never
+  depends on one PC. My configuration groups may use either kind of action.
 
 ## Advanced JSON files
 
-- `data/command_surface.json`: reviewed portable groups shared through Git.
+- `data/command_surface.json`: Built-in starter groups tracked through Git.
 - `data/local_command_surface.json`: personal or machine-specific groups ignored by Git.
 - `data/local_command_surface.example.json`: safe template copied by setup.
 
@@ -50,7 +56,11 @@ Shared and local group IDs must be unique case-insensitively. Button IDs must be
 | `primary_action_id` | Optional action used by Enter/Space |
 | `action_ids` | Actions offered by the right-click menu |
 
-Every action ID should resolve to an existing shared or local action. The configuration checker reports missing references with the owning group and button.
+Every action ID must resolve to an available action. A Built-in group may refer
+only to actions in `data/actions.json`; otherwise another computer would receive
+the button without its local-only action. A My configuration group may refer to both
+Built-in and local actions. The configuration checker reports missing and
+non-portable references with the owning group and button.
 
 ## Interaction
 
@@ -65,4 +75,7 @@ After an external JSON edit, return to or reopen the palette. Changed files are 
 
 ## Limitations
 
-Groups are global, not context-conditional. Drag ordering and richer controls are not implemented. Shared configuration remains file-reviewed and read-only in Configure.
+Groups are global, not context-conditional. Ordering uses explicit Move up and
+Move down controls rather than drag-and-drop. Application-owned editor and Work
+Item context menus remain fixed program controls rather than stored Quick-action
+configuration.

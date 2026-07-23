@@ -12,7 +12,7 @@ from uuid import uuid4
 import xml.etree.ElementTree as ET
 import zipfile
 
-from .actions import Action, ActionError, configured_draft_action, validate_http_url
+from .actions import Action, ActionError, configured_action, validate_http_url
 
 
 SUPPORTED_EXTENSIONS = frozenset({".md", ".txt", ".docx", ".xlsx"})
@@ -453,11 +453,10 @@ def build_candidates(
     candidates: dict[str, HarvestCandidate] = {}
     existing: dict[str, str] = {}
     for action in existing_actions:
-        if action.type == "open_url" and action.state in {"Draft", "Trusted"}:
+        if action.type == "open_url" and action.state == "Active":
             try:
                 key = normalize_url_for_comparison(action.value)
-                if action.state == "Trusted" or key not in existing:
-                    existing[key] = action.state
+                existing[key] = action.state
             except ValueError:
                 continue
     for source in sorted(sources, key=lambda item: item.ordinal):
@@ -503,10 +502,7 @@ def build_candidates(
             candidate.classification = "Needs attention"
             candidate.warnings.append("Conflicting meaningful labels were found.")
         state = existing.get(candidate.comparison_key)
-        if state == "Draft":
-            candidate.classification = "Existing Draft"
-            candidate.duplicate_state = "Existing Draft"
-        elif state == "Trusted":
+        if state == "Active":
             candidate.classification = "Already available"
             candidate.duplicate_state = "Already available"
         elif len(candidate.occurrences) > 1:
@@ -536,10 +532,10 @@ def update_candidate_values(
             )
 
 
-def candidate_to_draft(candidate: HarvestCandidate) -> Action:
+def candidate_to_action(candidate: HarvestCandidate) -> Action:
     if candidate.classification not in {"Ready", "Needs attention"}:
         raise HarvestError(f"Candidate is not importable: {candidate.classification}")
-    return configured_draft_action(
+    return configured_action(
         title=candidate.name,
         context="General",
         contexts=sorted(candidate.contexts, key=str.casefold),

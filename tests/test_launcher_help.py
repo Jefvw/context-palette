@@ -11,7 +11,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from context_palette.help_window import MarkdownLine, parse_inline, parse_markdown
+from context_palette.help_window import render_markdown_html, resolve_local_markdown_link
 from context_palette.launcher import HelpWindow, suggest_url_template
 
 
@@ -27,31 +27,13 @@ class FakeSearchVar:
 
 
 class FakeHelpContent:
-    def __init__(self, positions: dict[str, str] | None = None) -> None:
-        self.positions = positions or {}
+    def __init__(self, counts: list[int] | None = None) -> None:
+        self.counts = list(counts or [])
         self.calls: list[tuple] = []
 
-    def tag_remove(self, tag: str, start: str, end: str) -> None:
-        self.calls.append(("tag_remove", tag, start, end))
-
-    def index(self, index: str) -> str:
-        self.calls.append(("index", index))
-        if index == tk.INSERT:
-            return "2.4"
-        return index
-
-    def search(self, query: str, start: str, **options) -> str:
-        self.calls.append(("search", query, start, options))
-        return self.positions.get(start, "")
-
-    def tag_add(self, tag: str, start: str, end: str) -> None:
-        self.calls.append(("tag_add", tag, start, end))
-
-    def see(self, index: str) -> None:
-        self.calls.append(("see", index))
-
-    def mark_set(self, mark: str, index: str) -> None:
-        self.calls.append(("mark_set", mark, index))
+    def find_text(self, text: str, **options) -> int:
+        self.calls.append(("find_text", text, options))
+        return self.counts.pop(0) if self.counts else 0
 
 
 def help_window(query: str, content: FakeHelpContent) -> HelpWindow:
@@ -59,6 +41,7 @@ def help_window(query: str, content: FakeHelpContent) -> HelpWindow:
     window.search_var = FakeSearchVar(query)
     window.search_status_var = FakeSearchVar("")
     window.content = content
+    window.search_match_index = 0
     return window
 
 
@@ -68,75 +51,99 @@ class HelpWindowSearchTests(unittest.TestCase):
 
         help_window("   ", content)._find_next()
 
-        self.assertEqual(content.calls, [])
+        self.assertEqual(content.calls, [("find_text", "", {})])
 
-    def test_search_starts_after_insert_and_selects_the_match(self):
-        content = FakeHelpContent({"2.4 +1c": "4.2"})
+    def test_search_selects_first_match_and_reports_count(self):
+        content = FakeHelpContent([3])
 
         help_window("Help", content)._find_next()
 
         self.assertEqual(
             content.calls,
             [
-                ("tag_remove", "found", "1.0", tk.END),
-                ("index", tk.INSERT),
-                ("index", "2.4 +1c"),
-                ("search", "Help", "2.4 +1c", {"stopindex": tk.END, "nocase": True}),
-                ("tag_add", "found", "4.2", "4.2+4c"),
-                ("see", "4.2"),
-                ("mark_set", tk.INSERT, "4.2+4c"),
+                (
+                    "find_text",
+                    "Help",
+                    {
+                        "select": 1,
+                        "ignore_case": True,
+                        "highlight_all": True,
+                    },
+                ),
             ],
         )
-
-    def test_search_wraps_to_the_start_of_the_document(self):
-        content = FakeHelpContent({"1.0": "1.3"})
-
-        help_window("palette", content)._find_next()
-
-        searches = [call for call in content.calls if call[0] == "search"]
         self.assertEqual(
-            searches,
-            [
-                ("search", "palette", "2.4 +1c", {"stopindex": tk.END, "nocase": True}),
-                ("search", "palette", "1.0", {"stopindex": tk.END, "nocase": True}),
-            ],
+            help_window("Help", FakeHelpContent()).search_match_index,
+            0,
         )
-        self.assertIn(("tag_add", "found", "1.3", "1.3+7c"), content.calls)
 
-    def test_missing_search_only_clears_the_previous_highlight(self):
+    def test_search_wraps_after_last_match(self):
+        content = FakeHelpContent([2, 2, 2, 2])
+        viewer = help_window("palette", content)
+
+        viewer._find_next()
+        viewer._find_next()
+        viewer._find_next()
+
+        self.assertEqual(
+            [call[2]["select"] for call in content.calls],
+            [1, 2, 3, 1],
+        )
+        self.assertEqual(viewer.search_match_index, 1)
+
+    def test_missing_search_reports_no_result(self):
         content = FakeHelpContent()
+        viewer = help_window("missing", content)
 
-        help_window("missing", content)._find_next()
+        viewer._find_next()
 
-        self.assertEqual(content.calls[-1][0], "search")
-        self.assertNotIn("tag_add", [call[0] for call in content.calls])
+        self.assertEqual(viewer.search_match_index, 0)
+        self.assertIn("No result", viewer.search_status_var.get())
 
 
 class MarkdownRenderingTests(unittest.TestCase):
-    def test_parser_removes_markdown_structure_and_preserves_content(self):
-        lines = parse_markdown(
-            "# Title\n\n- First **item**\n\n```text\nrun.bat\n```\n\n| A | B |\n| --- | --- |\n| 1 | 2 |"
+    def test_renderer_supports_common_document_structures(self):
+        html = render_markdown_html(
+            "# Title\n\n- First **item**\n\n```text\nrun.bat\n```\n\n"
+            "| A | B |\n| --- | --- |\n| 1 | 2 |"
         )
 
-        self.assertEqual(
-            [(line.kind, line.text) for line in lines],
-            [
-                ("heading", "Title"),
-                ("blank", ""),
-                ("bullet", "First **item**"),
-                ("blank", ""),
-                ("code", "run.bat"),
-                ("blank", ""),
-                ("table_header", "A\tB"),
-                ("table", "1\t2"),
-            ],
+        self.assertIn("<h1>Title</h1>", html)
+        self.assertIn("<strong>item</strong>", html)
+        self.assertIn('<code class="language-text">run.bat', html)
+        self.assertIn("<table>", html)
+        self.assertIn("<th>A</th>", html)
+        self.assertIn("<td>1</td>", html)
+
+    def test_renderer_disables_raw_html(self):
+        html = render_markdown_html("# Safe\n\n<script>alert('no')</script>")
+
+        self.assertNotIn("<script>", html)
+        self.assertIn("&lt;script&gt;", html)
+
+    def test_link_resolution_accepts_only_local_project_markdown(self):
+        current = ROOT / "docs" / "HELP.md"
+
+        local, anchor = resolve_local_markdown_link(
+            "ARCHITECTURE.md#runtime-overview",
+            current_path=current,
+            project_root=ROOT,
+        )
+        external, _ = resolve_local_markdown_link(
+            "https://example.com",
+            current_path=current,
+            project_root=ROOT,
+        )
+        outside, _ = resolve_local_markdown_link(
+            "../../outside.md",
+            current_path=current,
+            project_root=ROOT,
         )
 
-    def test_table_header_requires_the_markdown_divider_row(self):
-        lines = parse_markdown("| Key | Meaning |\n| :--- | ---: |\n| F1 | Help |")
-
-        self.assertEqual(lines[0], MarkdownLine("table_header", "Key\tMeaning"))
-        self.assertEqual(lines[1], MarkdownLine("table", "F1\tHelp"))
+        self.assertEqual(local, (ROOT / "docs" / "ARCHITECTURE.md").resolve())
+        self.assertEqual(anchor, "runtime-overview")
+        self.assertIsNone(external)
+        self.assertIsNone(outside)
 
     def test_help_prominent_document_references_are_real_links(self):
         help_markdown = (ROOT / "docs" / "HELP.md").read_text(encoding="utf-8")
@@ -166,24 +173,13 @@ class MarkdownRenderingTests(unittest.TestCase):
                 viewer.window.geometry("720x520+40+40")
                 viewer.window.deiconify()
                 root.update()
-                link_start = viewer.content.tag_ranges("doc_link_1")[0]
-                bounds = viewer.content.bbox(link_start)
-                self.assertIsNotNone(bounds)
-                viewer.content.event_generate(
-                    "<Motion>",
-                    x=bounds[0] + 2,
-                    y=bounds[1] + 2,
-                )
-                root.update()
-                viewer.content.event_generate(
-                    "<Button-1>",
-                    x=bounds[0] + 2,
-                    y=bounds[1] + 2,
-                )
+                self.assertEqual(viewer.window.resizable(), (1, 1))
+                self.assertEqual(viewer.window.transient(), "")
+                viewer._open_link("SECOND.md")
                 root.update()
 
                 self.assertEqual(viewer.current_path, second.resolve())
-                self.assertIn("Destination text.", viewer.content.get("1.0", tk.END))
+                self.assertIn("Destination text.", viewer.content.get_page_text())
                 self.assertEqual(str(viewer.back_button.cget("state")), "normal")
                 viewer._go_back()
                 self.assertEqual(viewer.current_path, first.resolve())
@@ -204,39 +200,7 @@ class MarkdownRenderingTests(unittest.TestCase):
         finally:
             root.destroy()
 
-    def test_document_reload_removes_obsolete_link_tags(self):
-        content = unittest.mock.Mock()
-        content.tag_names.return_value = ("sel", "doc_link_1", "doc_link_2", "bold")
-        viewer = HelpWindow.__new__(HelpWindow)
-        viewer.content = content
-        viewer.link_counter = 8
-
-        viewer._clear_link_tags()
-
-        self.assertEqual(
-            content.tag_delete.call_args_list,
-            [unittest.mock.call("doc_link_1"), unittest.mock.call("doc_link_2")],
-        )
-        self.assertEqual(viewer.link_counter, 0)
-
-    def test_inline_parser_exposes_styles_and_local_link_target(self):
-        spans = parse_inline("Read **Help**, use `F1`, or open [MVP](MVP.md).")
-
-        self.assertEqual(
-            [(span.text, span.style, span.target) for span in spans],
-            [
-                ("Read ", "", ""),
-                ("Help", "bold", ""),
-                (", use ", "", ""),
-                ("F1", "code", ""),
-                (", or open ", "", ""),
-                ("MVP", "link", "MVP.md"),
-                (".", "", ""),
-            ],
-        )
-
-
-class DraftActionCreatorHelperTests(unittest.TestCase):
+class ActionCreatorHelperTests(unittest.TestCase):
     def test_suggest_url_template_appends_identifier_placeholder_to_base_url(self):
         self.assertEqual(
             suggest_url_template("https://domain-product.atlassian.net/browse/"),

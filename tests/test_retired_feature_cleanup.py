@@ -19,6 +19,50 @@ def write_json(path: Path, value: object) -> None:
 
 
 class RetiredFeatureCleanupTests(unittest.TestCase):
+    def test_migrates_legacy_action_and_inbox_states_idempotently(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            data = root / "data"
+            write_json(
+                data / "local_actions.json",
+                {
+                    "actions": [
+                        {"id": "one", "type": "copy_text", "state": "Draft"},
+                        {"id": "two", "type": "copy_text", "state": "Trusted"},
+                        {"id": "old", "type": "copy_text", "state": "Archived"},
+                    ]
+                },
+            )
+            write_json(
+                data / "inbox.json",
+                {
+                    "items": [
+                        {"id": "converted", "state": "Draft"},
+                        {"id": "waiting", "state": "Inbox"},
+                    ]
+                },
+            )
+
+            report = cleanup_retired_local_configuration(root)
+            second_report = cleanup_retired_local_configuration(root)
+
+            action_states = [
+                item["state"]
+                for item in json.loads(
+                    (data / "local_actions.json").read_text(encoding="utf-8")
+                )["actions"]
+            ]
+            inbox_states = [
+                item["state"]
+                for item in json.loads(
+                    (data / "inbox.json").read_text(encoding="utf-8")
+                )["items"]
+            ]
+            self.assertEqual(action_states, ["Active", "Active", "Archived"])
+            self.assertEqual(inbox_states, ["Converted", "Inbox"])
+            self.assertEqual(report.files_changed, 2)
+            self.assertEqual(second_report.files_changed, 0)
+
     def test_removes_retired_actions_and_every_local_reference_atomically(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -36,7 +80,11 @@ class RetiredFeatureCleanupTests(unittest.TestCase):
                 data / "local_contexts.json",
                 {
                     "contexts": [
-                        {"name": "Work", "preferred_action_ids": ["snapshot", "keep"]}
+                        {
+                            "name": "Work",
+                            "preferred_action_ids": ["snapshot", "keep"],
+                            "action_ids": ["snapshot", "keep"],
+                        }
                     ]
                 },
             )
@@ -69,7 +117,7 @@ class RetiredFeatureCleanupTests(unittest.TestCase):
             second_report = cleanup_retired_local_configuration(root)
 
             self.assertEqual(report.actions_removed, 1)
-            self.assertEqual(report.references_removed, 5)
+            self.assertEqual(report.references_removed, 6)
             self.assertEqual(report.files_changed, 4)
             self.assertEqual(second_report.files_changed, 0)
             self.assertTrue((data / "local_actions.json.bak").exists())

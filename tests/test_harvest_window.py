@@ -70,7 +70,7 @@ def descendants(widget: tk.Misc):
 
 
 class HarvestCreationTests(unittest.TestCase):
-    def test_selected_drafts_are_created_in_one_atomic_batch(self):
+    def test_selected_actions_are_created_in_one_atomic_batch(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "actions.json"
             path.write_text('{"actions": []}\n', encoding="utf-8")
@@ -83,7 +83,7 @@ class HarvestCreationTests(unittest.TestCase):
             actions = load_actions(path)
 
         self.assertEqual(len(actions), 1)
-        self.assertEqual(actions[0].state, "Draft")
+        self.assertEqual(actions[0].state, "Active")
         self.assertEqual(actions[0].type, "open_url")
         window.on_change.assert_called_once_with()
 
@@ -102,10 +102,10 @@ class HarvestCreationTests(unittest.TestCase):
             path = Path(temporary) / "actions.json"
             window = minimal_window(path, ready_candidate())
 
-            drafts = window._drafts()
+            actions = window._actions_to_create()
 
-        self.assertEqual(len(drafts), 1)
-        self.assertEqual(drafts[0].type, "open_url")
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(actions[0].type, "open_url")
 
     def test_invalid_selected_candidate_is_reported_before_mutation(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -143,7 +143,7 @@ class HarvestCreationTests(unittest.TestCase):
                                 "title": "Existing guide",
                                 "type": "open_url",
                                 "value": "https://example.test/guide",
-                                "state": "Draft",
+                                "state": "Active",
                             }
                         ]
                     }
@@ -164,11 +164,11 @@ class HarvestCreationTests(unittest.TestCase):
             path = Path(temporary) / "actions.json"
             path.write_text('{"actions": []}\n', encoding="utf-8")
             window = minimal_window(path, ready_candidate())
-            draft = window._drafts()[0]
+            action = window._actions_to_create()[0]
             with patch.object(
                 window,
-                "_drafts",
-                side_effect=[[draft], HarvestError("A Draft already uses this URL.")],
+                "_actions_to_create",
+                side_effect=[[action], HarvestError("An action already uses this URL.")],
             ), patch(
                 "context_palette.harvest_window.messagebox.askyesno", return_value=True
             ), patch(
@@ -192,7 +192,7 @@ class HarvestCreationTests(unittest.TestCase):
             window.batch.candidates.append(second)
 
             with self.assertRaisesRegex(ValueError, "Another selected candidate uses this URL"):
-                window._drafts()
+                window._actions_to_create()
 
 
 class HarvestWindowSmokeTests(unittest.TestCase):
@@ -233,8 +233,8 @@ class HarvestWindowSmokeTests(unittest.TestCase):
                     "Select source",
                     "Deselect source",
                     "Edit candidate…",
-                    "Preview selected Drafts",
-                    "Create selected Drafts",
+                    "Preview selected actions",
+                    "Create selected actions",
                 ):
                     self.assertIn(label, button_labels)
                 for sequence in ("<Control-f>", "<Control-o>", "<F5>"):
@@ -284,7 +284,7 @@ class HarvestWindowSmokeTests(unittest.TestCase):
                 root.update()
                 action = ready_candidate()
                 window.batch.candidates = [action]
-                with patch.object(window, "_drafts", return_value=[]):
+                with patch.object(window, "_actions_to_create", return_value=[]):
                     window._preview()
                 root.update()
 

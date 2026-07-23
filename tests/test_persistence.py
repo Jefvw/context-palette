@@ -32,6 +32,18 @@ class PersistenceTests(unittest.TestCase):
             self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {"version": 2})
             self.assertEqual(path.with_suffix(".json.bak").read_text(encoding="utf-8"), '{"version": 1}')
 
+    def test_replacing_without_backup_preserves_existing_backup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "data.json"
+            backup = path.with_suffix(".json.bak")
+            path.write_text('{"version": 2}', encoding="utf-8")
+            backup.write_text('{"version": 1}', encoding="utf-8")
+
+            atomic_write_json(path, {"version": 3}, preserve_previous=False)
+
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {"version": 3})
+            self.assertEqual(backup.read_text(encoding="utf-8"), '{"version": 1}')
+
     def test_replace_failure_keeps_original_and_removes_temporary_file(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "data.json"

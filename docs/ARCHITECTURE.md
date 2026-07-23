@@ -19,7 +19,7 @@ Context Palette is optimized for:
 3. No administrator requirement, installer, service, registry modification, or mandatory AutoHotkey.
 4. Inspectable local JSON and Markdown data.
 5. Constrained action types instead of arbitrary command execution.
-6. Incremental context authoring through Inbox, Draft, Trusted, and Archived states.
+6. Permanent confirmed action creation with Active and Archived states.
 7. Standard-library implementation where practical.
 
 It is intentionally a personal, single-user desktop application. There are no
@@ -90,7 +90,7 @@ Presentation and application orchestration.
   mode: **↗** retains workbook-first Open behavior while its adjacent folder
   button requests the same constrained boundary with the folder target.
 
-The main-window construction is divided into focused header, results/command-surface, shortcut, workspace, and footer builders. Inbox and Draft windows still live in this module and are the next safe extraction boundary; this is documented in `TECHNICAL_REVIEW.md`.
+The main-window construction is divided into focused header, results/command-surface, shortcut, workspace, and footer builders. Inbox and action-creation windows still live in this module and are the next safe extraction boundary; this is documented in `TECHNICAL_REVIEW.md`.
 
 The launcher does not implement action transformations or window matching directly. Those responsibilities live in specialized modules.
 
@@ -99,7 +99,7 @@ The launcher does not implement action transformations or window matching direct
 `harvest.py` is the platform-independent bulk document-harvesting boundary. It
 defines transient source, occurrence, candidate, and batch models; bounded
 local extractors for `.md`, `.txt`, `.docx`, and `.xlsx`; conservative URL
-normalization and semantic deduplication; Draft conversion; and the background
+normalization and semantic deduplication; Active-action conversion; and the background
 scan coordinator. OOXML packages are inspected as ZIP/XML without starting
 Office or evaluating formulas.
 
@@ -177,14 +177,14 @@ allow existing launcher orchestration to migrate incrementally.
 Right-click callbacks preserve the clicked flat or Focus row as the current
 selection, then route its stable action ID into the existing Configure Actions
 workspace. `configuration_window.py` highlights that action after rendering;
-personal actions persist to the ignored local action file. Shared actions may
-also be edited after an explicit risk warning and persist to the Git-tracked
-shared action file.
+My configuration actions persist to the ignored local action file. Built-in
+actions may also be edited after an explicit developer-impact warning and
+persist to the Git-tracked starter action file.
 
 ### `context_membership_field.py`
 
 Provides reusable comma-separated picker fields used by Configure, Inbox
-conversion, and Draft editing. Context membership combines an editable field
+conversion, and action editing. Context membership combines an editable field
 with a checklist of canonical defined contexts. Tag selection uses the same
 interaction for existing normalized tags but continues to allow new free-form
 values. Selection mechanics remain separate from domain validation in
@@ -210,7 +210,9 @@ before source compilation and the complete unit suite.
 
 Owns narrow, idempotent migrations for deliberately removed local features.
 Setup and application startup remove retired action records and their references
-from ignored local actions, contexts, quick buttons, and palette state. Every
+from ignored local actions, contexts, quick buttons, and palette state. It also
+normalizes legacy Draft/Trusted actions to Active and converted Inbox items to
+Converted. Every
 changed file is written through `persistence.py`, preserving its previous
 contents as an ignored `.bak`. The migration stores and logs aggregate counts
 only; it does not inspect credential secrets or delete legacy snapshot files.
@@ -219,14 +221,36 @@ only; it does not inspect credential secrets or delete legacy snapshot files.
 
 Provide the guided configuration workspace and its persistence operations.
 Action creation starts from the executable built-in action catalogue, which
-includes a concrete example for every type. Every personal and shared action
-type is editable. Editing a shared action requires acknowledging that its file
-is tracked by Git and can affect other machines; the warning also prohibits
-personal paths, secrets, and private work details. Personal contexts can assign
-slots 6–9, and personal Quick actions can reference existing actions without
-exposing technical IDs. Shared contexts and Quick-action records remain
-read-only. Writes use the same atomic JSON replacement path as the rest of the
-application.
+includes a concrete example for every type. Every My configuration and Built-in
+action type is editable. Editing a Built-in action requires acknowledging that
+its file is tracked by Git and changes starter defaults; the warning also
+prohibits personal paths, secrets, and private work details. Contexts can assign
+an unlimited action membership plus slots 6–9, and personal Quick actions can
+reference existing actions without exposing technical IDs. Built-in contexts
+and Quick-action records are editable after the same developer-impact warning.
+Writes use the same atomic JSON
+replacement path as the rest of the application.
+
+New actions, contexts, and Quick-action groups explicitly choose **My
+configuration** or **Built-in** and default to My configuration. The
+Quick-actions tab is a hierarchical
+editor: groups and items can be added, renamed, deleted, and reordered. Each
+item owns an unlimited ordered action list; the first action is the left-click
+default and the complete list becomes the right-click menu. Built-in Quick
+actions may reference only Built-in actions so starter configuration cannot
+depend on ignored machine-local records; My configuration Quick actions may
+reference either storage location. The configuration checker enforces the same
+boundary for manually edited JSON.
+
+### `context_deletion.py`
+
+Owns dependency-aware context deletion and renaming across the defining file,
+project and local action memberships, and palette Focus state. Deletion removes
+references before the definition so an interrupted sequence leaves an unused
+context rather than actions pointing at a missing one. A material rename first
+writes a safe intermediate definition containing both names, updates every
+reference, and then removes the old definition. The final write preserves the
+true pre-rename definition as the context file's backup.
 
 ### `action_deletion.py`
 
@@ -265,23 +289,27 @@ Owns the shared native ttk theme, Segoe UI font policy, grey/teal/aqua palette, 
 
 ### `help_window.py`
 
-Owns the reusable in-app Markdown document viewer. It renders the project's
-headings, emphasis, code, lists, quotes, separators, and tables with native Tk
-text styles; provides in-document search; opens local Markdown links in place;
-offers a Documents menu for repository Markdown pages; and maintains explicit
-Back, Forward, and Home history. Navigation is restricted to `.md` files
-beneath the viewer's local document root. `launcher.py` opens Help and the
+Owns the reusable in-app Markdown document viewer. It renders CommonMark plus
+tables and strikethrough through `markdown-it-py`, then presents the generated
+document through an embedded `tkinterweb` HTML frame. This provides responsive
+bordered tables, nested lists, code blocks, block quotes, complete heading
+levels, and consistent document spacing. Raw source HTML, JavaScript, forms,
+objects, remote navigation, automatic URL linkification, and image/resource
+loading are disabled. Clicked navigation is resolved again by Context Palette
+and restricted to `.md` files beneath the viewer's local document root.
+
+The viewer also provides rendered-document search, a Documents menu, and
+explicit Back, Forward, and Home history. `launcher.py` opens Help and the
 authoritative Keyboard Shortcuts page through this component and injects an
 opener into the normal action dispatcher so existing `.md` open-file actions
 use the same viewer. The Browser control hands only the current validated local
-file URI to the default browser. Each page render removes obsolete dynamic link
-tags and bindings so navigation cannot accumulate them in the resident process.
-Non-Markdown file actions retain the platform opener.
+file URI to the default browser. Non-Markdown file actions retain the platform
+opener.
 
 ### `cheat_sheet_window.py`
 
 Owns the searchable Cheat Sheet secondary window, including selection, preview,
-and promotion to a local Draft action. `launcher.py` retains loading and
+and promotion to a permanent local Active action. `launcher.py` retains loading and
 orchestration responsibility.
 
 ### `hotkeys.py`
@@ -296,7 +324,11 @@ Native Windows hotkey and selection-copy support using `ctypes`.
 
 ### `contexts.py`
 
-Loads and validates standalone shared and local context definitions. A definition provides identity metadata and up to four preferred action IDs. Explicit per-machine choices in `palette.json` override configured defaults.
+Loads and validates standalone Built-in and My configuration context
+definitions. A definition owns an unlimited ordered `action_ids` membership and
+up to four preferred action IDs. `focus_model.py` combines definition-owned
+membership with legacy action-side memberships for backward compatibility.
+Explicit per-machine choices in `palette.json` override configured defaults.
 
 ### `focus_model.py`
 
@@ -424,7 +456,10 @@ Resident-process coordination through a localhost socket.
 
 `main.py` accepts optional `--context` and `--search` arguments. `integrations/Invoke-ContextPalette.ps1` provides the parameterized wrapper for Power Automate Desktop; the ordinary batch launcher remains argumentless.
 
-The bridge is attended by design: it may reveal and filter the palette but cannot run an action by ID. Any future unattended execution API requires a Trusted-action policy, confirmation rules, structured results, and separate security tests.
+The bridge is attended by design: it may reveal and filter the palette but
+cannot run an action by ID. Any future unattended execution API requires its
+own authorization policy, confirmation rules, structured results, and separate
+security tests.
 
 ### `inbox.py`
 
@@ -435,17 +470,32 @@ Capture Inbox domain model and persistence.
 - Updates maturity state.
 - Keeps captured material separate from actions until conversion.
 
-The Inbox creation UI supports guided `copy_text` and URL-builder Drafts. URL templates are validated through the same domain function used at execution, and the dialog keeps its action footer outside the expandable form so buttons remain visible at smaller window sizes.
+The Inbox creation UI supports guided permanent `copy_text` and URL-builder
+actions. URL templates are validated through the same domain function used at
+execution, and the dialog keeps its action footer outside the expandable form
+so buttons remain visible at smaller window sizes.
 
 ### `ai_guidance.py` and `ai_guidance_window.py`
 
-`ai_guidance.py` builds a user-previewable request from an Inbox capture, a constrained prompt variation, and catalogue-owned type guidance. It parses plain versioned JSON or exactly one complete JSON Markdown fence without surrounding commentary. It accepts only the variation's catalogue-enabled action types, rejects unknown fields, and creates actions through type-specific Draft constructors. Envelope errors reject the response; proposal errors are reported individually so valid siblings remain reviewable. A local example response supports evaluation without contacting an AI.
+`ai_guidance.py` builds a user-previewable request from an Inbox capture, a
+constrained prompt variation, and catalogue-owned type guidance. It parses
+plain versioned JSON or exactly one complete JSON Markdown fence without
+surrounding commentary. It accepts only the variation's catalogue-enabled
+action types, rejects unknown fields, and creates actions through type-specific
+validated Active-action constructors. Envelope errors reject the response;
+proposal errors are reported individually so valid siblings remain reviewable.
+A local example response supports evaluation without contacting an AI.
 
 Untrusted AI response text has a 1,000,000-character ceiling enforced before
 JSON parsing. The clipboard handoff applies the same limit before replacing the
 response widget, avoiding unnecessary UI and parser memory amplification.
 
-`ai_guidance_window.py` owns the attended clipboard handoff: choose guidance, review and copy the request, paste an AI response, validate and select proposals, and explicitly create local Draft actions. It also exposes the local test-response path and per-proposal validation status. Selected proposals are batch-validated before the local action file is written. The window does not contact an AI provider, store credentials, or promote actions to Trusted.
+`ai_guidance_window.py` owns the attended clipboard handoff: choose guidance,
+review and copy the request, paste an AI response, validate and select
+proposals, and explicitly create permanent local Active actions. It also
+exposes the local test-response path and per-proposal validation status.
+Selected proposals are batch-validated before the local action file is written.
+The window does not contact an AI provider or store credentials.
 
 ### `cheatsheets.py`
 
@@ -453,7 +503,7 @@ Structured local reference material.
 
 - Loads and validates sheet JSON.
 - Searches sections, labels, details, and tags.
-- Promotes an individual sheet entry to a Draft action.
+- Promotes an individual sheet entry to a permanent Active action.
 
 ### `windows_credentials.py`
 
@@ -600,7 +650,7 @@ The current allow-list includes:
 Action types that cause external effects use constrained implementations.
 `launch_app`, for example, accepts an existing absolute `.exe`, fixed argument
 list, and optional validated working directory. `paste_credential` accepts only
-an exact standard Windows or generic credential target, requires Trusted state and a fresh
+an exact standard Windows or generic credential target and requires a fresh
 hotkey-captured destination, confirms the target window, and never accepts a
 password in configuration.
 
@@ -700,11 +750,16 @@ membership.
 
 ### `data/contexts.json` and `data/local_contexts.json`
 
-The shared file contains reviewed portable context definitions. The ignored local file contains personal or work-specific definitions.
+The Built-in file contains only shipped starter contexts; currently that is
+**Developing Context Palette**. The ignored local file contains the user's
+personal or work-specific contexts and owns their action memberships. General
+is an implicit root rather than a stored definition.
 
 ### `data/command_surface.json` and `data/local_command_surface.json`
 
-The shared file contains portable global quick-action groups. The ignored local file can add personal or machine-specific groups. Both refer to actions by stable ID.
+The Built-in file contains portable starter Quick-action groups. The ignored My
+configuration file can add personal or machine-specific groups. Both refer to
+actions by stable ID.
 
 ### `data/local_actions.json`
 
@@ -829,7 +884,7 @@ For the complete configuration, compilation, and test check, run:
 When adding an action type:
 
 1. Add one definition to the catalogue in `action_types.py`; `SUPPORTED_ACTION_TYPES` is derived from it.
-2. Add type-specific parsing, validation, execution, and Draft creation as required.
+2. Add type-specific parsing, validation, execution, and Active-action creation as required.
 3. Keep pure transformation logic separate from UI/platform effects.
 4. Inject external behavior through a callback where practical.
 5. Regenerate `docs/ACTION_TYPES.md` through the catalogue-owned renderer.
@@ -841,12 +896,12 @@ When adding context behavior:
 1. Preserve global search.
 2. Do not silently switch the user's focus context.
 3. Keep pinned slots stable.
-4. Explain inputs, outputs, clipboard effects, opened targets, and trust state.
+4. Explain inputs, outputs, clipboard effects, opened targets, and persistence.
 5. Prefer composition over duplicating actions.
 
 ## Known architectural next steps
 
-- Extract secondary Inbox and Draft views from `launcher.py` without changing behavior.
+- Extract secondary Inbox and action-creation views from `launcher.py` without changing behavior.
 - Add supporting-context composition and weighted ranking.
 - Design safe linear action sequences and clipboard transactions as explicit, previewable models.
 - Consider optional application-aware context suggestions that never switch focus silently.
