@@ -78,6 +78,54 @@ class FakeKeyEvent:
 
 
 class LauncherInteractionTests(unittest.TestCase):
+    def test_quit_is_blocked_while_each_work_item_write_is_running(self):
+        for file_copy_running, inbox_running, expected in (
+            (True, False, "file copy"),
+            (False, True, "Excel Inbox update"),
+            (True, True, "file copy and an Excel Inbox update"),
+        ):
+            with self.subTest(
+                file_copy_running=file_copy_running,
+                inbox_running=inbox_running,
+            ):
+                app = LauncherApp.__new__(LauncherApp)
+                app.root = Mock()
+                app.hotkey = Mock()
+                app.instance_server = Mock()
+                app.work_item_file_copy = Mock(running=file_copy_running)
+                app.work_item_inbox = Mock(running=inbox_running)
+                app.status_var = FakeVariable()
+                app._clear_protected_clipboard = Mock()
+
+                with patch(
+                    "context_palette.launcher.messagebox.showwarning"
+                ) as warning:
+                    app.quit_app()
+
+                self.assertIn(expected, warning.call_args.args[1])
+                self.assertIn("Quit blocked", app.status_var.value)
+                app._clear_protected_clipboard.assert_not_called()
+                app.hotkey.stop.assert_not_called()
+                app.instance_server.stop.assert_not_called()
+                app.root.destroy.assert_not_called()
+
+    def test_quit_still_stops_cleanly_when_no_work_item_write_is_running(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.hotkey = Mock()
+        app.instance_server = Mock()
+        app.work_item_file_copy = Mock(running=False)
+        app.work_item_inbox = Mock(running=False)
+        app.status_var = FakeVariable()
+        app._clear_protected_clipboard = Mock()
+
+        app.quit_app()
+
+        app._clear_protected_clipboard.assert_called_once_with()
+        app.hotkey.stop.assert_called_once_with()
+        app.instance_server.stop.assert_called_once_with()
+        app.root.destroy.assert_called_once_with()
+
     def test_workspace_file_copy_starts_for_selected_work_item(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

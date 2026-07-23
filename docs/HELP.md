@@ -510,6 +510,11 @@ Hides the palette but keeps it resident. Reopen with `Ctrl+Alt+P`.
 
 Stops Context Palette completely and releases the global hotkey.
 
+Quit is temporarily refused while **Copy file** or **To inbox** is still
+running, because terminating a write could leave an uncertain file or workbook
+result. Wait for the success or error message, then quit normally. **Hide**
+remains available while the operation finishes.
+
 ## Action naming
 
 Actions use independent searchable metadata:

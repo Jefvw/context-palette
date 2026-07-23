@@ -1,5 +1,27 @@
 # Decisions
 
+## 2026-07-23 - Prevent application Quit during active Work Item writes
+
+**Decision:** Refuse complete process termination while **Copy file** or
+**To inbox** is still running. Explain which operation is active, keep the
+resident process alive, and allow the palette to be hidden while work finishes.
+Normal Quit resumes after the coordinator delivers completion.
+
+**Reason:** Both operations run on daemon workers so the Tk interface remains
+responsive. Unconditional Quit could terminate a copy before temporary-output
+cleanup or abandon reporting for an external Excel update.
+
+**Alternatives considered:** Cooperative cancellation is larger and must span
+file streams and Excel automation. Waiting on non-daemon workers can leave a
+headless process blocked on a network or Excel failure. Startup cleanup cannot
+resolve an uncertain workbook result. A small Quit guard protects both current
+write paths without changing their operation semantics.
+
+**Consequences:** Users must wait for success or failure before fully stopping
+Context Palette. Forced process termination and machine shutdown remain outside
+the app's control; temporary naming and Excel's save boundary continue to limit
+their impact.
+
 ## 2026-07-23 - Copy one explicit file path into a selected Work Item
 
 **Decision:** Add an attended **Copy file** Work Item command. Treat the complete

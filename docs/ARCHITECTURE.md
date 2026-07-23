@@ -397,6 +397,13 @@ files are never changed. Metadata preservation is best effort because not all
 local and network filesystems support the same Windows attributes. A
 single-flight coordinator returns completion to Tk through main-thread polling.
 
+`LauncherApp.quit_app()` checks both Work Item write coordinators before
+stopping the hotkey, instance server, or Tk root. A running file copy or Excel
+Inbox update blocks complete process termination with an actionable warning;
+ordinary Hide remains available. This keeps daemon-backed work from being
+terminated by the application's own Quit control before completion is
+delivered.
+
 ### `single_instance.py`
 
 Resident-process coordination through a localhost socket.

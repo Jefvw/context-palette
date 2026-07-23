@@ -947,10 +947,33 @@ class LauncherApp:
         self.root.withdraw()
 
     def quit_app(self) -> None:
+        active_writes = self._active_work_item_writes()
+        if active_writes:
+            operation_text = " and ".join(active_writes)
+            message = (
+                f"Context Palette cannot quit while {operation_text} is still running.\n\n"
+                "Wait for its success or error message. You may hide the palette "
+                "while the operation finishes."
+            )
+            self.status_var.set(f"Quit blocked: {operation_text} is still running.")
+            messagebox.showwarning(
+                "Work Item operation still running",
+                message,
+                parent=self.root,
+            )
+            return
         self._clear_protected_clipboard()
         self.hotkey.stop()
         self.instance_server.stop()
         self.root.destroy()
+
+    def _active_work_item_writes(self) -> tuple[str, ...]:
+        active: list[str] = []
+        if self.work_item_file_copy.running:
+            active.append("a Work Item file copy")
+        if self.work_item_inbox.running:
+            active.append("an Excel Inbox update")
+        return tuple(active)
 
     def focus_search(self) -> str:
         if self.search_entry is not None:

@@ -11,6 +11,9 @@ This project has not published a versioned release. Changes are recorded under *
   only after completion, and existing files are never overwritten.
 - Added compact **↗** and **📁** Work Item controls so the folder remains
   directly accessible while **↗** keeps its matching-workbook-first behavior.
+- Prevented **Quit** from terminating Context Palette during an active Work
+  Item file copy or Excel Inbox update. The warning identifies the active work;
+  Hide remains available until completion.
 - Added **To inbox** in Work Items mode. It appends current Input / Output to
   Added, Text, Link, and Source columns on the selected exact-name workbook's
   `Inbox` sheet through constrained background Excel automation. Missing sheets
