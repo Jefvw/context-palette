@@ -244,7 +244,7 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
         self.assertEqual(menu.popup_calls, [(10, 20)])
         self.assertEqual(menu.grab_release_calls, 1)
         self.assertGreaterEqual(len(menu.commands), 2)
-        self.assertEqual(menu.labels, ["Open → Primary", "Open → Secondary"])
+        self.assertEqual(menu.labels, ["↗ Primary", "↗ Secondary"])
         first_callback = menu.commands[0]
         self.assertTrue(callable(first_callback))
         first_callback()

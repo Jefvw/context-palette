@@ -76,7 +76,8 @@ Example `copy_text` action:
 ```json
 {
   "id": "db-copy-default-query",
-  "title": "Copy default DQ query",
+  "title": "Default DQ query",
+  "description": "Copy the standard seven-day data-quality issue query",
   "contexts": ["Database"],
   "tags": ["sql", "data quality"],
   "type": "copy_text",
@@ -90,7 +91,8 @@ Example URL-builder action from selected/copied text:
 ```json
 {
   "id": "db-open-dashboard",
-  "title": "Open dashboard by ID",
+  "title": "Dashboard by ID",
+  "description": "Open a database dashboard using selected or copied text",
   "contexts": ["Database"],
   "tags": ["dashboard", "lookup"],
   "type": "build_url_selection_open",
@@ -102,6 +104,9 @@ Example URL-builder action from selected/copied text:
 Notes:
 
 - Action `id` must be unique across shared and local action files.
+- `title` is the required short name shown in action lists.
+- `description` is optional longer searchable text. It appears in hover help
+  and Action info, not in the compact list row.
 - `contexts` is optional. Each value should match a defined context name.
 - Every action is automatically available in General; do not add General to `contexts`.
 - `tags` is optional and can contain any reusable discovery terms.

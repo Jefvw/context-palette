@@ -840,6 +840,9 @@ class LauncherApp:
         if action.effective_tags:
             lines.append(f"Tags: {', '.join(action.effective_tags)}")
         lines.append(f"Action: {action.title}")
+        if action.description:
+            lines.append(f"Description: {action.description}")
+        lines.append(f"Type: {ACTION_TYPES[action.type].label}")
         return "\n".join(lines)
 
     def _transform_workspace(
@@ -2358,7 +2361,14 @@ class LauncherApp:
         if len(detail) > 520:
             detail = detail[:517].rstrip() + "…"
         compact_detail = " · ".join(line.strip() for line in detail.splitlines() if line.strip())
-        self.action_info_full = f"{action.display_text}\n\n{self._preview_text(action)}"
+        description = (
+            f"\n\nDescription\n{action.description}"
+            if action.description
+            else ""
+        )
+        self.action_info_full = (
+            f"{action.display_text}{description}\n\n{self._preview_text(action)}"
+        )
         message = f"{action.display_text} — {compact_detail}"
         self.status_var.set(message[:217].rstrip() + "…" if len(message) > 220 else message)
 
@@ -2368,7 +2378,12 @@ class LauncherApp:
             return ""
         return (
             f"{action.title}\n"
-            f"Contexts: {', '.join(action.effective_contexts) or 'General only'}\n"
+            + (
+                f"Description: {action.description}\n"
+                if action.description
+                else ""
+            )
+            + f"Contexts: {', '.join(action.effective_contexts) or 'General only'}\n"
             f"Tags: {', '.join(action.effective_tags) or '(none)'}\n"
             f"Type: {ACTION_TYPES[action.type].label}\n"
             f"State: {action.state}"
@@ -2467,6 +2482,7 @@ class LauncherApp:
         self,
         action: Action,
         title: str,
+        description: str,
         contexts: tuple[str, ...],
         tags: tuple[str, ...],
         value: str,
@@ -2475,6 +2491,7 @@ class LauncherApp:
             updated = edited_copy_text_action(
                 action,
                 title=title,
+                description=description,
                 contexts=contexts,
                 tags=tags,
                 value=value,
@@ -3183,6 +3200,7 @@ class DraftActionCreator:
             value="" if initial_context.casefold() == "general" else initial_context
         )
         self.title_var = tk.StringVar(value=item.title)
+        self.description_var = tk.StringVar()
         self.action_type_var = tk.StringVar(value="Copy captured text")
         self.guidance_var = tk.StringVar()
         self.example_var = tk.StringVar()
@@ -3235,9 +3253,18 @@ class DraftActionCreator:
             tags,
         )
 
-        ttk.Label(right, text="Action name").pack(anchor=tk.W, pady=(8, 0))
+        ttk.Label(right, text="Short name").pack(anchor=tk.W, pady=(8, 0))
         title_entry = ttk.Entry(right, textvariable=self.title_var)
         title_entry.pack(fill=tk.X, pady=(3, 0))
+
+        ttk.Label(
+            form,
+            text="Description (optional; searchable, not shown in the action list)",
+        ).pack(anchor=tk.W, pady=(8, 0))
+        ttk.Entry(form, textvariable=self.description_var).pack(
+            fill=tk.X,
+            pady=(3, 0),
+        )
 
         self.content_label = ttk.Label(form, text="Captured text to copy")
         self.content_label.pack(anchor=tk.W, pady=(8, 0))
@@ -3332,6 +3359,7 @@ class DraftActionCreator:
             )
             common = {
                 "title": self.title_var.get(),
+                "description": self.description_var.get(),
                 "context": "General",
                 "contexts": contexts,
                 "tags": tuple(
@@ -3366,7 +3394,7 @@ class DraftActionEditor:
         context_names: list[str],
         tag_names: tuple[str, ...],
         on_save: Callable[
-            [Action, str, tuple[str, ...], tuple[str, ...], str],
+            [Action, str, str, tuple[str, ...], tuple[str, ...], str],
             None,
         ],
     ) -> None:
@@ -3387,9 +3415,19 @@ class DraftActionEditor:
         ttk.Button(controls, text="Save", command=self._save).pack(side=tk.LEFT)
         ttk.Button(controls, text="Cancel", command=self.window.destroy).pack(side=tk.RIGHT)
 
-        ttk.Label(outer, text="Title").pack(anchor=tk.W)
+        ttk.Label(outer, text="Short name").pack(anchor=tk.W)
         self.title_var = tk.StringVar(value=action.title)
         ttk.Entry(outer, textvariable=self.title_var).pack(fill=tk.X, pady=(4, 8))
+
+        ttk.Label(
+            outer,
+            text="Description (optional; searchable, not shown in the action list)",
+        ).pack(anchor=tk.W)
+        self.description_var = tk.StringVar(value=action.description)
+        ttk.Entry(outer, textvariable=self.description_var).pack(
+            fill=tk.X,
+            pady=(4, 8),
+        )
 
         self.contexts_var = tk.StringVar(value=", ".join(action.effective_contexts))
         self.context_field = ContextMembershipField(
@@ -3426,6 +3464,7 @@ class DraftActionEditor:
         self.on_save(
             self.action,
             self.title_var.get(),
+            self.description_var.get(),
             contexts,
             tuple(
                 part.strip()

@@ -68,6 +68,7 @@ def action_matches_filter(action: Action, query: str, *, personal: bool) -> bool
     searchable = " ".join(
         (
             action.title,
+            action.description,
             ACTION_TYPES[action.type].label,
             *action.effective_contexts,
             *action.effective_tags,
@@ -905,6 +906,9 @@ class ActionDraftDialog:
             style="Muted.TLabel", wraplength=610,
         ).pack(anchor=tk.W, pady=(2, 6))
         self.title_var = tk.StringVar(value=action.title if action else "")
+        self.description_var = tk.StringVar(
+            value=action.description if action else ""
+        )
         self.contexts_var = tk.StringVar(
             value=", ".join(action.effective_contexts) if action else ""
         )
@@ -917,7 +921,16 @@ class ActionDraftDialog:
         self.working_directory_var = tk.StringVar(
             value=action.working_directory or "" if action else ""
         )
-        title_entry = _entry(outer, "Action name", self.title_var)
+        title_entry = _entry(
+            outer,
+            "Short name (shown in action lists)",
+            self.title_var,
+        )
+        _entry(
+            outer,
+            "Description (optional; searchable, shown in Action info)",
+            self.description_var,
+        )
         self.context_field = ContextMembershipField(
             outer,
             self.contexts_var,
@@ -978,6 +991,7 @@ class ActionDraftDialog:
             )
             values = dict(
                 title=self.title_var.get(),
+                description=self.description_var.get(),
                 context="General",
                 contexts=contexts,
                 tags=_comma_separated(self.tags_var.get()),

@@ -127,7 +127,7 @@ The left side of the action dashboard is one Actions workspace. Find action
 sits directly above the numbered list it filters. Passwords, Types, Run, and
 the action-search Help control form the narrow rail beside that list.
 
-Search matches tags, contexts, Action name, type, and content.
+Search matches tags, contexts, short name, description, type, and content.
 
 - Type to filter actions.
 - Click **Passwords** for the protected-credential shortcut, or open **Types**
@@ -143,7 +143,8 @@ Search matches tags, contexts, Action name, type, and content.
   status asks you to paste manually with `Ctrl+V`.
 - Right-click an action row to open the Actions tab in Configure with that
   exact action highlighted. Personal actions can then be edited, including
-  name, contexts, tags, type-specific value, and supported launch settings.
+  short name, description, contexts, tags, type-specific value, and supported
+  launch settings.
   Shared project actions can also be edited after acknowledging their warning.
 - Plain number-row and numpad digits remain ordinary Find text.
 - Shift plus a physical top-row number key executes slots 1 through 9 only
@@ -321,8 +322,8 @@ Keyboard shortcuts in these guided forms:
   button.
 - Use the normal arrow keys and Space in the checklist, then `Esc` to close it.
 
-In **Actions**, use **Find actions** or press `Ctrl+F` to filter by action name,
-built-in type, context, tag, state, or source. Multiple words must
+In **Actions**, use **Find actions** or press `Ctrl+F` to filter by short name,
+description, built-in type, context, tag, state, or source. Multiple words must
 all match. Press Enter on the selected result to edit it.
 
 Use **Delete selected** to remove an action. The confirmation identifies how
@@ -434,7 +435,8 @@ Copies current clipboard text into the Inbox after asking for a title. Captures 
 ### Inbox
 
 Shows captured items. An item can be converted into a structured Draft action
-with contexts, tags, Action name, and a guided action type.
+with contexts, tags, short name, optional searchable description, and a guided
+action type.
 
 Select an Inbox item and click **Ask AI** for an attended AI-guidance workflow:
 
@@ -520,18 +522,29 @@ remains available while the operation finishes.
 Actions use independent searchable metadata:
 
 ```text
-Contexts | Tags | Action name
+Contexts | Tags | Short name | Description
 ```
 
 Example:
 
 ```text
-Product lookup | colruyt, cart | Open colruyt.be cart
+Product lookup | colruyt, cart | colruyt.be cart | Open the product page for a selected or copied article ID
 ```
 
-To keep the launcher fast to scan, result rows show `Command → subject`, for
-example `Open → colruyt.be cart`. Contexts and tags remain fully searchable
-and appear in the row's hover tooltip and the bottom communication line.
+The short name is the compact label shown in action lists. Description is
+optional longer text: it is searchable and appears in row help and Action info,
+but does not consume permanent list space.
+
+To keep the launcher fast to scan, Open and Copy use compact type symbols:
+
+| Symbol | Meaning |
+| --- | --- |
+| `↗` | Open |
+| `⧉` | Copy |
+
+Other commands retain a short text cue. The complete built-in action type and
+description remain available in hover help and Action info, so the symbols do
+not replace accessible explanations.
 
 The main palette keeps its compact width. Its nine management commands use the
 single character strip documented above, keeping every command directly

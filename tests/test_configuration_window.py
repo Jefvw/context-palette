@@ -328,11 +328,13 @@ class ConfigurationDialogTests(unittest.TestCase):
             state="Draft",
             technology="Python",
             task="Reference",
+            description="Official language documentation",
         )
 
         self.assertTrue(action_matches_filter(action, "python developing", personal=True))
         self.assertTrue(action_matches_filter(action, "website draft", personal=True))
         self.assertTrue(action_matches_filter(action, "personal reference", personal=True))
+        self.assertTrue(action_matches_filter(action, "official language", personal=True))
         self.assertFalse(action_matches_filter(action, "shared", personal=True))
 
     def test_initial_action_is_selected_when_actions_are_rendered(self) -> None:
@@ -459,6 +461,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         dialog.action = None
         dialog.context_names = ()
         dialog.title_var = FakeVariable("Greeting")
+        dialog.description_var = FakeVariable("Professional opening")
         dialog.contexts_var = FakeVariable()
         dialog.tags_var = FakeVariable()
         dialog.arguments_var = FakeVariable()
@@ -477,6 +480,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         dialog.action = None
         dialog.context_names = ()
         dialog.title_var = FakeVariable("Greeting")
+        dialog.description_var = FakeVariable("Professional opening")
         dialog.contexts_var = FakeVariable()
         dialog.tags_var = FakeVariable()
         dialog.arguments_var = FakeVariable()
@@ -495,6 +499,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         dialog.action = None
         dialog.context_names = ("General", "Mail")
         dialog.title_var = FakeVariable("Greeting")
+        dialog.description_var = FakeVariable("Professional opening")
         dialog.contexts_var = FakeVariable("Typo")
         dialog.tags_var = FakeVariable()
         dialog.arguments_var = FakeVariable()
@@ -533,6 +538,7 @@ class ConfigurationDialogTests(unittest.TestCase):
             )
             root.update_idletasks()
             dialog.title_var.set("Reusable response")
+            dialog.description_var.set("Professional opening for a customer reply")
             dialog.tags_var.set("new tag")
             dialog.value.insert("1.0", "Hello")
 
@@ -548,6 +554,10 @@ class ConfigurationDialogTests(unittest.TestCase):
             self.assertEqual(saved[0].effective_contexts, ("Mail",))
             self.assertEqual(saved[0].effective_tags, ("new tag", "sql"))
             self.assertEqual(saved[0].value, "Hello")
+            self.assertEqual(
+                saved[0].description,
+                "Professional opening for a customer reply",
+            )
         finally:
             for child in root.winfo_children():
                 child.destroy()

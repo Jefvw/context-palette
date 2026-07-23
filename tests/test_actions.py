@@ -402,11 +402,22 @@ class ActionTests(unittest.TestCase):
 
     def test_search_matches_context_and_title(self):
         actions = [
-            Action("email", "Copy greeting", "Email", "copy_text", "Hello"),
+            Action(
+                "email",
+                "Greeting",
+                "Email",
+                "copy_text",
+                "Hello",
+                description="Professional opening for a customer reply",
+            ),
             Action("database", "Copy SELECT", "Database", "copy_text", "SELECT"),
         ]
 
         self.assertEqual([action.id for action in search_actions(actions, "email greeting")], ["email"])
+        self.assertEqual(
+            [action.id for action in search_actions(actions, "customer reply")],
+            ["email"],
+        )
         self.assertEqual([action.id for action in search_actions(actions, "select")], ["database"])
 
     def test_new_action_schema_normalizes_contexts_and_tags(self):
@@ -467,14 +478,48 @@ class ActionTests(unittest.TestCase):
             task="Product lookup",
         )
 
-        self.assertEqual(action.compact_display_text, "Open → selected product")
+        self.assertEqual(action.compact_display_text, "↗ selected product")
         self.assertIn("browser", action.display_text)
         self.assertEqual(search_actions([action], "browser product lookup"), [action])
 
     def test_compact_display_infers_command_when_title_has_no_verb(self):
         action = Action("settings", "Quick Settings", "Windows", "copy_text", "Win + A")
 
-        self.assertEqual(action.compact_display_text, "Copy → Quick Settings")
+        self.assertEqual(action.compact_display_text, "⧉ Quick Settings")
+        self.assertEqual(
+            Action(
+                "list",
+                "Convert values",
+                "Database",
+                "transform_list_csv",
+                "csv",
+            ).compact_display_text,
+            "Convert → values",
+        )
+
+    def test_action_description_round_trips_without_affecting_legacy_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "actions.json"
+            described = draft_copy_text_action(
+                title="Greeting",
+                context="Email",
+                value="Hello",
+                description="Professional opening for a customer reply",
+            )
+            append_action(path, described)
+
+            raw = json.loads(path.read_text(encoding="utf-8"))["actions"][0]
+            loaded = load_actions(path)[0]
+
+        self.assertEqual(
+            raw["description"],
+            "Professional opening for a customer reply",
+        )
+        self.assertEqual(loaded.description, raw["description"])
+        self.assertEqual(
+            Action("legacy", "Legacy", "General", "copy_text", "text").description,
+            "",
+        )
 
     def test_execute_copy_text_uses_clipboard_callback(self):
         copied = []

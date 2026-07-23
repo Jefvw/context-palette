@@ -474,7 +474,8 @@ An action currently contains:
 
 ```text
 id
-title
+title (short name)
+description
 contexts
 tags
 type
@@ -484,7 +485,10 @@ arguments
 working_directory
 ```
 
-`contexts` and `tags` are optional lists. Every action belongs to the virtual
+`description`, `contexts`, and `tags` are optional. `title` remains the
+backward-compatible stored field for the compact name shown in action lists;
+`description` holds a longer searchable explanation that appears in hover and
+Action info surfaces. Every action belongs to the virtual
 General root even when `contexts` is absent. Specific context membership can be
 shared by several contexts. Tags are normalized, case-insensitive discovery
 facets and never define a hierarchy. Legacy singular `context`, `technology`,
@@ -503,21 +507,28 @@ temporarily missing.
 
 ### Presentation versus search
 
-Compact result rows show:
+Compact result rows show a type cue followed by the short name:
 
 ```text
-Command → subject
+↗ subject
+⧉ subject
 ```
 
-The command is taken from a recognized leading verb such as Open, Copy, Convert, Search, Arrange, or Restore. When a title does not include one, a suitable command is inferred from the constrained action type. Contexts, tags, and the original title are shown in a delayed per-row hover tooltip.
+Open uses `↗` and Copy uses `⧉`; other recognized commands retain their short
+text label. A leading command is removed from an existing title, or inferred
+from the constrained action type when the short name has no command. The full
+built-in type, contexts, tags, short name, and optional description are shown
+in delayed row help and Action info, so symbols are never the only explanation.
 
 The full explanation path is:
 
 ```text
-Contexts | Tags | Action title
+Contexts | Tags | Short name | Description
 ```
 
-Search indexes title, tags, contexts, type, value, and maturity state. Multiple query terms use AND semantics. The tag menu applies an additional exact tag filter.
+Search indexes short name, description, tags, contexts, type, value, and
+maturity state. Multiple query terms use AND semantics. The tag menu applies an
+additional exact tag filter.
 
 This separation allows visual simplification without losing retrieval power.
 

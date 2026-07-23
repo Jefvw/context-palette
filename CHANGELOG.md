@@ -4,6 +4,11 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Added an optional searchable action description while keeping the existing
+  title as the compact short name. Configure, Inbox conversion, and the Draft
+  editor expose both fields; descriptions appear in hover help and Action info.
+  Compact action rows now use `↗` for Open and `⧉` for Copy while retaining the
+  full built-in type in explanatory surfaces.
 - Added **Copy file** in Work Items mode. It copies the one exact absolute file
   path in Input / Output into the selected Work Item folder on a background
   worker. Quoted Explorer paths are accepted; folders, mixed input, same-folder

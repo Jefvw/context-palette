@@ -67,7 +67,8 @@
       "tags": [
         "colruyt",
         "cart"
-      ]
+      ],
+      "description": "Opens the colruyt.be site based on commercial article number"
     },
     {
       "id": "product-lookup-bioplanet",

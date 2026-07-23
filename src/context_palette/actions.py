@@ -35,6 +35,7 @@ class Action:
     task: str = ""
     contexts: tuple[str, ...] = ()
     tags: tuple[str, ...] = ()
+    description: str = ""
 
     @property
     def effective_contexts(self) -> tuple[str, ...]:
@@ -60,26 +61,35 @@ class Action:
     def compact_display_text(self) -> str:
         title = self.title.strip()
         commands = ("Open", "Copy", "Convert", "Search", "Arrange", "Restore")
+        command_symbols = {
+            "Open": "↗",
+            "Copy": "⧉",
+        }
         for command in commands:
             prefix = command + " "
             if title.casefold().startswith(prefix.casefold()):
-                return f"{command} → {title[len(prefix):].strip()}"
+                label = command_symbols.get(command, command)
+                separator = " " if command in command_symbols else " → "
+                return f"{label}{separator}{title[len(prefix):].strip()}"
 
         inferred_command = {
-            "copy_text": "Copy",
-            "workspace_template": "Copy",
+            "copy_text": "⧉",
+            "workspace_template": "⧉",
             "ai_prompt": "Load",
             "transform_list_csv": "Convert",
-            "open_url": "Open",
-            "open_file": "Open",
-            "open_folder": "Open",
-            "launch_app": "Open",
+            "open_url": "↗",
+            "open_file": "↗",
+            "open_folder": "↗",
+            "launch_app": "↗",
             "paste_credential": "Paste",
-            "build_url_copy": "Copy",
-            "build_url_open": "Open",
-            "build_url_selection_open": "Open",
+            "build_url_copy": "⧉",
+            "build_url_open": "↗",
+            "build_url_selection_open": "↗",
         }.get(self.type)
-        return f"{inferred_command} → {title}" if inferred_command else title
+        if not inferred_command:
+            return title
+        separator = " " if inferred_command in command_symbols.values() else " → "
+        return f"{inferred_command}{separator}{title}"
 
 
 def normalize_contexts(values: Iterable[str]) -> tuple[str, ...]:
@@ -213,6 +223,7 @@ def draft_copy_text_action(
     task: str = "",
     contexts: Iterable[str] = (),
     tags: Iterable[str] = (),
+    description: str = "",
 ) -> Action:
     clean_title = title.strip()
     clean_contexts = normalize_contexts((*contexts, context))
@@ -233,6 +244,7 @@ def draft_copy_text_action(
         task=task.strip(),
         contexts=clean_contexts,
         tags=normalize_tags(tags),
+        description=description.strip(),
     )
 
 
@@ -245,6 +257,7 @@ def draft_open_url_action(
     task: str = "",
     contexts: Iterable[str] = (),
     tags: Iterable[str] = (),
+    description: str = "",
 ) -> Action:
     clean_title = title.strip()
     clean_contexts = normalize_contexts((*contexts, context))
@@ -263,6 +276,7 @@ def draft_open_url_action(
         task=task.strip(),
         contexts=clean_contexts,
         tags=normalize_tags(tags),
+        description=description.strip(),
     )
 
 
@@ -276,6 +290,7 @@ def draft_build_url_action(
     task: str = "",
     contexts: Iterable[str] = (),
     tags: Iterable[str] = (),
+    description: str = "",
 ) -> Action:
     allowed_types = {"build_url_copy", "build_url_open", "build_url_selection_open"}
     if action_type not in allowed_types:
@@ -297,6 +312,7 @@ def draft_build_url_action(
         task=task.strip(),
         contexts=clean_contexts,
         tags=normalize_tags(tags),
+        description=description.strip(),
     )
 
 
@@ -312,6 +328,7 @@ def configured_draft_action(
     tags: Iterable[str] = (),
     arguments: Iterable[str] = (),
     working_directory: str = "",
+    description: str = "",
 ) -> Action:
     """Create a validated local Draft from the built-in action catalogue."""
     clean_title = title.strip()
@@ -336,6 +353,7 @@ def configured_draft_action(
         task=task.strip(),
         contexts=clean_contexts,
         tags=normalize_tags(tags),
+        description=description.strip(),
     )
 
 
@@ -352,6 +370,7 @@ def edited_configured_action(
     tags: Iterable[str] = (),
     arguments: Iterable[str] = (),
     working_directory: str = "",
+    description: str = "",
 ) -> Action:
     """Validate edits while preserving an action's stable identity and maturity."""
     validated = configured_draft_action(
@@ -365,6 +384,7 @@ def edited_configured_action(
         tags=tags,
         arguments=arguments,
         working_directory=working_directory,
+        description=description,
     )
     return Action(
         id=action.id,
@@ -379,6 +399,7 @@ def edited_configured_action(
         task=validated.task,
         contexts=validated.contexts,
         tags=validated.tags,
+        description=validated.description,
     )
 
 
@@ -390,6 +411,7 @@ def edited_copy_text_action(
     value: str,
     contexts: Iterable[str] = (),
     tags: Iterable[str] = (),
+    description: str | None = None,
 ) -> Action:
     if action.type != "copy_text" or action.state != "Draft":
         raise ActionError("Only draft copy-text actions can be edited right now.")
@@ -413,6 +435,7 @@ def edited_copy_text_action(
         working_directory=action.working_directory,
         contexts=clean_contexts,
         tags=normalize_tags(tags),
+        description=action.description if description is None else description.strip(),
     )
 
 
@@ -433,6 +456,7 @@ def trusted_action(action: Action) -> Action:
         task=action.task,
         contexts=action.contexts,
         tags=action.tags,
+        description=action.description,
     )
 
 
@@ -451,6 +475,7 @@ def search_actions(actions: Iterable[Action], query: str) -> list[Action]:
                 action.type,
                 action.value,
                 action.state,
+                action.description,
             ]
         ).casefold()
         if all(term in searchable for term in terms):
@@ -521,6 +546,7 @@ def execute_action(
                 action.state,
                 contexts=action.contexts,
                 tags=action.tags,
+                description=action.description,
             )
         )
         return "Copied the built URL and opened it in the browser."
@@ -548,6 +574,7 @@ def execute_action(
                 action.state,
                 contexts=action.contexts,
                 tags=action.tags,
+                description=action.description,
             )
         )
         return "Opened the built URL."
@@ -824,6 +851,7 @@ def expanded_action(
         task=action.task,
         contexts=action.contexts,
         tags=action.tags,
+        description=action.description,
     )
 
 
@@ -944,6 +972,9 @@ def _parse_action(item: object, index: int) -> Action:
         isinstance(value, str) for value in raw_tags
     ):
         raise ActionError(f"Action #{index} has invalid tags metadata.")
+    description = item.get("description", "")
+    if not isinstance(description, str):
+        raise ActionError(f"Action #{index} has an invalid description.")
     contexts = normalize_contexts(raw_contexts)
     primary_context = contexts[0] if contexts else legacy_context.strip() or "General"
 
@@ -960,6 +991,7 @@ def _parse_action(item: object, index: int) -> Action:
         task=task,
         contexts=contexts,
         tags=normalize_tags(raw_tags),
+        description=description.strip(),
     )
 
 
@@ -1004,6 +1036,8 @@ def _action_to_dict(action: Action) -> dict[str, object]:
         data["contexts"] = list(action.effective_contexts)
     if action.effective_tags:
         data["tags"] = list(action.effective_tags)
+    if action.description:
+        data["description"] = action.description
     return data
 
 

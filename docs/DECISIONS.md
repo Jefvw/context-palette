@@ -1220,3 +1220,17 @@ find and perform a known operation. A second search window would duplicate
 navigation and consume more screen space. Mode-specific filter variables keep
 existing action state intact, while constrained open targets preserve the
 application's allow-listed execution model.
+
+## 2026-07-23 - Separate compact action names from searchable descriptions
+
+**Decision:** Keep the existing `title` field as a backward-compatible short
+name and add an optional `description` field for longer searchable explanation.
+Show only the short name in action lists, but include description and the full
+built-in type in hover help and Action info. Render Open as `↗` and Copy as
+`⧉`; keep text cues for other commands.
+
+**Reason:** One title cannot be both quickly scannable and richly descriptive.
+Separating those responsibilities improves retrieval without widening the
+launcher or migrating existing action files. Unicode text symbols scale with
+Windows and avoid an image-asset dependency, while the accompanying semantic
+type text preserves discoverability and accessibility.
