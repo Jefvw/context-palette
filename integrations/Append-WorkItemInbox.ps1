@@ -3,6 +3,22 @@ $ProgressPreference = "SilentlyContinue"
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
+function Resolve-WorkbookPath {
+    param(
+        [string]$PathText
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PathText)) {
+        return $null
+    }
+    try {
+        return [System.IO.Path]::GetFullPath($PathText)
+    }
+    catch {
+        return $null
+    }
+}
+
 $excel = $null
 $workbook = $null
 $sheet = $null
@@ -20,8 +36,9 @@ try {
         throw "The Inbox request is empty or too large."
     }
     $request = $rawRequest | ConvertFrom-Json
-    $workbookPath = [System.IO.Path]::GetFullPath([string]$request.workbook)
+    $workbookPath = Resolve-WorkbookPath([string]$request.workbook)
     if (
+        [string]::IsNullOrWhiteSpace($workbookPath) -or
         -not [System.IO.Path]::IsPathRooted($workbookPath) -or
         [System.IO.Path]::GetExtension($workbookPath).ToLowerInvariant() -ne ".xlsx" -or
         -not (Test-Path -LiteralPath $workbookPath -PathType Leaf)
@@ -41,8 +58,12 @@ try {
     }
 
     foreach ($candidate in $excel.Workbooks) {
+        $candidatePath = Resolve-WorkbookPath([string]$candidate.FullName)
+        if ([string]::IsNullOrWhiteSpace($candidatePath)) {
+            continue
+        }
         if ([string]::Equals(
-            [System.IO.Path]::GetFullPath([string]$candidate.FullName),
+            $candidatePath,
             $workbookPath,
             [System.StringComparison]::OrdinalIgnoreCase
         )) {

@@ -126,6 +126,9 @@ class WorkItemInboxTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn("[Console]::InputEncoding", script)
+        self.assertIn('function Resolve-WorkbookPath', script)
+        self.assertIn('$candidatePath = Resolve-WorkbookPath([string]$candidate.FullName)', script)
+        self.assertIn('if ([string]::IsNullOrWhiteSpace($candidatePath)) {', script)
         self.assertIn('$sheet.Cells.Item($row, 2)', script)
         self.assertIn('$addedCell.NumberFormat = "@"', script)
         self.assertIn('$textCell.NumberFormat = "@"', script)
