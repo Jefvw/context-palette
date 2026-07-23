@@ -4,6 +4,11 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Recovered safely from unexpected Work Item refresh and Excel Inbox background
+  failures. Both operations now return to an idle state, preserve last-known
+  Work Item rows where possible, and provide an actionable error instead of
+  leaving controls or Quit permanently blocked. The existing Work Item folder
+  button is now explicitly included in normal Tab focus.
 - Added an optional searchable action description while keeping the existing
   title as the compact short name. Configure, Inbox conversion, and the Draft
   editor expose both fields; descriptions appear in hover help and Action info.

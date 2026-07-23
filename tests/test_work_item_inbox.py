@@ -215,6 +215,41 @@ class WorkItemInboxTests(unittest.TestCase):
         callback.assert_called_once_with(result, None)
         self.assertFalse(coordinator.running)
 
+    def test_coordinator_converts_unexpected_failure_and_recovers(self) -> None:
+        coordinator = WorkItemInboxCoordinator()
+        callback = Mock()
+
+        with self.assertLogs(
+            "context_palette.work_item_inbox",
+            level="ERROR",
+        ) as logs:
+            with patch(
+                "context_palette.work_item_inbox.send_to_work_item_inbox",
+                side_effect=RuntimeError("boom"),
+            ):
+                self.assertTrue(
+                    coordinator.start(
+                        Path("C:/work/item"),
+                        Path("C:/work/item/item.xlsx"),
+                        None,
+                        WorkItemInboxEntry("now", "text", "", "source"),
+                        callback,
+                    )
+                )
+                for _ in range(100):
+                    if coordinator.drain():
+                        break
+                    __import__("time").sleep(0.01)
+                else:
+                    self.fail("Unexpected Inbox failure did not reach completion")
+
+        result, error = callback.call_args.args
+        self.assertIsNone(result)
+        self.assertIsInstance(error, WorkItemInboxError)
+        self.assertIn("unexpected local error", str(error))
+        self.assertFalse(coordinator.running)
+        self.assertIn("Unexpected Work Item Inbox", logs.output[0])
+
 
 if __name__ == "__main__":
     unittest.main()

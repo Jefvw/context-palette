@@ -202,6 +202,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app.type_filter.cget("text"), "Projects ▾")
                     self.assertEqual(app.run_button.cget("text"), "↗")
                     self.assertTrue(app.work_item_folder_button.winfo_manager())
+                    self.assertTrue(app.work_item_folder_button.cget("takefocus"))
                     self.assertFalse(app.passwords_button.winfo_manager())
                     self.assertTrue(app.new_work_item_button.winfo_manager())
                     self.assertTrue(app.send_work_item_inbox_button.winfo_manager())

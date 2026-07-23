@@ -5,6 +5,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -104,6 +105,45 @@ class WorkItemRefreshTests(unittest.TestCase):
             self.assertEqual(completed[0][1], main_thread)
             self.assertFalse(coordinator.running)
             self.assertFalse(coordinator.drain())
+
+    def test_background_coordinator_recovers_from_unexpected_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._source(Path(directory), "one", "ISS-CAP40-one")
+            previous = refresh_work_item_index((source,))
+            completed: list[WorkItemIndex] = []
+            coordinator = WorkItemRefreshCoordinator()
+
+            with self.assertLogs(
+                "context_palette.work_item_refresh",
+                level="ERROR",
+            ) as logs:
+                with patch(
+                    "context_palette.work_item_refresh.refresh_work_item_index",
+                    side_effect=RuntimeError("boom"),
+                ):
+                    self.assertTrue(
+                        coordinator.start((source,), previous, completed.append)
+                    )
+                    wait = threading.Event()
+                    for _attempt in range(200):
+                        if coordinator.completion_pending:
+                            break
+                        wait.wait(0.01)
+                    else:
+                        self.fail("Unexpected Work Item refresh failure did not complete")
+
+            self.assertTrue(coordinator.drain())
+            self.assertFalse(coordinator.running)
+            self.assertEqual(
+                [item.display_name for item in completed[0].items],
+                ["ISS-CAP40-one"],
+            )
+            self.assertTrue(completed[0].sources[0].using_last_known_good)
+            self.assertIn(
+                "unexpected local error",
+                completed[0].sources[0].error or "",
+            )
+            self.assertIn("Unexpected Work Item refresh", logs.output[0])
 
     def _source(self, root: Path, source_id: str, folder_name: str) -> WorkItemSource:
         workitems = root / source_id / "workitems"

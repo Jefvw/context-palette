@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 import queue
 import threading
 import time
@@ -12,6 +13,8 @@ from .work_items import (
     WorkItemSource,
     discover_work_items,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,7 +95,11 @@ class WorkItemRefreshCoordinator:
             self._running = True
 
         def work() -> None:
-            result = refresh_work_item_index(sources, previous)
+            try:
+                result = refresh_work_item_index(sources, previous)
+            except Exception:
+                LOGGER.exception("Unexpected Work Item refresh background failure")
+                result = _failed_refresh_index(sources, previous)
             self._completed.put((result, on_complete))
 
         threading.Thread(target=work, daemon=True, name="work-item-refresh").start()
@@ -110,3 +117,26 @@ class WorkItemRefreshCoordinator:
             with self._lock:
                 self._running = False
         return True
+
+
+def _failed_refresh_index(
+    sources: tuple[WorkItemSource, ...],
+    previous: WorkItemIndex | None,
+) -> WorkItemIndex:
+    """Preserve known rows and expose a safe error after an unexpected failure."""
+    previous_by_id = {
+        result.source.id.casefold(): result
+        for result in (previous.sources if previous else ())
+    }
+    results = []
+    for source in sources:
+        last_good = previous_by_id.get(source.id.casefold())
+        results.append(
+            SourceRefreshResult(
+                source,
+                last_good.items if last_good is not None else (),
+                "The source could not be refreshed because of an unexpected local error.",
+                last_good is not None,
+            )
+        )
+    return WorkItemIndex(tuple(results))

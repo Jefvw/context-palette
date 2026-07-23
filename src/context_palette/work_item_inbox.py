@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import json
+import logging
 import os
 from pathlib import Path
 import queue
@@ -27,6 +28,7 @@ SCRIPT_PATH = (
     / "integrations"
     / "Append-WorkItemInbox.ps1"
 )
+LOGGER = logging.getLogger(__name__)
 
 
 class WorkItemInboxError(RuntimeError):
@@ -246,6 +248,11 @@ class WorkItemInboxCoordinator:
                 )
             except WorkItemInboxError as exc:
                 error = exc
+            except Exception:
+                LOGGER.exception("Unexpected Work Item Inbox background failure")
+                error = WorkItemInboxError(
+                    "The Inbox update stopped because of an unexpected local error."
+                )
             self._completed.put((result, error, on_complete))
 
         threading.Thread(

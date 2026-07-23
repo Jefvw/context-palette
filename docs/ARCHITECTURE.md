@@ -333,7 +333,10 @@ index. A failed source retains only its own previous successful items while
 available sources refresh normally; removed sources leave the index. No index
 is written to disk. The background coordinator places completed immutable
 results on a thread-safe queue. Future Tk orchestration must call `drain()` on
-the main thread, so worker code has no Tk callback or widget access. A local
+the main thread, so worker code has no Tk callback or widget access. Unexpected
+worker failures are logged and converted into an immutable error result that
+retains each source's last-known rows; the coordinator never remains
+permanently busy. A local
 500-folder direct-scan measurement completed in 21.9 ms on 2026-07-21, providing
 no evidence that a private persistent cache is warranted.
 
@@ -368,7 +371,9 @@ Item's exact matching `.xlsx`. The Python layer validates and bounds one
 timestamp/text/link/source record, accepts only the exact direct-child workbook,
 optionally delegates collision-safe creation to `work_item_creation.py`, and
 runs the operation through a single-flight background coordinator. Completion
-is delivered to Tk only through main-thread polling.
+is delivered to Tk only through main-thread polling. Expected and unexpected
+worker failures both enqueue a safe completion, ensuring that controls and the
+Quit guard return to their normal state.
 
 The fixed PowerShell integration receives size-limited JSON through standard
 input so captured content is absent from command-line history and temporary

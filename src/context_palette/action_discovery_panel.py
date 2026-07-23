@@ -200,6 +200,7 @@ class ActionDiscoveryPanel:
             width=3,
             command=lambda: execute_selected(open_folder=True),
             style="Compact.TButton",
+            takefocus=True,
         )
         tooltip_adder(
             self.work_item_folder_button,

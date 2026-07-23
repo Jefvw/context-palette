@@ -238,7 +238,9 @@ copy the configured generic template into the existing Work Item folder and
 then send the row. It never overwrites an existing workbook. If the template is
 missing, it offers to open Work Items configuration. Locked, read-only,
 unavailable, invalid, or oversized destinations fail with an error and do not
-report success.
+report success. An unexpected background failure also returns the Inbox
+operation to an idle state, so it cannot leave the button or Quit permanently
+blocked.
 
 ### Copy a file into a Work Item
 
