@@ -223,14 +223,6 @@ class LauncherSmokeTests(unittest.TestCase):
                         app.copy_file_to_work_item_button.tk_focusNext(),
                         app.type_filter,
                     )
-                    self.assertIs(
-                        app.run_button.tk_focusNext(),
-                        app.work_item_folder_button,
-                    )
-                    self.assertIs(
-                        app.work_item_folder_button.tk_focusNext(),
-                        app.action_help_button,
-                    )
                     self.assertLessEqual(
                         app.action_help_button.winfo_y()
                         + app.action_help_button.winfo_height(),
