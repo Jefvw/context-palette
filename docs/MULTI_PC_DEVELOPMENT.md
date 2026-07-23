@@ -217,7 +217,9 @@ and unit-test phases as the local complete check on Windows for pushes and pull
 requests. This verifies dependency declarations, portable code paths, and
 shared configuration references but does not replace manual testing of global
 hotkeys, Tk focus, application launching, window placement, and multi-monitor
-behavior.
+behavior. GitHub starts this check automatically after a push; no separate
+request is required. See [Testing](TESTING.md#why-github-runs-the-tests-again)
+for why both local and GitHub checks are kept and what a failure email means.
 
 ## Suggested daily workflow
 

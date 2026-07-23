@@ -51,6 +51,32 @@ import error (investigate with the complete check).
 
 Do not document a fixed test count; it changes as coverage grows.
 
+## Why GitHub runs the tests again
+
+The repository contains `.github/workflows/tests.yml`. GitHub automatically
+runs that workflow after every push and for every pull request; starting a run
+does not require a separate instruction from the user or Codex.
+
+This check deliberately repeats the local automated check in a fresh Windows
+environment. The local check provides fast feedback before a commit, while the
+GitHub check verifies that the committed repository can set itself up without
+the current computer's existing virtual environment, caches, ignored personal
+files, or other local state. Its Windows, Python, and Tk versions can also
+expose portability problems that do not reproduce on the development computer.
+
+A push should therefore normally follow a successful local
+`.\check-context-palette.bat` run, but a local pass does not guarantee that the
+GitHub run will pass. If GitHub reports a failure, open the linked workflow run
+and inspect the failed step and test output before changing code. Warnings and
+the final `Process completed with exit code 1` annotation are often secondary;
+the first failed command or test identifies the useful cause.
+
+GitHub may email the repository owner or subscribed participants when this
+automatic run fails. That notification is controlled by the user's GitHub
+Actions notification settings, not by Context Palette. A message saying that
+all jobs failed can still represent one failed test when the workflow contains
+only one job.
+
 ## Harvest actions manual check
 
 Last completed: **Passed on Windows on 2026-07-21.** The attended check used
