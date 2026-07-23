@@ -21,6 +21,10 @@ from context_palette.launcher import (
 )
 from context_palette.palette_state import PaletteState
 from context_palette.windows_credentials import CredentialSecret
+from context_palette.work_item_file_copy import (
+    WorkItemFileCopyError,
+    WorkItemFileCopyResult,
+)
 from context_palette.work_item_inbox import WorkItemInboxError, WorkItemInboxResult
 from context_palette.work_items import DiscoveredWorkItem
 
@@ -74,6 +78,79 @@ class FakeKeyEvent:
 
 
 class LauncherInteractionTests(unittest.TestCase):
+    def test_workspace_file_copy_starts_for_selected_work_item(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.txt"
+            source.write_text("content", encoding="utf-8")
+            folder = root / "ISS-CAP40-example"
+            folder.mkdir()
+            item = DiscoveredWorkItem(
+                "cap40", "CAP40", folder.name, folder, folder.name,
+                "ISS", "Issue", "CAP40", "example", (), None,
+            )
+            app = LauncherApp.__new__(LauncherApp)
+            app.work_item_file_copy = Mock(running=False)
+            app.work_item_file_copy.start.return_value = True
+            app._selected_work_item = Mock(return_value=item)
+            app._workspace_text = Mock(return_value=f'"{source}"')
+            app.copy_file_to_work_item_button = Mock()
+            app.status_var = FakeVariable()
+
+            app._copy_workspace_file_to_work_item()
+
+            app.work_item_file_copy.start.assert_called_once()
+            self.assertEqual(app.work_item_file_copy.start.call_args.args[0], source)
+            self.assertEqual(app.work_item_file_copy.start.call_args.args[1], folder)
+            self.assertIn(source.name, app.status_var.value)
+
+    def test_invalid_workspace_file_path_shows_actionable_error(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.work_item_file_copy = Mock(running=False)
+        app._selected_work_item = Mock(return_value=Mock())
+        app._workspace_text = Mock(return_value="not-a-full-path")
+        app.status_var = FakeVariable()
+
+        with patch("context_palette.launcher.messagebox.showerror") as showerror:
+            app._copy_workspace_file_to_work_item()
+
+        self.assertIn("absolute", showerror.call_args.args[1])
+        app.work_item_file_copy.start.assert_not_called()
+
+    def test_file_copy_completion_reports_destination_without_source_content(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.copy_file_to_work_item_button = Mock()
+        app.status_var = FakeVariable()
+        item = Mock(display_name="ISS-CAP40-example")
+        result = WorkItemFileCopyResult(
+            Path("C:/source/report.txt"),
+            Path("C:/work/item/report.txt"),
+            12,
+        )
+
+        app._complete_work_item_file_copy(item, result, None)
+
+        self.assertEqual(
+            app.status_var.value,
+            "Copied report.txt to ISS-CAP40-example.",
+        )
+
+    def test_file_copy_completion_shows_collision_error(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.copy_file_to_work_item_button = Mock()
+        app.status_var = FakeVariable()
+
+        with patch("context_palette.launcher.messagebox.showerror") as showerror:
+            app._complete_work_item_file_copy(
+                Mock(),
+                None,
+                WorkItemFileCopyError("A file already exists; nothing was overwritten."),
+            )
+
+        self.assertIn("nothing was overwritten", showerror.call_args.args[1])
+
     def test_existing_workbook_inbox_send_starts_without_confirmation(self):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory) / "ISS-CAP40-example"

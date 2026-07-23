@@ -1,5 +1,28 @@
 # Decisions
 
+## 2026-07-23 - Copy one explicit file path into a selected Work Item
+
+**Decision:** Add an attended **Copy file** Work Item command. Treat the complete
+Input / Output value, optionally surrounded by matching quotation marks, as one
+absolute source file path and copy it into the selected Work Item folder under
+the same filename.
+
+**Reason:** Files received or produced elsewhere frequently need to become part
+of the current Work Item. Using the existing editable workspace and selected
+Work Item removes repeated Explorer navigation without introducing general
+filesystem automation.
+
+**Safety boundary:** Reject empty, relative, missing, folder, mixed-text, and
+multi-line inputs. Never accept a user-supplied destination name, recurse,
+delete, move, or overwrite. Copy in a single-flight background worker to a
+private temporary file in the destination folder, then rename it into place
+only after completion. Remove only that temporary output on failure.
+
+**Consequences:** Filename collisions are actionable errors rather than
+automatic renames. File metadata is preserved where the destination filesystem
+supports it. Large and network copies do not block Tk, but the first version
+does not expose byte-level progress or cancellation.
+
 ## 2026-07-23 - Append captured text through constrained Excel automation
 
 **Decision:** Let the user send current Input / Output to an `Inbox` sheet in

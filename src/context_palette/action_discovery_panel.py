@@ -34,6 +34,7 @@ class ActionDiscoveryPanel:
         toggle_work_items: Callable[[], None],
         create_work_item: Callable[[], None],
         send_work_item_inbox: Callable[[], None],
+        copy_file_to_work_item: Callable[[], None],
         select_action_type_filter: Callable[[str | None], None],
         select_tag_filter: Callable[[str | None], None],
         select_project_filter: Callable[[str | None], None],
@@ -137,6 +138,17 @@ class ActionDiscoveryPanel:
             "Send to Inbox — Append Input / Output to columns A–D of the selected Work Item workbook's Inbox sheet.",
         )
 
+        self.copy_file_to_work_item_button = ttk.Button(
+            self.tool_rail,
+            text="Copy file",
+            command=copy_file_to_work_item,
+            style="Compact.TButton",
+        )
+        tooltip_adder(
+            self.copy_file_to_work_item_button,
+            "Copy file — Copy the one exact file path in Input / Output into the selected Work Item folder without overwriting.",
+        )
+
         self.type_filter = ttk.Menubutton(
             self.tool_rail,
             text="Types ▾",
@@ -169,16 +181,29 @@ class ActionDiscoveryPanel:
         )
         self.set_tags(())
 
+        self.primary_action_frame = ttk.Frame(self.tool_rail)
+        self.primary_action_frame.pack(fill=tk.X, pady=(12, 0))
         self.run_button = ttk.Button(
-            self.tool_rail,
+            self.primary_action_frame,
             text="Run",
             command=execute_selected,
             style="Accent.TButton",
         )
-        self.run_button.pack(fill=tk.X, pady=(12, 0))
+        self.run_button.pack(side=tk.LEFT, fill=tk.X, expand=True)
         tooltip_adder(
             self.run_button,
             lambda: self.primary_help_text,
+        )
+        self.work_item_folder_button = ttk.Button(
+            self.primary_action_frame,
+            text="📁",
+            width=3,
+            command=lambda: execute_selected(open_folder=True),
+            style="Compact.TButton",
+        )
+        tooltip_adder(
+            self.work_item_folder_button,
+            "Open folder — Always open the selected Work Item folder instead of its matching workbook.",
         )
         self.primary_help_text = (
             "Execute the highlighted action. Its input and effect appear in Action info below."
@@ -269,9 +294,18 @@ class ActionDiscoveryPanel:
                     pady=(5, 0),
                     before=self.type_filter,
                 )
+            if not self.copy_file_to_work_item_button.winfo_manager():
+                self.copy_file_to_work_item_button.pack(
+                    fill=tk.X,
+                    pady=(5, 0),
+                    before=self.type_filter,
+                )
             self.find_label.configure(text="Find Work Item")
             self.type_filter.configure(text="Projects ▾")
-            self.run_button.configure(text="Open")
+            self.run_button.configure(text="↗")
+            self.run_button.pack_forget()
+            self.work_item_folder_button.pack(side=tk.RIGHT)
+            self.run_button.pack(side=tk.LEFT, fill=tk.X, expand=True)
             self.find_help_text = (
                 "Find by Work Item name, kind, organisation, subject, source, project code, or tag."
             )
@@ -289,6 +323,7 @@ class ActionDiscoveryPanel:
                 empty_label="All work tags",
             )
         else:
+            self.copy_file_to_work_item_button.pack_forget()
             self.send_work_item_inbox_button.pack_forget()
             self.new_work_item_button.pack_forget()
             if not self.passwords_button.winfo_manager():
@@ -296,6 +331,9 @@ class ActionDiscoveryPanel:
             self.find_label.configure(text="Find action")
             self.type_filter.configure(text="Types ▾")
             self.run_button.configure(text="Run")
+            self.work_item_folder_button.pack_forget()
+            self.run_button.pack_forget()
+            self.run_button.pack(side=tk.LEFT, fill=tk.X, expand=True)
             self.find_help_text = "Type any tag, context, action name, type, or content."
             self.primary_help_text = (
                 "Execute the highlighted action. Its input and effect appear in Action info below."

@@ -148,9 +148,21 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertIs(app.passwords_button.master, app.actions_tool_rail)
                     self.assertIs(app.new_work_item_button.master, app.actions_tool_rail)
                     self.assertIs(app.send_work_item_inbox_button.master, app.actions_tool_rail)
+                    self.assertIs(app.copy_file_to_work_item_button.master, app.actions_tool_rail)
                     self.assertIs(app.type_filter.master, app.actions_tool_rail)
                     self.assertIs(app.tag_filter.master, app.actions_tool_rail)
-                    self.assertIs(app.run_button.master, app.actions_tool_rail)
+                    self.assertIs(
+                        app.run_button.master,
+                        app.action_discovery_panel.primary_action_frame,
+                    )
+                    self.assertIs(
+                        app.action_discovery_panel.primary_action_frame.master,
+                        app.actions_tool_rail,
+                    )
+                    self.assertIs(
+                        app.work_item_folder_button.master,
+                        app.action_discovery_panel.primary_action_frame,
+                    )
                     self.assertIs(app.action_help_button.master, app.actions_tool_rail)
                     self.assertEqual(app.actions_tool_rail.winfo_width(), 88)
                     self.assertGreaterEqual(app.results.winfo_width(), 220)
@@ -158,9 +170,11 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app.new_work_item_button.cget("text"), "New item")
                     self.assertFalse(app.new_work_item_button.winfo_manager())
                     self.assertFalse(app.send_work_item_inbox_button.winfo_manager())
+                    self.assertFalse(app.copy_file_to_work_item_button.winfo_manager())
                     self.assertEqual(app.tag_filter.cget("text"), "Tags ▾")
                     self.assertEqual(app.type_filter.cget("text"), "Types ▾")
                     self.assertEqual(app.run_button.cget("text"), "Run")
+                    self.assertFalse(app.work_item_folder_button.winfo_manager())
                     self.assertEqual(app.action_help_button.cget("text"), "?")
                     self.assertTrue(root.bind("<F5>"))
                     self.assertTrue(root.bind("<Control-Shift-D>"))
@@ -186,10 +200,12 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app.results_count_var.get(), "2 work items")
                     self.assertIn("Issue", app.results.get(0))
                     self.assertEqual(app.type_filter.cget("text"), "Projects ▾")
-                    self.assertEqual(app.run_button.cget("text"), "Open")
+                    self.assertEqual(app.run_button.cget("text"), "↗")
+                    self.assertTrue(app.work_item_folder_button.winfo_manager())
                     self.assertFalse(app.passwords_button.winfo_manager())
                     self.assertTrue(app.new_work_item_button.winfo_manager())
                     self.assertTrue(app.send_work_item_inbox_button.winfo_manager())
+                    self.assertTrue(app.copy_file_to_work_item_button.winfo_manager())
                     self.assertIs(
                         app.work_items_button.tk_focusNext(),
                         app.new_work_item_button,
@@ -200,7 +216,24 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     self.assertIs(
                         app.send_work_item_inbox_button.tk_focusNext(),
+                        app.copy_file_to_work_item_button,
+                    )
+                    self.assertIs(
+                        app.copy_file_to_work_item_button.tk_focusNext(),
                         app.type_filter,
+                    )
+                    self.assertIs(
+                        app.run_button.tk_focusNext(),
+                        app.work_item_folder_button,
+                    )
+                    self.assertIs(
+                        app.work_item_folder_button.tk_focusNext(),
+                        app.action_help_button,
+                    )
+                    self.assertLessEqual(
+                        app.action_help_button.winfo_y()
+                        + app.action_help_button.winfo_height(),
+                        app.actions_tool_rail.winfo_height(),
                     )
                     self.assertEqual(app.work_project_filter_var.get(), "All project codes")
 
@@ -212,6 +245,8 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(open_target.call_args.args[0].value, str(exact_workbook))
                     app._execute_selected(open_folder=True)
                     self.assertEqual(open_target.call_args.args[0].value, str(exact_folder))
+                    app.work_item_folder_button.invoke()
+                    self.assertEqual(open_target.call_args.args[0].value, str(exact_folder))
 
                     app.work_items_button.invoke()
                     root.update()
@@ -220,9 +255,11 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app.action_discovery_panel.find_label.cget("text"), "Find action")
                     self.assertEqual(app.type_filter.cget("text"), "Types ▾")
                     self.assertEqual(app.run_button.cget("text"), "Run")
+                    self.assertFalse(app.work_item_folder_button.winfo_manager())
                     self.assertTrue(app.passwords_button.winfo_manager())
                     self.assertFalse(app.new_work_item_button.winfo_manager())
                     self.assertFalse(app.send_work_item_inbox_button.winfo_manager())
+                    self.assertFalse(app.copy_file_to_work_item_button.winfo_manager())
 
                     opened_action_ids: list[str] = []
                     original_show_configuration = app._show_configuration

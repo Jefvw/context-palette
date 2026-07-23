@@ -4,6 +4,13 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Added **Copy file** in Work Items mode. It copies the one exact absolute file
+  path in Input / Output into the selected Work Item folder on a background
+  worker. Quoted Explorer paths are accepted; folders, mixed input, same-folder
+  sources, and collisions are rejected. A private temporary copy is renamed
+  only after completion, and existing files are never overwritten.
+- Added compact **↗** and **📁** Work Item controls so the folder remains
+  directly accessible while **↗** keeps its matching-workbook-first behavior.
 - Added **To inbox** in Work Items mode. It appends current Input / Output to
   Added, Text, Link, and Source columns on the selected exact-name workbook's
   `Inbox` sheet through constrained background Excel automation. Missing sheets

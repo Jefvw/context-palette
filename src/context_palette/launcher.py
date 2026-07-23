@@ -77,6 +77,12 @@ from .windows_credentials import (
 )
 from .workspace_panel import WorkspacePanel
 from .work_item_refresh import WorkItemIndex, WorkItemRefreshCoordinator
+from .work_item_file_copy import (
+    WorkItemFileCopyCoordinator,
+    WorkItemFileCopyError,
+    WorkItemFileCopyResult,
+    file_path_from_workspace,
+)
 from .work_item_inbox import (
     WorkItemInboxCoordinator,
     WorkItemInboxError,
@@ -254,6 +260,7 @@ class LauncherApp:
         self.work_item_metadata: dict[str, WorkItemMetadata] = {}
         self.work_item_index = WorkItemIndex()
         self.work_item_refresh = WorkItemRefreshCoordinator()
+        self.work_item_file_copy = WorkItemFileCopyCoordinator()
         self.work_item_inbox = WorkItemInboxCoordinator()
         self.work_item_refresh_pending = False
         self.work_items_mode = False
@@ -326,6 +333,7 @@ class LauncherApp:
             self.show_requests.put(initial_request)
         self._poll_show_requests()
         self._poll_work_item_refresh()
+        self._poll_work_item_file_copy()
         self._poll_work_item_inbox()
         self._start_work_item_refresh()
         self._audit_tooltips()
@@ -550,6 +558,7 @@ class LauncherApp:
             toggle_work_items=self._toggle_work_items,
             create_work_item=self._show_work_item_creation,
             send_work_item_inbox=self._send_workspace_to_work_item_inbox,
+            copy_file_to_work_item=self._copy_workspace_file_to_work_item,
             select_action_type_filter=self._select_action_type_filter,
             select_tag_filter=self._select_tag_filter,
             select_project_filter=self._select_work_project_filter,
@@ -567,9 +576,11 @@ class LauncherApp:
         self.work_items_button = discovery.work_items_button
         self.new_work_item_button = discovery.new_work_item_button
         self.send_work_item_inbox_button = discovery.send_work_item_inbox_button
+        self.copy_file_to_work_item_button = discovery.copy_file_to_work_item_button
         self.type_filter = discovery.type_filter
         self.tag_filter = discovery.tag_filter
         self.run_button = discovery.run_button
+        self.work_item_folder_button = discovery.work_item_folder_button
         self.action_help_button = discovery.help_button
         self.actions_list_frame = discovery.list_frame
         self.results_scrollbar = discovery.scrollbar
@@ -1129,6 +1140,13 @@ class LauncherApp:
         try:
             self.work_item_inbox.drain()
             self.root.after(100, self._poll_work_item_inbox)
+        except tk.TclError:
+            return
+
+    def _poll_work_item_file_copy(self) -> None:
+        try:
+            self.work_item_file_copy.drain()
+            self.root.after(100, self._poll_work_item_file_copy)
         except tk.TclError:
             return
 
@@ -2638,6 +2656,68 @@ class LauncherApp:
             return "Clipboard"
         return "Input / Output"
 
+    def _copy_workspace_file_to_work_item(
+        self,
+        item: DiscoveredWorkItem | None = None,
+    ) -> None:
+        selected = item or self._selected_work_item()
+        if selected is None:
+            self.status_var.set("Select a Work Item before copying a file.")
+            return
+        if self.work_item_file_copy.running:
+            self.status_var.set("A Work Item file copy is already running.")
+            return
+        try:
+            source = file_path_from_workspace(self._workspace_text())
+        except WorkItemFileCopyError as exc:
+            self.status_var.set(str(exc))
+            messagebox.showerror(
+                "File could not be copied",
+                str(exc),
+                parent=self.root,
+            )
+            return
+
+        self.copy_file_to_work_item_button.configure(state=tk.DISABLED)
+        started = self.work_item_file_copy.start(
+            source,
+            selected.folder_path,
+            lambda result, error: self._complete_work_item_file_copy(
+                selected,
+                result,
+                error,
+            ),
+        )
+        if not started:
+            self.copy_file_to_work_item_button.configure(state=tk.NORMAL)
+            self.status_var.set("A Work Item file copy is already running.")
+            return
+        self.status_var.set(
+            f"Copying {source.name} to {selected.display_name}…"
+        )
+
+    def _complete_work_item_file_copy(
+        self,
+        item: DiscoveredWorkItem,
+        result: WorkItemFileCopyResult | None,
+        error: WorkItemFileCopyError | None,
+    ) -> None:
+        self.copy_file_to_work_item_button.configure(state=tk.NORMAL)
+        if error is not None:
+            self.status_var.set("The file could not be copied to the Work Item.")
+            messagebox.showerror(
+                "File could not be copied",
+                str(error),
+                parent=self.root,
+            )
+            return
+        if result is None:
+            self.status_var.set("The Work Item file copy returned no result.")
+            return
+        self.status_var.set(
+            f"Copied {result.destination_path.name} to {item.display_name}."
+        )
+
     def _complete_work_item_inbox_send(
         self,
         item: DiscoveredWorkItem,
@@ -2728,6 +2808,10 @@ class LauncherApp:
         menu.add_command(
             label="Send Input / Output to Inbox",
             command=lambda: self._send_workspace_to_work_item_inbox(item),
+        )
+        menu.add_command(
+            label="Copy file from Input / Output",
+            command=lambda: self._copy_workspace_file_to_work_item(item),
         )
         menu.add_separator()
         menu.add_command(

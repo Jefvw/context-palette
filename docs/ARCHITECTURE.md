@@ -86,7 +86,9 @@ Presentation and application orchestration.
   context-menu targets pass through one constrained Work Item opening boundary.
   The mode-specific **New item** control opens the existing Configure creation
   flow; the launcher does not duplicate template validation or filesystem
-  creation.
+  creation. The primary action row becomes a two-part control in Work Items
+  mode: **↗** retains workbook-first Open behavior while its adjacent folder
+  button requests the same constrained boundary with the folder target.
 
 The main-window construction is divided into focused header, results/command-surface, shortcut, workspace, and footer builders. Inbox and Draft windows still live in this module and are the next safe extraction boundary; this is documented in `TECHNICAL_REVIEW.md`.
 
@@ -379,6 +381,21 @@ registered automation instance remain open;
 workbooks opened by the integration are saved and closed. A workbook locked in
 another Excel instance fails safely as locked rather than opening a read-only
 copy. No third-party Python package or direct OOXML rewrite is introduced.
+
+### `work_item_file_copy.py`
+
+Owns the UI-independent Work Item file-copy boundary. It accepts one exact
+absolute file path from Input / Output, rejects folders and mixed/multiple
+lines, validates the selected Work Item folder, and derives the destination
+only from the source filename. It never accepts a destination name or
+overwrites an existing entry.
+
+Content is copied off the Tk thread to a unique temporary file inside the
+destination folder and renamed into place only after completion. Errors remove
+only temporary output created by that attempt; source and existing destination
+files are never changed. Metadata preservation is best effort because not all
+local and network filesystems support the same Windows attributes. A
+single-flight coordinator returns completion to Tk through main-thread polling.
 
 ### `single_instance.py`
 

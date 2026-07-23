@@ -15,6 +15,8 @@ This file contains actionable future work. Completed user-visible work belongs i
 - Evaluate whether safe discovery across multiple separately running Excel
   instances is worthwhile. The current integration uses Excel's registered
   automation instance and otherwise reports a locked workbook without writing.
+- Manually verify **Copy file** with a representative network source, a large
+  file, a destination collision, and an unavailable Work Item source.
 - Perform and record the manual Windows UI/accessibility smoke test for the guided Configure workflow.
 - Extract secondary Inbox and Draft views from `launcher.py` incrementally
   without changing behavior. The sheet view has been extracted.

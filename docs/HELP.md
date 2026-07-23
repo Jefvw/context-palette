@@ -159,7 +159,7 @@ Blue rows are pinned slots 1–5. Green rows are focus-context slots 6–9. Neut
 Choose **Work** in the Actions rail to use the same result area for configured
 local work-item folders. The heading changes to **Work Items**, Find becomes
 **Find Work Item**, action-only **Passwords** is hidden, **Types** becomes
-**Projects**, and **Run** becomes **Open**. Choose **Work** again to return to
+**Projects**, and **Run** becomes **↗** (Open). Choose **Work** again to return to
 Actions. Existing action filters and Focus slots are preserved while Work Items
 is active.
 
@@ -167,13 +167,16 @@ is active.
   Configure opens on the missing source or generic Excel template first.
 - **To inbox** appends the current Input / Output to the selected Work Item
   workbook's `Inbox` sheet. The result context menu offers the same command.
+- **Copy file** copies the one exact file path in Input / Output into the
+  selected Work Item folder. The result context menu offers the same command.
 - Find matches the folder name, parsed kind, organisation, subject, source
   name, detected project codes, and personal tags.
 - **Projects** filters by one detected four-character project code.
 - **Tags** filters by one personal Work Item tag.
-- Enter, double-click, or **Open** opens the exact matching
+- Enter, double-click, or **↗** opens the exact matching
   `<folder-name>.xlsx`; when it does not exist, the work-item folder opens.
-- Shift+Enter always opens the work-item folder.
+- The **📁** button beside **↗**, or Shift+Enter, always opens the work-item
+  folder directly.
 - Right-click offers the exact workbook when available, the work-item folder,
   and the configured source folder.
 - Right-click a result and choose **Edit personal tags…** to open that exact
@@ -235,6 +238,25 @@ then send the row. It never overwrites an existing workbook. If the template is
 missing, it offers to open Work Items configuration. Locked, read-only,
 unavailable, invalid, or oversized destinations fail with an error and do not
 report success.
+
+### Copy a file into a Work Item
+
+Choose **Work**, select a Work Item, put one exact absolute Windows file path in
+**Input / Output**, and choose **Copy file**. Paths copied with Windows
+Explorer's **Copy as path** command may remain inside matching quotation marks.
+
+Context Palette copies the file into the selected Work Item folder under its
+existing filename. Copying runs in the background. The final filename appears
+only after the content copy completes, so an interrupted copy does not expose a
+partial file under that name.
+
+For safety:
+
+- Input / Output must contain only one file path, not prose or several paths.
+- Folder paths are rejected.
+- An existing destination file is never replaced or renamed automatically.
+- A source file already inside the Work Item is rejected.
+- Missing, unavailable, or failed copies produce an actionable error.
 
 ## Quick-action surface
 

@@ -24,6 +24,8 @@ The application is under active development. It already supports the complete Ca
   generic `.xlsx` template, using an editable suggested name.
 - Sends the current Input / Output text to columns A–D of a selected Work
   Item workbook's `Inbox` sheet, creating that sheet when necessary.
+- Copies the one exact Windows file path in Input / Output into the selected
+  Work Item folder without replacing an existing file.
 - Stores personal data locally and writes application-managed JSON atomically.
 
 ## Requirements
