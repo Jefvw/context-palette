@@ -4,6 +4,12 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Replaced technical action IDs in the Configure Contexts and Quick actions
+  tables with human-readable action names. Broken references remain visible as
+  clearly labelled missing actions.
+- Added Find fields and live result counts to Configure Contexts and Quick
+  actions. `Ctrl+F` now targets the current searchable Configure tab instead of
+  focusing a hidden Actions field.
 - Corrected context-deletion confirmation and success feedback to count
   context-owned action assignments rather than only legacy classifications
   stored inside actions.

@@ -124,6 +124,14 @@ explicit Focus Actions and flat global search results. Its temporary fixture
 proves that only explicit context members enter the Focus list, search remains
 global, a Focus change does not silently filter visible global results, and
 clearing Find restores the list when Focus Actions mode remains active.
+The same module also constructs a clean-PC data directory containing only the
+tracked Built-in actions, context, and Quick-action files. It verifies that the
+launcher and Configure window load entirely from those files without creating
+Inbox, palette, Work Item, or local customization files merely by reading
+configuration. A second clean-PC integration creates the first personal action,
+context, and Quick action through the real Configure save boundaries, then
+constructs a fresh launcher and verifies all three reload while unrelated
+private files remain absent.
 It also verifies that the real Configure notebook exposes Diagnostics with a
 read-only rendered summary plus keyboard-reachable Refresh and Copy controls.
 `tests.test_diagnostics` protects the allow-listed parser and privacy boundary;

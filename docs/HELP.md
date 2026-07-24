@@ -354,9 +354,19 @@ Keyboard shortcuts in these guided forms:
   button.
 - Use the normal arrow keys and Space in the checklist, then `Esc` to close it.
 
-In **Actions**, use **Find actions** or press `Ctrl+F` to filter by short name,
-description, built-in type, context, tag, state, or source. Multiple words must
-all match. Press Enter on the selected result to edit it.
+Use the visible **Find** field in **Actions**, **Contexts**, or **Quick actions**
+to reduce that table. `Ctrl+F` focuses and selects the Find field for the
+current one of those tabs. On another Configure tab, it opens the Actions tab
+and focuses **Find actions**. Multiple words must all match.
+
+- Actions search short name, description, built-in type, context, tag, state,
+  and storage.
+- Contexts search name, description, member and preferred action names, and
+  storage.
+- Quick actions search group name, button name, assigned action names, and
+  storage.
+
+Press Enter on a selected result to edit it.
 
 Use **Delete selected** to remove an action. The confirmation identifies how
 many saved references will also be removed. Pins, Focus slots, context

@@ -121,6 +121,99 @@ def context_membership_count(
     return len(member_ids)
 
 
+def action_reference_labels(
+    action_ids: tuple[str, ...],
+    actions: list[Action],
+) -> tuple[str, ...]:
+    """Resolve stable action references into names suitable for the UI."""
+    actions_by_id = {action.id: action for action in actions}
+    return tuple(
+        (
+            actions_by_id[action_id].title
+            if action_id in actions_by_id
+            else f"Missing action: {action_id}"
+        )
+        for action_id in action_ids
+    )
+
+
+def context_action_summary(
+    context: ContextDefinition,
+    actions: list[Action],
+) -> str:
+    preferred = action_reference_labels(context.preferred_action_ids, actions)
+    preferred_text = ", ".join(preferred) if preferred else "automatic"
+    return (
+        f"{context_membership_count(context, actions)} member(s) | "
+        f"Preferred: {preferred_text}"
+    )
+
+
+def context_matches_filter(
+    context: ContextDefinition,
+    query: str,
+    *,
+    actions: list[Action],
+    personal: bool,
+) -> bool:
+    terms = [term.casefold() for term in query.split() if term.strip()]
+    if not terms:
+        return True
+    member_ids = (
+        context.action_ids
+        if context.action_ids is not None
+        else tuple(
+            action.id
+            for action in actions
+            if action.belongs_to_context(context.name)
+        )
+    )
+    labels = action_reference_labels(
+        tuple(dict.fromkeys((*member_ids, *context.preferred_action_ids))),
+        actions,
+    )
+    searchable = " ".join(
+        (
+            context.name,
+            context.description,
+            *labels,
+            f"{LOCAL_DESTINATION} local personal"
+            if personal
+            else f"{PROJECT_DESTINATION} project shared",
+        )
+    ).casefold()
+    return all(term in searchable for term in terms)
+
+
+def quick_action_matches_filter(
+    group: CommandGroup,
+    item: CommandItem | None,
+    query: str,
+    *,
+    actions: list[Action],
+    personal: bool,
+) -> bool:
+    terms = [term.casefold() for term in query.split() if term.strip()]
+    if not terms:
+        return True
+    labels = (
+        action_reference_labels(command_item_action_ids(item), actions)
+        if item is not None
+        else ()
+    )
+    searchable = " ".join(
+        (
+            group.label,
+            item.label if item is not None else "",
+            *labels,
+            f"{LOCAL_DESTINATION} local personal"
+            if personal
+            else f"{PROJECT_DESTINATION} project shared",
+        )
+    ).casefold()
+    return all(term in searchable for term in terms)
+
+
 def select_first_tree_item(tree: ttk.Treeview, *, descend: bool = False) -> None:
     roots = tree.get_children()
     if not roots:
@@ -179,6 +272,10 @@ class ConfigurationWindow:
         self.groups: list[CommandGroup] = []
         self.action_filter_var = tk.StringVar()
         self.action_filter_count_var = tk.StringVar()
+        self.context_filter_var = tk.StringVar()
+        self.context_filter_count_var = tk.StringVar()
+        self.button_filter_var = tk.StringVar()
+        self.button_filter_count_var = tk.StringVar()
         self.initial_tab = initial_tab
         self.initial_action_id = initial_action_id
         self.initial_work_item_key = initial_work_item_key
@@ -238,7 +335,7 @@ class ConfigurationWindow:
         }
         self.notebook.select(tab_indexes.get(self.initial_tab, 0))
         self.notebook.bind("<<NotebookTabChanged>>", self._focus_selected_tab)
-        self.window.bind("<Control-f>", self._focus_action_filter)
+        self.window.bind("<Control-f>", self._focus_current_filter)
         self._reload()
         if self.initial_work_item_key:
             self.work_items_panel.select_item(self.initial_work_item_key)
@@ -410,6 +507,24 @@ class ConfigurationWindow:
             ),
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(0, 6))
+        filter_row = ttk.Frame(tab)
+        filter_row.pack(fill=tk.X, pady=(0, 6))
+        ttk.Label(filter_row, text="Find contexts").pack(side=tk.LEFT)
+        self.context_filter_entry = ttk.Entry(
+            filter_row,
+            textvariable=self.context_filter_var,
+        )
+        self.context_filter_entry.pack(
+            side=tk.LEFT,
+            fill=tk.X,
+            expand=True,
+            padx=(6, 8),
+        )
+        ttk.Label(
+            filter_row,
+            textvariable=self.context_filter_count_var,
+            style="Muted.TLabel",
+        ).pack(side=tk.RIGHT)
         self.context_tree = ttk.Treeview(
             tab, columns=("source", "actions"), show="tree headings", selectmode="browse"
         )
@@ -422,6 +537,10 @@ class ConfigurationWindow:
         self.context_tree.pack(fill=tk.BOTH, expand=True)
         self.context_tree.bind("<Double-1>", lambda _event: self._edit_context())
         self.context_tree.bind("<Return>", lambda _event: self._edit_context())
+        self.context_filter_var.trace_add(
+            "write",
+            lambda *_args: self._render_contexts(),
+        )
         controls = ttk.Frame(tab)
         controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0), before=self.context_tree)
         ttk.Button(controls, text="Add context", command=self._add_context).pack(side=tk.LEFT)
@@ -438,6 +557,24 @@ class ConfigurationWindow:
             text="Buttons safely reference existing actions; they never contain commands.",
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(0, 6))
+        filter_row = ttk.Frame(tab)
+        filter_row.pack(fill=tk.X, pady=(0, 6))
+        ttk.Label(filter_row, text="Find Quick actions").pack(side=tk.LEFT)
+        self.button_filter_entry = ttk.Entry(
+            filter_row,
+            textvariable=self.button_filter_var,
+        )
+        self.button_filter_entry.pack(
+            side=tk.LEFT,
+            fill=tk.X,
+            expand=True,
+            padx=(6, 8),
+        )
+        ttk.Label(
+            filter_row,
+            textvariable=self.button_filter_count_var,
+            style="Muted.TLabel",
+        ).pack(side=tk.RIGHT)
         self.button_tree = ttk.Treeview(
             tab, columns=("source", "actions"), show="tree headings", selectmode="browse"
         )
@@ -462,6 +599,10 @@ class ConfigurationWindow:
         self.button_tree.bind(
             "<<TreeviewSelect>>",
             lambda _event: self._update_button_preview(),
+        )
+        self.button_filter_var.trace_add(
+            "write",
+            lambda *_args: self._render_buttons(),
         )
         controls = ttk.Frame(tab)
         controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0), before=self.button_tree)
@@ -633,6 +774,20 @@ class ConfigurationWindow:
         self.action_filter_entry.selection_range(0, tk.END)
         return "break"
 
+    def _focus_current_filter(self, _event: tk.Event | None = None) -> str:
+        selected = self.notebook.index(self.notebook.select())
+        entry = {
+            0: self.action_filter_entry,
+            2: self.context_filter_entry,
+            3: self.button_filter_entry,
+        }.get(selected)
+        if entry is None:
+            self.notebook.select(0)
+            entry = self.action_filter_entry
+        entry.focus_set()
+        entry.selection_range(0, tk.END)
+        return "break"
+
     def _reload(self) -> None:
         self.window.configure(cursor="wait")
         self.window.update_idletasks()
@@ -652,52 +807,102 @@ class ConfigurationWindow:
         finally:
             self.window.configure(cursor="")
         self._render_actions()
-        local_context_names = {
+        self.local_context_names = {
             item.name.casefold()
             for item in (load_contexts(self.local_contexts_path) if self.local_contexts_path.exists() else [])
         }
+        self._render_contexts()
+        self._render_buttons()
+        self._refresh_diagnostics()
+
+    def _render_contexts(self) -> None:
         self.context_tree.delete(*self.context_tree.get_children())
+        query = self.context_filter_var.get()
+        matches = 0
         for index, context in enumerate(self.contexts):
-            local = context.name.casefold() in local_context_names
+            local = context.name.casefold() in self.local_context_names
+            if not context_matches_filter(
+                context,
+                query,
+                actions=self.actions,
+                personal=local,
+            ):
+                continue
+            matches += 1
             self.context_tree.insert(
                 "", tk.END, iid=f"context-{index}", text=context.name,
                 values=(
                     LOCAL_DESTINATION if local else PROJECT_DESTINATION,
-                    (
-                        f"{len(context.action_ids or ())} member(s) | "
-                        f"{', '.join(context.preferred_action_ids) or 'Automatic slots'}"
-                    ),
+                    context_action_summary(context, self.actions),
                 ),
                 tags=("local",) if local else ("shared",),
             )
         self.context_tree.tag_configure("shared", foreground="#666666")
         select_first_tree_item(self.context_tree)
+        self.context_filter_count_var.set(
+            f"{matches} of {len(self.contexts)}"
+            if query.strip()
+            else f"{len(self.contexts)} contexts"
+        )
+
+    def _render_buttons(self) -> None:
         self.button_tree.delete(*self.button_tree.get_children())
+        query = self.button_filter_var.get()
+        total_items = sum(len(group.items) for group in self.groups)
+        matching_items = 0
         for group_index, group in enumerate(self.groups):
             local = bool(
                 group.source_path
                 and group.source_path.resolve() == self.local_command_surface_path.resolve()
             )
+            visible_items = [
+                (item_index, item)
+                for item_index, item in enumerate(group.items)
+                if quick_action_matches_filter(
+                    group,
+                    item,
+                    query,
+                    actions=self.actions,
+                    personal=local,
+                )
+            ]
+            group_matches = quick_action_matches_filter(
+                group,
+                None,
+                query,
+                actions=self.actions,
+                personal=local,
+            )
+            if not visible_items and not group_matches:
+                continue
+            if group_matches and not visible_items:
+                visible_items = list(enumerate(group.items))
+            matching_items += len(visible_items)
             group_iid = f"group-{group_index}"
             self.button_tree.insert(
                 "", tk.END, iid=group_iid, text=group.label,
                 values=(LOCAL_DESTINATION if local else PROJECT_DESTINATION, ""),
                 tags=("local",) if local else ("shared",), open=True,
             )
-            for item_index, item in enumerate(group.items):
+            for item_index, item in visible_items:
                 ids = command_item_action_ids(item)
                 self.button_tree.insert(
                     group_iid, tk.END, iid=f"button-{group_index}-{item_index}",
                     text=item.label,
                     values=(
                         LOCAL_DESTINATION if local else PROJECT_DESTINATION,
-                        ", ".join(ids),
+                        ", ".join(action_reference_labels(ids, self.actions)),
                     ),
                     tags=("local",) if local else ("shared",),
                 )
         self.button_tree.tag_configure("shared", foreground="#666666")
         select_first_tree_item(self.button_tree, descend=True)
-        self._refresh_diagnostics()
+        self.button_filter_count_var.set(
+            f"{matching_items} of {total_items}"
+            if query.strip()
+            else f"{total_items} Quick actions"
+        )
+        self._update_button_preview()
 
     def _refresh_diagnostics(self) -> None:
         summary = summarize_diagnostics(
@@ -1383,13 +1588,10 @@ class ConfigurationWindow:
                 f"{destination}"
             )
             return
-        actions_by_id = {action.id: action for action in self.actions}
-        labels = [
-            actions_by_id[action_id].title
-            if action_id in actions_by_id
-            else f"Missing: {action_id}"
-            for action_id in command_item_action_ids(item)
-        ]
+        labels = action_reference_labels(
+            command_item_action_ids(item),
+            self.actions,
+        )
         self.button_preview_var.set(
             f"Left click: {labels[0] if labels else 'No action'} | "
             f"Right-click menu: {', '.join(labels) if labels else 'empty'} | "

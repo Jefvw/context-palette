@@ -21,11 +21,339 @@ from context_palette.launcher import (
     MINIMUM_WORKSPACE_HEIGHT,
     LauncherApp,
 )
+from context_palette.actions import Action
+from context_palette.command_surface import CommandGroup, CommandItem
+from context_palette.configuration_window import (
+    ConfigurationWindow,
+    LOCAL_DESTINATION,
+)
+from context_palette.contexts import ContextDefinition
 from context_palette.workspace_transforms import WORKSPACE_TRANSFORM_GROUPS
 
 
 @unittest.skipUnless(sys.platform == "win32", "The launcher smoke test requires Windows Tk.")
 class LauncherSmokeTests(unittest.TestCase):
+    def test_clean_pc_loads_built_in_configuration_without_creating_local_files(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            data = Path(temporary_directory)
+            for filename in ("actions.json", "contexts.json", "command_surface.json"):
+                (data / filename).write_bytes((ROOT / "data" / filename).read_bytes())
+            built_in_action_count = len(
+                json.loads((data / "actions.json").read_text(encoding="utf-8"))[
+                    "actions"
+                ]
+            )
+            built_in_group_count = len(
+                json.loads(
+                    (data / "command_surface.json").read_text(encoding="utf-8")
+                )["groups"]
+            )
+            cheatsheets_dir = data / "cheatsheets"
+            cheatsheets_dir.mkdir()
+            local_paths = tuple(
+                data / filename
+                for filename in (
+                    "local_actions.json",
+                    "local_contexts.json",
+                    "local_command_surface.json",
+                    "palette.json",
+                    "inbox.json",
+                    "local_work_item_sources.json",
+                    "local_work_item_metadata.json",
+                    "local_work_item_settings.json",
+                )
+            )
+            self.assertFalse(any(path.exists() for path in local_paths))
+
+            root = tk.Tk()
+            root_destroyed = False
+            try:
+                with (
+                    patch(
+                        "context_palette.launcher.SingleInstanceServer.start",
+                        return_value=True,
+                    ),
+                    patch("context_palette.launcher.SingleInstanceServer.stop"),
+                    patch(
+                        "context_palette.launcher.GlobalHotkey.start",
+                        return_value=False,
+                    ),
+                    patch("context_palette.launcher.GlobalHotkey.stop"),
+                    patch(
+                        "context_palette.launcher.messagebox.showerror"
+                    ) as error,
+                ):
+                    app = LauncherApp(
+                        root,
+                        data / "actions.json",
+                        data / "local_actions.json",
+                        data / "contexts.json",
+                        data / "local_contexts.json",
+                        data / "command_surface.json",
+                        data / "local_command_surface.json",
+                        data / "palette.json",
+                        data / "inbox.json",
+                        cheatsheets_dir,
+                        instance_port=0,
+                    )
+                    root.update()
+
+                    self.assertEqual(len(app.actions), built_in_action_count)
+                    self.assertEqual(app.local_action_ids, set())
+                    self.assertEqual(
+                        [context.name for context in app.context_definitions],
+                        ["Developing Context Palette"],
+                    )
+                    self.assertEqual(len(app.command_groups), built_in_group_count)
+                    self.assertEqual(app.palette_state.focus_context, "General")
+                    self.assertEqual(app.work_item_sources, ())
+                    self.assertFalse(any(path.exists() for path in local_paths))
+
+                    app._show_configuration()
+                    root.update()
+                    configure_windows = [
+                        child
+                        for child in root.winfo_children()
+                        if isinstance(child, tk.Toplevel)
+                        and child.title() == "Configure Context Palette"
+                    ]
+                    self.assertEqual(len(configure_windows), 1)
+                    trees_by_heading = {
+                        tree.heading("#0", "text"): tree
+                        for tree in self._descendants(configure_windows[0])
+                        if isinstance(tree, ttk.Treeview)
+                    }
+                    self.assertEqual(
+                        len(trees_by_heading["Action"].get_children()),
+                        len(app.actions),
+                    )
+                    self.assertEqual(
+                        len(trees_by_heading["Context"].get_children()),
+                        1,
+                    )
+                    self.assertEqual(
+                        len(trees_by_heading["Group / button"].get_children()),
+                        len(app.command_groups),
+                    )
+                    error.assert_not_called()
+                    self.assertFalse(any(path.exists() for path in local_paths))
+
+                    configure_windows[0].destroy()
+                    for callback_id in root.tk.splitlist(
+                        root.tk.call("after", "info")
+                    ):
+                        root.after_cancel(callback_id)
+                    app.quit_app()
+                    root_destroyed = True
+            finally:
+                if not root_destroyed:
+                    root.destroy()
+
+    def test_clean_pc_creates_first_personal_records_and_reloads_them(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            data = Path(temporary_directory)
+            for filename in ("actions.json", "contexts.json", "command_surface.json"):
+                (data / filename).write_bytes((ROOT / "data" / filename).read_bytes())
+            cheatsheets_dir = data / "cheatsheets"
+            cheatsheets_dir.mkdir()
+            local_actions = data / "local_actions.json"
+            local_contexts = data / "local_contexts.json"
+            local_surface = data / "local_command_surface.json"
+            unrelated_private_paths = tuple(
+                data / filename
+                for filename in (
+                    "palette.json",
+                    "inbox.json",
+                    "local_work_item_sources.json",
+                    "local_work_item_metadata.json",
+                    "local_work_item_settings.json",
+                )
+            )
+
+            root = tk.Tk()
+            first_root_destroyed = False
+            try:
+                with (
+                    patch(
+                        "context_palette.launcher.SingleInstanceServer.start",
+                        return_value=True,
+                    ),
+                    patch("context_palette.launcher.SingleInstanceServer.stop"),
+                    patch(
+                        "context_palette.launcher.GlobalHotkey.start",
+                        return_value=False,
+                    ),
+                    patch("context_palette.launcher.GlobalHotkey.stop"),
+                    patch(
+                        "context_palette.configuration_window.messagebox.showerror"
+                    ) as error,
+                ):
+                    app = LauncherApp(
+                        root,
+                        data / "actions.json",
+                        local_actions,
+                        data / "contexts.json",
+                        local_contexts,
+                        data / "command_surface.json",
+                        local_surface,
+                        data / "palette.json",
+                        data / "inbox.json",
+                        cheatsheets_dir,
+                        instance_port=0,
+                    )
+                    configuration = ConfigurationWindow(
+                        root,
+                        actions=app.actions,
+                        local_action_ids=app.local_action_ids,
+                        shared_actions_path=data / "actions.json",
+                        local_actions_path=local_actions,
+                        contexts_path=data / "contexts.json",
+                        local_contexts_path=local_contexts,
+                        command_surface_path=data / "command_surface.json",
+                        local_command_surface_path=local_surface,
+                        palette_path=data / "palette.json",
+                        work_item_sources_path=data / "local_work_item_sources.json",
+                        work_item_metadata_path=data / "local_work_item_metadata.json",
+                        work_item_settings_path=data / "local_work_item_settings.json",
+                        work_item_sources=app.work_item_sources,
+                        work_item_metadata=app.work_item_metadata,
+                        work_item_index=app.work_item_index,
+                        on_change=app._reload,
+                    )
+                    personal_action = Action(
+                        "personal-first",
+                        "Personal first action",
+                        "General",
+                        "copy_text",
+                        "Hello",
+                    )
+                    personal_context = ContextDefinition(
+                        "Personal focus",
+                        preferred_action_ids=(personal_action.id,),
+                        action_ids=(personal_action.id,),
+                    )
+                    personal_group = CommandGroup(
+                        "personal-tools",
+                        "Personal tools",
+                        (
+                            CommandItem(
+                                "personal-first-button",
+                                "Personal first",
+                                action_ids=(personal_action.id,),
+                            ),
+                        ),
+                    )
+
+                    self.assertTrue(
+                        configuration._save_action(
+                            personal_action,
+                            LOCAL_DESTINATION,
+                        )
+                    )
+                    self.assertTrue(
+                        configuration._save_context(
+                            personal_context,
+                            "",
+                            target_path=local_contexts,
+                        )
+                    )
+                    self.assertTrue(
+                        configuration._save_group(
+                            personal_group,
+                            "",
+                            LOCAL_DESTINATION,
+                        )
+                    )
+                    root.update()
+
+                    self.assertTrue(local_actions.exists())
+                    self.assertTrue(local_contexts.exists())
+                    self.assertTrue(local_surface.exists())
+                    self.assertFalse(
+                        any(path.exists() for path in unrelated_private_paths)
+                    )
+                    error.assert_not_called()
+
+                    configuration.window.destroy()
+                    for callback_id in root.tk.splitlist(
+                        root.tk.call("after", "info")
+                    ):
+                        root.after_cancel(callback_id)
+                    app.quit_app()
+                    first_root_destroyed = True
+            finally:
+                if not first_root_destroyed:
+                    root.destroy()
+
+            restarted_root = tk.Tk()
+            restarted_root_destroyed = False
+            try:
+                with (
+                    patch(
+                        "context_palette.launcher.SingleInstanceServer.start",
+                        return_value=True,
+                    ),
+                    patch("context_palette.launcher.SingleInstanceServer.stop"),
+                    patch(
+                        "context_palette.launcher.GlobalHotkey.start",
+                        return_value=False,
+                    ),
+                    patch("context_palette.launcher.GlobalHotkey.stop"),
+                    patch(
+                        "context_palette.launcher.messagebox.showerror"
+                    ) as restart_error,
+                ):
+                    restarted = LauncherApp(
+                        restarted_root,
+                        data / "actions.json",
+                        local_actions,
+                        data / "contexts.json",
+                        local_contexts,
+                        data / "command_surface.json",
+                        local_surface,
+                        data / "palette.json",
+                        data / "inbox.json",
+                        cheatsheets_dir,
+                        instance_port=0,
+                    )
+                    restarted_root.update()
+
+                    self.assertIn(
+                        personal_action.id,
+                        {action.id for action in restarted.actions},
+                    )
+                    self.assertEqual(
+                        restarted.local_action_ids,
+                        {personal_action.id},
+                    )
+                    self.assertIn(
+                        personal_context.name,
+                        {context.name for context in restarted.context_definitions},
+                    )
+                    reloaded_group = next(
+                        group
+                        for group in restarted.command_groups
+                        if group.id == personal_group.id
+                    )
+                    self.assertEqual(
+                        reloaded_group.items[0].action_ids,
+                        (personal_action.id,),
+                    )
+                    self.assertFalse(
+                        any(path.exists() for path in unrelated_private_paths)
+                    )
+                    restart_error.assert_not_called()
+
+                    for callback_id in restarted_root.tk.splitlist(
+                        restarted_root.tk.call("after", "info")
+                    ):
+                        restarted_root.after_cancel(callback_id)
+                    restarted.quit_app()
+                    restarted_root_destroyed = True
+            finally:
+                if not restarted_root_destroyed:
+                    restarted_root.destroy()
+
     def test_complete_launcher_constructs_and_closes(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             data = Path(temporary_directory)

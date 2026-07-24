@@ -19,8 +19,12 @@ from context_palette.configuration_window import (
     GroupDialog,
     LOCAL_DESTINATION,
     PROJECT_DESTINATION,
+    action_reference_labels,
     action_matches_filter,
+    context_action_summary,
     context_membership_count,
+    context_matches_filter,
+    quick_action_matches_filter,
     select_first_tree_item,
     _focus_entry,
 )
@@ -144,6 +148,110 @@ class ContextMembershipCountTests(unittest.TestCase):
         ]
 
         self.assertEqual(context_membership_count(context, actions), 3)
+
+
+class ActionReferenceLabelTests(unittest.TestCase):
+    def test_action_references_use_names_and_identify_missing_actions(self):
+        actions = [
+            Action("open-project", "Open project folder", "General", "open_folder", "."),
+            Action("copy-greeting", "Friendly greeting", "General", "copy_text", "Hi"),
+        ]
+
+        labels = action_reference_labels(
+            ("open-project", "missing-id", "copy-greeting"),
+            actions,
+        )
+
+        self.assertEqual(
+            labels,
+            (
+                "Open project folder",
+                "Missing action: missing-id",
+                "Friendly greeting",
+            ),
+        )
+
+    def test_context_summary_uses_action_names_instead_of_ids(self):
+        actions = [
+            Action("open-project", "Open project folder", "General", "open_folder", "."),
+            Action("open-code", "Open code editor", "General", "launch_app", "code.exe"),
+        ]
+        context = ContextDefinition(
+            "Developing",
+            preferred_action_ids=("open-project", "open-code"),
+            action_ids=("open-project", "open-code"),
+        )
+
+        summary = context_action_summary(context, actions)
+
+        self.assertEqual(
+            summary,
+            "2 member(s) | Preferred: Open project folder, Open code editor",
+        )
+        self.assertNotIn("open-project", summary)
+
+
+class ConfigurationFilterTests(unittest.TestCase):
+    def test_context_filter_searches_names_descriptions_actions_and_storage(self):
+        actions = [
+            Action("open-code", "Open code editor", "General", "launch_app", "code.exe")
+        ]
+        context = ContextDefinition(
+            "Development",
+            description="Application maintenance",
+            action_ids=("open-code",),
+        )
+
+        for query in (
+            "development",
+            "maintenance",
+            "open code",
+            "my configuration",
+        ):
+            self.assertTrue(
+                context_matches_filter(
+                    context,
+                    query,
+                    actions=actions,
+                    personal=True,
+                )
+            )
+        self.assertFalse(
+            context_matches_filter(
+                context,
+                "database",
+                actions=actions,
+                personal=True,
+            )
+        )
+
+    def test_quick_action_filter_searches_group_item_action_and_storage(self):
+        actions = [
+            Action("open-code", "Open code editor", "General", "launch_app", "code.exe")
+        ]
+        item = CommandItem("code", "Editor", action_ids=("open-code",))
+        group = CommandGroup("navigation", "Navigation", (item,))
+
+        for query in ("navigation", "editor", "open code", "built-in"):
+            self.assertTrue(
+                quick_action_matches_filter(
+                    group,
+                    item,
+                    query,
+                    actions=actions,
+                    personal=False,
+                )
+            )
+        self.assertFalse(
+            quick_action_matches_filter(
+                group,
+                item,
+                "personal",
+                actions=actions,
+                personal=False,
+            )
+        )
+
 
 class FakeEntry:
     def __init__(self) -> None:
@@ -360,6 +468,20 @@ class ConfigurationDialogTests(unittest.TestCase):
         self.assertEqual(result, "break")
         self.assertEqual(configuration.action_filter_entry.focus_calls, 1)
         self.assertEqual(configuration.action_filter_entry.selection, (0, "end"))
+
+    def test_find_shortcut_focuses_filter_for_current_tab(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.notebook = FakeNotebook(selected=2)
+        configuration.action_filter_entry = FakeEntry()
+        configuration.context_filter_entry = FakeEntry()
+        configuration.button_filter_entry = FakeEntry()
+
+        result = configuration._focus_current_filter()
+
+        self.assertEqual(result, "break")
+        self.assertEqual(configuration.context_filter_entry.focus_calls, 1)
+        self.assertEqual(configuration.context_filter_entry.selection, (0, "end"))
+        self.assertEqual(configuration.action_filter_entry.focus_calls, 0)
 
     def test_action_filter_matches_multiple_visible_facets(self) -> None:
         action = Action(
