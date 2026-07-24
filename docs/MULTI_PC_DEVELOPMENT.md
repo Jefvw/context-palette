@@ -138,16 +138,18 @@ settings. Setup adopts an existing unmarked environment once, then stores an
 ignored repository-location marker inside `.venv` so subsequent folder copies
 are detected reliably.
 
-Python discovery checks the `py` launcher, `python` on `PATH`, and standard
-python.org per-user and system installation folders. If a computer uses a
-custom folder, identify it for that PowerShell session before development:
+Python discovery prefers the version in `.python-version`, then accepts a newer
+Python 3.x with Tkinter from `PATH` (including Miniconda), standard python.org
+per-user and system installation folders, or a custom path. If a computer uses
+a custom folder, identify it for that PowerShell session before development:
 
 ```powershell
 $env:CONTEXT_PALETTE_PYTHON = "D:\Tools\Python312\python.exe"
 .\develop-context-palette.bat
 ```
 
-The selected executable must match `.python-version` and include Tkinter.
+The selected executable must be at least `.python-version`, remain in the same
+major Python family, and include Tkinter.
 
 Setup and application startup also remove local actions and references that
 belong to deliberately retired features. These migrations are idempotent and

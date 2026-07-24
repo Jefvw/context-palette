@@ -31,8 +31,8 @@ access before concluding that `.venv` needs repair. Rebuild the environment only
 when the normal Windows check also fails.
 
 Setup applies the same safeguard. A failed `.venv` check does not move or
-rebuild the environment unless an independent compatible Python 3.12
-interpreter can launch in that process. When both checks are inaccessible,
+rebuild the environment unless an independent compatible Python 3.12 or newer
+3.x interpreter can launch in that process. When both checks are inaccessible,
 setup stops and requests a normal Windows retry.
 
 ## Targeted tests

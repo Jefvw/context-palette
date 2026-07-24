@@ -11,7 +11,9 @@ This project has not published a versioned release. Changes are recorded under *
   available. Direct first-time setup also returns a failure status when Python
   is unavailable or the new environment cannot be created. Python discovery
   now includes standard Windows installation folders and an explicit custom
-  executable override for computers without a launcher or `PATH` entry.
+  executable override for computers without a launcher or `PATH` entry. The
+  tracked Python version is now a minimum: newer Python 3.x installations,
+  including compatible Miniconda installations, are accepted.
 - Reused one live Configure workspace across the main button, Manage focuses,
   action editing, Work Item configuration, and diagnostics routes. Repeated
   requests now raise and retarget the existing editor instead of creating

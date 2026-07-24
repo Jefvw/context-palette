@@ -1364,4 +1364,17 @@ process-level inaccessibility without parsing localized Windows error text.
 **Portability:** Discovery checks the Python launcher, `PATH`, standard
 python.org Windows locations, and an optional machine-local
 `CONTEXT_PALETTE_PYTHON` executable path. Every candidate must prove that its
-version matches `.python-version` and that Tkinter imports successfully.
+version meets the `.python-version` baseline and that Tkinter imports
+successfully.
+
+## 2026-07-24 - Treat the tracked Python version as a minimum
+
+**Decision:** Prefer the Python version declared by `.python-version`, but
+accept newer Python 3.x interpreters that can import Tkinter. Continue rejecting
+older releases and a future incompatible major version.
+
+**Reason:** Context Palette worked with compatible Miniconda installations
+before setup required an exact Python 3.12 match. Exact matching unnecessarily
+broke multi-computer development even though the application and dependencies
+support newer Python 3.x releases. The tracked version remains a reproducible
+baseline without dictating every computer's installation layout.

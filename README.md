@@ -35,12 +35,12 @@ confirms creation; Archived actions remain outside normal retrieval. See
 ## Requirements
 
 - Windows 10 or Windows 11.
-- Python 3.12 with Tcl/Tk support.
+- Python 3.12 or newer 3.x with Tcl/Tk support.
 - A user-writable folder; administrator rights are not required.
 
 The application primarily uses the Python standard library and Tkinter. Its
 in-app documentation viewer uses pinned Markdown and HTML-rendering libraries;
-`setup-context-palette.bat` installs the exact declared versions into the local
+`setup-context-palette.bat` installs the declared dependencies into the local
 `.venv`.
 
 ## Quick start
@@ -68,8 +68,9 @@ git pull
 .\develop-context-palette.bat
 ```
 
-The tracked `.python-version`, `requirements.txt`, and setup scripts are the
-portable environment recipe. The ignored `.venv` is a disposable local result.
+The tracked `.python-version` declares the minimum supported Python family;
+`requirements.txt` and the setup scripts complete the portable environment
+recipe. The ignored `.venv` is a disposable local result.
 Setup detects an environment from another repository location, an unavailable
 base installation, or the wrong Python family. It preserves a failed environment
 as `.venv-unusable*` and recreates it only after a compatible base Python can

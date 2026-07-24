@@ -28,7 +28,7 @@ set "RUN_TESTS=1"
 if /i "%~1"=="--skip-tests" set "RUN_TESTS=0"
 
 if not exist ".venv\Scripts\python.exe" goto :create_venv
-".venv\Scripts\python.exe" -c "import os, pathlib, sys, tkinter; expected_version=os.environ['PYTHON_VERSION']; expected_prefix=pathlib.Path('.venv').resolve(); actual_prefix=pathlib.Path(sys.prefix).resolve(); marker=expected_prefix / '.context-palette-root'; marker_matches=not marker.exists() or pathlib.Path(marker.read_text(encoding='utf-8').strip()).resolve() == pathlib.Path.cwd().resolve(); raise SystemExit(not (f'{sys.version_info.major}.{sys.version_info.minor}' == expected_version and actual_prefix == expected_prefix and marker_matches))" >nul 2>nul
+".venv\Scripts\python.exe" -c "import os, pathlib, sys, tkinter; minimum=tuple(map(int, os.environ['PYTHON_VERSION'].split('.'))); actual=sys.version_info[:2]; expected_prefix=pathlib.Path('.venv').resolve(); actual_prefix=pathlib.Path(sys.prefix).resolve(); marker=expected_prefix / '.context-palette-root'; marker_matches=not marker.exists() or pathlib.Path(marker.read_text(encoding='utf-8').strip()).resolve() == pathlib.Path.cwd().resolve(); raise SystemExit(not (actual[0] == minimum[0] and actual >= minimum and actual_prefix == expected_prefix and marker_matches))" >nul 2>nul
 if errorlevel 1 goto :repair_existing_venv
 echo Existing .venv found.
 goto :environment_ready
@@ -36,7 +36,7 @@ goto :environment_ready
 :repair_existing_venv
 call :find_compatible_python
 if not defined PYTHON_CMD goto :venv_check_unavailable
-echo Existing .venv is unusable, belongs to another location, or does not use Python !PYTHON_VERSION!.
+echo Existing .venv is unusable, belongs to another location, or uses Python older than !PYTHON_VERSION!.
 set "VENV_BACKUP=.venv-unusable"
 if exist "!VENV_BACKUP!" (
     for /l %%N in (1,1,99) do (
@@ -114,8 +114,8 @@ echo Setup complete. Start with run-context-palette.bat
 exit /b 0
 
 :python_unavailable
-echo ERROR: A usable Python !PYTHON_VERSION! installation was not found.
-echo Install Python !PYTHON_VERSION! from https://www.python.org/downloads/windows/
+echo ERROR: A usable Python !PYTHON_VERSION! or newer 3.x installation was not found.
+echo Install Python !PYTHON_VERSION! or newer from https://www.python.org/downloads/windows/
 echo Setup checked the Python launcher, PATH, and standard Windows install folders.
 echo For a custom location, set CONTEXT_PALETTE_PYTHON to its python.exe path.
 exit /b 1
@@ -135,28 +135,28 @@ exit /b 1
 
 :venv_check_unavailable
 echo ERROR: Existing .venv could not be checked safely.
-echo No compatible Python !PYTHON_VERSION! interpreter can be launched in this process.
+echo No compatible Python !PYTHON_VERSION! or newer 3.x interpreter can be launched in this process.
 echo The environment was not renamed or rebuilt.
 echo If this is a restricted Codex run, retry with normal Windows access.
-echo Otherwise install or repair Python !PYTHON_VERSION!, then run setup again.
+echo Otherwise install or repair Python !PYTHON_VERSION! or newer, then run setup again.
 exit /b 1
 
 :find_compatible_python
 set "PYTHON_CMD="
-if defined CONTEXT_PALETTE_PYTHON if exist "!CONTEXT_PALETTE_PYTHON!" "!CONTEXT_PALETTE_PYTHON!" -c "import os, sys, tkinter; expected=os.environ['PYTHON_VERSION']; actual=f'{sys.version_info.major}.{sys.version_info.minor}'; raise SystemExit(not actual == expected)" >nul 2>nul
+if defined CONTEXT_PALETTE_PYTHON if exist "!CONTEXT_PALETTE_PYTHON!" "!CONTEXT_PALETTE_PYTHON!" -c "import os, sys, tkinter; minimum=tuple(map(int, os.environ['PYTHON_VERSION'].split('.'))); actual=sys.version_info[:2]; raise SystemExit(not (actual[0] == minimum[0] and actual >= minimum))" >nul 2>nul
 if defined CONTEXT_PALETTE_PYTHON if exist "!CONTEXT_PALETTE_PYTHON!" if not errorlevel 1 set PYTHON_CMD="!CONTEXT_PALETTE_PYTHON!"
 if not defined PYTHON_CMD py -!PYTHON_VERSION! -c "import sys, tkinter" >nul 2>nul
 if not defined PYTHON_CMD if not errorlevel 1 set "PYTHON_CMD=py -!PYTHON_VERSION!"
-if not defined PYTHON_CMD python -c "import os, sys, tkinter; expected=os.environ['PYTHON_VERSION']; actual=f'{sys.version_info.major}.{sys.version_info.minor}'; raise SystemExit(not actual == expected)" >nul 2>nul
+if not defined PYTHON_CMD python -c "import os, sys, tkinter; minimum=tuple(map(int, os.environ['PYTHON_VERSION'].split('.'))); actual=sys.version_info[:2]; raise SystemExit(not (actual[0] == minimum[0] and actual >= minimum))" >nul 2>nul
 if not defined PYTHON_CMD if not errorlevel 1 set "PYTHON_CMD=python"
 set "PYTHON_CANDIDATE=!LocalAppData!\Programs\Python\Python!PYTHON_MAJOR!!PYTHON_MINOR!\python.exe"
-if not defined PYTHON_CMD if exist "!PYTHON_CANDIDATE!" "!PYTHON_CANDIDATE!" -c "import os, sys, tkinter; expected=os.environ['PYTHON_VERSION']; actual=f'{sys.version_info.major}.{sys.version_info.minor}'; raise SystemExit(not actual == expected)" >nul 2>nul
+if not defined PYTHON_CMD if exist "!PYTHON_CANDIDATE!" "!PYTHON_CANDIDATE!" -c "import os, sys, tkinter; minimum=tuple(map(int, os.environ['PYTHON_VERSION'].split('.'))); actual=sys.version_info[:2]; raise SystemExit(not (actual[0] == minimum[0] and actual >= minimum))" >nul 2>nul
 if not defined PYTHON_CMD if exist "!PYTHON_CANDIDATE!" if not errorlevel 1 set PYTHON_CMD="!PYTHON_CANDIDATE!"
 set "PYTHON_CANDIDATE=!ProgramFiles!\Python!PYTHON_MAJOR!!PYTHON_MINOR!\python.exe"
-if not defined PYTHON_CMD if exist "!PYTHON_CANDIDATE!" "!PYTHON_CANDIDATE!" -c "import os, sys, tkinter; expected=os.environ['PYTHON_VERSION']; actual=f'{sys.version_info.major}.{sys.version_info.minor}'; raise SystemExit(not actual == expected)" >nul 2>nul
+if not defined PYTHON_CMD if exist "!PYTHON_CANDIDATE!" "!PYTHON_CANDIDATE!" -c "import os, sys, tkinter; minimum=tuple(map(int, os.environ['PYTHON_VERSION'].split('.'))); actual=sys.version_info[:2]; raise SystemExit(not (actual[0] == minimum[0] and actual >= minimum))" >nul 2>nul
 if not defined PYTHON_CMD if exist "!PYTHON_CANDIDATE!" if not errorlevel 1 set PYTHON_CMD="!PYTHON_CANDIDATE!"
 set "PYTHON_CANDIDATE=!ProgramFiles!\Python!PYTHON_MAJOR!.!PYTHON_MINOR!\python.exe"
-if not defined PYTHON_CMD if exist "!PYTHON_CANDIDATE!" "!PYTHON_CANDIDATE!" -c "import os, sys, tkinter; expected=os.environ['PYTHON_VERSION']; actual=f'{sys.version_info.major}.{sys.version_info.minor}'; raise SystemExit(not actual == expected)" >nul 2>nul
+if not defined PYTHON_CMD if exist "!PYTHON_CANDIDATE!" "!PYTHON_CANDIDATE!" -c "import os, sys, tkinter; minimum=tuple(map(int, os.environ['PYTHON_VERSION'].split('.'))); actual=sys.version_info[:2]; raise SystemExit(not (actual[0] == minimum[0] and actual >= minimum))" >nul 2>nul
 if not defined PYTHON_CMD if exist "!PYTHON_CANDIDATE!" if not errorlevel 1 set PYTHON_CMD="!PYTHON_CANDIDATE!"
 set "PYTHON_CANDIDATE="
 exit /b 0

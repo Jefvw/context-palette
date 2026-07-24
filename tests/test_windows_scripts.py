@@ -22,7 +22,11 @@ class WindowsScriptTests(unittest.TestCase):
 
         self.assertEqual((ROOT / ".python-version").read_text().strip(), "3.12")
         self.assertIn('set /p "PYTHON_VERSION="<".python-version"', script)
-        self.assertIn("expected_version=os.environ['PYTHON_VERSION']", script)
+        self.assertIn(
+            "minimum=tuple(map(int, os.environ['PYTHON_VERSION'].split('.')))",
+            script,
+        )
+        self.assertIn("actual[0] == minimum[0] and actual >= minimum", script)
         self.assertIn("marker_matches=not marker.exists()", script)
         self.assertIn('> ".venv\\.context-palette-root" echo %CD%', script)
         self.assertIn(health_check, script)
@@ -208,7 +212,7 @@ class WindowsScriptTests(unittest.TestCase):
                 msg=f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
             )
             self.assertIn(
-                "A usable Python 3.12 installation was not found.",
+                "A usable Python 3.12 or newer 3.x installation was not found.",
                 result.stdout,
             )
             self.assertFalse((root / ".venv").exists())
@@ -244,7 +248,7 @@ class WindowsScriptTests(unittest.TestCase):
             )
 
             self.assertNotIn(
-                "A usable Python 3.12 installation was not found.",
+                "A usable Python 3.12 or newer 3.x installation was not found.",
                 result.stdout,
             )
             self.assertIn(
@@ -295,7 +299,7 @@ class WindowsScriptTests(unittest.TestCase):
             )
 
             self.assertNotIn(
-                "A usable Python 3.12 installation was not found.",
+                "A usable Python 3.12 or newer 3.x installation was not found.",
                 result.stdout,
             )
             self.assertIn(
