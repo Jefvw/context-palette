@@ -50,6 +50,7 @@ from .context_membership_field import (
     TagSelectionField,
     specific_context_names,
 )
+from .treeview_utils import scrollable_tree
 from .window_geometry import configure_standard_window
 from .work_item_configuration import WorkItemsConfigurationPanel
 from .work_item_refresh import WorkItemIndex
@@ -74,6 +75,14 @@ ACTION_TYPE_EXAMPLES = {
 
 LOCAL_DESTINATION = "My configuration"
 PROJECT_DESTINATION = "Built-in"
+CONFIGURATION_TAB_INDEXES = {
+    "actions": 0,
+    "types": 1,
+    "contexts": 2,
+    "buttons": 3,
+    "work_items": 4,
+    "diagnostics": 5,
+}
 
 
 def action_matches_filter(action: Action, query: str, *, personal: bool) -> bool:
@@ -325,15 +334,7 @@ class ConfigurationWindow:
             work_item_index,
         )
         self._build_diagnostics_tab(self.notebook)
-        tab_indexes = {
-            "actions": 0,
-            "types": 1,
-            "contexts": 2,
-            "buttons": 3,
-            "work_items": 4,
-            "diagnostics": 5,
-        }
-        self.notebook.select(tab_indexes.get(self.initial_tab, 0))
+        self.notebook.select(CONFIGURATION_TAB_INDEXES.get(self.initial_tab, 0))
         self.notebook.bind("<<NotebookTabChanged>>", self._focus_selected_tab)
         self.window.bind("<Control-f>", self._focus_current_filter)
         self._reload()
@@ -343,6 +344,29 @@ class ConfigurationWindow:
         self.window.lift()
         self.window.after_idle(self._focus_current_tab)
         if self.start_work_item_creation:
+            self.window.after_idle(self._start_work_item_creation)
+
+    def show(
+        self,
+        *,
+        initial_tab: str = "actions",
+        initial_action_id: str | None = None,
+        initial_work_item_key: str | None = None,
+        start_work_item_creation: bool = False,
+    ) -> None:
+        """Refresh, navigate, and raise an already-open Configure workspace."""
+        self.initial_action_id = initial_action_id
+        self._reload()
+        if initial_action_id and self.action_filter_var.get():
+            self.action_filter_var.set("")
+        self.notebook.select(CONFIGURATION_TAB_INDEXES.get(initial_tab, 0))
+        if initial_work_item_key:
+            self.work_items_panel.select_item(initial_work_item_key)
+        self.window.deiconify()
+        self.window.lift()
+        self.window.focus_force()
+        self.window.after_idle(self._focus_current_tab)
+        if start_work_item_creation:
             self.window.after_idle(self._start_work_item_creation)
 
     def _start_work_item_creation(self) -> None:
@@ -395,32 +419,35 @@ class ConfigurationWindow:
             textvariable=self.action_filter_count_var,
             style="Muted.TLabel",
         ).pack(side=tk.RIGHT)
-        self.action_tree = ttk.Treeview(
+        self.action_tree_frame, self.action_tree = scrollable_tree(
             tab,
-            columns=("type", "contexts", "tags", "source", "state"),
-            show="tree headings",
-            selectmode="browse",
+            ("type", "contexts", "tags", "source", "state"),
         )
         for column, label, width in (
-            ("#0", "Action", 245),
-            ("type", "Built-in type", 150),
-            ("contexts", "Contexts", 145),
-            ("tags", "Tags", 150),
+            ("#0", "Action", 170),
+            ("type", "Built-in type", 105),
+            ("contexts", "Contexts", 75),
+            ("tags", "Tags", 100),
             ("source", "Source", 115),
-            ("state", "State", 70),
+            ("state", "State", 55),
         ):
             self.action_tree.heading(column, text=label)
             self.action_tree.column(
                 column,
                 width=width,
-                stretch=column in {"#0", "contexts", "tags"},
+                stretch=column in {"#0", "type", "contexts", "tags"},
             )
-        self.action_tree.pack(fill=tk.BOTH, expand=True)
+        self.action_tree_frame.pack(fill=tk.BOTH, expand=True)
         self.action_tree.bind("<Double-1>", lambda _event: self._edit_action())
         self.action_tree.bind("<Return>", lambda _event: self._edit_action())
         self.action_filter_var.trace_add("write", lambda *_args: self._render_actions())
         controls = ttk.Frame(tab)
-        controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0), before=self.action_tree)
+        controls.pack(
+            side=tk.BOTTOM,
+            fill=tk.X,
+            pady=(8, 0),
+            before=self.action_tree_frame,
+        )
         ttk.Button(
             controls,
             text="Create from built-in type",
@@ -525,16 +552,17 @@ class ConfigurationWindow:
             textvariable=self.context_filter_count_var,
             style="Muted.TLabel",
         ).pack(side=tk.RIGHT)
-        self.context_tree = ttk.Treeview(
-            tab, columns=("source", "actions"), show="tree headings", selectmode="browse"
+        self.context_tree_frame, self.context_tree = scrollable_tree(
+            tab,
+            ("source", "actions"),
         )
         self.context_tree.heading("#0", text="Context")
         self.context_tree.heading("source", text="Source")
         self.context_tree.heading("actions", text="Members / preferred actions")
-        self.context_tree.column("#0", width=180)
-        self.context_tree.column("source", width=120, stretch=False)
-        self.context_tree.column("actions", width=380)
-        self.context_tree.pack(fill=tk.BOTH, expand=True)
+        self.context_tree.column("#0", width=160)
+        self.context_tree.column("source", width=115, stretch=False)
+        self.context_tree.column("actions", width=345)
+        self.context_tree_frame.pack(fill=tk.BOTH, expand=True)
         self.context_tree.bind("<Double-1>", lambda _event: self._edit_context())
         self.context_tree.bind("<Return>", lambda _event: self._edit_context())
         self.context_filter_var.trace_add(
@@ -542,7 +570,12 @@ class ConfigurationWindow:
             lambda *_args: self._render_contexts(),
         )
         controls = ttk.Frame(tab)
-        controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0), before=self.context_tree)
+        controls.pack(
+            side=tk.BOTTOM,
+            fill=tk.X,
+            pady=(8, 0),
+            before=self.context_tree_frame,
+        )
         ttk.Button(controls, text="Add context", command=self._add_context).pack(side=tk.LEFT)
         ttk.Button(controls, text="Edit selected", command=self._edit_context).pack(side=tk.LEFT, padx=(6, 0))
         ttk.Button(controls, text="Delete selected", command=self._delete_context).pack(
@@ -575,16 +608,17 @@ class ConfigurationWindow:
             textvariable=self.button_filter_count_var,
             style="Muted.TLabel",
         ).pack(side=tk.RIGHT)
-        self.button_tree = ttk.Treeview(
-            tab, columns=("source", "actions"), show="tree headings", selectmode="browse"
+        self.button_tree_frame, self.button_tree = scrollable_tree(
+            tab,
+            ("source", "actions"),
         )
         self.button_tree.heading("#0", text="Group / button")
         self.button_tree.heading("source", text="Source")
         self.button_tree.heading("actions", text="Assigned actions")
-        self.button_tree.column("#0", width=220)
-        self.button_tree.column("source", width=120, stretch=False)
-        self.button_tree.column("actions", width=340)
-        self.button_tree.pack(fill=tk.BOTH, expand=True)
+        self.button_tree.column("#0", width=190)
+        self.button_tree.column("source", width=115, stretch=False)
+        self.button_tree.column("actions", width=315)
+        self.button_tree_frame.pack(fill=tk.BOTH, expand=True)
         self.button_preview_var = tk.StringVar(
             value="Select a group or Quick action to see how it behaves."
         )
@@ -605,7 +639,12 @@ class ConfigurationWindow:
             lambda *_args: self._render_buttons(),
         )
         controls = ttk.Frame(tab)
-        controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0), before=self.button_tree)
+        controls.pack(
+            side=tk.BOTTOM,
+            fill=tk.X,
+            pady=(8, 0),
+            before=self.button_tree_frame,
+        )
         ttk.Button(controls, text="Add group", command=self._add_group).pack(side=tk.LEFT)
         ttk.Button(controls, text="Add Quick action", command=self._add_button).pack(
             side=tk.LEFT, padx=(6, 0)

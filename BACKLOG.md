@@ -18,8 +18,8 @@ This file contains actionable future work. Completed user-visible work belongs i
 - Manually verify **Copy file** with a representative network source, a large
   file, a destination collision, and an unavailable Work Item source.
 - Perform and record the manual Windows UI/accessibility smoke test for the guided Configure workflow.
-- Extract secondary Inbox and action-creation views from `launcher.py` incrementally
-  without changing behavior. The sheet view has been extracted.
+- Extract Configure dialog families from `configuration_window.py`
+  mechanically when the next material Configure change needs them.
 - Refine action discovery and effect descriptions using real repeated-work feedback.
 - Add focused tests for configuration-window keyboard order and validation recovery where Tk permits reliable automation.
 
@@ -30,7 +30,8 @@ This file contains actionable future work. Completed user-visible work belongs i
 - Design clipboard preservation/restoration as an explicit transaction.
 - Design constrained, previewable linear sequences for supported actions, paste, Tab, Enter, and bounded waits.
 - Define context activation bundles only after effect preview and recovery behavior are documented.
-- Continue extracting stable UI families from `launcher.py`.
+- Continue extracting stable UI families only when a demonstrated change
+  boundary benefits; avoid line-count-only refactors.
 
 ## Later
 

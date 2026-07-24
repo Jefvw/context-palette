@@ -2,7 +2,9 @@
 
 Date: 2026-07-13
 
-This is a dated review, not the current architecture source of truth. See [Architecture](ARCHITECTURE.md) for current behavior. Status notes below were updated on 2026-07-18; the original rationale remains useful.
+This is a dated review, not the current architecture source of truth. See
+[Architecture](ARCHITECTURE.md) for current behavior. Status notes below were
+updated on 2026-07-24; the original rationale remains useful.
 
 ## Conclusion
 
@@ -36,14 +38,14 @@ cannot claim those integrations during a test run. Manual verification remains
 necessary for focus, global hotkeys, tooltips, monitor placement, and external
 application opening.
 
-### Medium: continue splitting `launcher.py`
+### Completed: extract remaining secondary windows from `launcher.py`
 
 The UI construction is now divided into header, results/command surface,
 shortcuts, workspace, and footer methods. Tooltip behaviour lives in
-`tooltips.py`; Help and Cheat Sheet windows now have focused modules. A later
-maintenance pass should move Inbox and action-creation windows into one or more
-focused UI modules. Do this mechanically; do not introduce a UI framework or
-redesign the screens during extraction.
+`tooltips.py`; Help, Cheat Sheet, Inbox, and Inbox action-creation windows now
+have focused modules. The remaining launcher work is main-window orchestration;
+future extraction should follow demonstrated stable component boundaries
+rather than splitting methods for line-count reduction alone.
 
 ### Medium: make action input/output effects explicit
 
@@ -69,7 +71,8 @@ The current `unittest`, `compileall`, and `git diff --check` checks are useful. 
 
 ## Recommended refactoring order
 
-1. Extract secondary windows from `launcher.py` one family at a time.
+1. Separate Configure dialog families from `configuration_window.py` when the
+   next material Configure change needs them.
 2. Define clipboard and workspace effects before implementing transactions and sequences.
 3. Reassess only after those capabilities have real usage feedback.
 

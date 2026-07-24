@@ -12,7 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.help_window import render_markdown_html, resolve_local_markdown_link
-from context_palette.launcher import HelpWindow, suggest_url_template
+from context_palette.inbox_window import suggest_url_template
+from context_palette.launcher import HelpWindow
 
 
 class FakeSearchVar:

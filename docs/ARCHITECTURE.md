@@ -69,7 +69,9 @@ Presentation and application orchestration.
 - Maintains the explicitly selected focus context through a compact menu launcher.
 - Exposes the complete configuration workspace through one direct
   **Configure** button. The Focus selector retains a direct **Manage focuses…**
-  route to the Contexts tab.
+  route to the Contexts tab. All Configure routes reuse one live editor and
+  retarget its tab or selected record; a new editor is created only after the
+  previous one closes.
 - Renders numbered slots, global flat search results, or an explicitly activated
   flat list of actions belonging to the selected Focus.
 - Renders a global JSON-configured quick-action surface beside search results,
@@ -90,7 +92,10 @@ Presentation and application orchestration.
   mode: **↗** retains workbook-first Open behavior while its adjacent folder
   button requests the same constrained boundary with the folder target.
 
-The main-window construction is divided into focused header, results/command-surface, shortcut, workspace, and footer builders. Inbox and action-creation windows still live in this module and are the next safe extraction boundary; this is documented in `TECHNICAL_REVIEW.md`.
+The main-window construction is divided into focused header,
+results/command-surface, shortcut, workspace, and footer builders. Secondary
+Inbox and Inbox-action-creation presentation lives in `inbox_window.py`;
+`launcher.py` retains only the capture command and window orchestration.
 
 The launcher does not implement action transformations or window matching directly. Those responsibilities live in specialized modules.
 
@@ -231,6 +236,11 @@ and Quick-action records are editable after the same developer-impact warning.
 Writes use the same atomic JSON
 replacement path as the rest of the application.
 
+Configure list tables use the shared `treeview_utils.py` scrollable-tree
+builder. Actions, contexts, Quick actions, Work Item sources, and discovered
+Work Items retain visible final columns and consistent vertical scrolling at
+the supported minimum window size.
+
 New actions, contexts, and Quick-action groups explicitly choose **My
 configuration** or **Built-in** and default to My configuration. The
 Quick-actions tab is a hierarchical
@@ -311,6 +321,14 @@ opener.
 Owns the searchable Cheat Sheet secondary window, including selection, preview,
 and promotion to a permanent local Active action. `launcher.py` retains loading and
 orchestration responsibility.
+
+### `inbox_window.py`
+
+Owns the captured-item Inbox window and the form that turns one Inbox item into
+a permanent personal action. It coordinates the existing Inbox and action
+domain helpers, context/tag pickers, and attended AI guidance without depending
+on `LauncherApp`. The launcher opens this window and retains compatibility
+imports for existing callers.
 
 ### `hotkeys.py`
 
@@ -901,7 +919,8 @@ When adding context behavior:
 
 ## Known architectural next steps
 
-- Extract secondary Inbox and action-creation views from `launcher.py` without changing behavior.
+- Separate Configure dialog families from `configuration_window.py` when a
+  material Configure change benefits from the boundary.
 - Add supporting-context composition and weighted ranking.
 - Design safe linear action sequences and clipboard transactions as explicit, previewable models.
 - Consider optional application-aware context suggestions that never switch focus silently.

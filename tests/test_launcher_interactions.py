@@ -496,6 +496,8 @@ class LauncherInteractionTests(unittest.TestCase):
         app.focus_actions_mode = True
         app.action_type_filter = "open_url"
         app.action_tag_filter = "database"
+        app.work_project_filter = "AB9C"
+        app.work_tag_filter = "urgent"
         app.action_type_filter_var = FakeVariable()
         app.action_tag_filter_var = FakeVariable()
         app.passwords_button = FakeButton()
@@ -520,6 +522,8 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertFalse(app.focus_actions_mode)
         self.assertIsNone(app.action_type_filter)
         self.assertIsNone(app.action_tag_filter)
+        self.assertIsNone(app.work_project_filter)
+        self.assertIsNone(app.work_tag_filter)
         self.assertEqual(app.action_type_filter_var.value, "All types")
         self.assertEqual(app.action_tag_filter_var.value, "All tags")
         self.assertEqual(app.passwords_button.options["style"], "Compact.TButton")

@@ -24,6 +24,7 @@ from .work_item_storage import (
     save_work_item_sources,
     work_item_metadata_key,
 )
+from .treeview_utils import scrollable_tree
 
 
 class WorkItemsConfigurationPanel:
@@ -77,20 +78,18 @@ class WorkItemsConfigurationPanel:
             text="Sources are stored only on this computer. Missing folders remain configured so they can recover later.",
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(0, 6))
-        self.source_tree = ttk.Treeview(
+        self.source_tree_frame, self.source_tree = scrollable_tree(
             parent,
-            columns=("folder", "state"),
-            show="tree headings",
-            selectmode="browse",
+            ("folder", "state"),
             height=6,
         )
         self.source_tree.heading("#0", text="Source")
         self.source_tree.heading("folder", text="Workitems folder")
         self.source_tree.heading("state", text="State")
-        self.source_tree.column("#0", width=170)
-        self.source_tree.column("folder", width=430)
+        self.source_tree.column("#0", width=150)
+        self.source_tree.column("folder", width=370)
         self.source_tree.column("state", width=100, stretch=False)
-        self.source_tree.pack(fill=tk.X)
+        self.source_tree_frame.pack(fill=tk.X)
         self.source_tree.bind("<Double-1>", lambda _event: self.edit_source())
         self.source_tree.bind("<Return>", lambda _event: self.edit_source())
         self.source_tree.bind("<Insert>", lambda _event: self._add_source_from_key())
@@ -118,22 +117,20 @@ class WorkItemsConfigurationPanel:
         ttk.Button(source_controls, text="Refresh index", command=self.refresh).pack(side=tk.RIGHT)
 
         ttk.Label(parent, text="Discovered Work Items", style="Heading.TLabel").pack(anchor=tk.W)
-        self.item_tree = ttk.Treeview(
+        self.item_tree_frame, self.item_tree = scrollable_tree(
             parent,
-            columns=("source", "projects", "tags", "opens"),
-            show="tree headings",
-            selectmode="browse",
+            ("source", "projects", "tags", "opens"),
         )
         for column, label, width in (
-            ("#0", "Work Item", 270),
-            ("source", "Source", 140),
-            ("projects", "Projects", 110),
-            ("tags", "Personal tags", 160),
-            ("opens", "Default", 80),
+            ("#0", "Work Item", 190),
+            ("source", "Source", 105),
+            ("projects", "Projects", 85),
+            ("tags", "Personal tags", 155),
+            ("opens", "Default", 75),
         ):
             self.item_tree.heading(column, text=label)
             self.item_tree.column(column, width=width, stretch=column in {"#0", "tags"})
-        self.item_tree.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
+        self.item_tree_frame.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
         self.item_tree.bind("<Double-1>", lambda _event: self.edit_tags())
         self.item_tree.bind("<Return>", lambda _event: self.edit_tags())
         self.item_tree.bind("<F5>", lambda _event: self._refresh_from_key())

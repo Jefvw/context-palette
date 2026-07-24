@@ -160,10 +160,10 @@ class ActionDiscoveryPanel:
         self.select_action_type_filter = select_action_type_filter
         self.select_project_filter = select_project_filter
         self._set_action_type_menu()
-        tooltip_adder(
-            self.type_filter,
-            "Types — Filter the action list by any built-in action type, or show all types.",
+        self.type_filter_help_text = (
+            "Types — Filter the action list by any built-in action type, or show all types."
         )
+        tooltip_adder(self.type_filter, lambda: self.type_filter_help_text)
 
         self.tag_filter_var = tag_filter_var
         self.select_tag_filter = select_tag_filter
@@ -175,10 +175,10 @@ class ActionDiscoveryPanel:
             style="Compact.TButton",
         )
         self.tag_filter.pack(fill=tk.X, pady=(5, 0))
-        tooltip_adder(
-            self.tag_filter,
-            "Tags — Narrow actions by a reusable descriptive tag.",
+        self.tag_filter_help_text = (
+            "Tags — Narrow actions by a reusable descriptive tag."
         )
+        tooltip_adder(self.tag_filter, lambda: self.tag_filter_help_text)
         self.set_tags(())
 
         self.primary_action_frame = ttk.Frame(self.tool_rail)
@@ -270,6 +270,48 @@ class ActionDiscoveryPanel:
             self.focus_tree,
             focus_tree_tooltip_text,
         )
+
+    def set_filter_indicators(
+        self,
+        *,
+        work_items: bool,
+        primary_value: str | None,
+        tag_value: str | None,
+    ) -> None:
+        """Keep compact filter controls explicit about hidden active state."""
+        primary_label = "Projects" if work_items else "Types"
+        self.type_filter.configure(
+            text=f"{primary_label} ✓" if primary_value else f"{primary_label} ▾",
+            style="Accent.TButton" if primary_value else "Compact.TButton",
+        )
+        self.tag_filter.configure(
+            text="Tags ✓" if tag_value else "Tags ▾",
+            style="Accent.TButton" if tag_value else "Compact.TButton",
+        )
+        if primary_value:
+            clear_label = "project codes" if work_items else "types"
+            self.type_filter_help_text = (
+                f"{primary_label} — Active filter: {primary_value}. "
+                f"Choose All {clear_label} to clear it."
+            )
+        else:
+            self.type_filter_help_text = (
+                "Projects — Filter Work Items by a detected project code."
+                if work_items
+                else "Types — Filter the action list by any built-in action type, or show all types."
+            )
+        if tag_value:
+            clear_label = "work tags" if work_items else "tags"
+            self.tag_filter_help_text = (
+                f"Tags — Active filter: {tag_value}. "
+                f"Choose All {clear_label} to clear it."
+            )
+        else:
+            self.tag_filter_help_text = (
+                "Tags — Narrow Work Items by a personal tag."
+                if work_items
+                else "Tags — Narrow actions by a reusable descriptive tag."
+            )
 
     def set_work_item_mode(
         self,

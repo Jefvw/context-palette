@@ -84,9 +84,10 @@ version.
 - Press `Ctrl+Shift+D` to open Configure directly on the safe Diagnostics tab.
 - Click the **⌨** footer button for the authoritative keyboard-shortcut page.
 - Press `F5` while the main palette is focused to clear transient screen state
-  and return to the startup view. Find, type/tag filters, Focus Actions mode,
-  captured selection, and Input / Output are cleared. Saved Focus, pins,
-  context slots, actions, and configuration are preserved.
+  and return to the startup view. Find, action type/tag filters, Work Item
+  project/tag filters, Focus Actions mode, captured selection, and Input /
+  Output are cleared. Saved Focus, pins, context slots, actions, and
+  configuration are preserved.
 - Choose **Configure** for a visible route to the complete
   personal-configuration workspace.
 - Click `Quit` to stop the resident process completely.
@@ -156,7 +157,10 @@ Search matches tags, contexts, short name, description, type, and content.
   to filter by any built-in action type. Choose **All types** to clear the type
   filter.
 - Open **Tags** to filter by one exact reusable tag. Choose **All tags** to
-  clear it. Find text, type, and tag filters work together.
+  clear it. Find text, type, and tag filters work together. An active type,
+  project-code, or tag filter is highlighted and marked **✓** until it is
+  cleared. Its tooltip identifies the selected value, and an empty result
+  explains the active filter combination.
 - Use Up/Down, Page Up/Page Down, Home, and End to navigate.
 - Press Enter, double-click, or click **Run**.
 - A saved-text action opened through `F9` or `Ctrl+Alt+P` copies its text,
@@ -333,6 +337,11 @@ complete guided configuration workspace:
   `Ctrl+Tab` cycles through all Configure tabs. Both paths move focus into the
   selected tab's main content.
 
+Only one Configure workspace opens at a time. Choosing Configure again, using
+Manage focuses, right-clicking an action, or opening Work Item configuration
+raises that same window and moves it to the requested tab or record. Close it
+when finished; the next request creates a fresh Configure window.
+
 Configure opens with keyboard focus on the action list. Action, context, and button dialogs focus and select their first editable field, so typing can begin immediately.
 
 Use **Choose…** in guided action forms to select one or more defined specific
@@ -358,6 +367,11 @@ Use the visible **Find** field in **Actions**, **Contexts**, or **Quick actions*
 to reduce that table. `Ctrl+F` focuses and selects the Find field for the
 current one of those tabs. On another Configure tab, it opens the Actions tab
 and focuses **Find actions**. Multiple words must all match.
+
+The Actions, Contexts, Quick actions, Work Item sources, and discovered Work
+Items tables resize within the Configure window instead of hiding their final
+columns. Each table has a visible vertical scrollbar for records that extend
+beyond the available height.
 
 - Actions search short name, description, built-in type, context, tag, state,
   and storage.

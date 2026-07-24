@@ -4,6 +4,21 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Reused one live Configure workspace across the main button, Manage focuses,
+  action editing, Work Item configuration, and diagnostics routes. Repeated
+  requests now raise and retarget the existing editor instead of creating
+  overlapping configuration windows.
+- Made the Configure Actions, Contexts, and Quick actions tables fit their
+  supported window width, including the ownership and state columns, and added
+  consistent visible vertical scrollbars for longer configuration lists.
+  Applied the same responsive layout to Work Item sources and discovered Work
+  Items so source state and workbook/folder defaults remain visible.
+- Made active action-type, Work Item project-code, and tag filters persistently
+  visible through highlighted **✓** controls and value-specific help/status
+  text. `F5` now also clears the underlying Work Item filters instead of only
+  resetting their displayed labels.
+- Extracted the Inbox and Inbox action-creation windows from the main launcher
+  module without changing their UI, persistence, or execution behavior.
 - Replaced technical action IDs in the Configure Contexts and Quick actions
   tables with human-readable action names. Broken references remain visible as
   clearly labelled missing actions.

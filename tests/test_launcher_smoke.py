@@ -135,6 +135,36 @@ class LauncherSmokeTests(unittest.TestCase):
                         len(trees_by_heading["Group / button"].get_children()),
                         len(app.command_groups),
                     )
+                    configure_windows[0].geometry("700x480")
+                    root.update()
+                    configure_notebook = next(
+                        child
+                        for child in self._descendants(configure_windows[0])
+                        if isinstance(child, ttk.Notebook)
+                    )
+                    for tab_index, heading, last_column in (
+                        (0, "Action", "state"),
+                        (2, "Context", "actions"),
+                        (3, "Group / button", "actions"),
+                    ):
+                        configure_notebook.select(tab_index)
+                        root.update()
+                        tree = trees_by_heading[heading]
+                        self.assertTrue(
+                            any(
+                                isinstance(child, ttk.Scrollbar)
+                                for child in tree.master.winfo_children()
+                            ),
+                            f"{heading} list has no visible scrollbar",
+                        )
+                        first_item = tree.get_children()[0]
+                        bounds = tree.bbox(first_item, last_column)
+                        self.assertTrue(bounds)
+                        self.assertLessEqual(
+                            bounds[0] + bounds[2],
+                            tree.winfo_width(),
+                            f"{heading} list clips its final column",
+                        )
                     error.assert_not_called()
                     self.assertFalse(any(path.exists() for path in local_paths))
 
@@ -560,8 +590,12 @@ class LauncherSmokeTests(unittest.TestCase):
 
                     app._select_work_project_filter("AB9C")
                     self.assertEqual(app.results_count_var.get(), "1 work item")
+                    self.assertEqual(app.type_filter.cget("text"), "Projects ✓")
+                    self.assertEqual(app.type_filter.cget("style"), "Accent.TButton")
                     app._select_work_tag_filter("urgent")
                     self.assertEqual(app.results_count_var.get(), "1 work item")
+                    self.assertEqual(app.tag_filter.cget("text"), "Tags ✓")
+                    self.assertEqual(app.tag_filter.cget("style"), "Accent.TButton")
                     app._execute_selected()
                     self.assertEqual(open_target.call_args.args[0].value, str(exact_workbook))
                     app._execute_selected(open_folder=True)
@@ -615,8 +649,12 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     type_menu.invoke(open_url_index)
                     self.assertEqual(app.action_type_filter, "open_url")
+                    self.assertEqual(app.type_filter.cget("text"), "Types ✓")
+                    self.assertEqual(app.type_filter.cget("style"), "Accent.TButton")
                     type_menu.invoke(0)
                     self.assertIsNone(app.action_type_filter)
+                    self.assertEqual(app.type_filter.cget("text"), "Types ▾")
+                    self.assertEqual(app.type_filter.cget("style"), "Compact.TButton")
 
                     tag_menu = root.nametowidget(app.tag_filter.cget("menu"))
                     database_tag_index = next(
@@ -627,12 +665,16 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     tag_menu.invoke(database_tag_index)
                     self.assertEqual(app.action_tag_filter, "database")
+                    self.assertEqual(app.tag_filter.cget("text"), "Tags ✓")
+                    self.assertEqual(app.tag_filter.cget("style"), "Accent.TButton")
                     self.assertEqual(
                         [action.id for action in app.filtered_actions],
                         ["database-only"],
                     )
                     tag_menu.invoke(0)
                     self.assertIsNone(app.action_tag_filter)
+                    self.assertEqual(app.tag_filter.cget("text"), "Tags ▾")
+                    self.assertEqual(app.tag_filter.cget("style"), "Compact.TButton")
 
                     app._activate_focus_actions()
                     root.update()
@@ -1017,6 +1059,7 @@ class LauncherSmokeTests(unittest.TestCase):
                         ),
                         (app.configure_button.invoke, "Actions"),
                     )
+                    reused_configuration_window = None
                     for open_configuration, expected_tab in configuration_routes:
                         open_configuration()
                         root.update()
@@ -1027,6 +1070,13 @@ class LauncherSmokeTests(unittest.TestCase):
                             and child.title() == "Configure Context Palette"
                         ]
                         self.assertEqual(len(configuration_windows), 1)
+                        if reused_configuration_window is None:
+                            reused_configuration_window = configuration_windows[0]
+                        else:
+                            self.assertIs(
+                                configuration_windows[0],
+                                reused_configuration_window,
+                            )
                         notebook = next(
                             child
                             for child in self._descendants(configuration_windows[0])
@@ -1069,8 +1119,75 @@ class LauncherSmokeTests(unittest.TestCase):
                             {"Refresh", "Copy safe summary"}
                             <= diagnostic_button_labels
                         )
-                        configuration_windows[0].destroy()
-                        root.update()
+                    self.assertIsNotNone(reused_configuration_window)
+                    reused_configuration_window.geometry("700x480")
+                    app.configuration_window.notebook.select(4)
+                    root.update()
+                    work_item_trees = {
+                        tree.heading("#0", "text"): tree
+                        for tree in self._descendants(
+                            app.configuration_window.work_items_panel.parent
+                        )
+                        if isinstance(tree, ttk.Treeview)
+                    }
+                    for heading, last_column in (
+                        ("Source", "state"),
+                        ("Work Item", "opens"),
+                    ):
+                        tree = work_item_trees[heading]
+                        self.assertTrue(
+                            any(
+                                isinstance(child, ttk.Scrollbar)
+                                for child in tree.master.winfo_children()
+                            ),
+                            f"{heading} list has no visible scrollbar",
+                        )
+                        first_item = tree.get_children()[0]
+                        bounds = tree.bbox(first_item, last_column)
+                        self.assertTrue(bounds)
+                        self.assertLessEqual(
+                            bounds[0] + bounds[2],
+                            tree.winfo_width(),
+                            f"{heading} list clips its final column",
+                        )
+                    requested_action = app.actions[-1]
+                    app.configuration_window.action_filter_var.set(
+                        "query that hides every action"
+                    )
+                    app._show_configuration(
+                        initial_tab="actions",
+                        initial_action_id=requested_action.id,
+                    )
+                    root.update()
+                    self.assertIs(
+                        app.configuration_window.window,
+                        reused_configuration_window,
+                    )
+                    self.assertEqual(
+                        app.configuration_window.action_filter_var.get(),
+                        "",
+                    )
+                    selected_action_iid = (
+                        app.configuration_window.action_tree.selection()[0]
+                    )
+                    selected_action_index = int(
+                        selected_action_iid.removeprefix("action-")
+                    )
+                    self.assertEqual(
+                        app.configuration_window.actions[selected_action_index].id,
+                        requested_action.id,
+                    )
+                    reused_configuration_window.destroy()
+                    root.update()
+                    previous_configuration = app.configuration_window
+                    app.configure_button.invoke()
+                    root.update()
+                    self.assertIsNot(
+                        app.configuration_window,
+                        previous_configuration,
+                    )
+                    app.configuration_window.window.destroy()
+                    root.update()
 
                     for help_button in (
                         app.global_help_button,
