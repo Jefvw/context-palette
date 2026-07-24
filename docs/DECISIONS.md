@@ -1345,3 +1345,23 @@ Focus settings attached to an undefined old name. No filesystem transaction can
 atomically replace several independent JSON files. Temporarily defining both
 names ensures that interruption can leave a harmless unused alias, but never an
 orphaned action membership.
+
+## 2026-07-24 - Require an independent Python check before moving `.venv`
+
+**Decision:** When the existing environment health check fails, setup must
+launch a compatible base Python 3.12 before it may preserve and rebuild
+`.venv`. If neither interpreter can launch, setup stops with an actionable
+normal-Windows retry message and leaves `.venv` unchanged. All unrecoverable
+setup branches must return a nonzero status even when the batch file is invoked
+directly rather than through another script.
+
+**Reason:** A restricted Codex sandbox can block the user-profile Python behind
+an otherwise valid environment. Treating every launch failure as corruption
+renamed working environments and caused unnecessary dependency reinstalls. An
+independent interpreter check distinguishes an available repair path from
+process-level inaccessibility without parsing localized Windows error text.
+
+**Portability:** Discovery checks the Python launcher, `PATH`, standard
+python.org Windows locations, and an optional machine-local
+`CONTEXT_PALETTE_PYTHON` executable path. Every candidate must prove that its
+version matches `.python-version` and that Tkinter imports successfully.

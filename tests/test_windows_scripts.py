@@ -1,4 +1,8 @@
+import os
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 
 
@@ -10,6 +14,9 @@ class WindowsScriptTests(unittest.TestCase):
         script = (ROOT / "setup-context-palette.bat").read_text(encoding="utf-8")
 
         health_check = "expected_prefix=pathlib.Path('.venv').resolve()"
+        compatible_python_check = "call :find_compatible_python"
+        safe_stop_route = "goto :venv_check_unavailable"
+        safe_stop = "The environment was not renamed or rebuilt."
         preserve = 'move ".venv" "!VENV_BACKUP!"'
         create = "!PYTHON_CMD! -m venv .venv"
 
@@ -19,10 +26,330 @@ class WindowsScriptTests(unittest.TestCase):
         self.assertIn("marker_matches=not marker.exists()", script)
         self.assertIn('> ".venv\\.context-palette-root" echo %CD%', script)
         self.assertIn(health_check, script)
+        self.assertIn(compatible_python_check, script)
+        self.assertIn("CONTEXT_PALETTE_PYTHON", script)
+        self.assertIn(
+            r"!LocalAppData!\Programs\Python\Python!PYTHON_MAJOR!!PYTHON_MINOR!\python.exe",
+            script,
+        )
+        self.assertIn(
+            r"!ProgramFiles!\Python!PYTHON_MAJOR!!PYTHON_MINOR!\python.exe",
+            script,
+        )
+        self.assertNotIn("call :try_python_executable", script)
+        self.assertIn(safe_stop, script)
         self.assertIn(preserve, script)
         self.assertIn(create, script)
-        self.assertLess(script.index(health_check), script.index(preserve))
+        self.assertLess(script.index(health_check), script.index(compatible_python_check))
+        self.assertLess(
+            script.index(compatible_python_check),
+            script.index(safe_stop_route),
+        )
+        self.assertLess(script.index(safe_stop_route), script.index(preserve))
+        self.assertIn(safe_stop, script)
         self.assertLess(script.index(preserve), script.index(create))
+
+    def test_setup_does_not_move_venv_when_no_base_python_can_validate_repair(
+        self,
+    ) -> None:
+        script = (ROOT / "setup-context-palette.bat").read_text(encoding="utf-8")
+
+        repair_route = ":repair_existing_venv"
+        independent_check = "call :find_compatible_python"
+        guard = "if not defined PYTHON_CMD goto :venv_check_unavailable"
+        safe_stop = "The environment was not renamed or rebuilt."
+        preserve = 'move ".venv" "!VENV_BACKUP!"'
+
+        health_block = script[
+            script.index(repair_route):script.index(preserve)
+        ]
+        self.assertIn(independent_check, health_block)
+        self.assertIn(guard, health_block)
+        self.assertIn(safe_stop, script)
+        self.assertIn("retry with normal Windows access", script)
+
+    @unittest.skipUnless(os.name == "nt", "Windows batch behavior")
+    def test_setup_preserves_failed_venv_when_python_is_inaccessible(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "setup-context-palette.bat").write_text(
+                (ROOT / "setup-context-palette.bat").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (root / ".python-version").write_text("3.12\n", encoding="utf-8")
+            fake_python = root / ".venv" / "Scripts" / "python.exe"
+            fake_python.parent.mkdir(parents=True)
+            fake_python.write_bytes(b"not a Windows executable")
+            environment = os.environ.copy()
+            environment["PATH"] = ""
+            environment["LOCALAPPDATA"] = str(root / "missing-local-app-data")
+            environment["PROGRAMFILES"] = str(root / "missing-program-files")
+            environment["PROGRAMFILES(X86)"] = str(
+                root / "missing-program-files-x86"
+            )
+
+            result = subprocess.run(
+                [
+                    os.environ.get("COMSPEC", r"C:\Windows\System32\cmd.exe"),
+                    "/d",
+                    "/c",
+                    "setup-context-palette.bat",
+                    "--skip-tests",
+                ],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+
+            self.assertNotEqual(
+                result.returncode,
+                0,
+                msg=f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
+            )
+            self.assertIn(
+                "The environment was not renamed or rebuilt.",
+                result.stdout,
+            )
+            self.assertTrue(fake_python.exists())
+            self.assertEqual(list(root.glob(".venv-unusable*")), [])
+
+    @unittest.skipUnless(os.name == "nt", "Windows batch behavior")
+    def test_development_wrapper_preserves_venv_when_python_is_inaccessible(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for filename in (
+                "develop-context-palette.bat",
+                "setup-context-palette.bat",
+            ):
+                (root / filename).write_text(
+                    (ROOT / filename).read_text(encoding="utf-8"),
+                    encoding="utf-8",
+                )
+            (root / ".python-version").write_text("3.12\n", encoding="utf-8")
+            fake_python = root / ".venv" / "Scripts" / "python.exe"
+            fake_python.parent.mkdir(parents=True)
+            fake_python.write_bytes(b"not a Windows executable")
+            environment = os.environ.copy()
+            environment["PATH"] = ""
+            environment["LOCALAPPDATA"] = str(root / "missing-local-app-data")
+            environment["PROGRAMFILES"] = str(root / "missing-program-files")
+            environment["PROGRAMFILES(X86)"] = str(
+                root / "missing-program-files-x86"
+            )
+
+            result = subprocess.run(
+                [
+                    os.environ.get("COMSPEC", r"C:\Windows\System32\cmd.exe"),
+                    "/d",
+                    "/c",
+                    "develop-context-palette.bat",
+                ],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+
+            self.assertNotEqual(
+                result.returncode,
+                0,
+                msg=f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
+            )
+            self.assertIn(
+                "The environment was not renamed or rebuilt.",
+                result.stdout,
+            )
+            self.assertTrue(fake_python.exists())
+            self.assertEqual(list(root.glob(".venv-unusable*")), [])
+
+    @unittest.skipUnless(os.name == "nt", "Windows batch behavior")
+    def test_fresh_setup_without_python_reports_failure_directly(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "setup-context-palette.bat").write_text(
+                (ROOT / "setup-context-palette.bat").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (root / ".python-version").write_text("3.12\n", encoding="utf-8")
+            environment = os.environ.copy()
+            environment["PATH"] = ""
+            environment["LOCALAPPDATA"] = str(root / "missing-local-app-data")
+            environment["PROGRAMFILES"] = str(root / "missing-program-files")
+            environment["PROGRAMFILES(X86)"] = str(
+                root / "missing-program-files-x86"
+            )
+
+            result = subprocess.run(
+                [
+                    os.environ.get("COMSPEC", r"C:\Windows\System32\cmd.exe"),
+                    "/d",
+                    "/c",
+                    "setup-context-palette.bat",
+                    "--skip-tests",
+                ],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+
+            self.assertNotEqual(
+                result.returncode,
+                0,
+                msg=f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
+            )
+            self.assertIn(
+                "A usable Python 3.12 installation was not found.",
+                result.stdout,
+            )
+            self.assertFalse((root / ".venv").exists())
+            self.assertEqual(list(root.glob(".venv-unusable*")), [])
+
+    @unittest.skipUnless(os.name == "nt", "Windows batch behavior")
+    def test_fresh_setup_accepts_an_explicit_compatible_python_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "setup-context-palette.bat").write_text(
+                (ROOT / "setup-context-palette.bat").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (root / ".python-version").write_text("3.12\n", encoding="utf-8")
+            environment = os.environ.copy()
+            environment["PATH"] = ""
+            environment["CONTEXT_PALETTE_PYTHON"] = sys._base_executable
+
+            result = subprocess.run(
+                [
+                    os.environ.get("COMSPEC", r"C:\Windows\System32\cmd.exe"),
+                    "/d",
+                    "/c",
+                    "setup-context-palette.bat",
+                    "--skip-tests",
+                ],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+
+            self.assertNotIn(
+                "A usable Python 3.12 installation was not found.",
+                result.stdout,
+            )
+            self.assertIn(
+                "Creating local Python 3.12 environment...",
+                result.stdout,
+            )
+            self.assertTrue((root / ".venv" / "Scripts" / "python.exe").exists())
+
+    @unittest.skipUnless(os.name == "nt", "Windows batch behavior")
+    def test_fresh_setup_finds_the_standard_per_user_python_without_path(
+        self,
+    ) -> None:
+        standard_python = (
+            Path(os.environ["LOCALAPPDATA"])
+            / "Programs"
+            / "Python"
+            / "Python312"
+            / "python.exe"
+        )
+        if not standard_python.exists():
+            self.skipTest("Python 3.12 is not installed in the per-user location")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "setup-context-palette.bat").write_text(
+                (ROOT / "setup-context-palette.bat").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (root / ".python-version").write_text("3.12\n", encoding="utf-8")
+            environment = os.environ.copy()
+            environment["PATH"] = ""
+            environment.pop("CONTEXT_PALETTE_PYTHON", None)
+
+            result = subprocess.run(
+                [
+                    os.environ.get("COMSPEC", r"C:\Windows\System32\cmd.exe"),
+                    "/d",
+                    "/c",
+                    "setup-context-palette.bat",
+                    "--skip-tests",
+                ],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+
+            self.assertNotIn(
+                "A usable Python 3.12 installation was not found.",
+                result.stdout,
+            )
+            self.assertIn(
+                "Creating local Python 3.12 environment...",
+                result.stdout,
+            )
+            self.assertTrue((root / ".venv" / "Scripts" / "python.exe").exists())
+
+    @unittest.skipUnless(os.name == "nt", "Windows batch behavior")
+    def test_setup_moves_failed_venv_only_after_base_python_is_confirmed(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "setup-context-palette.bat").write_text(
+                (ROOT / "setup-context-palette.bat").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (root / ".python-version").write_text("3.12\n", encoding="utf-8")
+            fake_python = root / ".venv" / "Scripts" / "python.exe"
+            fake_python.parent.mkdir(parents=True)
+            fake_python.write_bytes(b"not a Windows executable")
+            environment = os.environ.copy()
+            environment["PATH"] = str(Path(sys.executable).parent)
+
+            result = subprocess.run(
+                [
+                    os.environ.get("COMSPEC", r"C:\Windows\System32\cmd.exe"),
+                    "/d",
+                    "/c",
+                    "setup-context-palette.bat",
+                    "--skip-tests",
+                ],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "Preserved the old environment as .venv-unusable.",
+                result.stdout,
+            )
+            self.assertTrue(
+                (
+                    root
+                    / ".venv-unusable"
+                    / "Scripts"
+                    / "python.exe"
+                ).exists()
+            )
 
     def test_setup_checks_real_interpreters_in_fallback_order(self) -> None:
         script = (ROOT / "setup-context-palette.bat").read_text(encoding="utf-8")

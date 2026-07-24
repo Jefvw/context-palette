@@ -71,12 +71,24 @@ git pull
 The tracked `.python-version`, `requirements.txt`, and setup scripts are the
 portable environment recipe. The ignored `.venv` is a disposable local result.
 Setup detects an environment from another repository location, an unavailable
-base installation, or the wrong Python family; it preserves that environment as
-`.venv-unusable*` and recreates it. Personal Context Palette data lives outside
-`.venv` and is not removed during repair. Existing environments are adopted by
-writing an ignored repository-location marker on their first successful setup.
+base installation, or the wrong Python family. It preserves a failed environment
+as `.venv-unusable*` and recreates it only after a compatible base Python can
+run and validate the repair path. If neither Python can launch, setup leaves
+`.venv` untouched and asks for a normal Windows retry or Python repair.
+Personal Context Palette data lives outside `.venv` and is not removed during
+repair. Existing environments are adopted by writing an ignored
+repository-location marker on their first successful setup.
 See
 [Multi-PC development](docs/MULTI_PC_DEVELOPMENT.md) for the complete workflow.
+
+Setup finds Python through the `py` launcher, `PATH`, and the standard
+python.org per-user and system installation folders. For a custom installation,
+set `CONTEXT_PALETTE_PYTHON` to the full `python.exe` path before running setup:
+
+```powershell
+$env:CONTEXT_PALETTE_PYTHON = "D:\Tools\Python312\python.exe"
+.\develop-context-palette.bat
+```
 
 For first-time application-only setup, `setup-context-palette.bat` remains
 available and includes the test suite.

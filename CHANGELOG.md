@@ -4,6 +4,14 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Prevented setup from renaming or rebuilding `.venv` when neither the
+  environment nor an independent compatible Python can launch in the current
+  process. Restricted Codex runs now stop with a normal-Windows retry message,
+  while genuine cross-machine repair remains automatic once Python 3.12 is
+  available. Direct first-time setup also returns a failure status when Python
+  is unavailable or the new environment cannot be created. Python discovery
+  now includes standard Windows installation folders and an explicit custom
+  executable override for computers without a launcher or `PATH` entry.
 - Reused one live Configure workspace across the main button, Manage focuses,
   action editing, Work Item configuration, and diagnostics routes. Repeated
   requests now raise and retarget the existing editor instead of creating

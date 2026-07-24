@@ -126,13 +126,28 @@ be repaired without rebuilding the environment.
 An environment is disposable. If `.venv` was copied from another computer,
 belongs to another repository location, uses the wrong declared Python family,
 or points to an unavailable Python installation, run
-`develop-context-palette.bat`. Setup preserves the environment under the next
-available `.venv-unusable*` name and creates a fresh one. Local Context Palette
+`develop-context-palette.bat`. After confirming that this computer can launch a
+compatible base Python, setup preserves the environment under the next
+available `.venv-unusable*` name and creates a fresh one. If neither the
+environment nor a compatible base Python can launch, setup changes nothing and
+asks for a normal Windows retry or Python repair. This prevents a restricted
+Codex process from misclassifying a working environment. Local Context Palette
 data is stored under `data`, not inside `.venv`, so rebuilding the environment
-does not remove Inbox items, private actions, contexts, buttons, pins, or
-local settings. Setup adopts an existing unmarked environment once, then stores an
+does not remove Inbox items, private actions, contexts, buttons, pins, or local
+settings. Setup adopts an existing unmarked environment once, then stores an
 ignored repository-location marker inside `.venv` so subsequent folder copies
 are detected reliably.
+
+Python discovery checks the `py` launcher, `python` on `PATH`, and standard
+python.org per-user and system installation folders. If a computer uses a
+custom folder, identify it for that PowerShell session before development:
+
+```powershell
+$env:CONTEXT_PALETTE_PYTHON = "D:\Tools\Python312\python.exe"
+.\develop-context-palette.bat
+```
+
+The selected executable must match `.python-version` and include Tkinter.
 
 Setup and application startup also remove local actions and references that
 belong to deliberately retired features. These migrations are idempotent and
