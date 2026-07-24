@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.actions import Action, ActionError
+from context_palette.action_types import ACTION_TYPES
 from context_palette.command_surface import CommandItem
 from context_palette.contexts import ContextDefinition, ContextError
 from context_palette.launcher import (
@@ -466,7 +467,10 @@ class LauncherInteractionTests(unittest.TestCase):
         app._toggle_password_actions()
 
         self.assertEqual(app.action_type_filter, "paste_credential")
-        self.assertEqual(app.action_type_filter_var.value, "Paste a Windows credential")
+        self.assertEqual(
+            app.action_type_filter_var.value,
+            ACTION_TYPES["paste_credential"].display_label,
+        )
         self.assertEqual(app.passwords_button.options["style"], "Accent.TButton")
 
         app._toggle_password_actions()
@@ -487,7 +491,10 @@ class LauncherInteractionTests(unittest.TestCase):
         app._select_action_type_filter("open_url")
 
         self.assertEqual(app.action_type_filter, "open_url")
-        self.assertEqual(app.action_type_filter_var.value, "Open a website")
+        self.assertEqual(
+            app.action_type_filter_var.value,
+            ACTION_TYPES["open_url"].display_label,
+        )
         self.assertEqual(app.passwords_button.options["style"], "Compact.TButton")
         self.assertEqual(refreshes, [True])
 

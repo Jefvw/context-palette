@@ -82,7 +82,8 @@ permanently only after confirmation.
 
 1. **Fast first:** repeated use must feel immediate.
 2. **Contextual, not hidden:** explicit focus improves relevance without silent automation.
-3. **Constrained effects:** no arbitrary shell-command action.
+3. **Explicit effects:** powerful Windows targets remain visible and
+   user-configured; the app does not invent or parse a compound command language.
 4. **Local ownership:** ordinary user organization lives in My configuration
    files on one PC; Built-in files contain only reviewed starter data.
 5. **Confirm before persistence:** generation and capture never save an action

@@ -59,7 +59,10 @@ class ConfigurationDataTests(unittest.TestCase):
 
         self.assertEqual(
             choices,
-            {"Open documentation · Developing": "internal-open-docs"},
+            {
+                f"{ACTION_TYPES['open_url'].icon} "
+                "Open documentation · Developing": "internal-open-docs"
+            },
         )
 
     def test_adds_and_updates_personal_context(self):

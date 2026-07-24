@@ -22,6 +22,7 @@ from context_palette.launcher import (
     LauncherApp,
 )
 from context_palette.actions import Action
+from context_palette.action_types import ACTION_TYPES
 from context_palette.command_surface import CommandGroup, CommandItem
 from context_palette.configuration_window import (
     ConfigurationWindow,
@@ -296,6 +297,18 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     root.update()
 
+                    self.assertEqual(len(configuration.pin_comboboxes), 5)
+                    self.assertTrue(configuration.save_pins_button.winfo_ismapped())
+                    self.assertLessEqual(
+                        configuration.pins_frame.winfo_reqwidth(),
+                        configuration.window.winfo_width(),
+                    )
+                    for index, definition in enumerate(ACTION_TYPES.values()):
+                        self.assertTrue(
+                            configuration.type_list.get(index).startswith(
+                                f"{definition.icon} "
+                            )
+                        )
                     self.assertTrue(local_actions.exists())
                     self.assertTrue(local_contexts.exists())
                     self.assertTrue(local_surface.exists())
@@ -645,7 +658,8 @@ class LauncherSmokeTests(unittest.TestCase):
                         index
                         for index in range(type_menu.index(tk.END) + 1)
                         if type_menu.type(index) == "radiobutton"
-                        and type_menu.entrycget(index, "label") == "Open a website"
+                        and type_menu.entrycget(index, "label")
+                        == ACTION_TYPES["open_url"].display_label
                     )
                     type_menu.invoke(open_url_index)
                     self.assertEqual(app.action_type_filter, "open_url")
@@ -887,7 +901,10 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(copied, ["Hello World"])
 
                     lines_menu = root.nametowidget(
-                        app.workspace_transform_menu.entrycget(2, "menu")
+                        app.workspace_transform_menu.entrycget(
+                            transform_groups.index("Lines"),
+                            "menu",
+                        )
                     )
                     sql_index = next(
                         index
@@ -900,6 +917,25 @@ class LauncherSmokeTests(unittest.TestCase):
                         lines_menu.invoke(sql_index)
                     self.assertEqual(app._workspace_text(), "(1, 'O''Brien')")
                     self.assertEqual(copied[-1], "(1, 'O''Brien')")
+
+                    paths_menu = root.nametowidget(
+                        app.workspace_transform_menu.entrycget(
+                            transform_groups.index("Paths"),
+                            "menu",
+                        )
+                    )
+                    slash_index = next(
+                        index
+                        for index in range(paths_menu.index(tk.END) + 1)
+                        if paths_menu.entrycget(index, "label").startswith(
+                            "Forward slashes"
+                        )
+                    )
+                    app._set_workspace_text("C:/work/project")
+                    with patch.object(app, "_set_clipboard", copied.append):
+                        paths_menu.invoke(slash_index)
+                    self.assertEqual(app._workspace_text(), "C:\\work\\project")
+                    self.assertEqual(copied[-1], "C:\\work\\project")
 
                     app._set_workspace_text("One TWO\nThree")
                     app.workspace.tag_add(tk.SEL, "1.4", "1.7")

@@ -200,6 +200,32 @@
       ]
     },
     {
+      "id": "general-forward-slashes-to-backslashes",
+      "title": "Convert / to \\",
+      "type": "transform_slashes",
+      "value": "forward_to_back",
+      "state": "Active",
+      "tags": [
+        "path",
+        "slashes",
+        "text"
+      ],
+      "description": "Replace every forward slash in Input / Output with a backslash."
+    },
+    {
+      "id": "general-backslashes-to-forward-slashes",
+      "title": "Convert \\ to /",
+      "type": "transform_slashes",
+      "value": "back_to_forward",
+      "state": "Active",
+      "tags": [
+        "path",
+        "slashes",
+        "text"
+      ],
+      "description": "Replace every backslash in Input / Output with a forward slash."
+    },
+    {
       "id": "database-cte-template",
       "title": "Copy basic CTE template",
       "type": "copy_text",

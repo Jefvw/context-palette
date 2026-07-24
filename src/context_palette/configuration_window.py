@@ -45,6 +45,7 @@ from .context_deletion import (
 )
 from .diagnostics import render_safe_diagnostics, summarize_diagnostics
 from .harvest_window import HarvestWindow
+from .palette_state import PaletteState, load_palette_state, save_palette_state
 from .context_membership_field import (
     ContextMembershipField,
     TagSelectionField,
@@ -63,6 +64,10 @@ ACTION_TYPE_EXAMPLES = {
     "workspace_template": "Example: Put a reusable meeting-notes outline in Input / Output.",
     "ai_prompt": "Example: Load a stored review prompt into Input / Output before using it with an AI assistant.",
     "open_url": "Example: Open https://docs.python.org/ in the default browser.",
+    "open_windows_target": (
+        r"Example: Open vscode://file/c:/work/project/, shell:AppsFolder, "
+        r"or C:\Tools\script.cmd through Windows."
+    ),
     "open_file": r"Example: Open %PROJECT_ROOT%\README.md in its associated application.",
     "open_folder": r"Example: Open %PROJECT_ROOT%\docs in File Explorer.",
     "launch_app": r"Example: Start C:\Tools\Example\Example.exe with reviewed arguments.",
@@ -71,10 +76,12 @@ ACTION_TYPE_EXAMPLES = {
     "build_url_open": "Example: Ask for ABC 123 and open its generated website address.",
     "build_url_selection_open": "Example: Use selected text ABC 123, copy its URL, and open it.",
     "transform_list_csv": "Example: Convert three input lines into red, green, blue.",
+    "transform_slashes": r"Example: Convert C:/work/project into C:\work\project.",
 }
 
 LOCAL_DESTINATION = "My configuration"
 PROJECT_DESTINATION = "Built-in"
+EMPTY_PIN_LABEL = "Not assigned"
 CONFIGURATION_TAB_INDEXES = {
     "actions": 0,
     "types": 1,
@@ -236,6 +243,23 @@ def select_first_tree_item(tree: ttk.Treeview, *, descend: bool = False) -> None
     tree.focus(target)
 
 
+def resolve_pinned_action_ids(
+    selected_labels: list[str],
+    action_choices: dict[str, str],
+) -> tuple[str, ...]:
+    action_ids: list[str] = []
+    for label in selected_labels:
+        if not label or label == EMPTY_PIN_LABEL:
+            continue
+        action_id = action_choices.get(label)
+        if action_id is None:
+            raise ActionError(f'Pinned action "{label}" is no longer available.')
+        if action_id in action_ids:
+            raise ActionError("Each action can occupy only one pinned slot.")
+        action_ids.append(action_id)
+    return tuple(action_ids)
+
+
 class ConfigurationWindow:
     def __init__(
         self,
@@ -272,6 +296,7 @@ class ConfigurationWindow:
         self.command_surface_path = command_surface_path
         self.local_command_surface_path = local_command_surface_path
         self.palette_path = palette_path
+        self.palette_state = PaletteState()
         self.work_item_sources_path = work_item_sources_path
         self.work_item_metadata_path = work_item_metadata_path
         self.work_item_settings_path = work_item_settings_path
@@ -406,6 +431,38 @@ class ConfigurationWindow:
             ),
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(0, 6))
+        pins = ttk.LabelFrame(
+            tab,
+            text="Pinned slots 1–5 · local to this computer",
+            padding=(8, 5),
+        )
+        self.pins_frame = pins
+        pins.pack(fill=tk.X, pady=(0, 8))
+        self.pin_vars: list[tk.StringVar] = []
+        self.pin_choices: dict[str, str] = {}
+        self.pin_comboboxes: list[ttk.Combobox] = []
+        for column in range(5):
+            pins.columnconfigure(column, weight=1)
+            slot = ttk.Frame(pins)
+            slot.grid(row=0, column=column, sticky="ew", padx=(0, 6))
+            ttk.Label(slot, text=f"Slot {column + 1}").pack(anchor=tk.W)
+            variable = tk.StringVar(value=EMPTY_PIN_LABEL)
+            chooser = ttk.Combobox(
+                slot,
+                textvariable=variable,
+                state="readonly",
+                width=12,
+            )
+            chooser.pack(fill=tk.X, pady=(2, 0))
+            self.pin_vars.append(variable)
+            self.pin_comboboxes.append(chooser)
+        self.save_pins_button = ttk.Button(
+            pins,
+            text="Save pins",
+            command=self._save_pinned_slots,
+            style="Accent.TButton",
+        )
+        self.save_pins_button.grid(row=0, column=5, sticky="se")
         filter_row = ttk.Frame(tab)
         filter_row.pack(fill=tk.X, pady=(0, 6))
         ttk.Label(filter_row, text="Find actions").pack(side=tk.LEFT)
@@ -501,7 +558,7 @@ class ConfigurationWindow:
         self.type_ids = list(ACTION_TYPES)
         self.type_list = tk.Listbox(panes, exportselection=False, width=30)
         for definition in ACTION_TYPES.values():
-            self.type_list.insert(tk.END, definition.label)
+            self.type_list.insert(tk.END, definition.display_label)
         panes.add(self.type_list, weight=1)
         detail = ttk.Frame(panes, padding=(12, 0, 0, 0))
         panes.add(detail, weight=2)
@@ -754,7 +811,7 @@ class ConfigurationWindow:
         if not selected:
             return
         definition = ACTION_TYPES[self.type_ids[selected[0]]]
-        self.type_title.set(definition.label)
+        self.type_title.set(definition.display_label)
         self.type_family.set(f"{definition.family} · {definition.id}")
         detail = (
             f"{definition.description}\n\nInput\n{definition.input_description}\n\n"
@@ -835,6 +892,7 @@ class ConfigurationWindow:
                 self.shared_actions_path,
                 self.local_actions_path,
             )
+            self.palette_state = load_palette_state(self.palette_path)
             self.contexts = load_combined_contexts(self.contexts_path, self.local_contexts_path)
             self.groups = load_combined_command_groups(
                 self.command_surface_path, self.local_command_surface_path
@@ -846,6 +904,7 @@ class ConfigurationWindow:
         finally:
             self.window.configure(cursor="")
         self._render_actions()
+        self._render_pinned_slots()
         self.local_context_names = {
             item.name.casefold()
             for item in (load_contexts(self.local_contexts_path) if self.local_contexts_path.exists() else [])
@@ -853,6 +912,53 @@ class ConfigurationWindow:
         self._render_contexts()
         self._render_buttons()
         self._refresh_diagnostics()
+
+    def _render_pinned_slots(self) -> None:
+        self.pin_choices = _action_choices(self.actions)
+        labels_by_id = {
+            action_id: label for label, action_id in self.pin_choices.items()
+        }
+        for action_id in self.palette_state.pinned_action_ids:
+            if action_id not in labels_by_id:
+                label = f"Missing action: {action_id}"
+                self.pin_choices[label] = action_id
+                labels_by_id[action_id] = label
+        values = [EMPTY_PIN_LABEL, *self.pin_choices]
+        for chooser in self.pin_comboboxes:
+            chooser.configure(values=values)
+        for index, variable in enumerate(self.pin_vars):
+            label = EMPTY_PIN_LABEL
+            if index < len(self.palette_state.pinned_action_ids):
+                action_id = self.palette_state.pinned_action_ids[index]
+                label = labels_by_id.get(action_id, f"Missing action: {action_id}")
+            variable.set(label)
+
+    def _save_pinned_slots(self) -> None:
+        try:
+            action_ids = resolve_pinned_action_ids(
+                [variable.get() for variable in self.pin_vars],
+                self.pin_choices,
+            )
+            updated = PaletteState(
+                action_ids,
+                self.palette_state.focus_context,
+                self.palette_state.context_slots,
+            )
+            save_palette_state(self.palette_path, updated)
+        except (ActionError, OSError) as exc:
+            messagebox.showerror(
+                "Pinned slots were not saved",
+                f"Context Palette could not save slots 1–5.\n\n{exc}",
+                parent=self.window,
+            )
+            return
+        self.palette_state = updated
+        self.on_change()
+        self._render_pinned_slots()
+        self.feedback_var.set(
+            f"Saved {len(action_ids)} pinned action(s) in slots 1–5."
+        )
+        self.feedback_label.configure(style="Success.TLabel")
 
     def _render_contexts(self) -> None:
         self.context_tree.delete(*self.context_tree.get_children())
@@ -989,7 +1095,7 @@ class ConfigurationWindow:
                 iid=iid,
                 text=action.title,
                 values=(
-                    ACTION_TYPES[action.type].label,
+                    ACTION_TYPES[action.type].display_label,
                     ", ".join(action.effective_contexts) or "General only",
                     ", ".join(action.effective_tags),
                     LOCAL_DESTINATION if local else PROJECT_DESTINATION,
@@ -1656,7 +1762,9 @@ class ActionDialog:
         self.window = tk.Toplevel(parent)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
         self.window.title(
-            f"Edit action · {definition.label}" if action else f"Create action · {definition.label}"
+            f"Edit action · {definition.display_label}"
+            if action
+            else f"Create action · {definition.display_label}"
         )
         configure_standard_window(self.window)
         outer = ttk.Frame(self.window, padding=12)
@@ -1670,7 +1778,11 @@ class ActionDialog:
             style="Accent.TButton",
         ).pack(side=tk.LEFT)
         ttk.Button(controls, text="Cancel", command=self.window.destroy).pack(side=tk.RIGHT)
-        ttk.Label(outer, text=definition.label, style="Heading.TLabel").pack(anchor=tk.W)
+        ttk.Label(
+            outer,
+            text=definition.display_label,
+            style="Heading.TLabel",
+        ).pack(anchor=tk.W)
         ttk.Label(
             outer,
             text=(
@@ -1739,10 +1851,15 @@ class ActionDialog:
                 wraplength=610,
             ).pack(anchor=tk.W, pady=(2, 0))
         label = {
-            "open_url": "Complete website address", "open_file": "File path",
+            "open_url": "Complete website address",
+            "open_windows_target": "Windows target, URI, path, or script",
+            "open_file": "File path",
             "open_folder": "Folder path", "launch_app": "Application .exe path",
             "paste_credential": "Exact Windows or generic credential target name",
             "transform_list_csv": "Conversion mode: csv or sql_strings",
+            "transform_slashes": (
+                "Conversion mode: forward_to_back or back_to_forward"
+            ),
         }.get(action_type, "Saved text or URL template")
         ttk.Label(outer, text=label).pack(anchor=tk.W, pady=(8, 0))
         self.value = tk.Text(outer, height=7, wrap=tk.WORD, undo=True)
@@ -1751,9 +1868,13 @@ class ActionDialog:
             self.value.insert("1.0", action.value)
         elif action_type == "transform_list_csv":
             self.value.insert("1.0", "csv")
+        elif action_type == "transform_slashes":
+            self.value.insert("1.0", "forward_to_back")
+        elif action_type == "open_windows_target":
+            self.value.insert("1.0", "vscode:")
         elif action_type in {"build_url_copy", "build_url_open", "build_url_selection_open"}:
             self.value.insert("1.0", "https://example.com/items/{id_url}")
-        if action_type == "launch_app":
+        if action_type in {"launch_app", "open_windows_target"}:
             _entry(outer, "Arguments, one per line (optional)", self.arguments_var)
             _entry(outer, "Working folder (optional)", self.working_directory_var)
         self.window.transient(parent)
@@ -2309,9 +2430,12 @@ def _action_choices(actions: list[Action]) -> dict[str, str]:
         key=lambda item: (item.title.casefold(), item.effective_contexts),
     ):
         context_label = ", ".join(action.effective_contexts) or "General"
-        label = f"{action.title} · {context_label}"
+        definition = ACTION_TYPES[action.type]
+        label = f"{definition.icon} {action.title} · {context_label}"
         if label in choices:
-            label = f"{label} · {ACTION_TYPES[action.type].label}"
+            label = f"{label} · {definition.label}"
+        if label in choices:
+            label = f"{label} · {action.id}"
         choices[label] = action.id
     return choices
 

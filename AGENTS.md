@@ -22,7 +22,9 @@ common modifications.
 - Keep the application portable and fast.
 - Prefer Python standard library and Tkinter.
 - Do not introduce a dependency without verifying portability and explaining why it is necessary.
-- Do not implement arbitrary shell-command execution.
+- Windows target actions may delegate user-configured protocols, file URIs,
+  drive paths, files, folders, and associated scripts to ShellExecute. Do not
+  invent or parse a separate compound command language.
 - Keep actions constrained, previewable, and testable.
 - Preserve the permanent Active/Archived action lifecycle. Confirmed creation
   and edits save immediately; do not reintroduce a Draft or Trusted gate.

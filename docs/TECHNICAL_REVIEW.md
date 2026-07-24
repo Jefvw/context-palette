@@ -15,7 +15,8 @@ The main technical risk is concentrated UI orchestration. `launcher.py` still ow
 ## Strengths
 
 - No mandatory third-party runtime dependency.
-- No arbitrary shell-command action type.
+- No application-defined compound command parser; one explicit Windows target
+  can be delegated to ShellExecute.
 - Domain behaviour is separated into actions, contexts, command-surface
   configuration, Inbox, cheat sheets, palette state, single-instance
   coordination, and hotkeys.

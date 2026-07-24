@@ -31,7 +31,7 @@ The roadmap describes ordered product outcomes, not commitments or implemented b
 
 ## Explicit non-goals
 
-- Arbitrary shell-command execution.
+- Application-defined compound shell-command parsing.
 - Hidden or automatic execution of unreviewed actions.
 - Cloud storage as a requirement.
 - Automatic context switching without user control.

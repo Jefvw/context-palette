@@ -30,7 +30,9 @@ owning module, focused tests, and documentation that normally changes with it.
 - Target Windows without administrator rights.
 - Prefer Python standard library and Tkinter.
 - Explain and verify portability before adding a dependency.
-- Never add arbitrary shell-command execution.
+- Keep Windows target execution explicit: delegate one configured target plus
+  structured arguments to ShellExecute; do not invent or parse a compound
+  command language.
 - Keep effects constrained, visible, previewable, and testable.
 - Preserve Capture → Draft → Test → Refine → Trusted.
 - Keep Tk widget access on the main thread.

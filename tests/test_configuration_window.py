@@ -19,19 +19,22 @@ from context_palette.configuration_window import (
     GroupDialog,
     LOCAL_DESTINATION,
     PROJECT_DESTINATION,
+    EMPTY_PIN_LABEL,
     action_reference_labels,
     action_matches_filter,
     context_action_summary,
     context_membership_count,
     context_matches_filter,
     quick_action_matches_filter,
+    resolve_pinned_action_ids,
     select_first_tree_item,
     _focus_entry,
 )
 from context_palette.action_deletion import ActionDeletionReport
-from context_palette.actions import Action, append_action, load_actions
+from context_palette.actions import Action, ActionError, append_action, load_actions
 from context_palette.command_surface import CommandGroup, CommandItem
 from context_palette.contexts import ContextDefinition
+from context_palette.palette_state import PaletteState, load_palette_state
 
 
 class FakeVariable:
@@ -189,6 +192,68 @@ class ActionReferenceLabelTests(unittest.TestCase):
             "2 member(s) | Preferred: Open project folder, Open code editor",
         )
         self.assertNotIn("open-project", summary)
+
+
+class PinnedSlotConfigurationTests(unittest.TestCase):
+    def test_pin_labels_resolve_in_slot_order_and_close_empty_gaps(self) -> None:
+        self.assertEqual(
+            resolve_pinned_action_ids(
+                ["Copy greeting", EMPTY_PIN_LABEL, "Open docs"],
+                {
+                    "Copy greeting": "copy-greeting",
+                    "Open docs": "open-docs",
+                },
+            ),
+            ("copy-greeting", "open-docs"),
+        )
+
+    def test_duplicate_pin_assignment_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ActionError, "only one pinned slot"):
+            resolve_pinned_action_ids(
+                ["Greeting", "Greeting"],
+                {"Greeting": "copy-greeting"},
+            )
+
+    def test_save_pins_preserves_focus_and_context_slots(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+            configuration.pin_vars = [
+                FakeVariable("Greeting"),
+                FakeVariable(EMPTY_PIN_LABEL),
+                FakeVariable("Documentation"),
+                FakeVariable(EMPTY_PIN_LABEL),
+                FakeVariable(EMPTY_PIN_LABEL),
+            ]
+            configuration.pin_choices = {
+                "Greeting": "copy-greeting",
+                "Documentation": "open-docs",
+            }
+            configuration.palette_state = PaletteState(
+                ("old",),
+                "Developing",
+                {"Developing": ("open-code",)},
+            )
+            configuration.palette_path = Path(directory) / "palette.json"
+            configuration.window = FakeWindow()
+            configuration.on_change = Mock()
+            configuration._render_pinned_slots = Mock()
+            configuration.feedback_var = FakeVariable()
+            configuration.feedback_label = Mock()
+
+            configuration._save_pinned_slots()
+
+            saved = load_palette_state(configuration.palette_path)
+            self.assertEqual(
+                saved,
+                PaletteState(
+                    ("copy-greeting", "open-docs"),
+                    "Developing",
+                    {"Developing": ("open-code",)},
+                ),
+            )
+            configuration.on_change.assert_called_once_with()
+            configuration._render_pinned_slots.assert_called_once_with()
+            self.assertIn("2 pinned action(s)", configuration.feedback_var.value)
 
 
 class ConfigurationFilterTests(unittest.TestCase):

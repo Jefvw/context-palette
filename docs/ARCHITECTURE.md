@@ -18,7 +18,8 @@ Context Palette is optimized for:
 2. Portable operation from a user-writable Windows folder.
 3. No administrator requirement, installer, service, registry modification, or mandatory AutoHotkey.
 4. Inspectable local JSON and Markdown data.
-5. Constrained action types instead of arbitrary command execution.
+5. Explicit action types, including a user-owned Windows ShellExecute target,
+   instead of an application-defined compound command language.
 6. Permanent confirmed action creation with Active and Archived states.
 7. Standard-library implementation where practical.
 
@@ -140,16 +141,25 @@ Action domain model, persistence, validation, search, transformation, and dispat
 Important principles:
 
 - Each action type is explicitly allow-listed.
+- Windows target actions pass one configured target, optional structured
+  arguments, and an optional working folder to `os.startfile()`/ShellExecute.
+  Registered protocols, file URIs, drive paths, documents, and associated
+  scripts are deliberately accepted. The action preview makes clear that the
+  target can execute code and is not sandboxed.
 - Guided creation and JSON loading share the same action-value validation, while
   execution retains safety checks around platform effects.
-- Arbitrary shell commands are rejected.
+- The app does not tokenize or interpret a compound shell command language.
 - Pure transformations are separated from UI callbacks.
 - Platform effects are injected through callbacks where practical, enabling tests without opening applications.
 - Clipboard access during template expansion is lazy: actions without clipboard variables do not fail when the clipboard contains a non-text format.
 
 ### `action_types.py`
 
-Defines the machine-readable catalogue for every supported action type: user label, family, description, required fields, input/output effects, portability, AI eligibility, and type-specific AI guidance. `actions.py` derives its supported-type set from this catalogue, and AI prompt generation consumes the same definitions.
+Defines the machine-readable catalogue for every supported action type: icon,
+user label, family, description, required fields, input/output effects,
+portability, AI eligibility, and type-specific AI guidance. `actions.py`
+derives its supported-type set and compact row icon from this catalogue, and AI
+prompt generation consumes the same definitions.
 
 The catalogue renders `docs/ACTION_TYPES.md`; an automated test requires the user-readable overview to remain identical to the executable definitions.
 
@@ -585,13 +595,14 @@ Compact result rows show a type cue followed by the short name:
 ```text
 ↗ subject
 ⧉ subject
+✦ subject
 ```
 
-Open uses `↗` and Copy uses `⧉`; other recognized commands retain their short
-text label. A leading command is removed from an existing title, or inferred
-from the constrained action type when the short name has no command. The full
-built-in type, contexts, tags, short name, and optional description are shown
-in delayed row help and Action info, so symbols are never the only explanation.
+Every constrained action type owns a standard symbol in `action_types.py`. A
+redundant leading command such as Open, Copy, or Convert is removed from an
+existing title. The full icon and built-in type, contexts, tags, short name, and
+optional description are shown in filters, Configure, delayed row help, and
+Action info, so symbols are never the only explanation.
 
 The full explanation path is:
 
@@ -867,12 +878,16 @@ Detailed help is stored once in `docs/HELP.md` and displayed by the in-app searc
   hostname. Reject embedded usernames/passwords, whitespace/control characters
   in the authority, and backslash-based authority ambiguity.
 - Validate files, folders, executables, and working directories before opening.
-- Do not execute arbitrary shell command strings.
+- Do not invent or parse a compound shell command language; keep Windows target
+  execution as one explicit target plus structured arguments.
 - Keep API keys out of version-controlled files.
 - Never enumerate or write Windows credentials. Credential actions store only
   exact target names and are unavailable to AI proposal and external execution paths.
 - Require explicit user action for launches and trust promotion.
-- Treat captured text and AI responses as untrusted data. AI requests are previewed and copied manually; responses must remain within the bounded size limit and pass the versioned proposal schema and existing action validation before selected proposals become local Drafts.
+- Treat captured text and AI responses as untrusted data. AI requests are
+  previewed and copied manually; responses must remain within the bounded size
+  limit and pass the versioned proposal schema and existing action validation
+  before selected proposals become local Active actions.
 
 ## Testing strategy
 

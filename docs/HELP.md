@@ -64,8 +64,8 @@ but cannot be selected.
 
 Choose **Preview selected actions**, then **Create selected actions**. All selected
 actions are validated again and written to the personal action file in one
-atomic operation. They always start as Drafts. Cancelling the scan or closing
-the review window creates nothing. Per-file failures do not discard successful
+atomic operation. They are permanent Active actions. Cancelling the scan or
+closing the review window creates nothing. Per-file failures do not discard successful
 results from other files, and size, compression, worksheet, cell, occurrence,
 and candidate limits keep scans bounded.
 
@@ -313,10 +313,12 @@ Choose **Manage focuses…** in the Focus selector for direct Focus
 configuration. Choose **Configure**, or use the shortcut (`Ctrl+,`), for the
 complete guided configuration workspace:
 
-- **Actions:** edit every kind of My configuration or Built-in action, including URLs,
-  files, folders, applications, credentials, URL builders, and
-  transformations. New actions default to **My configuration**; choose
-  **Built-in** only when deliberately changing shipped starter data.
+- **Actions:** assign the five machine-local pinned slots directly, then edit
+  every kind of My configuration or Built-in action, including URLs, files,
+  folders, applications, credentials, URL builders, and transformations.
+  Empty pin choices are closed automatically when saved. New actions default
+  to **My configuration**; choose **Built-in** only when deliberately changing
+  shipped starter data.
 - **Built-in action types:** inspect what each built-in type reads and does, see
   a concrete example, then create a validated permanent personal action.
 - **Contexts:** add, edit, or delete contexts, assign any built-in or personal
@@ -445,8 +447,9 @@ The bottom communication line always stays one row high. Hover over it for the c
 - Transform groups provide lowercase, UPPERCASE, Proper Case, sentence case,
   inverted case, consecutive-space normalization, per-line trimming,
   prefix/suffix, blank-line removal, A–Z or Z–A sorting, joining lines with
-  spaces, SQL value-list formatting, and consecutive or global duplicate-line
-  removal. SQL formatting accepts lines, commas, tabs, or semicolons; numbers
+  spaces, `/` to `\` or `\` to `/` path conversion, SQL value-list formatting,
+  and consecutive or global duplicate-line removal. SQL formatting accepts
+  lines, commas, tabs, or semicolons; numbers
   and `NULL` remain unquoted, while text is quoted and apostrophes are escaped.
 - Transform actions read it and place their result back in it.
 - URL-builder actions use it as selected input when it is not empty.
@@ -563,7 +566,10 @@ warning.
 
 ### Pin
 
-Adds the selected action to the next free pinned slot from 1 to 5. If already pinned, it removes the pin. When all five slots are occupied, unpin another action first.
+Adds the selected action to the next free pinned slot from 1 to 5. If already
+pinned, it removes the pin. When all five slots are occupied, unpin another
+action first. To assign or reorder all five slots directly, open
+**Configure**, choose **Actions**, and use **Pinned slots 1–5**.
 
 ### Help
 
@@ -600,16 +606,54 @@ The short name is the compact label shown in action lists. Description is
 optional longer text: it is searchable and appears in row help and Action info,
 but does not consume permanent list space.
 
-To keep the launcher fast to scan, Open and Copy use compact type symbols:
+To keep the launcher fast to scan, every built-in action type has one standard
+compact symbol:
 
-| Symbol | Meaning |
+| Symbol | Action type |
 | --- | --- |
-| `↗` | Open |
-| `⧉` | Copy |
+| `⧉` | Paste saved text |
+| `▤` | Place a template in Input / Output |
+| `✦` | AI prompt |
+| `↗` | Open a website |
+| `⌁` | Open or run a Windows target |
+| `▧` | Open a file |
+| `📁` | Open a folder |
+| `▶` | Run an application |
+| `🔑` | Paste a Windows credential |
+| `🔗` | Build and copy a URL |
+| `⇱` | Build and open a URL |
+| `⇗` | Build a URL from selected text |
+| `⇄` | Convert lines to a list |
+| `／` | Convert path slashes |
 
-Other commands retain a short text cue. The complete built-in action type and
-description remain available in hover help and Action info, so the symbols do
-not replace accessible explanations.
+The complete built-in action type and description remain available beside the
+icon in filters and Configure, and in hover help and Action info. Symbols never
+replace accessible explanations.
+
+### Open or run Windows targets
+
+Create an **Open or run a Windows target** action when Windows itself knows how
+to handle the target. Examples include:
+
+```text
+vscode://file/c:/work/project/
+vscode://settings/editor.wordWrap
+shell:AppsFolder
+file:///C:/work/project/readme.md
+C:\work\project\readme.md
+C:\Tools\script.cmd
+```
+
+Optional arguments are entered one per line so spaces and quoting remain
+predictable. An optional working folder can also be set. Registered protocols
+work only when an installed application owns that protocol. If Windows cannot
+resolve a path, association, or protocol, Context Palette reports an actionable
+error.
+
+This is a deliberately powerful personal-tool action. Context Palette passes
+the configured target directly to Windows ShellExecute and does not inspect or
+sandbox what it starts. Targets may execute code. Configure only targets you
+intend to run; the application does not add a confirmation prompt.
 
 The main palette keeps its compact width. Its eight management commands use the
 single character strip documented above, keeping every command directly
@@ -665,8 +709,9 @@ tracked, Context Palette keeps treating the clipboard as protected and will
 not synchronize its content into Input / Output.
 
 Credential paste is unavailable after an ordinary launcher/external show
-request because that route has no fresh destination window. Credential actions
-cannot run as Drafts and are not AI-proposable. Windows Credential Manager
+request because that route has no fresh destination window. Archived
+credential actions are hidden, and credential actions are not AI-proposable.
+Windows Credential Manager
 protects storage at rest, but this feature cannot protect against malicious
 software already running as the same Windows user.
 

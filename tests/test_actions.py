@@ -1,5 +1,7 @@
 import json
 from pathlib import Path
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -34,8 +36,10 @@ from context_palette.actions import (
     update_action,
     validate_credential_target,
     validate_context_memberships,
+    validate_windows_target,
     validate_http_url,
 )
+from context_palette.action_types import ACTION_TYPES
 
 
 class ActionTests(unittest.TestCase):
@@ -522,8 +526,23 @@ class ActionTests(unittest.TestCase):
                 "transform_list_csv",
                 "csv",
             ).compact_display_text,
-            "Convert → values",
+            "⇄ values",
         )
+
+    def test_every_action_type_has_a_compact_icon(self):
+        for action_type, definition in ACTION_TYPES.items():
+            with self.subTest(action_type=action_type):
+                action = Action(
+                    action_type,
+                    "Example action",
+                    "General",
+                    action_type,
+                    "example",
+                )
+                self.assertEqual(
+                    action.compact_display_text,
+                    f"{definition.icon} Example action",
+                )
 
     def test_action_description_round_trips_without_affecting_legacy_files(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -633,6 +652,79 @@ class ActionTests(unittest.TestCase):
         for value in unsafe_urls:
             with self.subTest(value=value), self.assertRaises(ActionError):
                 validate_http_url(value)
+
+    def test_windows_target_validation_accepts_personal_windows_targets(self):
+        for value in (
+            "vscode:",
+            "vscode://file/c:/work/project/",
+            "shell:AppsFolder",
+            "file:///C:/work/project/read me.txt",
+            r"C:\work\project\read me.txt",
+            r"C:\Tools\script.cmd",
+            "https://example.com",
+            'vscode:"value with spaces"',
+        ):
+            with self.subTest(value=value):
+                validate_windows_target(value)
+
+    def test_windows_target_validation_rejects_only_unrepresentable_values(self):
+        with self.assertRaisesRegex(ActionError, "null"):
+            validate_windows_target("C:\\work\x00file.txt")
+        with self.assertRaisesRegex(ActionError, "too long"):
+            validate_windows_target("x" * 32_768)
+
+    def test_open_windows_target_uses_windows_shell_execute(self):
+        action = Action(
+            "open-code",
+            "Open VS Code",
+            "General",
+            "open_windows_target",
+            "vscode://file/c:/work/project/",
+        )
+        with patch.object(os, "startfile", create=True) as startfile:
+            open_action_target(action)
+
+        startfile.assert_called_once_with(action.value, "open", None, None)
+
+    def test_open_windows_target_passes_arguments_and_working_folder(self):
+        with tempfile.TemporaryDirectory() as directory:
+            action = Action(
+                "run-script",
+                "Run script",
+                "General",
+                "open_windows_target",
+                '"C:\\Tools\\script.cmd"',
+                arguments=("first value", "/quiet"),
+                working_directory=directory,
+            )
+            with patch.object(os, "startfile", create=True) as startfile:
+                open_action_target(action)
+
+        startfile.assert_called_once_with(
+            r"C:\Tools\script.cmd",
+            "open",
+            subprocess.list2cmdline(action.arguments),
+            directory,
+        )
+
+    def test_open_windows_target_reports_unavailable_target(self):
+        action = Action(
+            "open-notes",
+            "Open notes",
+            "General",
+            "open_windows_target",
+            "notepad:",
+        )
+        with (
+            patch.object(
+                os,
+                "startfile",
+                create=True,
+                side_effect=OSError("No handler"),
+            ),
+            self.assertRaisesRegex(ActionError, "path exists"),
+        ):
+            open_action_target(action)
 
     def test_all_url_action_creation_paths_reject_embedded_credentials(self):
         value = "https://user:secret@example.com/private"
@@ -754,6 +846,53 @@ class ActionTests(unittest.TestCase):
 
         self.assertEqual(output, ["'alpha', 'beta'"])
         self.assertEqual(copied, output)
+
+    def test_slash_transform_actions_update_output_and_clipboard(self):
+        cases = (
+            ("forward_to_back", "C:/work/project/file.txt", "C:\\work\\project\\file.txt"),
+            ("back_to_forward", "C:\\work\\project\\file.txt", "C:/work/project/file.txt"),
+        )
+        for mode, source, expected in cases:
+            copied: list[str] = []
+            output: list[str] = []
+            action = Action(
+                mode,
+                "Convert path",
+                "General",
+                "transform_slashes",
+                mode,
+            )
+
+            execute_action(
+                action,
+                input_text=source,
+                clipboard_setter=copied.append,
+                output_setter=output.append,
+            )
+
+            self.assertEqual(output, [expected])
+            self.assertEqual(copied, [expected])
+
+    def test_slash_transform_action_requires_workspace_text(self):
+        action = Action(
+            "slashes",
+            "Convert path",
+            "General",
+            "transform_slashes",
+            "forward_to_back",
+        )
+
+        with self.assertRaisesRegex(ActionError, "does not contain text"):
+            execute_action(action, input_text="")
+
+    def test_slash_transform_action_rejects_unknown_direction(self):
+        with self.assertRaisesRegex(ActionError, "forward_to_back"):
+            configured_action(
+                title="Broken slash conversion",
+                context="General",
+                action_type="transform_slashes",
+                value="toggle",
+            )
 
     def test_workspace_template_updates_output_and_clipboard(self):
         copied = []

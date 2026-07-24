@@ -466,7 +466,9 @@ class LauncherApp:
     def _select_action_type_filter(self, action_type: str | None) -> None:
         self.action_type_filter = action_type
         self.action_type_filter_var.set(
-            ACTION_TYPES[action_type].label if action_type is not None else "All types"
+            ACTION_TYPES[action_type].display_label
+            if action_type is not None
+            else "All types"
         )
         if self.passwords_button is not None:
             self.passwords_button.configure(
@@ -538,7 +540,9 @@ class LauncherApp:
         panel.set_filter_indicators(
             work_items=False,
             primary_value=(
-                ACTION_TYPES[action_type].label if action_type is not None else None
+                ACTION_TYPES[action_type].display_label
+                if action_type is not None
+                else None
             ),
             tag_value=self.action_tag_filter,
         )
@@ -849,7 +853,7 @@ class LauncherApp:
         lines.append(f"Action: {action.title}")
         if action.description:
             lines.append(f"Description: {action.description}")
-        lines.append(f"Type: {ACTION_TYPES[action.type].label}")
+        lines.append(f"Type: {ACTION_TYPES[action.type].display_label}")
         return "\n".join(lines)
 
     def _transform_workspace(
@@ -1749,7 +1753,7 @@ class LauncherApp:
                 self.action_type_filter is not None
                 and self.action_tag_filter is not None
             ):
-                type_label = ACTION_TYPES[self.action_type_filter].label
+                type_label = ACTION_TYPES[self.action_type_filter].display_label
                 empty_message = (
                     f'No {type_label} actions tagged “{self.action_tag_filter}” '
                     f'match “{query}”.\nClear Find or choose another filter.'
@@ -1766,7 +1770,7 @@ class LauncherApp:
                     "Choose another tag or add it in Configure."
                 )
             elif self.action_type_filter is not None:
-                type_label = ACTION_TYPES[self.action_type_filter].label
+                type_label = ACTION_TYPES[self.action_type_filter].display_label
                 empty_message = (
                     f'No {type_label} actions match “{query}”.\n'
                     "Clear Find or choose another type."
@@ -1789,7 +1793,7 @@ class LauncherApp:
                 self.action_type_filter is not None
                 and self.action_tag_filter is not None
             ):
-                type_label = ACTION_TYPES[self.action_type_filter].label
+                type_label = ACTION_TYPES[self.action_type_filter].display_label
                 self.status_var.set(
                     f"No matching actions · type: {type_label} · "
                     f"tag: {self.action_tag_filter}"
@@ -1799,7 +1803,7 @@ class LauncherApp:
                     f"No matching action tagged {self.action_tag_filter}."
                 )
             elif self.action_type_filter is not None:
-                type_label = ACTION_TYPES[self.action_type_filter].label
+                type_label = ACTION_TYPES[self.action_type_filter].display_label
                 self.status_var.set(
                     f"No matching {type_label} action. Clear Find or choose another type."
                 )
@@ -1810,7 +1814,7 @@ class LauncherApp:
                 self.action_type_filter is not None
                 and self.action_tag_filter is not None
             ):
-                type_label = ACTION_TYPES[self.action_type_filter].label
+                type_label = ACTION_TYPES[self.action_type_filter].display_label
                 self.status_var.set(
                     f"{count} action{'s' if count != 1 else ''} · "
                     f"type: {type_label} · tag: {self.action_tag_filter}"
@@ -1821,7 +1825,7 @@ class LauncherApp:
                     f"{self.action_tag_filter}"
                 )
             elif self.action_type_filter is not None:
-                type_label = ACTION_TYPES[self.action_type_filter].label
+                type_label = ACTION_TYPES[self.action_type_filter].display_label
                 label = f"{type_label} action" if count == 1 else f"{type_label} actions"
                 self.status_var.set(f"{count} {label}")
             else:
@@ -2389,7 +2393,7 @@ class LauncherApp:
             )
             + f"Contexts: {', '.join(action.effective_contexts) or 'General only'}\n"
             f"Tags: {', '.join(action.effective_tags) or '(none)'}\n"
-            f"Type: {ACTION_TYPES[action.type].label}\n"
+            f"Type: {ACTION_TYPES[action.type].display_label}\n"
             f"State: {action.state}"
         )
 
@@ -2405,6 +2409,17 @@ class LauncherApp:
             )
         if action.type == "open_url":
             return f"Open URL:\n{action.value}"
+        if action.type == "open_windows_target":
+            lines = [
+                f"Open or run Windows target:\n{action.value}",
+                "This target may execute code and is not sandboxed.",
+            ]
+            if action.arguments:
+                lines.append("Arguments:")
+                lines.extend(action.arguments)
+            if action.working_directory:
+                lines.append(f"Working folder:\n{action.working_directory}")
+            return "\n".join(lines)
         if action.type == "open_file":
             return f"Open file:\n{action.value}"
         if action.type == "open_folder":
@@ -2433,6 +2448,16 @@ class LauncherApp:
         if action.type == "transform_list_csv":
             mode = "quoted SQL strings" if action.value == "sql_strings" else "comma-separated values"
             return f"Transform Input / Output lines into {mode}.\nThe result replaces the field and is copied."
+        if action.type == "transform_slashes":
+            direction = (
+                "/ to \\"
+                if action.value == "forward_to_back"
+                else "\\ to /"
+            )
+            return (
+                f"Convert every {direction} in Input / Output.\n"
+                "The result replaces the field and is copied."
+            )
         if action.type == "workspace_template":
             return "Load this template into Input / Output and copy it:\n" + action.value
         return f"{action.type}:\n{action.value}"

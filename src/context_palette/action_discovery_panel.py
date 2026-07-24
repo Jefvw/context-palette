@@ -401,9 +401,9 @@ class ActionDiscoveryPanel:
         menu.add_separator()
         for action_type, definition in ACTION_TYPES.items():
             menu.add_radiobutton(
-                label=definition.label,
+                label=definition.display_label,
                 variable=self.action_type_filter_var,
-                value=definition.label,
+                value=definition.display_label,
                 command=lambda selected=action_type: self.select_action_type_filter(selected),
             )
         self.type_filter.configure(menu=menu)

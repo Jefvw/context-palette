@@ -13,7 +13,7 @@ from uuid import uuid4
 import webbrowser
 
 from .persistence import atomic_write_json
-from .action_types import SUPPORTED_ACTION_TYPES
+from .action_types import ACTION_TYPES, SUPPORTED_ACTION_TYPES
 
 
 ACTIVE_STATE = "Active"
@@ -64,35 +64,12 @@ class Action:
     def compact_display_text(self) -> str:
         title = self.title.strip()
         commands = ("Open", "Copy", "Convert", "Search", "Arrange", "Restore")
-        command_symbols = {
-            "Open": "↗",
-            "Copy": "⧉",
-        }
         for command in commands:
             prefix = command + " "
             if title.casefold().startswith(prefix.casefold()):
-                label = command_symbols.get(command, command)
-                separator = " " if command in command_symbols else " → "
-                return f"{label}{separator}{title[len(prefix):].strip()}"
-
-        inferred_command = {
-            "copy_text": "⧉",
-            "workspace_template": "⧉",
-            "ai_prompt": "Load",
-            "transform_list_csv": "Convert",
-            "open_url": "↗",
-            "open_file": "↗",
-            "open_folder": "↗",
-            "launch_app": "↗",
-            "paste_credential": "Paste",
-            "build_url_copy": "⧉",
-            "build_url_open": "↗",
-            "build_url_selection_open": "↗",
-        }.get(self.type)
-        if not inferred_command:
-            return title
-        separator = " " if inferred_command in command_symbols.values() else " → "
-        return f"{inferred_command}{separator}{title}"
+                title = title[len(prefix):].strip()
+                break
+        return f"{ACTION_TYPES[self.type].icon} {title}"
 
 
 def normalize_contexts(values: Iterable[str]) -> tuple[str, ...]:
@@ -503,6 +480,16 @@ def execute_action(
             clipboard_setter(result)
         return "Transformed the list and copied the result."
 
+    if action.type == "transform_slashes":
+        if not input_text:
+            raise ActionError("The Input / Output field does not contain text.")
+        result = transform_text(input_text, action.value)
+        if output_setter is not None:
+            output_setter(result)
+        if clipboard_setter is not None:
+            clipboard_setter(result)
+        return "Converted path slashes and copied the result."
+
     if action.type == "build_url_selection_open":
         identifier = selected_text
         if not identifier and clipboard_getter is not None:
@@ -566,7 +553,13 @@ def execute_action(
         clipboard_setter(expanded.value)
         return "Copied text to the clipboard."
 
-    if action.type in {"open_url", "open_file", "open_folder", "launch_app"}:
+    if action.type in {
+        "open_url",
+        "open_windows_target",
+        "open_file",
+        "open_folder",
+        "launch_app",
+    }:
         selected_opener = opener or open_action_target
         selected_opener(expanded)
         return "Opened selected target."
@@ -603,6 +596,14 @@ def validate_http_url(value: str, *, label: str = "URL") -> None:
         raise ActionError(f"{label} has an invalid or ambiguous hostname.")
 
 
+def validate_windows_target(value: str) -> None:
+    """Reject only values Windows cannot receive as a ShellExecute target."""
+    if len(value) > 32_767:
+        raise ActionError("Windows target is too long.")
+    if "\x00" in value:
+        raise ActionError("Windows target cannot contain a null character.")
+
+
 def validate_credential_target(value: str) -> None:
     if not value.strip():
         raise ActionError("Windows credential target name cannot be empty.")
@@ -619,12 +620,21 @@ def validate_action_value(action_type: str, value: str) -> None:
         raise ActionError("The action value cannot be empty.")
     if action_type == "open_url":
         validate_http_url(clean_value, label="Action URL")
+    elif action_type == "open_windows_target":
+        validate_windows_target(clean_value)
     elif action_type == "paste_credential":
         validate_credential_target(clean_value)
     elif action_type in {"build_url_copy", "build_url_open", "build_url_selection_open"}:
         build_url(clean_value, "example")
     elif action_type == "transform_list_csv" and clean_value not in {"csv", "sql_strings"}:
         raise ActionError("List conversion must use csv or sql_strings.")
+    elif action_type == "transform_slashes" and clean_value not in {
+        "forward_to_back",
+        "back_to_forward",
+    }:
+        raise ActionError(
+            "Slash conversion must use forward_to_back or back_to_forward."
+        )
 
 
 def list_to_comma_separated(value: str, *, sql_strings: bool = False) -> str:
@@ -708,6 +718,10 @@ def transform_text(
         return _remove_consecutive_duplicate_lines(value)
     if operation == "remove_duplicate_lines":
         return _remove_duplicate_lines(value)
+    if operation == "forward_to_back":
+        return value.replace("/", "\\")
+    if operation == "back_to_forward":
+        return value.replace("\\", "/")
     raise ActionError(f"Unsupported text transformation: {operation}")
 
 
@@ -878,6 +892,28 @@ def expand_template(value: str, *, clipboard: str = "", now: datetime | None = N
 def open_action_target(action: Action) -> None:
     if action.type == "open_url":
         _open_url(action.value)
+        return
+    if action.type == "open_windows_target":
+        validate_windows_target(action.value)
+        target = action.value.strip()
+        if len(target) >= 2 and target[0] == target[-1] == '"':
+            target = target[1:-1]
+        arguments = (
+            subprocess.list2cmdline(action.arguments) if action.arguments else None
+        )
+        cwd = _resolve_working_directory(action.working_directory)
+        try:
+            os.startfile(  # type: ignore[attr-defined]
+                target,
+                "open",
+                arguments,
+                cwd,
+            )
+        except OSError as exc:
+            raise ActionError(
+                "Windows could not open or run this target. Check that the path "
+                "exists or that an application is registered for the target."
+            ) from exc
         return
 
     target = Path(action.value).expanduser()

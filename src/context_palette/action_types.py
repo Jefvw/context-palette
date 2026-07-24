@@ -6,6 +6,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class ActionTypeDefinition:
     id: str
+    icon: str
     label: str
     family: str
     description: str
@@ -16,9 +17,14 @@ class ActionTypeDefinition:
     ai_proposable: bool = False
     ai_guidance: str = ""
 
+    @property
+    def display_label(self) -> str:
+        return f"{self.icon} {self.label}"
+
 
 def _definition(
     action_type: str,
+    icon: str,
     label: str,
     family: str,
     description: str,
@@ -31,6 +37,7 @@ def _definition(
 ) -> ActionTypeDefinition:
     return ActionTypeDefinition(
         id=action_type,
+        icon=icon,
         label=label,
         family=family,
         description=description,
@@ -48,6 +55,7 @@ ACTION_TYPES = {
     for item in (
         _definition(
             "copy_text",
+            "⧉",
             "Paste saved text",
             "Saved content",
             "Paste a reviewed reusable text value into the captured destination, or copy it when no safe destination is available.",
@@ -62,6 +70,7 @@ ACTION_TYPES = {
         ),
         _definition(
             "workspace_template",
+            "▤",
             "Place a template in Input / Output",
             "Saved content",
             "Place reusable text in the editable workspace and clipboard.",
@@ -71,6 +80,7 @@ ACTION_TYPES = {
         ),
         _definition(
             "ai_prompt",
+            "✦",
             "AI prompt",
             "AI assistance",
             "Place a stored AI prompt in the editable workspace and clipboard for review before use.",
@@ -80,6 +90,7 @@ ACTION_TYPES = {
         ),
         _definition(
             "open_url",
+            "↗",
             "Open a website",
             "Open target",
             "Open one fixed HTTP or HTTPS address in the default browser.",
@@ -93,7 +104,18 @@ ACTION_TYPES = {
             ),
         ),
         _definition(
+            "open_windows_target",
+            "⌁",
+            "Open or run a Windows target",
+            "Open target",
+            "Ask Windows to open or run a target such as vscode:, shell:, a file URI, drive path, document, or associated script.",
+            "No runtime input unless supported template variables are present.",
+            "Passes the target and optional arguments to Windows ShellExecute.",
+            "Windows-only. The target can execute code and is not sandboxed; configure only targets you trust.",
+        ),
+        _definition(
             "open_file",
+            "▧",
             "Open a file",
             "Open target",
             "Open one existing file with its associated Windows application.",
@@ -103,6 +125,7 @@ ACTION_TYPES = {
         ),
         _definition(
             "open_folder",
+            "📁",
             "Open a folder",
             "Open target",
             "Open one existing folder in Windows Explorer.",
@@ -112,6 +135,7 @@ ACTION_TYPES = {
         ),
         _definition(
             "launch_app",
+            "▶",
             "Run an application",
             "Open target",
             "Start one explicitly configured existing Windows executable.",
@@ -121,6 +145,7 @@ ACTION_TYPES = {
         ),
         _definition(
             "paste_credential",
+            "🔑",
             "Paste a Windows credential",
             "Protected credential",
             "Retrieve one exact generic or standard Windows credential from Credential Manager and paste it into the captured destination field.",
@@ -130,6 +155,7 @@ ACTION_TYPES = {
         ),
         _definition(
             "build_url_copy",
+            "🔗",
             "Build and copy a URL",
             "URL builder",
             "Insert prompted text into a reviewed HTTP/HTTPS URL template.",
@@ -139,6 +165,7 @@ ACTION_TYPES = {
         ),
         _definition(
             "build_url_open",
+            "⇱",
             "Build and open a URL",
             "URL builder",
             "Insert prompted text into a reviewed HTTP/HTTPS URL template.",
@@ -148,6 +175,7 @@ ACTION_TYPES = {
         ),
         _definition(
             "build_url_selection_open",
+            "⇗",
             "Build a URL from selected text",
             "URL builder",
             "Insert selected, workspace, or clipboard text into a reviewed URL template.",
@@ -157,9 +185,20 @@ ACTION_TYPES = {
         ),
         _definition(
             "transform_list_csv",
+            "⇄",
             "Convert lines to a list",
             "Transformation",
             "Convert workspace lines into a comma-separated plain or SQL string list.",
+            "Reads Input / Output text.",
+            "Replaces Input / Output and clipboard text.",
+            "Portable; operation is constrained by the application.",
+        ),
+        _definition(
+            "transform_slashes",
+            "／",
+            "Convert path slashes",
+            "Transformation",
+            "Replace every forward slash with a backslash, or every backslash with a forward slash.",
             "Reads Input / Output text.",
             "Replaces Input / Output and clipboard text.",
             "Portable; operation is constrained by the application.",
@@ -176,8 +215,8 @@ def render_action_type_overview() -> str:
         "",
         "This overview is generated from `context_palette.action_types`, the shared source of truth used by validation and AI guidance.",
         "",
-        "| Action type | User label | Family | Input | Output | Portability | AI proposals |",
-        "|---|---|---|---|---|---|---|",
+        "| Action type | Icon | User label | Family | Input | Output | Portability | AI proposals |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for definition in ACTION_TYPES.values():
         lines.append(
@@ -185,6 +224,7 @@ def render_action_type_overview() -> str:
             + " | ".join(
                 (
                     f"`{definition.id}`",
+                    definition.icon,
                     definition.label,
                     definition.family,
                     definition.input_description,

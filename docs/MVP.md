@@ -14,12 +14,12 @@ and retrieve it quickly in a chosen focus context.
 | --- | --- | --- |
 | Resident launcher and global shortcut | Implemented | `F9` primary, `Ctrl+Alt+P` fallback |
 | Global search and keyboard execution | Implemented | Search stays global; fixed slots use 1–9 |
-| Global pins and focus-context slots | Implemented | Pins 1–5, context slots 6–9 |
-| Guided configuration | Implemented | Actions, contexts, and Quick actions use My configuration or Built-in ownership; context membership, order, defaults, and complete menus are editable without JSON |
+| Global pins and focus-context slots | Implemented | Machine-local pins 1–5 are directly assignable in Configure; context slots 6–9 follow the selected Focus |
+| Guided configuration | Implemented | Actions, pinned slots, contexts, and Quick actions use My configuration or Built-in ownership; context membership, order, defaults, and complete menus are editable without JSON |
 | Confirm → Active → Archived | Implemented | Creation and editing are permanent after confirmation; archiving is represented in data but has limited UI |
-| Constrained action execution | Implemented | Thirteen allow-listed types; no arbitrary shell action |
+| Explicit action execution | Implemented | Fourteen allow-listed types with standard icons, including user-owned Windows targets and slash conversion |
 | Protected credential paste | Implemented with limitations | Exact standard Windows or generic credential target; confirmed, hotkey-originated paste only |
-| Input / Output transformations | Implemented | Selection or full field; result copied |
+| Input / Output transformations | Implemented | Selection or full field; result copied; includes both path-slash directions |
 | Cheat sheets and promotion | Implemented | Structured local JSON sheets |
 | Attended AI assistance | Partial | Reviewable stored prompt templates and manual clipboard handoff; `copy_text` and `open_url` proposals only |
 | Context model | Partial | General root, per-PC context-owned action membership, tags, explicit focus, preferred actions; Developing Context Palette is the only shipped specific context |
@@ -58,7 +58,8 @@ The MVP:
 - validates every persisted action type and its fields;
 - permits only HTTP/HTTPS web targets;
 - validates file, folder, executable, and working-directory targets;
-- does not interpret shell command strings;
+- delegates one user-configured Windows target plus structured arguments to
+  ShellExecute without interpreting a compound command string;
 - keeps the integration bridge attended;
 - treats captured material and AI responses as untrusted;
 - stores personal data locally in ignored files.
@@ -70,7 +71,7 @@ The MVP:
 - Application-provided speech and dedicated screen-reader conformance testing.
   Ordinary keyboard operation and clear native control labels remain required.
 - Cloud synchronization or accounts.
-- Arbitrary scripts, loops, conditions, or unattended workflows.
+- Loops, conditions, compound command parsing, or unattended workflows.
 - Automatic application-aware context switching.
 - Exact restoration of unsaved documents, browser history, or tab groups.
 - Third-party UI or persistence frameworks.

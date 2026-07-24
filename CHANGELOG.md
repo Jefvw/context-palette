@@ -4,6 +4,16 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Added **Open or run a Windows target** actions. They delegate registered
+  protocols, `shell:` targets, file URIs, drive paths, documents, associated
+  scripts, optional arguments, and an optional working folder directly to
+  Windows ShellExecute. The preview warns that targets may execute code and are
+  not sandboxed. Added ready-to-use `/` → `\` and `\` → `/` actions plus the
+  same operations in the Transform menu.
+- Added direct machine-local configuration for pinned slots 1–5 above the
+  Configure Actions table. Added one catalogue-owned standard icon for every
+  built-in action type and reused those icons in compact action rows, type
+  filters, action editors, and configuration lists.
 - Prevented setup from renaming or rebuilding `.venv` when neither the
   environment nor an independent compatible Python can launch in the current
   process. Restricted Codex runs now stop with a normal-Windows retry message,

@@ -1378,3 +1378,34 @@ before setup required an exact Python 3.12 match. Exact matching unnecessarily
 broke multi-computer development even though the application and dependencies
 support newer Python 3.x releases. The tracked version remains a reproducible
 baseline without dictating every computer's installation layout.
+
+## 2026-07-24 - Configure local pins directly and catalogue every type icon
+
+**Decision:** Put five ordered action selectors for machine-local pinned slots
+1–5 above the Configure Actions table. Save them as one atomic palette update,
+preserving Focus and slots 6–9. Empty selections close gaps and duplicate
+actions are rejected. Give every constrained action type a Unicode icon in the
+central action-type catalogue and derive compact action rows and type labels
+from it.
+
+**Reason:** Pinning from the main list could fill or remove slots but could not
+directly explain or reorder all five. Central icon ownership gives every action
+a compact, consistent visual cue without image assets, dependencies, or hidden
+technical IDs. Text labels and detailed help remain present for accessibility.
+
+## 2026-07-24 - Delegate user-owned Windows targets to ShellExecute
+
+**Decision:** Add an `open_windows_target` action that passes one configured
+target plus optional structured arguments and working folder to Windows
+ShellExecute. Accept registered protocols, `shell:` targets, file URIs, drive
+paths, documents, and associated scripts. Reject only values Windows cannot
+represent, and warn in the preview that the target may execute code and is not
+sandboxed. Add a separate `transform_slashes` action with two fixed directions
+and expose the same pure operations in the Input / Output Transform menu.
+
+**Reason:** Context Palette is a personal, single-user tool and the owner wants
+Windows Run-style flexibility without redundant restrictions or confirmations.
+Structured argument fields avoid fragile command-line parsing while
+ShellExecute preserves Windows associations. Slash conversion is frequent path
+preparation and belongs in the existing workspace/clipboard transformation
+pipeline.

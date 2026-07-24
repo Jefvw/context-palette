@@ -12,13 +12,18 @@ confirms creation; Archived actions remain outside normal retrieval. See
 - Opens instantly from a resident process with `F9` or `Ctrl+Alt+P`.
 - Searches actions by name, tag, context, type, state, and content.
 - Keeps five global pinned slots and four slots for the selected focus context.
-- Runs the constrained, allow-listed [standard action types](docs/ACTION_TYPES.md)
-  without an arbitrary shell-command action.
+- Runs the explicit, allow-listed [standard action types](docs/ACTION_TYPES.md).
+- Opens or runs user-configured Windows targets through ShellExecute, including
+  registered protocols such as `vscode:`, `shell:` targets, `file:` URIs,
+  drive paths, documents, and associated scripts.
 - Pastes Windows or generic credentials without storing passwords in action JSON.
 - Provides compact, fully configurable Quick-action groups and ordered menus.
-- Configures My configuration or Built-in actions, contexts, groups, and menu items through
-  a guided window without exposing technical IDs.
+- Configures My configuration or Built-in actions, contexts, groups, menu
+  items, and local pinned slots 1–5 through a guided window without exposing
+  technical IDs.
 - Captures clipboard material into an Inbox and converts it into permanent actions.
+- Converts path separators in Input / Output in either direction and copies the
+  result automatically.
 - Supports attended, schema-validated AI proposals for selected action types.
 - Searches cheat sheets and promotes entries to permanent actions.
 - Loads stored AI prompt templates into Input / Output from a compact quick-action menu.
@@ -208,7 +213,12 @@ AI coding agents must also follow [AGENTS.md](AGENTS.md).
 
 ## Current boundaries
 
-Context Palette does not currently provide arbitrary shell actions, unattended action execution, automatic context switching, safe multi-action sequences, clipboard restoration transactions, rich clipboard/image actions, or generic browser-tab/document restoration. Those items are proposals or future work unless the roadmap says otherwise.
+Context Palette does not parse compound shell command lines or provide
+unattended action execution, automatic context switching, safe multi-action
+sequences, clipboard restoration transactions, rich clipboard/image actions,
+or generic browser-tab/document restoration. A configured Windows target can
+execute code through its registered association; this personal-tool capability
+is explicit and not sandboxed.
 
 ## License
 

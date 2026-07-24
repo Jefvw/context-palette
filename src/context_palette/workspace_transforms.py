@@ -42,6 +42,21 @@ WORKSPACE_TRANSFORM_GROUPS = (
         ),
     ),
     WorkspaceTransformGroup(
+        "Paths",
+        (
+            WorkspaceTransform(
+                "Forward slashes / to backslashes \\",
+                "forward_to_back",
+                "Changed / to \\",
+            ),
+            WorkspaceTransform(
+                "Backslashes \\ to forward slashes /",
+                "back_to_forward",
+                "Changed \\ to /",
+            ),
+        ),
+    ),
+    WorkspaceTransformGroup(
         "Lines",
         (
             WorkspaceTransform(
