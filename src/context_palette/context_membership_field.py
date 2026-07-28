@@ -4,6 +4,8 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Iterable
 
+from .searchable_selection import SearchableSelectionPopup
+
 
 def specific_context_names(contexts: Iterable[str]) -> tuple[str, ...]:
     """Return distinct canonical context names suitable for guided selection."""
@@ -38,10 +40,12 @@ class CommaSeparatedPickerField:
         label: str,
         empty_text: str,
         mnemonic: str,
+        searchable: bool = False,
     ) -> None:
         self.variable = variable
         self.names = tuple(names)
         self.mnemonic = mnemonic.casefold()
+        self.searchable = searchable
         self.selected_vars: dict[str, tk.BooleanVar] = {}
         self._syncing = False
 
@@ -59,16 +63,22 @@ class CommaSeparatedPickerField:
         row.pack(fill=tk.X, pady=(3, 0))
         self.entry = ttk.Entry(row, textvariable=variable)
         self.entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.picker = ttk.Menubutton(
+        picker_class = ttk.Button if searchable else ttk.Menubutton
+        self.picker = picker_class(
             row,
             text="Choose…",
             style="Compact.TButton",
         )
         self.picker.pack(side=tk.RIGHT, padx=(5, 0))
-        self.menu = tk.Menu(self.picker, tearoff=False)
-        self.picker.configure(menu=self.menu)
+        self.menu: tk.Menu | None = None
+        if not searchable:
+            self.menu = tk.Menu(self.picker, tearoff=False)
+            self.picker.configure(menu=self.menu)
+        else:
+            self.picker.configure(command=self._show_searchable_picker)
 
-        if self.names:
+        if self.names and not searchable:
+            assert self.menu is not None
             for name in self.names:
                 selected = tk.BooleanVar(value=False)
                 self.selected_vars[name] = selected
@@ -77,8 +87,11 @@ class CommaSeparatedPickerField:
                     variable=selected,
                     command=lambda selected_name=name: self._selection_changed(selected_name),
                 )
-        else:
+        elif not searchable:
+            assert self.menu is not None
             self.menu.add_command(label=empty_text, state=tk.DISABLED)
+            self.picker.configure(state=tk.DISABLED)
+        elif not self.names:
             self.picker.configure(state=tk.DISABLED)
 
         self.label.bind("<Button-1>", self._focus_entry)
@@ -109,8 +122,14 @@ class CommaSeparatedPickerField:
     def _post_picker(self, _event: tk.Event | None = None) -> str:
         if str(self.picker.cget("state")) == tk.DISABLED:
             return "break"
+        if self.searchable:
+            self._show_searchable_picker()
+            return "break"
         self.picker.tk.call("ttk::menubutton::Post", self.picker)
         return "break"
+
+    def _show_searchable_picker(self) -> None:
+        """Override in searchable fields that supply a selection callback."""
 
     def _text_changed(self, *_args: object) -> None:
         self._sync_checks()
@@ -188,4 +207,36 @@ class TagSelectionField(CommaSeparatedPickerField):
             label=label,
             empty_text="No existing tags",
             mnemonic="t",
+            searchable=True,
         )
+
+    def _show_searchable_picker(self) -> None:
+        existing = getattr(self, "tag_picker", None)
+        if existing is not None and existing.window.winfo_exists():
+            existing.window.lift()
+            existing.search_entry.focus_set()
+            return
+        selected = {
+            part.strip().casefold()
+            for part in self.variable.get().split(",")
+            if part.strip()
+        }
+        self.tag_picker = SearchableSelectionPopup(
+            self.picker,
+            self.tag_names,
+            selected=selected,
+            multiple=True,
+            on_select=self._replace_selected_tags,
+            title="Choose tags",
+        )
+
+    def _replace_selected_tags(self, selected: tuple[str, ...]) -> None:
+        selected_keys = {tag.casefold() for tag in selected}
+        known_keys = {tag.casefold() for tag in self.tag_names}
+        typed = [
+            part.strip()
+            for part in self.variable.get().split(",")
+            if part.strip() and part.strip().casefold() not in known_keys
+        ]
+        typed.extend(tag for tag in self.tag_names if tag.casefold() in selected_keys)
+        self.variable.set(", ".join(typed))

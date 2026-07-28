@@ -22,8 +22,9 @@ confirms creation; Archived actions remain outside normal retrieval. See
   items, and local pinned slots 1–5 through a guided window without exposing
   technical IDs.
 - Captures clipboard material into an Inbox and converts it into permanent actions.
-- Converts path separators in Input / Output in either direction and copies the
-  result automatically.
+- Transforms Input / Output through reusable operations for filtering,
+  delimiters, naming styles, JSON, URL encoding, SQL escaping, file URIs, and
+  path separators; every result is copied automatically.
 - Supports attended, schema-validated AI proposals for selected action types.
 - Searches cheat sheets and promotes entries to permanent actions.
 - Loads stored AI prompt templates into Input / Output from a compact quick-action menu.
@@ -121,7 +122,12 @@ Configure supports adding, editing, deleting, and ordering actions, contexts,
 Quick-action groups, and menu items. Normal user records default to **My
 configuration**, which stays on this PC. **Built-in** is the starter
 configuration tracked through Git and is intended for deliberate developer
-changes.
+changes. The starter Quick actions occupy one **Standard** group; additional
+editable groups can remain personal while still assigning both Built-in and
+My configuration actions. Standard uses one compact launcher with nested
+subject menus up to three levels deep, with actions allowed at the group or any
+level. Personal groups can choose the same presentation or retain direct
+one-click rows.
 
 Close, `Esc`, and **Hide** keep the process resident. **Quit** stops it.
 

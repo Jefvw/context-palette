@@ -5,6 +5,7 @@ from tkinter import ttk
 from typing import Callable
 
 from .action_types import ACTION_TYPES
+from .searchable_selection import SearchableSelectionPopup
 from .style import COLORS
 from .tooltips import ListboxItemTooltip, TreeviewItemTooltip
 
@@ -169,12 +170,15 @@ class ActionDiscoveryPanel:
         self.select_tag_filter = select_tag_filter
         self.work_tag_filter_var = work_tag_filter_var
         self.select_work_tag_filter = select_work_tag_filter
-        self.tag_filter = ttk.Menubutton(
+        self.tag_filter = ttk.Button(
             self.tool_rail,
             text="Tags ▾",
             style="Compact.TButton",
+            command=self._show_tag_picker,
         )
         self.tag_filter.pack(fill=tk.X, pady=(5, 0))
+        self.tag_filter.bind("<Alt-Down>", self._show_tag_picker)
+        self.tag_filter.bind("<F4>", self._show_tag_picker)
         self.tag_filter_help_text = (
             "Tags — Narrow actions by a reusable descriptive tag."
         )
@@ -442,24 +446,33 @@ class ActionDiscoveryPanel:
     ) -> None:
         selected_variable = variable or self.tag_filter_var
         selected_callback = select or self.select_tag_filter
-        previous_menu = getattr(self, "tag_menu", None)
-        if previous_menu is not None:
-            previous_menu.destroy()
-        menu = tk.Menu(self.tag_filter, tearoff=False)
-        menu.add_radiobutton(
-            label=empty_label,
-            variable=selected_variable,
-            value=empty_label,
-            command=lambda: selected_callback(None),
+        existing_popup = getattr(self, "tag_picker_popup", None)
+        if existing_popup is not None and existing_popup.window.winfo_exists():
+            existing_popup.close()
+        self._tag_options = tuple(tags)
+        self._tag_empty_label = empty_label
+        self._tag_selected_variable = selected_variable
+        self._tag_selected_callback = selected_callback
+
+    def _show_tag_picker(self, _event: tk.Event | None = None) -> str | None:
+        existing_popup = getattr(self, "tag_picker_popup", None)
+        if existing_popup is not None and existing_popup.window.winfo_exists():
+            existing_popup.window.lift()
+            existing_popup.search_entry.focus_set()
+            return "break"
+        self.tag_picker_popup = SearchableSelectionPopup(
+            self.tag_filter,
+            self._tag_options,
+            selected=(self._tag_selected_variable.get(),),
+            multiple=False,
+            on_select=self._select_tag_from_picker,
+            title="Filter tags",
+            empty_label=self._tag_empty_label,
         )
-        if tags:
-            menu.add_separator()
-        for tag in tags:
-            menu.add_radiobutton(
-                label=tag,
-                variable=selected_variable,
-                value=tag,
-                command=lambda selected=tag: selected_callback(selected),
-            )
-        self.tag_filter.configure(menu=menu)
-        self.tag_menu = menu
+        return "break" if _event is not None else None
+
+    def _select_tag_from_picker(self, selected: tuple[str, ...]) -> None:
+        value = selected[0] if selected else self._tag_empty_label
+        self._tag_selected_callback(
+            None if value == self._tag_empty_label else value
+        )

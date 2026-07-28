@@ -12,14 +12,44 @@ from context_palette.command_surface import (
     CommandGroup,
     CommandItem,
     CommandSurfaceError,
-    command_item_action_ids,
+    GROUP_PRESENTATION_NESTED_MENU,
+    GROUP_PRESENTATION_ROWS,
+    MAX_COMMAND_MENU_LEVELS,
     command_configuration_paths,
+    command_group_action_ids,
+    command_group_launcher_count,
+    command_item_action_ids,
+    iter_command_items,
     load_combined_command_groups,
     load_command_groups,
 )
 
 
 class CommandSurfaceTests(unittest.TestCase):
+    def test_group_launcher_count_follows_presentation(self):
+        items = (
+            CommandItem("one", "One"),
+            CommandItem("two", "Two"),
+        )
+
+        self.assertEqual(
+            command_group_launcher_count(
+                CommandGroup("rows", "Rows", items)
+            ),
+            2,
+        )
+        self.assertEqual(
+            command_group_launcher_count(
+                CommandGroup(
+                    "nested",
+                    "Nested",
+                    items,
+                    presentation=GROUP_PRESENTATION_NESTED_MENU,
+                )
+            ),
+            1,
+        )
+
     def test_item_action_ids_are_primary_first_and_unique(self):
         item = CommandItem(
             id="lookup",
@@ -60,29 +90,58 @@ class CommandSurfaceTests(unittest.TestCase):
             (local_surface, local_actions),
         )
 
-    def test_loads_groups_with_multiple_items(self):
+    def test_loads_one_standard_group_with_subject_menus(self):
         groups = load_command_groups(ROOT / "data" / "command_surface.json")
 
-        self.assertEqual(groups[0].label, "Product systems")
-        self.assertGreaterEqual(len(groups[0].items), 4)
-        self.assertEqual(groups[0].items[0].primary_action_id, "colruyt-open-product")
-        self.assertIn("product-lookup-rti", groups[0].items[2].action_ids)
+        self.assertEqual([group.id for group in groups], ["standard"])
+        self.assertEqual(groups[0].label, "Standard")
+        self.assertEqual(
+            groups[0].presentation,
+            GROUP_PRESENTATION_NESTED_MENU,
+        )
+        self.assertEqual(
+            [item.label for item in groups[0].items],
+            [
+                "Product systems",
+                "Work tools",
+                "References",
+            ],
+        )
+        self.assertEqual(
+            command_group_action_ids(groups[0]),
+            ("general-open-python-docs",),
+        )
+        self.assertEqual(
+            groups[0].items[0].primary_action_id,
+            "product-lookup-myproduct-any-id",
+        )
+        levels = {len(path) for path, _item in iter_command_items(groups[0])}
+        self.assertEqual(levels, {1, 2, 3})
+        technical_articles = next(
+            item
+            for _path, item in iter_command_items(groups[0])
+            if item.id == "technical-articles"
+        )
+        self.assertIn(
+            "product-lookup-rti",
+            technical_articles.action_ids,
+        )
 
-    def test_shared_surface_references_existing_actions(self):
+    def test_shared_surface_distributes_every_active_builtin_action_once(self):
         groups = load_command_groups(ROOT / "data" / "command_surface.json")
         action_ids = {
             item["id"]
             for item in json.loads((ROOT / "data" / "actions.json").read_text(encoding="utf-8"))["actions"]
+            if item.get("state", "Active") != "Archived"
         }
-        referenced = {
-            action_id
-            for group in groups
-            for item in group.items
-            for action_id in (item.primary_action_id, *item.action_ids)
-            if action_id
-        }
+        referenced: list[str] = []
+        for group in groups:
+            referenced.extend(command_group_action_ids(group))
+            for _path, item in iter_command_items(group):
+                referenced.extend(command_item_action_ids(item))
 
-        self.assertTrue(referenced <= action_ids)
+        self.assertEqual(set(referenced), action_ids)
+        self.assertEqual(len(referenced), len(set(referenced)))
 
     def test_combined_surface_allows_missing_local_file(self):
         groups = load_combined_command_groups(
@@ -90,7 +149,7 @@ class CommandSurfaceTests(unittest.TestCase):
             ROOT / "data" / "missing-command-surface.json",
         )
 
-        self.assertGreaterEqual(len(groups), 4)
+        self.assertEqual([group.id for group in groups], ["standard"])
 
     def test_combined_surface_rejects_duplicate_group_ids(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -129,6 +188,88 @@ class CommandSurfaceTests(unittest.TestCase):
 
             with self.assertRaises(CommandSurfaceError):
                 load_command_groups(path)
+
+    def test_group_rejects_more_than_three_submenu_levels(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "surface.json"
+            nested_item: dict[str, object] = {
+                "id": "level-4",
+                "label": "Level 4",
+                "action_ids": ["one"],
+            }
+            for level in range(MAX_COMMAND_MENU_LEVELS, 0, -1):
+                nested_item = {
+                    "id": f"level-{level}",
+                    "label": f"Level {level}",
+                    "items": [nested_item],
+                }
+            path.write_text(
+                json.dumps(
+                    {
+                        "groups": [
+                            {
+                                "id": "group",
+                                "label": "Group",
+                                "presentation": "nested_menu",
+                                "items": [nested_item],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                CommandSurfaceError,
+                "maximum of 3 submenu levels",
+            ):
+                load_command_groups(path)
+
+    def test_group_rejects_unknown_presentation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "surface.json"
+            for presentation in ("recursive_magic", []):
+                with self.subTest(presentation=presentation):
+                    path.write_text(
+                        json.dumps(
+                            {
+                                "groups": [
+                                    {
+                                        "id": "group",
+                                        "label": "Group",
+                                        "presentation": presentation,
+                                        "items": [],
+                                    }
+                                ]
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+
+                    with self.assertRaisesRegex(
+                        CommandSurfaceError,
+                        "invalid presentation",
+                    ):
+                        load_command_groups(path)
+
+    def test_group_defaults_to_quick_action_rows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "surface.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "groups": [
+                            {"id": "group", "label": "Group", "items": []}
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                load_command_groups(path)[0].presentation,
+                GROUP_PRESENTATION_ROWS,
+            )
 
 
 if __name__ == "__main__":

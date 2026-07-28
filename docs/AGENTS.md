@@ -9,4 +9,7 @@ Before changing code:
 3. Read [Architecture](ARCHITECTURE.md), [MVP](MVP.md), [Decisions](DECISIONS.md), and the root [Backlog](../BACKLOG.md) as required by the task.
 4. Inspect existing changes and preserve unrelated or personal work.
 
-For human contribution expectations, see [Contributing](../CONTRIBUTING.md). For verification, see [Testing](TESTING.md).
+For model recommendations and explicitly requested delegated work, see
+[Model selection for AI work](MODEL_SELECTION.md). For human contribution
+expectations, see [Contributing](../CONTRIBUTING.md). For verification, see
+[Testing](TESTING.md).

@@ -172,32 +172,64 @@ def _remove_command_references(
         if not isinstance(group, dict) or not isinstance(group.get("items"), list):
             retained_groups.append(group)
             continue
-        retained_items: list[object] = []
-        for item in group["items"]:
-            if not isinstance(item, dict):
-                retained_items.append(item)
-                continue
-            action_ids = item.get("action_ids")
-            if isinstance(action_ids, list):
-                retained_ids = [value for value in action_ids if value != action_id]
-                removed_references += len(action_ids) - len(retained_ids)
-                item["action_ids"] = retained_ids
-            if item.get("primary_action_id") == action_id:
-                removed_references += 1
-                item["primary_action_id"] = (
-                    item["action_ids"][0]
-                    if isinstance(item.get("action_ids"), list) and item["action_ids"]
-                    else ""
-                )
-            if item.get("primary_action_id") or item.get("action_ids"):
-                retained_items.append(item)
-            else:
-                removed_buttons += 1
-        group["items"] = retained_items
-        if retained_items:
+        group_removed, group_buttons_removed = _clean_command_node(
+            group,
+            action_id,
+        )
+        removed_references += group_removed
+        removed_buttons += group_buttons_removed
+        if (
+            group.get("primary_action_id")
+            or group.get("action_ids")
+            or group.get("items")
+        ):
             retained_groups.append(group)
     data["groups"] = retained_groups
     return removed_references, removed_buttons
+
+
+def _clean_command_node(
+    node: dict[str, object],
+    action_id: str,
+) -> tuple[int, int]:
+    removed_references = 0
+    removed_items = 0
+    action_ids = node.get("action_ids")
+    if isinstance(action_ids, list):
+        retained_ids = [value for value in action_ids if value != action_id]
+        removed_references += len(action_ids) - len(retained_ids)
+        node["action_ids"] = retained_ids
+    if node.get("primary_action_id") == action_id:
+        removed_references += 1
+        node["primary_action_id"] = (
+            node["action_ids"][0]
+            if isinstance(node.get("action_ids"), list) and node["action_ids"]
+            else ""
+        )
+    child_items = node.get("items")
+    if not isinstance(child_items, list):
+        return removed_references, removed_items
+    retained_children: list[object] = []
+    for child in child_items:
+        if not isinstance(child, dict):
+            retained_children.append(child)
+            continue
+        child_removed, descendants_removed = _clean_command_node(
+            child,
+            action_id,
+        )
+        removed_references += child_removed
+        removed_items += descendants_removed
+        if (
+            child.get("primary_action_id")
+            or child.get("action_ids")
+            or child.get("items")
+        ):
+            retained_children.append(child)
+        else:
+            removed_items += 1
+    node["items"] = retained_children
+    return removed_references, removed_items
 
 
 def _remove_palette_references(data: dict[str, object], action_id: str) -> int:

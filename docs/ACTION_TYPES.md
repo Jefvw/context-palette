@@ -17,6 +17,7 @@ This overview is generated from `context_palette.action_types`, the shared sourc
 | `build_url_open` | ⇱ | Build and open a URL | URL builder | Prompts for an identifier or value. | Opens the complete URL without copying it. | Portable when the URL template is suitable for sharing. | Not yet |
 | `build_url_selection_open` | ⇗ | Build a URL from selected text | URL builder | Reads selected text, Input / Output, or clipboard text. | Copies and opens the complete URL. | Portable when the URL template is suitable for sharing. | Not yet |
 | `transform_list_csv` | ⇄ | Convert lines to a list | Transformation | Reads Input / Output text. | Replaces Input / Output and clipboard text. | Portable; operation is constrained by the application. | Not yet |
+| `transform_text` | ✎ | Transform text | Transformation | Reads Input / Output text. | Replaces Input / Output and clipboard text. | Portable; operations are implemented by Context Palette. | Not yet |
 | `transform_slashes` | ／ | Convert path slashes | Transformation | Reads Input / Output text. | Replaces Input / Output and clipboard text. | Portable; operation is constrained by the application. | Not yet |
 
 ## AI guidance boundary

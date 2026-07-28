@@ -27,7 +27,10 @@ from .command_surface import (
     CommandGroup,
     CommandItem,
     CommandSurfaceError,
+    GROUP_PRESENTATION_NESTED_MENU,
     command_configuration_paths,
+    command_group_action_ids,
+    command_group_launcher_count,
     command_item_action_ids,
     load_combined_command_groups,
 )
@@ -65,6 +68,7 @@ from .windows_credentials import (
     set_protected_clipboard_text,
 )
 from .workspace_panel import WorkspacePanel
+from .workspace_transforms import WORKSPACE_TRANSFORMS
 from .work_item_refresh import WorkItemIndex, WorkItemRefreshCoordinator
 from .work_item_file_copy import (
     WorkItemFileCopyCoordinator,
@@ -1260,7 +1264,10 @@ class LauncherApp:
                 self.local_command_surface_path,
             )
         except CommandSurfaceError as exc:
-            button_count = sum(len(group.items) for group in self.command_groups)
+            button_count = sum(
+                command_group_launcher_count(group)
+                for group in self.command_groups
+            )
             self.status_var.set(
                 f"Quick actions could not be loaded; kept {button_count} previous button(s)."
             )
@@ -1284,7 +1291,8 @@ class LauncherApp:
             self.palette_state.pinned_action_ids,
         )
         button_count = 1 + len(credential_actions) + sum(
-            len(group.items) for group in self.command_groups
+            command_group_launcher_count(group)
+            for group in self.command_groups
         )
         self.surface_count_var.set(
             f"{button_count} button" if button_count == 1 else f"{button_count} buttons"
@@ -1336,6 +1344,37 @@ class LauncherApp:
             area = ttk.LabelFrame(self.command_tiles_frame, text=group.label, padding=4)
             area.grid(row=row, column=column, sticky=tk.NSEW, padx=2, pady=2)
             area.columnconfigure(0, weight=1)
+            if group.presentation == GROUP_PRESENTATION_NESTED_MENU:
+                control = ttk.Label(
+                    area,
+                    text="Browse actions ▾",
+                    style="SurfaceMenu.TLabel",
+                    anchor=tk.W,
+                    relief=tk.SOLID,
+                    cursor="hand2",
+                    takefocus=True,
+                )
+                control.grid(row=0, column=0, sticky=tk.EW, padx=1, pady=1)
+                self._command_surface_tooltip(
+                    control,
+                    "Open the nested subject menus. Shift/Ctrl+click edits configuration.",
+                )
+                self._bind_surface_menu_control(
+                    control,
+                    on_click=lambda event, selected_group=group: self._show_group_menu(
+                        event,
+                        selected_group,
+                    ),
+                    on_menu=lambda event, selected_group=group: self._show_group_menu(
+                        event,
+                        selected_group,
+                    ),
+                    on_keyboard=lambda _event, selected_group=group, anchor=control: self._show_group_menu_at_control(
+                        anchor,
+                        selected_group,
+                    ),
+                )
+                continue
             for item_index, item in enumerate(group.items):
                 control = ttk.Label(
                     area,
@@ -1367,8 +1406,9 @@ class LauncherApp:
                     on_menu=lambda event, selected_item=item: self._show_item_menu(
                         event, selected_item
                     ),
-                    on_keyboard=lambda _event, selected_item=item: self._execute_item_primary(
-                        selected_item
+                    on_keyboard=lambda _event, selected_item=item, anchor=control: self._activate_item_at_control(
+                        anchor,
+                        selected_item,
                     ),
                 )
 
@@ -1513,9 +1553,31 @@ class LauncherApp:
             return "break"
         action = self._primary_action_for_item(item)
         if action is None:
+            if item.items:
+                return self._show_item_menu(event, item)
             self.status_var.set(f"No available actions configured for {item.label}.")
             return "break"
         self._execute_action(action)
+        return "break"
+
+    def _activate_item_at_control(
+        self,
+        control: tk.Widget,
+        item: CommandItem,
+    ) -> str:
+        action = self._primary_action_for_item(item)
+        if action is not None:
+            self._execute_action(action)
+            return "break"
+        if item.items:
+            return self._post_item_menu(
+                item,
+                control.winfo_rootx(),
+                control.winfo_rooty() + control.winfo_height(),
+            )
+        self.status_var.set(
+            f"{item.label} has no available action. Open Configure to assign one."
+        )
         return "break"
 
     def _primary_action_for_item(self, item: CommandItem) -> Action | None:
@@ -1553,9 +1615,40 @@ class LauncherApp:
         self.status_var.set(f"Opened menu and action configuration for {group.label}.")
 
     def _show_item_menu(self, event: tk.Event, item: CommandItem) -> str:
-        actions_by_id = {action.id: action for action in self.actions}
+        return self._post_item_menu(item, event.x_root, event.y_root)
+
+    def _post_item_menu(
+        self,
+        item: CommandItem,
+        x_root: int,
+        y_root: int,
+    ) -> str:
         menu = tk.Menu(self.root, tearoff=False)
-        for action_id in command_item_action_ids(item):
+        submenus: list[tk.Menu] = []
+        self._populate_menu_node(
+            menu,
+            command_item_action_ids(item),
+            item.items,
+            submenus,
+        )
+        self._active_command_menu = menu
+        self._active_command_submenus = tuple(submenus)
+        try:
+            menu.tk_popup(x_root, y_root)
+        finally:
+            menu.grab_release()
+        return "break"
+
+    def _populate_menu_node(
+        self,
+        menu: tk.Menu,
+        action_ids: tuple[str, ...],
+        child_items: tuple[CommandItem, ...],
+        submenus: list[tk.Menu],
+    ) -> None:
+        actions_by_id = {action.id: action for action in self.actions}
+        added_actions = False
+        for action_id in action_ids:
             action = actions_by_id.get(action_id)
             if action is None:
                 continue
@@ -1563,10 +1656,57 @@ class LauncherApp:
                 label=action.compact_display_text,
                 command=lambda selected_action=action: self._execute_action(selected_action),
             )
+            added_actions = True
+        if added_actions and child_items:
+            menu.add_separator()
+        for child in child_items:
+            submenu = tk.Menu(menu, tearoff=False)
+            submenus.append(submenu)
+            self._populate_menu_node(
+                submenu,
+                command_item_action_ids(child),
+                child.items,
+                submenus,
+            )
+            menu.add_cascade(label=child.label, menu=submenu)
         if menu.index(tk.END) is None:
             menu.add_command(label="No available actions", state=tk.DISABLED)
+
+    def _show_group_menu(self, event: tk.Event, group: CommandGroup) -> str:
+        if event.state & (0x0001 | 0x0004):
+            self._open_command_configuration(group)
+            return "break"
+        return self._post_group_menu(group, event.x_root, event.y_root)
+
+    def _show_group_menu_at_control(
+        self,
+        control: tk.Widget,
+        group: CommandGroup,
+    ) -> str:
+        return self._post_group_menu(
+            group,
+            control.winfo_rootx(),
+            control.winfo_rooty() + control.winfo_height(),
+        )
+
+    def _post_group_menu(
+        self,
+        group: CommandGroup,
+        x_root: int,
+        y_root: int,
+    ) -> str:
+        menu = tk.Menu(self.root, tearoff=False)
+        submenus: list[tk.Menu] = []
+        self._populate_menu_node(
+            menu,
+            command_group_action_ids(group),
+            group.items,
+            submenus,
+        )
+        self._active_command_menu = menu
+        self._active_command_submenus = tuple(submenus)
         try:
-            menu.tk_popup(event.x_root, event.y_root)
+            menu.tk_popup(x_root, y_root)
         finally:
             menu.grab_release()
         return "break"
@@ -2448,6 +2588,18 @@ class LauncherApp:
         if action.type == "transform_list_csv":
             mode = "quoted SQL strings" if action.value == "sql_strings" else "comma-separated values"
             return f"Transform Input / Output lines into {mode}.\nThe result replaces the field and is copied."
+        if action.type == "transform_text":
+            definition = WORKSPACE_TRANSFORMS[action.value]
+            lines = [
+                f"Transform Input / Output: {definition.label.rstrip('…')}",
+            ]
+            for label, argument in zip(
+                definition.parameter_labels,
+                action.arguments,
+            ):
+                lines.append(f"{label}: {argument or '(empty)'}")
+            lines.append("The result replaces the field and is copied.")
+            return "\n".join(lines)
         if action.type == "transform_slashes":
             direction = (
                 "/ to \\"

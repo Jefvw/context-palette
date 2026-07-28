@@ -25,7 +25,8 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Next
 
-- Extend text transformations with literal replace, line-ending cleanup, URL encoding/decoding, and additional line operations.
+- Add line-ending normalization and CSV/TSV column operations after real-use
+  feedback on the expanded reusable text-operation catalogue.
 - Design supporting-context composition and weighted ranking while preserving explicit Focus and global search.
 - Design clipboard preservation/restoration as an explicit transaction.
 - Design constrained, previewable linear sequences for supported actions, paste, Tab, Enter, and bounded waits.

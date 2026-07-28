@@ -12,13 +12,19 @@ Developers can find the current implementation in
 Help is rendered as Markdown inside Context Palette. Use **Documents** in this
 window to open other project Markdown pages, or activate a rendered local
 Markdown link. Use **←**, **→**, and **Home** to move through document
-history or return to the page that opened the viewer. Choose **Browser** to
-open the current validated local Markdown file in the default browser.
+history or return to the page that opened the viewer. Choose **Edge** to open
+the current validated local Markdown file in Microsoft Edge, where an installed
+Markdown extension can provide browser-grade rendering.
 `Alt+Left`, `Alt+Right`,
 and `Alt+Home` provide the same navigation from the keyboard; `Ctrl+F` searches
 the currently displayed page. Open-file actions targeting an existing `.md`
 file use this viewer automatically. Other file actions keep their normal
 Windows behavior. The viewer never opens arbitrary commands.
+
+Context Palette looks for Edge on `PATH` and in the standard per-user and
+system installation folders. If Edge cannot be found, the viewer remains open
+and shows an error in its status line. The Markdown extension must have
+permission to read local `file:` URLs if that extension requires it.
 
 The viewer supports normal headings, emphasis, nested lists, block quotes,
 fenced code, links, separators, strikethrough, and responsive bordered tables.
@@ -156,8 +162,9 @@ Search matches tags, contexts, short name, description, type, and content.
 - Click **Passwords** for the protected-credential shortcut, or open **Types**
   to filter by any built-in action type. Choose **All types** to clear the type
   filter.
-- Open **Tags** to filter by one exact reusable tag. Choose **All tags** to
-  clear it. Find text, type, and tag filters work together. An active type,
+- Open **Tags** to search and choose one exact reusable tag. Choose **All tags**
+  to clear it. Type part of a tag name, use the arrow keys, then press Enter or
+  click **Choose**. Find text, type, and tag filters work together. An active type,
   project-code, or tag filter is highlighted and marked **✓** until it is
   cleared. Its tooltip identifies the selected value, and an empty result
   explains the active filter combination.
@@ -290,22 +297,30 @@ For safety:
 ## Quick-action surface
 
 The wider right side of the action console contains global configurable
-subareas and stays visible when Focus changes. Each group presents one
-full-width subject per row. The right-side `▾` indicates that right-click opens
-the subject's existing multi-action menu; it does not change left-click
-behavior.
+subareas and stays visible when Focus changes. A group can use direct
+Quick-action rows or one compact nested-menu launcher.
 
-- Left-click a label to execute its primary configured action.
-- Right-click that label to open its individually assigned executable action menu.
+- In a Quick-action-row group, left-click a subject to execute its primary
+  action; right-click opens its complete assigned-action menu.
+- In a nested-menu group, click, right-click, Enter, or Space on **Browse
+  actions** to open the group. Choose zero to three submenu levels, then an
+  action.
 - Shift+click or Ctrl+click a label to open its technical menu configuration and corresponding action file in the default JSON editor.
-- Tab to a quick action and press Enter or Space to run its primary action.
 - Every item uses the same selected text, Input / Output, clipboard, and safe action executor as the search list.
 - Configure shared groups in `data/command_surface.json` and private groups in `data/local_command_surface.json`.
 - Press `Ctrl+,`, then use **Quick actions** to add or edit personal groups
-  and buttons without editing JSON. Choose existing actions from lists; stable
+  and menu levels without editing JSON. Choose existing actions from lists; stable
   IDs are generated from the visible names when left blank.
+- **Standard** is the single Built-in group. Its one **Browse actions** launcher
+  distributes all active Built-in actions across direct commands and three
+  first-level sections with deeper subject levels, leaving the other editable
+  group positions for **My configuration**.
 - Groups remain in configured order across two columns. Subjects remain in
   configured order from top to bottom inside each group.
+- The group and every menu level accept any number of ordered actions. Nesting
+  is bounded at group → level 1 → level 2 → level 3 → action. Actions may stop
+  at any earlier point, including directly under the group. Native menus do not
+  provide search or app-managed scrolling.
 
 ## Configure
 
@@ -324,10 +339,16 @@ complete guided configuration workspace:
 - **Contexts:** add, edit, or delete contexts, assign any built-in or personal
   actions as members, and choose defaults for slots 6–9. My configuration
   contexts stay on this PC.
-- **Quick actions:** create, rename, delete, and reorder groups and items.
-  Assign any number of existing actions in order. The first is the left-click
-  default; right-click shows the complete list. A preview explains both.
-  Built-in groups offer only Built-in actions, keeping starter buttons usable
+- **Quick actions:** create, rename, delete, and reorder groups and menu levels.
+  Choose **Quick-action rows** or **Nested subject menu** when adding or editing
+  a group. Edit the group to assign actions directly below it. Select a group
+  and choose **Add menu level** for level 1; select an existing level and use
+  the same command to add its child, up to level 3. Edit any level to assign its
+  ordered actions. In row presentation, the first action is the left-click
+  default; in nested presentation, actions appear before child submenus. A
+  preview shows the full selected path.
+  The single Built-in **Standard** group offers only Built-in actions, keeping
+  starter buttons usable
   without one PC's private files. My configuration groups may use both
   built-in and personal actions.
 - **Diagnostics:** review a safe summary of loaded configuration, recent error
@@ -346,6 +367,14 @@ when finished; the next request creates a fresh Configure window.
 
 Configure opens with keyboard focus on the action list. Action, context, and button dialogs focus and select their first editable field, so typing can begin immediately.
 
+All fields that choose an existing action use the same **Find…** picker:
+pinned slots 1–5, context membership, preferred slots 6–9, and Quick-action
+assignments. Search by any combination of action name, description, built-in
+type, context, tag, or state. The result count and filtered list update while
+you type. Press Down Arrow to enter the results, then Enter to select; pressing
+Enter directly from Find selects the highlighted result. Double-click works
+with the mouse. Choose **Not assigned** to clear a pin or preferred slot.
+
 Use **Choose…** in guided action forms to select one or more defined specific
 contexts. The adjacent field remains editable for quick keyboard entry and
 shows the selected names as a comma-separated list. Names match without regard
@@ -357,13 +386,18 @@ The Tags field has the same **Choose…** control for tags already used by other
 actions. Tags remain open-ended: select existing ones for consistency, type new
 ones when needed, or combine both approaches.
 
+For existing tags, **Choose** opens a searchable list. Select several existing
+tags, keep the selection while narrowing the list, then choose **Add selected**.
+You can still type any new comma-separated tags directly in the field.
+
 Keyboard shortcuts in these guided forms:
 
 - `Alt+C` moves directly to Specific contexts.
 - `Alt+T` moves directly to Tags.
-- `Alt+Down` or `F4` opens the checklist from either its field or **Choose…**
-  button.
-- Use the normal arrow keys and Space in the checklist, then `Esc` to close it.
+- `Alt+Down` or `F4` opens the context checklist or searchable tag picker from
+  its field or **Choose…** button.
+- Use the normal arrow keys and Space to select tags, then choose **Add
+  selected**. Press `Esc` to close without applying changes.
 
 Use the visible **Find** field in **Actions**, **Contexts**, or **Quick actions**
 to reduce that table. `Ctrl+F` focuses and selects the Find field for the
@@ -444,13 +478,12 @@ The bottom communication line always stays one row high. Hover over it for the c
 - Open `Transform` through the right-click menu or the compact `⋮` button.
 - A transform changes the selection, or the complete field when nothing is selected.
 - Every transform result is copied to the clipboard automatically and can be reverted with one Undo.
-- Transform groups provide lowercase, UPPERCASE, Proper Case, sentence case,
-  inverted case, consecutive-space normalization, per-line trimming,
-  prefix/suffix, blank-line removal, A–Z or Z–A sorting, joining lines with
-  spaces, `/` to `\` or `\` to `/` path conversion, SQL value-list formatting,
-  and consecutive or global duplicate-line removal. SQL formatting accepts
-  lines, commas, tabs, or semicolons; numbers
-  and `NULL` remain unquoted, while text is quoted and apostrophes are escaped.
+- Transform groups provide case and naming styles, whitespace cleanup, literal
+  replacement, line filtering, custom split/join delimiters, sorting,
+  duplicate removal, JSON formatting, URL encoding, SQL escaping and value
+  lists, Windows path/file-URI conversion, and path-slash conversion. SQL value
+  formatting accepts lines, commas, tabs, or semicolons; numbers and `NULL`
+  remain unquoted, while text is quoted and apostrophes are escaped.
 - Transform actions read it and place their result back in it.
 - URL-builder actions use it as selected input when it is not empty.
 
@@ -624,11 +657,39 @@ compact symbol:
 | `⇱` | Build and open a URL |
 | `⇗` | Build a URL from selected text |
 | `⇄` | Convert lines to a list |
+| `✎` | Transform text |
 | `／` | Convert path slashes |
 
 The complete built-in action type and description remain available beside the
 icon in filters and Configure, and in hover help and Action info. Symbols never
 replace accessible explanations.
+
+### Transform Input / Output
+
+Choose the compact **⋮** button beside Input / Output, or right-click the field
+and choose **Transform**. An operation changes the selected text, or the
+complete field when nothing is selected. The result remains editable, forms
+one Undo step, and is copied automatically.
+
+Available groups include:
+
+- **Find and filter:** literal replacement and case-insensitive keep/remove
+  line filters.
+- **Lines:** custom delimiter splitting and joining, blank-line cleanup,
+  sorting, duplicate removal, SQL value lists, and line prefixes/suffixes.
+- **Naming style:** `camelCase`, `PascalCase`, `snake_case`,
+  `SCREAMING_SNAKE_CASE`, `kebab-case`, and readable words.
+- **Data and encoding:** JSON formatting/minification, URL encoding/decoding,
+  and SQL single-quote escaping.
+- **File addresses:** Windows path ↔ `file:` URI and both slash directions.
+
+Operations ending in **…** ask only for the values they need. Enter `\t`, `\n`,
+or `\r` when a delimiter should be a tab or line break.
+
+For repeated use, open **Configure**, choose **Actions**, and create a
+**Transform text** action. Choose the operation by its readable name; parameter
+fields change with the selection. Running the saved action transforms Input /
+Output and copies the result in exactly the same way as the menu.
 
 ### Open or run Windows targets
 
@@ -650,10 +711,20 @@ work only when an installed application owns that protocol. If Windows cannot
 resolve a path, association, or protocol, Context Palette reports an actionable
 error.
 
+File, folder, application, Windows-target, and working-folder fields accept
+normal paths, URL-encoded local paths such as
+`C:\work\Quarterly%20report.xlsx`, and `file:` URIs. Context Palette first uses
+an existing literal path, so a real filename containing `%20` still works. If
+the literal target does not exist, it tries the decoded local path. Website
+addresses remain encoded: `%20` in an HTTP or HTTPS URL is passed to the browser
+unchanged.
+
 This is a deliberately powerful personal-tool action. Context Palette passes
-the configured target directly to Windows ShellExecute and does not inspect or
-sandbox what it starts. Targets may execute code. Configure only targets you
-intend to run; the application does not add a confirmation prompt.
+registered protocols to Windows ShellExecute as configured; existing local
+targets may first be resolved from file-URI or percent-encoded form. Context
+Palette does not inspect or sandbox what Windows starts. Targets may execute
+code. Configure only targets you intend to run; the application does not add a
+confirmation prompt.
 
 The main palette keeps its compact width. Its eight management commands use the
 single character strip documented above, keeping every command directly

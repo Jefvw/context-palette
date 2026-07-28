@@ -10,7 +10,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.actions import Action
-from context_palette.command_surface import CommandGroup, CommandItem, CommandSurfaceError
+from context_palette.command_surface import (
+    CommandGroup,
+    CommandItem,
+    CommandSurfaceError,
+    GROUP_PRESENTATION_NESTED_MENU,
+)
 from context_palette.launcher import (
     BUILTIN_QUICK_COMMAND_OPEN_SHEETS,
     LauncherApp,
@@ -36,15 +41,18 @@ class FakeEvent:
 
 class FakeMenu:
     last_instance: "FakeMenu | None" = None
+    instances: list["FakeMenu"] = []
 
     def __init__(self, _root: object, tearoff: bool = False) -> None:
         self.tearoff = tearoff
         self.labels: list[str] = []
         self.commands: list[object] = []
         self.states: list[str | None] = []
+        self.cascades: list["FakeMenu"] = []
         self.popup_calls: list[tuple[int, int]] = []
         self.grab_release_calls = 0
         FakeMenu.last_instance = self
+        FakeMenu.instances.append(self)
 
     def add_command(self, label: str, command: object | None = None, state: str | None = None) -> None:
         self.labels.append(label)
@@ -55,6 +63,12 @@ class FakeMenu:
         self.labels.append("---")
         self.commands.append(None)
         self.states.append(None)
+
+    def add_cascade(self, label: str, menu: "FakeMenu") -> None:
+        self.labels.append(label)
+        self.commands.append(menu)
+        self.states.append(None)
+        self.cascades.append(menu)
 
     def index(self, _marker: object) -> int | None:
         return None if not self.labels else len(self.labels) - 1
@@ -266,6 +280,79 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
         self.assertIsNotNone(menu)
         self.assertEqual(menu.labels, ["No available actions"])
         self.assertEqual(menu.states, ["disabled"])
+
+    def test_nested_group_menu_shows_subject_cascades_and_actions(self):
+        app = self._app()
+        group = CommandGroup(
+            "standard",
+            "Standard",
+            (
+                CommandItem(
+                    "lookup",
+                    "Lookup",
+                    items=(
+                        CommandItem(
+                            "details",
+                            "Details",
+                            items=(
+                                CommandItem(
+                                    "deep",
+                                    "Deep",
+                                    primary_action_id="secondary",
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                CommandItem(
+                    "missing",
+                    "Missing",
+                    primary_action_id="not-found",
+                ),
+            ),
+            presentation=GROUP_PRESENTATION_NESTED_MENU,
+            primary_action_id="primary",
+            action_ids=("primary",),
+        )
+        first_new_menu = len(FakeMenu.instances)
+
+        with patch("context_palette.launcher.tk.Menu", FakeMenu):
+            result = app._show_group_menu(FakeEvent(), group)
+
+        self.assertEqual(result, "break")
+        (
+            root_menu,
+            lookup_menu,
+            details_menu,
+            deep_menu,
+            missing_menu,
+        ) = FakeMenu.instances[first_new_menu:]
+        self.assertEqual(
+            root_menu.labels,
+            ["↗ Primary", "---", "Lookup", "Missing"],
+        )
+        self.assertEqual(root_menu.cascades, [lookup_menu, missing_menu])
+        self.assertEqual(root_menu.popup_calls, [(10, 20)])
+        self.assertEqual(root_menu.grab_release_calls, 1)
+        self.assertEqual(lookup_menu.labels, ["Details"])
+        self.assertEqual(details_menu.labels, ["Deep"])
+        self.assertEqual(deep_menu.labels, ["↗ Secondary"])
+        self.assertEqual(missing_menu.labels, ["No available actions"])
+        deep_menu.commands[0]()
+        self.assertEqual(app._execute_action_calls, ["secondary"])
+
+    def test_modified_nested_group_click_opens_configuration(self):
+        app = self._app()
+        group = CommandGroup(
+            "standard",
+            "Standard",
+            presentation=GROUP_PRESENTATION_NESTED_MENU,
+        )
+
+        result = app._show_group_menu(FakeEvent(state=0x0001), group)
+
+        self.assertEqual(result, "break")
+        self.assertEqual(app._opened_group, "standard")
 
 
 if __name__ == "__main__":

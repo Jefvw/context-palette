@@ -230,6 +230,12 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    action and all references disappear. Repeat the warning check with a
    disposable Built-in action, revert tracked test changes, and remove the
    remaining disposable records afterward.
+   In every action-reference field used above—pins, context membership,
+   preferred slots, and Quick-action assignments—open **Find…**, search by
+   action name and by a metadata term such as type, context, or tag, and verify
+   Down Arrow plus Enter and double-click select the expected action. Verify
+   **Not assigned** clears a pin and a preferred slot without widening
+   Configure beyond the screen.
 10. In an action form, verify `Alt+C` focuses Specific contexts and `Alt+T`
    focuses Tags. From each field, verify `Alt+Down` or `F4` opens **Choose…**,
    arrow keys move through the checklist, Space toggles an item, and `Esc`
@@ -278,8 +284,10 @@ Perform only when relevant:
   confirms Ctrl+numpad 1 does not execute a slot.
 
 - Open a reviewed HTTP/HTTPS URL.
-- Open an existing file and folder.
-- Launch an explicitly configured executable with fixed arguments.
+- Open an existing file and folder using normal paths, `%20`-encoded paths, and
+  `file:` URIs. Confirm an HTTP/HTTPS URL containing `%20` stays encoded.
+- Launch an explicitly configured executable with fixed arguments and test a
+  `%20`-encoded executable or working-folder path when this behavior changes.
 - Exercise `integrations\Invoke-ContextPalette.ps1` with valid and unknown
   contexts when testing the optional Power Automate bridge.
 - For AI-boundary changes, verify a response above 1,000,000 characters is

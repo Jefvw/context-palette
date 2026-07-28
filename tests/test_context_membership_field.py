@@ -61,11 +61,27 @@ class ContextMembershipFieldTests(unittest.TestCase):
             value = tk.StringVar(value="new tag")
             field = TagSelectionField(root, value, ("sql", "data quality"))
 
-            sql_index = field.tag_names.index("sql")
-            field.menu.invoke(sql_index)
+            field.picker.invoke()
+            root.update()
+            sql_index = field.tag_picker.visible_values.index("sql")
+            field.tag_picker.listbox.selection_set(sql_index)
+            field.tag_picker._selection_changed()
+            field.tag_picker.apply()
 
             self.assertEqual(value.get(), "new tag, sql")
-            self.assertTrue(field.selected_vars["sql"].get())
+            self.assertEqual(str(field.picker.winfo_class()), "TButton")
+        finally:
+            root.destroy()
+
+    def test_tag_picker_is_disabled_when_no_existing_tags_are_available(self):
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            field = TagSelectionField(root, tk.StringVar(value="new tag"), ())
+
+            self.assertEqual(str(field.picker.cget("state")), tk.DISABLED)
+            self.assertEqual(field._post_picker(), "break")
+            self.assertFalse(hasattr(field, "tag_picker"))
         finally:
             root.destroy()
 

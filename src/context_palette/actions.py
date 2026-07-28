@@ -8,12 +8,13 @@ from pathlib import Path
 import re
 import subprocess
 from typing import Callable, Iterable
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, unquote, urlparse
 from uuid import uuid4
 import webbrowser
 
 from .persistence import atomic_write_json
 from .action_types import ACTION_TYPES, SUPPORTED_ACTION_TYPES
+from .workspace_transforms import WORKSPACE_TRANSFORMS
 
 
 ACTIVE_STATE = "Active"
@@ -320,6 +321,14 @@ def configured_action(
     validate_action_value(action_type, clean_value)
     clean_contexts = normalize_contexts((*contexts, context))
 
+    clean_arguments = (
+        tuple(arguments)
+        if action_type == "transform_text"
+        else tuple(argument.strip() for argument in arguments if argument.strip())
+    )
+    if action_type == "transform_text":
+        validate_text_transform(clean_value, clean_arguments)
+
     return Action(
         id=f"action-{uuid4().hex[:12]}",
         title=clean_title,
@@ -327,7 +336,7 @@ def configured_action(
         type=action_type,
         value=clean_value,
         state=ACTIVE_STATE,
-        arguments=tuple(argument.strip() for argument in arguments if argument.strip()),
+        arguments=clean_arguments,
         working_directory=working_directory.strip() or None,
         technology=technology.strip(),
         task=task.strip(),
@@ -490,6 +499,20 @@ def execute_action(
             clipboard_setter(result)
         return "Converted path slashes and copied the result."
 
+    if action.type == "transform_text":
+        if not input_text:
+            raise ActionError("The Input / Output field does not contain text.")
+        result = transform_text(
+            input_text,
+            action.value,
+            arguments=action.arguments,
+        )
+        if output_setter is not None:
+            output_setter(result)
+        if clipboard_setter is not None:
+            clipboard_setter(result)
+        return "Transformed Input / Output and copied the result."
+
     if action.type == "build_url_selection_open":
         identifier = selected_text
         if not identifier and clipboard_getter is not None:
@@ -604,6 +627,22 @@ def validate_windows_target(value: str) -> None:
         raise ActionError("Windows target cannot contain a null character.")
 
 
+def validate_text_transform(operation: str, arguments: tuple[str, ...] = ()) -> None:
+    definition = WORKSPACE_TRANSFORMS.get(operation)
+    if definition is None:
+        raise ActionError("Choose a supported text operation.")
+    required = len(definition.parameter_labels)
+    if len(arguments) != required:
+        raise ActionError(
+            f"{definition.label} requires {required} parameter"
+            f"{'s' if required != 1 else ''}."
+        )
+    if required and operation != "literal_replace" and not arguments[0]:
+        raise ActionError(f"{definition.parameter_labels[0]} cannot be empty.")
+    if operation == "literal_replace" and not arguments[0]:
+        raise ActionError("Find cannot be empty.")
+
+
 def validate_credential_target(value: str) -> None:
     if not value.strip():
         raise ActionError("Windows credential target name cannot be empty.")
@@ -622,6 +661,9 @@ def validate_action_value(action_type: str, value: str) -> None:
         validate_http_url(clean_value, label="Action URL")
     elif action_type == "open_windows_target":
         validate_windows_target(clean_value)
+    elif action_type == "transform_text":
+        if clean_value not in WORKSPACE_TRANSFORMS:
+            raise ActionError("Choose a supported text operation.")
     elif action_type == "paste_credential":
         validate_credential_target(clean_value)
     elif action_type in {"build_url_copy", "build_url_open", "build_url_selection_open"}:
@@ -676,6 +718,7 @@ def transform_text(
     *,
     prefix: str = "",
     suffix: str = "",
+    arguments: tuple[str, ...] = (),
 ) -> str:
     """Apply a constrained, previewable transformation to workspace text."""
     if operation == "lowercase":
@@ -696,6 +739,19 @@ def transform_text(
         return re.sub(r"[ \t]+", " ", value)
     if operation == "trim_lines":
         return _transform_line_bodies(value, lambda line: line.strip(" \t"))
+    if operation == "collapse_blank_lines":
+        return _collapse_blank_lines(value)
+    if operation == "literal_replace":
+        validate_text_transform(operation, arguments)
+        return value.replace(arguments[0], arguments[1])
+    if operation == "keep_lines_containing":
+        validate_text_transform(operation, arguments)
+        needle = arguments[0].casefold()
+        return _filter_and_join_lines(value, lambda line: needle in line.casefold())
+    if operation == "remove_lines_containing":
+        validate_text_transform(operation, arguments)
+        needle = arguments[0].casefold()
+        return _filter_and_join_lines(value, lambda line: needle not in line.casefold())
     if operation == "prefix_suffix_lines":
         return _affix_each_line(value, prefix, suffix)
     if operation == "remove_blank_lines":
@@ -712,6 +768,13 @@ def transform_text(
         )
     if operation == "join_lines":
         return re.sub(r"\r\n|\r|\n", " ", value)
+    if operation == "split_delimiter":
+        validate_text_transform(operation, arguments)
+        delimiter = _decoded_delimiter(arguments[0])
+        return _line_separator(value).join(value.split(delimiter))
+    if operation == "join_delimiter":
+        validate_text_transform(operation, arguments)
+        return _decoded_delimiter(arguments[0]).join(value.splitlines())
     if operation == "sql_values":
         return list_to_sql_values(value)
     if operation == "remove_consecutive_duplicate_lines":
@@ -722,6 +785,38 @@ def transform_text(
         return value.replace("/", "\\")
     if operation == "back_to_forward":
         return value.replace("\\", "/")
+    if operation in {
+        "camel_case",
+        "pascal_case",
+        "snake_case",
+        "screaming_snake_case",
+        "kebab_case",
+        "readable_words",
+    }:
+        return _transform_line_bodies(
+            value,
+            lambda line: _convert_naming_style(line, operation),
+        )
+    if operation in {"json_pretty", "json_minify"}:
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ActionError(
+                f"JSON is invalid at line {exc.lineno}, column {exc.colno}: {exc.msg}"
+            ) from exc
+        if operation == "json_pretty":
+            return json.dumps(parsed, ensure_ascii=False, indent=2)
+        return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
+    if operation == "url_encode":
+        return quote(value, safe="")
+    if operation == "url_decode":
+        return unquote(value)
+    if operation == "sql_escape_quotes":
+        return value.replace("'", "''")
+    if operation == "path_to_file_uri":
+        return _windows_path_to_file_uri(value)
+    if operation == "file_uri_to_path":
+        return _file_uri_to_windows_path(value)
     raise ActionError(f"Unsupported text transformation: {operation}")
 
 
@@ -737,6 +832,82 @@ def _sentence_case(value: str) -> str:
         if character in ".!?":
             capitalize_next = True
     return "".join(result)
+
+
+def _decoded_delimiter(value: str) -> str:
+    decoded = value.replace("\\t", "\t").replace("\\r", "\r").replace("\\n", "\n")
+    if not decoded:
+        raise ActionError("Delimiter cannot be empty.")
+    return decoded
+
+
+def _collapse_blank_lines(value: str) -> str:
+    lines = value.splitlines()
+    collapsed: list[str] = []
+    previous_blank = False
+    for line in lines:
+        blank = not line.strip()
+        if blank and previous_blank:
+            continue
+        collapsed.append(line)
+        previous_blank = blank
+    return _join_reordered_lines(value, collapsed)
+
+
+def _identifier_words(value: str) -> list[str]:
+    separated = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", value)
+    separated = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", separated)
+    return re.findall(r"[A-Za-z0-9]+", separated)
+
+
+def _convert_naming_style(value: str, operation: str) -> str:
+    words = _identifier_words(value)
+    if not words:
+        return value
+    lowered = [word.lower() for word in words]
+    if operation == "camel_case":
+        return lowered[0] + "".join(word.capitalize() for word in lowered[1:])
+    if operation == "pascal_case":
+        return "".join(word.capitalize() for word in lowered)
+    if operation == "snake_case":
+        return "_".join(lowered)
+    if operation == "screaming_snake_case":
+        return "_".join(lowered).upper()
+    if operation == "kebab_case":
+        return "-".join(lowered)
+    readable = [
+        word if word.isupper() and len(word) > 1 else word.lower()
+        for word in words
+    ]
+    readable[0] = readable[0] if readable[0].isupper() else readable[0].capitalize()
+    return " ".join(readable)
+
+
+def _windows_path_to_file_uri(value: str) -> str:
+    path = value.strip().strip('"')
+    if path.startswith("\\\\"):
+        parts = path[2:].replace("\\", "/").split("/", 1)
+        if len(parts) != 2 or not all(parts):
+            raise ActionError("Enter a complete UNC path such as \\\\server\\share\\file.")
+        return f"file://{parts[0]}/{quote(parts[1], safe='/')}"
+    if not re.match(r"^[A-Za-z]:[\\/]", path):
+        raise ActionError("Enter an absolute Windows drive or UNC path.")
+    normalized = path.replace("\\", "/")
+    return "file:///" + quote(normalized, safe="/:")
+
+
+def _file_uri_to_windows_path(value: str) -> str:
+    parsed = urlparse(value.strip())
+    if parsed.scheme.casefold() != "file":
+        raise ActionError("Enter a complete file: URI.")
+    path = unquote(parsed.path)
+    if parsed.netloc:
+        return "\\\\" + parsed.netloc + path.replace("/", "\\")
+    if re.match(r"^/[A-Za-z]:/", path):
+        path = path[1:]
+    if not re.match(r"^[A-Za-z]:/", path):
+        raise ActionError("The file URI does not contain a Windows drive or UNC path.")
+    return path.replace("/", "\\")
 
 
 def _transform_line_bodies(value: str, transform: Callable[[str], str]) -> str:
@@ -898,6 +1069,9 @@ def open_action_target(action: Action) -> None:
         target = action.value.strip()
         if len(target) >= 2 and target[0] == target[-1] == '"':
             target = target[1:-1]
+        local_target = _existing_local_target_path(action.value)
+        if local_target is not None:
+            target = str(local_target)
         arguments = (
             subprocess.list2cmdline(action.arguments) if action.arguments else None
         )
@@ -916,23 +1090,22 @@ def open_action_target(action: Action) -> None:
             ) from exc
         return
 
-    target = Path(action.value).expanduser()
-    if not target.is_absolute():
-        target = Path.cwd() / target
-
     if action.type == "open_file":
+        target = _resolve_local_path(action.value, Path.is_file)
         if not target.is_file():
             raise ActionError(f"File does not exist: {target}")
         os.startfile(target)  # type: ignore[attr-defined]
         return
 
     if action.type == "open_folder":
+        target = _resolve_local_path(action.value, Path.is_dir)
         if not target.is_dir():
             raise ActionError(f"Folder does not exist: {target}")
         os.startfile(target)  # type: ignore[attr-defined]
         return
 
     if action.type == "launch_app":
+        target = _resolve_local_path(action.value, Path.is_file)
         if not target.is_file() or target.suffix.casefold() != ".exe":
             raise ActionError(f"Application must be an existing .exe file: {target}")
         cwd = _resolve_working_directory(action.working_directory)
@@ -973,6 +1146,11 @@ def _parse_action(item: object, index: int) -> Action:
     arguments = item.get("arguments", [])
     if not isinstance(arguments, list) or not all(isinstance(arg, str) for arg in arguments):
         raise ActionError(f"Action #{index} has invalid arguments.")
+    if action_type == "transform_text":
+        try:
+            validate_text_transform(item["value"], tuple(arguments))
+        except ActionError as exc:
+            raise ActionError(f"Action #{index}: {exc}") from exc
 
     working_directory = item.get("working_directory")
     if working_directory is not None and not isinstance(working_directory, str):
@@ -1073,9 +1251,61 @@ def _resolve_working_directory(value: str | None) -> str | None:
     if value is None:
         return None
 
-    path = Path(value).expanduser()
-    if not path.is_absolute():
-        path = Path.cwd() / path
+    path = _resolve_local_path(value, Path.is_dir)
     if not path.is_dir():
         raise ActionError(f"Working directory does not exist: {path}")
     return str(path)
+
+
+def _local_path_candidates(value: str) -> tuple[Path, ...]:
+    """Return literal-first local path candidates."""
+
+    clean = value.strip()
+    if len(clean) >= 2 and clean[0] == clean[-1] == '"':
+        clean = clean[1:-1]
+    parsed = urlparse(clean)
+    values = (
+        (_file_uri_to_windows_path(clean),)
+        if parsed.scheme.casefold() == "file"
+        else tuple(dict.fromkeys((clean, unquote(clean))))
+    )
+    paths: list[Path] = []
+    for item in values:
+        path = Path(item).expanduser()
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        if path not in paths:
+            paths.append(path)
+    return tuple(paths)
+
+
+def _resolve_local_path(
+    value: str,
+    predicate: Callable[[Path], bool],
+) -> Path:
+    candidates = _local_path_candidates(value)
+    for candidate in candidates:
+        if predicate(candidate):
+            return candidate
+    return candidates[-1]
+
+
+def _existing_local_target_path(value: str) -> Path | None:
+    clean = value.strip()
+    if len(clean) >= 2 and clean[0] == clean[-1] == '"':
+        clean = clean[1:-1]
+    parsed = urlparse(clean)
+    is_drive_path = bool(re.match(r"^[A-Za-z]:[\\/]", clean))
+    is_absolute_path = (
+        is_drive_path
+        or clean.startswith("\\\\")
+        or Path(clean).is_absolute()
+    )
+    if parsed.scheme and parsed.scheme.casefold() != "file" and not is_drive_path:
+        return None
+    if not parsed.scheme and not is_absolute_path:
+        return None
+    return next(
+        (candidate for candidate in _local_path_candidates(value) if candidate.exists()),
+        None,
+    )

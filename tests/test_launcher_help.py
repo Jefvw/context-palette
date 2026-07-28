@@ -11,7 +11,12 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from context_palette.help_window import render_markdown_html, resolve_local_markdown_link
+from context_palette.help_window import (
+    find_edge_executable,
+    open_markdown_in_edge,
+    render_markdown_html,
+    resolve_local_markdown_link,
+)
 from context_palette.inbox_window import suggest_url_template
 from context_palette.launcher import HelpWindow
 
@@ -103,6 +108,60 @@ class HelpWindowSearchTests(unittest.TestCase):
 
 
 class MarkdownRenderingTests(unittest.TestCase):
+    def test_edge_discovery_uses_path_then_standard_install_folders(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path_edge = root / "path" / "msedge.exe"
+            path_edge.parent.mkdir()
+            path_edge.write_bytes(b"edge")
+            installed_edge = (
+                root / "local" / "Microsoft" / "Edge" / "Application" / "msedge.exe"
+            )
+            installed_edge.parent.mkdir(parents=True)
+            installed_edge.write_bytes(b"edge")
+
+            self.assertEqual(
+                find_edge_executable(
+                    environment={"LOCALAPPDATA": str(root / "local")},
+                    path_lookup=lambda _name: str(path_edge),
+                ),
+                path_edge.resolve(),
+            )
+            self.assertEqual(
+                find_edge_executable(
+                    environment={"LOCALAPPDATA": str(root / "local")},
+                    path_lookup=lambda _name: None,
+                ),
+                installed_edge.resolve(),
+            )
+
+    def test_edge_launch_receives_the_local_file_uri(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            edge = root / "msedge.exe"
+            markdown = root / "Help file.md"
+            edge.write_bytes(b"edge")
+            markdown.write_text("# Help", encoding="utf-8")
+            launched: list[list[str]] = []
+
+            open_markdown_in_edge(
+                markdown,
+                edge_executable=edge,
+                launcher=lambda arguments: launched.append(arguments),
+            )
+
+            self.assertEqual(
+                launched,
+                [[str(edge), markdown.resolve().as_uri()]],
+            )
+
+    def test_edge_launch_reports_when_edge_is_unavailable(self):
+        with (
+            patch("context_palette.help_window.find_edge_executable", return_value=None),
+            self.assertRaisesRegex(FileNotFoundError, "could not be found"),
+        ):
+            open_markdown_in_edge(ROOT / "README.md")
+
     def test_renderer_supports_common_document_structures(self):
         html = render_markdown_html(
             "# Title\n\n- First **item**\n\n```text\nrun.bat\n```\n\n"
@@ -190,12 +249,14 @@ class MarkdownRenderingTests(unittest.TestCase):
                 viewer._go_home()
                 self.assertEqual(viewer.current_path, first.resolve())
                 self.assertEqual(viewer.window.title(), "Context Palette Help")
-                with patch("context_palette.help_window.webbrowser.open", return_value=True) as browser:
-                    viewer._open_in_browser()
-                browser.assert_called_once_with(first.resolve().as_uri())
+                with patch(
+                    "context_palette.help_window.open_markdown_in_edge"
+                ) as edge_open:
+                    viewer._open_in_edge()
+                edge_open.assert_called_once_with(first.resolve())
                 self.assertEqual(
                     viewer.search_status_var.get(),
-                    "Opened the current document in the default browser.",
+                    "Opened the current document in Microsoft Edge.",
                 )
                 viewer.window.destroy()
         finally:

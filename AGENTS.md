@@ -115,6 +115,28 @@ Before handing off:
   and do not retry the identical edit unless it failed.
 - Distinguish Codex tool latency from measured Windows filesystem latency.
 
+## Model recommendation and delegation
+
+Use [Model selection for AI work](docs/MODEL_SELECTION.md) when recommending a
+model, writing a prompt or task brief for another agent, or selecting a model
+for explicitly requested delegated work.
+
+- When asked to write a prompt or task brief for another agent, include a short
+  model and reasoning-effort recommendation after the prompt.
+- When the user asks which model should perform a task, state the recommendation
+  before executing or delegating it.
+- When asked to perform work directly, proceed with the current model. Do not
+  interrupt a clear task merely to discuss model choice.
+- When the user explicitly requests delegation or model selection, choose the
+  least expensive available model that safely fits the ambiguity, scope, risk,
+  and verification cost. Use a stronger model for final synthesis when needed.
+- Pin a delegated model only when the current Codex surface exposes that
+  override. Otherwise inherit the parent setting and state the limitation.
+- Do not claim to have changed the model of the active thread. A model choice
+  applies only to a new or delegated agent unless the user changes the active
+  thread's model.
+- The user's explicit model choice always takes precedence.
+
 ## Application improvement iterations
 
 The user is a non-developer and may request an autonomous maintenance iteration

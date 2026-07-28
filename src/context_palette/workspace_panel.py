@@ -8,25 +8,46 @@ from .actions import ActionError, transform_text
 from .workspace_transforms import WORKSPACE_TRANSFORM_GROUPS, WorkspaceTransform
 
 
-class PrefixSuffixDialog(simpledialog.Dialog):
+class TransformParametersDialog(simpledialog.Dialog):
+    def __init__(
+        self,
+        parent: tk.Misc,
+        *,
+        transform: WorkspaceTransform,
+    ) -> None:
+        self.transform = transform
+        self.variables: list[tk.StringVar] = []
+        super().__init__(parent, title=transform.label.rstrip("…"))
+
     def body(self, master: tk.Misc) -> tk.Widget:
-        ttk.Label(master, text="Prefix for every line").grid(row=0, column=0, sticky=tk.W)
-        self.prefix_var = tk.StringVar()
-        prefix_entry = ttk.Entry(master, textvariable=self.prefix_var, width=42)
-        prefix_entry.grid(row=1, column=0, sticky=tk.EW, pady=(3, 9))
-        ttk.Label(master, text="Suffix for every line").grid(row=2, column=0, sticky=tk.W)
-        self.suffix_var = tk.StringVar()
-        ttk.Entry(master, textvariable=self.suffix_var, width=42).grid(
-            row=3,
-            column=0,
-            sticky=tk.EW,
-            pady=(3, 0),
-        )
+        first_entry: ttk.Entry | None = None
+        for index, label in enumerate(self.transform.parameter_labels):
+            ttk.Label(master, text=label).grid(
+                row=index * 2,
+                column=0,
+                sticky=tk.W,
+            )
+            default = (
+                self.transform.parameter_defaults[index]
+                if index < len(self.transform.parameter_defaults)
+                else ""
+            )
+            variable = tk.StringVar(value=default)
+            entry = ttk.Entry(master, textvariable=variable, width=42)
+            entry.grid(
+                row=index * 2 + 1,
+                column=0,
+                sticky=tk.EW,
+                pady=(3, 9 if index + 1 < len(self.transform.parameter_labels) else 0),
+            )
+            self.variables.append(variable)
+            first_entry = first_entry or entry
         master.columnconfigure(0, weight=1)
-        return prefix_entry
+        assert first_entry is not None
+        return first_entry
 
     def apply(self) -> None:
-        self.result = (self.prefix_var.get(), self.suffix_var.get())
+        self.result = tuple(variable.get() for variable in self.variables)
 
 
 class WorkspacePanel:
@@ -136,8 +157,8 @@ class WorkspacePanel:
         self,
         transform: WorkspaceTransform,
     ) -> Callable[[], None]:
-        if transform.prompts_for_affixes:
-            return self.prefix_suffix_lines
+        if transform.parameter_labels:
+            return lambda: self.prompted_transform(transform)
         return lambda: self.transform(
             transform.operation,
             transform.success_message,
@@ -188,6 +209,7 @@ class WorkspacePanel:
         *,
         prefix: str = "",
         suffix: str = "",
+        arguments: tuple[str, ...] = (),
     ) -> None:
         start, end, had_selection = self._transform_range()
         source = self.text.get(start, end)
@@ -195,7 +217,13 @@ class WorkspacePanel:
             self.status_setter("Input / Output is empty; nothing was transformed.")
             return
         try:
-            result = transform_text(source, operation, prefix=prefix, suffix=suffix)
+            result = transform_text(
+                source,
+                operation,
+                prefix=prefix,
+                suffix=suffix,
+                arguments=arguments,
+            )
         except ActionError as exc:
             messagebox.showerror("Context Palette", str(exc), parent=self.text.winfo_toplevel())
             return
@@ -211,18 +239,35 @@ class WorkspacePanel:
         self.status_setter(f"{description} in {scope}; result copied to clipboard.")
 
     def prefix_suffix_lines(self) -> None:
-        dialog = PrefixSuffixDialog(
+        transform = next(
+            item
+            for group in WORKSPACE_TRANSFORM_GROUPS
+            for item in group.transforms
+            if item.operation == "prefix_suffix_lines"
+        )
+        self.prompted_transform(transform)
+
+    def prompted_transform(self, transform: WorkspaceTransform) -> None:
+        dialog = TransformParametersDialog(
             self.text.winfo_toplevel(),
-            title="Prefix / suffix every line",
+            transform=transform,
         )
         if dialog.result is None:
             return
-        prefix, suffix = dialog.result
+        arguments = tuple(dialog.result)
+        if transform.operation == "prefix_suffix_lines":
+            prefix, suffix = arguments
+            self.transform(
+                transform.operation,
+                transform.success_message,
+                prefix=prefix,
+                suffix=suffix,
+            )
+            return
         self.transform(
-            "prefix_suffix_lines",
-            "Added line prefix / suffix",
-            prefix=prefix,
-            suffix=suffix,
+            transform.operation,
+            transform.success_message,
+            arguments=arguments,
         )
 
     def replace_with_clipboard(self) -> None:

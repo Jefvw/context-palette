@@ -23,7 +23,11 @@ from context_palette.launcher import (
 )
 from context_palette.actions import Action
 from context_palette.action_types import ACTION_TYPES
-from context_palette.command_surface import CommandGroup, CommandItem
+from context_palette.command_surface import (
+    CommandGroup,
+    CommandItem,
+    GROUP_PRESENTATION_NESTED_MENU,
+)
 from context_palette.configuration_window import (
     ConfigurationWindow,
     LOCAL_DESTINATION,
@@ -133,7 +137,11 @@ class LauncherSmokeTests(unittest.TestCase):
                         1,
                     )
                     self.assertEqual(
-                        len(trees_by_heading["Group / button"].get_children()),
+                        len(
+                            trees_by_heading[
+                                "Group / menu level"
+                            ].get_children()
+                        ),
                         len(app.command_groups),
                     )
                     configure_windows[0].geometry("700x480")
@@ -146,7 +154,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     for tab_index, heading, last_column in (
                         (0, "Action", "state"),
                         (2, "Context", "actions"),
-                        (3, "Group / button", "actions"),
+                        (3, "Group / menu level", "actions"),
                     ):
                         configure_notebook.select(tab_index)
                         root.update()
@@ -670,14 +678,13 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app.type_filter.cget("text"), "Types ▾")
                     self.assertEqual(app.type_filter.cget("style"), "Compact.TButton")
 
-                    tag_menu = root.nametowidget(app.tag_filter.cget("menu"))
-                    database_tag_index = next(
-                        index
-                        for index in range(tag_menu.index(tk.END) + 1)
-                        if tag_menu.type(index) == "radiobutton"
-                        and tag_menu.entrycget(index, "label") == "database"
-                    )
-                    tag_menu.invoke(database_tag_index)
+                    app.tag_filter.invoke()
+                    root.update()
+                    database_tag_index = app.action_discovery_panel.tag_picker_popup.visible_values.index("database")
+                    app.action_discovery_panel.tag_picker_popup.listbox.selection_clear(0, tk.END)
+                    app.action_discovery_panel.tag_picker_popup.listbox.selection_set(database_tag_index)
+                    app.action_discovery_panel.tag_picker_popup._selection_changed()
+                    app.action_discovery_panel.tag_picker_popup.apply()
                     self.assertEqual(app.action_tag_filter, "database")
                     self.assertEqual(app.tag_filter.cget("text"), "Tags ✓")
                     self.assertEqual(app.tag_filter.cget("style"), "Accent.TButton")
@@ -685,7 +692,12 @@ class LauncherSmokeTests(unittest.TestCase):
                         [action.id for action in app.filtered_actions],
                         ["database-only"],
                     )
-                    tag_menu.invoke(0)
+                    app.tag_filter.invoke()
+                    root.update()
+                    all_tags_index = app.action_discovery_panel.tag_picker_popup.visible_values.index("All tags")
+                    app.action_discovery_panel.tag_picker_popup.listbox.selection_set(all_tags_index)
+                    app.action_discovery_panel.tag_picker_popup._selection_changed()
+                    app.action_discovery_panel.tag_picker_popup.apply()
                     self.assertIsNone(app.action_tag_filter)
                     self.assertEqual(app.tag_filter.cget("text"), "Tags ▾")
                     self.assertEqual(app.tag_filter.cget("style"), "Compact.TButton")
@@ -795,9 +807,15 @@ class LauncherSmokeTests(unittest.TestCase):
                             if isinstance(child, ttk.Label)
                             and child.cget("style") == "SurfaceMenu.TLabel"
                         ]
+                        expected_launcher_labels = (
+                            ["Browse actions ▾"]
+                            if group.presentation
+                            == GROUP_PRESENTATION_NESTED_MENU
+                            else [item.label for item in group.items]
+                        )
                         self.assertEqual(
                             [control.cget("text") for control in menu_launchers],
-                            [item.label for item in group.items],
+                            expected_launcher_labels,
                         )
                         for row, control in enumerate(menu_launchers):
                             self.assertEqual(int(control.grid_info()["row"]), row)

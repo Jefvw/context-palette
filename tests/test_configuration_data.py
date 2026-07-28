@@ -10,7 +10,12 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from context_palette.command_surface import CommandGroup, CommandItem, load_command_groups
+from context_palette.command_surface import (
+    CommandGroup,
+    CommandItem,
+    GROUP_PRESENTATION_NESTED_MENU,
+    load_command_groups,
+)
 from context_palette.actions import Action
 from context_palette.configuration_data import (
     delete_command_group,
@@ -152,6 +157,7 @@ class ConfigurationDataTests(unittest.TestCase):
                         CommandItem("first", "First", action_ids=("one",)),
                         CommandItem("second", "Second", action_ids=("two",)),
                     ),
+                    presentation=GROUP_PRESENTATION_NESTED_MENU,
                 ),
             )
 
@@ -174,6 +180,16 @@ class ConfigurationDataTests(unittest.TestCase):
             self.assertEqual(
                 group.items[0].action_ids,
                 ("one", "two", "three", "four", "five", "six"),
+            )
+            self.assertEqual(
+                group.presentation,
+                GROUP_PRESENTATION_NESTED_MENU,
+            )
+            self.assertEqual(
+                json.loads(path.read_text(encoding="utf-8"))["groups"][0][
+                    "presentation"
+                ],
+                GROUP_PRESENTATION_NESTED_MENU,
             )
 
     def test_group_and_item_delete_and_reorder_operations(self):
@@ -212,6 +228,77 @@ class ConfigurationDataTests(unittest.TestCase):
                 [group.id for group in load_command_groups(path)],
                 ["first"],
             )
+
+    def test_nested_items_and_direct_group_actions_survive_guided_operations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "nested.json"
+            save_command_group(
+                path,
+                CommandGroup(
+                    "nested",
+                    "Nested",
+                    (
+                        CommandItem(
+                            "level-1",
+                            "Level 1",
+                            items=(
+                                CommandItem(
+                                    "level-2",
+                                    "Level 2",
+                                    items=(
+                                        CommandItem(
+                                            "first",
+                                            "First",
+                                            action_ids=("one",),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                    presentation=GROUP_PRESENTATION_NESTED_MENU,
+                    primary_action_id="root",
+                    action_ids=("root",),
+                ),
+            )
+
+            save_command_item(
+                path,
+                group_id="nested",
+                group_label="Nested",
+                item=CommandItem(
+                    "second",
+                    "Second",
+                    action_ids=("two",),
+                ),
+                parent_item_ids=("level-1", "level-2"),
+            )
+            self.assertTrue(
+                move_command_item(path, "nested", "second", -1)
+            )
+            save_command_item(
+                path,
+                group_id="nested",
+                group_label="Nested",
+                item=CommandItem(
+                    "renamed",
+                    "Renamed",
+                    action_ids=("two",),
+                ),
+                original_item_id="second",
+            )
+
+            group = load_command_groups(path)[0]
+            level_2 = group.items[0].items[0]
+            self.assertEqual(
+                [item.id for item in level_2.items],
+                ["renamed", "first"],
+            )
+            self.assertEqual(group.action_ids, ("root",))
+            delete_command_item(path, "nested", "level-2")
+            group = load_command_groups(path)[0]
+            self.assertEqual(group.items[0].items, ())
+            self.assertEqual(group.action_ids, ("root",))
 
 
 if __name__ == "__main__":

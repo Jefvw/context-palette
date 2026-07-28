@@ -121,6 +121,82 @@ class ActionDeletionTests(unittest.TestCase):
                 },
             )
 
+    def test_deletion_cleans_group_actions_and_nested_empty_levels(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            actions = root / "actions.json"
+            contexts = root / "contexts.json"
+            commands = root / "commands.json"
+            palette = root / "palette.json"
+            self._write(
+                actions,
+                {
+                    "actions": [
+                        {
+                            "id": "delete-me",
+                            "title": "Delete",
+                            "context": "General",
+                            "type": "copy_text",
+                            "value": "x",
+                            "state": "Active",
+                        },
+                        {
+                            "id": "keep",
+                            "title": "Keep",
+                            "context": "General",
+                            "type": "copy_text",
+                            "value": "y",
+                            "state": "Active",
+                        },
+                    ]
+                },
+            )
+            self._write(contexts, {"contexts": []})
+            self._write(palette, {"pinned_action_ids": []})
+            self._write(
+                commands,
+                {
+                    "groups": [
+                        {
+                            "id": "nested",
+                            "label": "Nested",
+                            "presentation": "nested_menu",
+                            "primary_action_id": "delete-me",
+                            "action_ids": ["delete-me", "keep"],
+                            "items": [
+                                {
+                                    "id": "parent",
+                                    "label": "Parent",
+                                    "items": [
+                                        {
+                                            "id": "leaf",
+                                            "label": "Leaf",
+                                            "primary_action_id": "delete-me",
+                                            "action_ids": ["delete-me"],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
+
+            report = delete_action_and_references(
+                actions,
+                "delete-me",
+                context_paths=(contexts,),
+                command_surface_paths=(commands,),
+                palette_path=palette,
+            )
+
+            self.assertEqual(report.references_removed, 4)
+            self.assertEqual(report.buttons_removed, 2)
+            group = self._read(commands)["groups"][0]
+            self.assertEqual(group["primary_action_id"], "keep")
+            self.assertEqual(group["action_ids"], ["keep"])
+            self.assertEqual(group["items"], [])
+
     @staticmethod
     def _write(path: Path, value: object) -> None:
         path.write_text(json.dumps(value), encoding="utf-8")

@@ -4,6 +4,35 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Consolidated all active Built-in actions into one compact **Standard**
+  launcher with direct commands and nested menu levels. Quick-action groups can
+  choose direct rows or the one-launcher nested presentation; actions may live
+  at the group or any of three submenu levels. Configure can add, edit, delete,
+  and reorder those levels without flattening their children. Personal groups
+  retain direct rows by default, while automated checks prevent starter actions
+  from being omitted or assigned to multiple Standard menus.
+- Replaced long tag menus with one searchable keyboard-friendly picker. Guided
+  action forms retain free-form comma-separated tags and multi-select existing
+  tags; Actions and Work Items retain their single exact-tag filters and
+  **All tags** / **All work tags** clear choices.
+- Accepted URL-encoded local paths and `file:` URIs for file, folder,
+  application, Windows-target, and working-folder actions. Existing literal
+  `%20` filenames remain preferred, while HTTP/HTTPS URLs keep their encoded
+  form unchanged.
+- Replaced long action dropdowns in Configure with one searchable action picker
+  for pins, context membership, preferred Focus slots, and Quick-action
+  assignments. It searches readable action metadata, reports a live result
+  count, supports keyboard selection, and preserves the supported window width.
+- Expanded Input / Output transformations with literal replacement,
+  case-insensitive line filtering, custom split/join delimiters, blank-line
+  cleanup, six naming styles, JSON formatting/minification, URL
+  encoding/decoding, SQL quote escaping, and Windows path/file-URI conversion.
+  Every operation is also available through the guided reusable **Transform
+  text** action type, including readable parameter fields and action previews.
+- Replaced the Markdown viewer's generic Browser button with a direct **Edge**
+  button. It finds Microsoft Edge across `PATH` and standard user/system
+  installations, then opens the current validated local Markdown file for the
+  user's Edge Markdown extension.
 - Added **Open or run a Windows target** actions. They delegate registered
   protocols, `shell:` targets, file URIs, drive paths, documents, associated
   scripts, optional arguments, and an optional working folder directly to

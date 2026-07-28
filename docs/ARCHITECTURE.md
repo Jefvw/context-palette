@@ -146,6 +146,10 @@ Important principles:
   Registered protocols, file URIs, drive paths, documents, and associated
   scripts are deliberately accepted. The action preview makes clear that the
   target can execute code and is not sandboxed.
+- Local file, folder, application, Windows-target, and working-folder paths
+  resolve the literal configured value first. When that target is unavailable,
+  a percent-decoded path or decoded `file:` URI is accepted if it resolves to
+  the required local target. HTTP/HTTPS addresses remain encoded and unchanged.
 - Guided creation and JSON loading share the same action-value validation, while
   execution retains safety checks around platform effects.
 - The app does not tokenize or interpret a compound shell command language.
@@ -166,8 +170,10 @@ The catalogue renders `docs/ACTION_TYPES.md`; an automated test requires the use
 ### `workspace_transforms.py`
 
 Defines the ordered, user-facing catalogue for Input / Output transformations:
-menu groups, labels, operation keys, completion feedback, and whether an
-operation needs an additional prompt. The launcher renders its Transform menu
+menu groups, labels, operation keys, completion feedback, and readable
+parameter definitions. The workspace menu and guided reusable action editor
+both consume this catalogue, while the launcher renders action previews
+without duplicating operation names. The launcher renders its Transform menu
 from this catalogue instead of repeating every command in the UI orchestrator.
 Pure transformation algorithms and validation remain in `actions.py`.
 
@@ -183,7 +189,7 @@ execution and integration flows, but no longer owns workspace widget mechanics.
 ### `action_discovery_panel.py`
 
 Owns construction and event wiring for the left action-discovery presentation:
-heading and count, global Find entry, type and tag controls, Run and Help
+heading and count, global Find entry, type and searchable single-tag controls, Run and Help
 controls, flat result list, Focus list, scrollbar, and row tooltips. Search
 policy, action ranking, filtering, Focus membership, selection meaning, and execution remain in
 `launcher.py` and are supplied through narrow callbacks. Compatibility aliases
@@ -200,12 +206,31 @@ persist to the Git-tracked starter action file.
 
 Provides reusable comma-separated picker fields used by Configure, Inbox
 conversion, and action editing. Context membership combines an editable field
-with a checklist of canonical defined contexts. Tag selection uses the same
-interaction for existing normalized tags but continues to allow new free-form
-values. Selection mechanics remain separate from domain validation in
+with a checklist of canonical defined contexts. Tag selection uses a shared
+searchable multi-select picker for existing normalized tags but continues to
+allow new free-form values. The discovery rail uses the same picker in
+single-select mode, including its explicit clear choice. Selection mechanics
+remain separate from domain validation in
 `actions.py`, so typed values and non-UI callers follow the same persistence
 rules. Underlined Windows mnemonics move focus directly to each field, and
-`Alt+Down`/`F4` delegates checklist opening to Tk's native menubutton behavior.
+`Alt+Down`/`F4` opens either Tk's native context checklist or the searchable
+tag picker.
+
+### `searchable_selection.py`
+
+Provides the compact searchable tag popup shared by guided multi-select tag
+fields and the discovery rail's single-tag filters. It preserves selections
+while search narrows the visible list, provides an explicit clear choice for
+filters, and restores an owning dialog's modal grab when it closes.
+
+### `action_picker.py`
+
+Provides the shared searchable action selector used throughout Configure.
+Pinned slots, context membership, preferred Focus slots, and Quick-action
+assignments open the same dialog instead of rendering separate long combobox
+menus. The picker matches all entered terms against the action's readable
+label, description, built-in type, context, tag, and state, while callers
+continue to persist stable action IDs.
 
 ### `persistence.py`
 
@@ -251,16 +276,27 @@ builder. Actions, contexts, Quick actions, Work Item sources, and discovered
 Work Items retain visible final columns and consistent vertical scrolling at
 the supported minimum window size.
 
+Every Configure field that references an existing action uses the shared
+searchable action picker. Its readonly field keeps the selected human-readable
+label visible; **Find…** opens a keyboard-operable filtered list with a result
+count. The five pin fields use the same behavior in a compact layout that
+preserves the supported minimum window width.
+
 New actions, contexts, and Quick-action groups explicitly choose **My
 configuration** or **Built-in** and default to My configuration. The
 Quick-actions tab is a hierarchical
-editor: groups and items can be added, renamed, deleted, and reordered. Each
-item owns an unlimited ordered action list; the first action is the left-click
-default and the complete list becomes the right-click menu. Built-in Quick
-actions may reference only Built-in actions so starter configuration cannot
-depend on ignored machine-local records; My configuration Quick actions may
-reference either storage location. The configuration checker enforces the same
-boundary for manually edited JSON.
+editor: groups and menu levels can be added, renamed, deleted, and reordered.
+A group chooses direct Quick-action rows or one nested subject-menu launcher.
+Nested groups and their menu levels may each own ordered actions; levels recurse
+to a validated maximum depth of three below the group. Selecting a group or
+level establishes the parent for **Add menu level**, while stable IDs remain
+unique across the complete group tree. In row presentation, a visible
+top-level item's first action remains its left-click default; its context menu
+can expose its descendants. Built-in Quick actions may reference only Built-in
+actions so starter configuration cannot depend on ignored machine-local
+records; My configuration Quick actions may reference either storage location.
+The configuration checker enforces the same boundary recursively for manually
+edited JSON.
 
 ### `context_deletion.py`
 
@@ -295,7 +331,16 @@ Stores and calculates launcher organization.
 
 ### `command_surface.py`
 
-Loads and validates global quick-action groups and their compact items from shared and local JSON. Each item has an individual action menu and retains its source configuration path. Groups reference existing action IDs; they do not define a second execution language. Duplicate group IDs and duplicate item IDs within a group are rejected case-insensitively.
+Loads and validates global quick-action groups and their compact items from
+shared and local JSON. A validated presentation flag selects direct subject
+rows or one nested group launcher; omitted presentation remains row-based for
+backward compatibility. A group and each recursive item retain ordered actions;
+items may contain child items to a maximum depth of three. Traversal helpers
+provide stable index/ID paths, recursive counts, and complete action-reference
+enumeration to rendering, Configure, deletion, and validation. Groups reference
+existing action IDs; they do not define a second execution language. Duplicate
+group IDs and duplicate item IDs anywhere within one group are rejected
+case-insensitively.
 
 The module also owns the canonical primary-first, duplicate-free action ordering used by execution, menus, Configure, and configuration validation.
 
@@ -322,9 +367,11 @@ The viewer also provides rendered-document search, a Documents menu, and
 explicit Back, Forward, and Home history. `launcher.py` opens Help and the
 authoritative Keyboard Shortcuts page through this component and injects an
 opener into the normal action dispatcher so existing `.md` open-file actions
-use the same viewer. The Browser control hands only the current validated local
-file URI to the default browser. Non-Markdown file actions retain the platform
-opener.
+use the same viewer. The Edge control locates Microsoft Edge through `PATH` or
+standard per-user/system installation folders and starts it with only the
+current validated local file URI. This supports extension-based Markdown
+rendering without making Edge a requirement for the embedded viewer.
+Non-Markdown file actions retain the platform opener.
 
 ### `cheat_sheet_window.py`
 
@@ -641,13 +688,26 @@ tooltips.
 Search text can be combined with one shared built-in action-type filter;
 Passwords is a direct shortcut into that same filter state.
 
-Each group renders in stable row-major order within a two-column grid. Its
-subjects are full-width vertical menu-launcher rows with a native `▾`
-affordance. The affordance is style-only: left-click runs the primary-first
-available action, right-click exposes the same canonical action-ID menu, and
-Shift/Ctrl+click opens the owning menu and action configuration files.
+Each group renders in stable row-major order within a two-column grid. The
+tracked command surface contributes one **Standard** group containing every
+active Built-in action exactly once across subject menus. Standard's nested
+presentation renders one **Browse actions** launcher. Direct group actions
+become root commands; recursive menu levels become native cascades; and actions
+assigned at any level appear before that level's child cascades.
+Ignored local groups load after it and occupy the remaining editable positions.
+They retain direct rows unless configured for nested presentation.
+Application-owned Knowledge and AI controls remain separate because they are
+not ordinary stored action-ID configuration. Shift/Ctrl+click opens the owning
+menu and action configuration files. The data model places no numeric limit on
+a node's ordered actions, but supports at most group → level 1 → level 2 →
+level 3 → action and provides no search or app-managed scrolling inside native
+menus.
 
-Quick-action labels participate in keyboard focus. Enter or Space executes the first available primary action. Empty search, Inbox, cheat-sheet, and command-surface states contain recovery guidance rather than blank widgets. Reloads use a short busy cursor/status state; local loading is intentionally not animated.
+Quick-action labels participate in keyboard focus. Enter or Space executes a
+row's first available primary action or opens a nested group at its launcher.
+Empty search, Inbox, cheat-sheet, and command-surface states contain recovery
+guidance rather than blank widgets. Reloads use a short busy cursor/status
+state; local loading is intentionally not animated.
 
 Ordinary widget tooltips respond to both pointer hover and keyboard focus. This
 keeps the full names and explanations of compact symbol controls available
@@ -655,10 +715,11 @@ without expanding the fixed-size main-window layout. They prefer the space
 below a control, move above it near the bottom edge, and remain inside the
 virtual desktop, including secondary monitors with negative coordinates.
 
-Configured Quick-action subjects and allow-listed built-in subjects share one
-mouse/keyboard binding contract for left click, right click, Enter, and Space.
-Their dispatch callbacks remain separate, so consolidating interaction wiring
-does not broaden the built-in command allow-list or action execution model.
+Configured Quick-action rows, nested group launchers, and allow-listed built-in
+subjects share one mouse/keyboard binding contract for left click, right click,
+Enter, and Space. Their dispatch callbacks remain separate, so consolidating
+interaction wiring does not broaden the built-in command allow-list or action
+execution model.
 
 ## Supported action types
 
@@ -714,6 +775,13 @@ clipboard-only outcomes use informational logging, unavailable destinations use
 warning logging, and dispatch failures retain their exception at error level.
 
 Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `workspace_panel.py` owns selection ranges, one-step Undo grouping, clipboard updates, and menus. The launcher injects clipboard and status callbacks and retains orchestration delegates. Action explanations and application status share a slim bottom communication line.
+
+The generic `transform_text` action persists one catalogue operation key and
+only that operation's ordered parameters. Configure presents readable
+operation and parameter labels; technical keys remain internal. Literal
+replacement intentionally preserves an empty replacement. Invalid JSON,
+delimiters, paths, file URIs, and parameter counts fail before replacing the
+workspace.
 
 The transformation menu groups deterministic operations into Case, Whitespace,
 and Lines. Line operations preserve the detected line-ending style and final
@@ -878,6 +946,8 @@ Detailed help is stored once in `docs/HELP.md` and displayed by the in-app searc
   hostname. Reject embedded usernames/passwords, whitespace/control characters
   in the authority, and backslash-based authority ambiguity.
 - Validate files, folders, executables, and working directories before opening.
+- Prefer an existing literal local path before trying a percent-decoded
+  fallback, so a real filename containing `%20` is never silently redirected.
 - Do not invent or parse a compound shell command language; keep Windows target
   execution as one explicit target plus structured arguments.
 - Keep API keys out of version-controlled files.
@@ -894,6 +964,7 @@ Detailed help is stored once in `docs/HELP.md` and displayed by the in-app searc
 Tests use `unittest` and focus on pure or callback-injected behavior.
 
 - Action parsing, search, execution dispatch, transformations, and URL building.
+- Searchable action-picker filtering and Tk selection behavior.
 - Inbox and cheat-sheet persistence.
 - Slot calculation and palette-state persistence.
 - Hotkey constants and single-instance behavior.

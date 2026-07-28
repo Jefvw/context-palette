@@ -30,6 +30,8 @@ This directory separates current behavior, durable direction, historical rationa
 
 - [Contributing](../CONTRIBUTING.md) — setup, change workflow, and review expectations.
 - [AI collaboration guide](../AGENTS.md) — repository-specific agent constraints.
+- [Model selection for AI work](MODEL_SELECTION.md) — recommendations for
+  prompt writing, direct execution, and explicitly requested delegation.
 - [Development process](DEVELOPMENT_PROCESS.md) — feature workflow and documentation responsibilities.
 - [Change guide](CHANGE_GUIDE.md) — common modifications, owning modules, and
   focused test commands.

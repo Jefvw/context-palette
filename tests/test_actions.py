@@ -627,6 +627,85 @@ class ActionTests(unittest.TestCase):
 
         self.assertEqual(opened[0].value, "C:\\config.json")
 
+    def test_open_file_accepts_percent_encoded_spaces_and_file_uris(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "Quarterly report.xlsx"
+            target.write_text("example", encoding="utf-8")
+            encoded_path = str(target).replace(" ", "%20")
+            values = (encoded_path, target.as_uri())
+
+            for value in values:
+                with (
+                    self.subTest(value=value),
+                    patch.object(os, "startfile", create=True) as startfile,
+                ):
+                    open_action_target(
+                        Action("report", "Open report", "General", "open_file", value)
+                    )
+                    startfile.assert_called_once_with(target)
+
+    def test_open_file_prefers_an_existing_literal_percent_filename(self):
+        with tempfile.TemporaryDirectory() as directory:
+            literal = Path(directory) / "Quarterly%20report.xlsx"
+            decoded = Path(directory) / "Quarterly report.xlsx"
+            literal.write_text("literal", encoding="utf-8")
+            decoded.write_text("decoded", encoding="utf-8")
+
+            with patch.object(os, "startfile", create=True) as startfile:
+                open_action_target(
+                    Action(
+                        "literal",
+                        "Open literal filename",
+                        "General",
+                        "open_file",
+                        str(literal),
+                    )
+                )
+
+        startfile.assert_called_once_with(literal)
+
+    def test_folder_and_application_targets_accept_percent_encoded_spaces(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            folder = root / "Report files"
+            application = root / "Report viewer.exe"
+            folder.mkdir()
+            application.write_text("example", encoding="utf-8")
+
+            with patch.object(os, "startfile", create=True) as startfile:
+                open_action_target(
+                    Action(
+                        "folder",
+                        "Open report folder",
+                        "General",
+                        "open_folder",
+                        str(folder).replace(" ", "%20"),
+                    )
+                )
+            startfile.assert_called_once_with(folder)
+
+            with patch("context_palette.actions.subprocess.Popen") as popen:
+                open_action_target(
+                    Action(
+                        "viewer",
+                        "Open report viewer",
+                        "General",
+                        "launch_app",
+                        str(application).replace(" ", "%20"),
+                        arguments=("--review",),
+                    )
+                )
+            popen.assert_called_once_with([str(application), "--review"], cwd=None)
+
+    def test_http_url_keeps_percent_encoded_spaces(self):
+        value = "https://example.com/Quarterly%20report"
+        with patch("context_palette.actions.webbrowser.open") as browser_open:
+            open_action_target(
+                Action("report", "Open report", "General", "open_url", value)
+            )
+
+        browser_open.assert_called_once_with(value)
+
     def test_build_url_inserts_and_url_encodes_identifier(self):
         result = build_url(
             "https://example.com/items/{id}?search={id_url}",
@@ -705,6 +784,55 @@ class ActionTests(unittest.TestCase):
             "open",
             subprocess.list2cmdline(action.arguments),
             directory,
+        )
+
+    def test_open_windows_target_decodes_existing_local_target_and_working_folder(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "Run report.cmd"
+            working_directory = root / "Working folder"
+            target.write_text("@echo off", encoding="utf-8")
+            working_directory.mkdir()
+            action = Action(
+                "run-report",
+                "Run report",
+                "General",
+                "open_windows_target",
+                str(target).replace(" ", "%20"),
+                working_directory=str(working_directory).replace(" ", "%20"),
+            )
+
+            with patch.object(os, "startfile", create=True) as startfile:
+                open_action_target(action)
+
+        startfile.assert_called_once_with(
+            str(target),
+            "open",
+            None,
+            str(working_directory),
+        )
+
+    def test_open_windows_target_leaves_relative_target_for_its_working_folder(self):
+        with tempfile.TemporaryDirectory() as directory:
+            working_directory = Path(directory) / "Working folder"
+            working_directory.mkdir()
+            action = Action(
+                "run-relative",
+                "Run relative script",
+                "General",
+                "open_windows_target",
+                "Run report.cmd",
+                working_directory=str(working_directory).replace(" ", "%20"),
+            )
+
+            with patch.object(os, "startfile", create=True) as startfile:
+                open_action_target(action)
+
+        startfile.assert_called_once_with(
+            action.value,
+            "open",
+            None,
+            str(working_directory),
         )
 
     def test_open_windows_target_reports_unavailable_target(self):
@@ -892,6 +1020,49 @@ class ActionTests(unittest.TestCase):
                 context="General",
                 action_type="transform_slashes",
                 value="toggle",
+            )
+
+    def test_configured_text_transform_preserves_empty_replacement(self):
+        action = configured_action(
+            title="Remove confidential marker",
+            context="General",
+            action_type="transform_text",
+            value="literal_replace",
+            arguments=("CONFIDENTIAL", ""),
+        )
+
+        self.assertEqual(action.arguments, ("CONFIDENTIAL", ""))
+
+    def test_reusable_text_transform_updates_output_and_clipboard(self):
+        action = Action(
+            "keep-invoices",
+            "Keep invoice lines",
+            "General",
+            "transform_text",
+            "keep_lines_containing",
+            arguments=("invoice",),
+        )
+        copied: list[str] = []
+        output: list[str] = []
+
+        message = execute_action(
+            action,
+            input_text="Invoice 1\nNote\ninvoice 2",
+            clipboard_setter=copied.append,
+            output_setter=output.append,
+        )
+
+        self.assertEqual(output, ["Invoice 1\ninvoice 2"])
+        self.assertEqual(copied, output)
+        self.assertIn("Transformed", message)
+
+    def test_reusable_text_transform_validates_parameters_on_creation(self):
+        with self.assertRaisesRegex(ActionError, "requires 1 parameter"):
+            configured_action(
+                title="Keep matching lines",
+                context="General",
+                action_type="transform_text",
+                value="keep_lines_containing",
             )
 
     def test_workspace_template_updates_output_and_clipboard(self):

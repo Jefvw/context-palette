@@ -31,8 +31,13 @@ from context_palette.configuration_window import (
     _focus_entry,
 )
 from context_palette.action_deletion import ActionDeletionReport
+from context_palette.action_picker import ActionPickerField
 from context_palette.actions import Action, ActionError, append_action, load_actions
-from context_palette.command_surface import CommandGroup, CommandItem
+from context_palette.command_surface import (
+    CommandGroup,
+    CommandItem,
+    GROUP_PRESENTATION_NESTED_MENU,
+)
 from context_palette.contexts import ContextDefinition
 from context_palette.palette_state import PaletteState, load_palette_state
 
@@ -931,6 +936,102 @@ class ConfigurationDialogTests(unittest.TestCase):
         self.assertIn("only built-in actions", error.call_args.args[1])
         save.assert_not_called()
 
+    def test_add_menu_level_under_selected_parent_passes_full_parent_path(self) -> None:
+        local_path = Path("local-commands.json")
+        group = CommandGroup(
+            "nested",
+            "Nested",
+            (
+                CommandItem(
+                    "level-1",
+                    "Level 1",
+                    items=(CommandItem("level-2", "Level 2"),),
+                ),
+            ),
+            source_path=local_path,
+            presentation=GROUP_PRESENTATION_NESTED_MENU,
+        )
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.groups = [group]
+        configuration.button_tree = FakeSelectedActionTree("button-0-0.0")
+        configuration.command_surface_path = Path("shared-commands.json")
+        configuration.local_command_surface_path = local_path
+        configuration.actions = []
+        configuration.local_action_ids = set()
+        configuration.window = FakeWindow()
+        configuration.on_change = Mock()
+        configuration._reload = Mock()
+        configuration.feedback_var = FakeVariable()
+        configuration.feedback_label = Mock()
+        child = CommandItem("level-3", "Level 3")
+
+        with (
+            patch("context_palette.configuration_window.ButtonDialog") as dialog,
+            patch(
+                "context_palette.configuration_window.save_command_item"
+            ) as save,
+        ):
+            configuration._add_button()
+            callback = dialog.call_args.args[4]
+            self.assertTrue(
+                callback(
+                    "nested",
+                    "Nested",
+                    child,
+                    "nested",
+                    "",
+                )
+            )
+
+        save.assert_called_once_with(
+            local_path,
+            group_id="nested",
+            group_label="Nested",
+            item=child,
+            original_group_id="nested",
+            original_item_id="",
+            parent_item_ids=("level-1", "level-2"),
+        )
+
+    def test_add_menu_level_rejects_a_fourth_level(self) -> None:
+        group = CommandGroup(
+            "nested",
+            "Nested",
+            (
+                CommandItem(
+                    "one",
+                    "One",
+                    items=(
+                        CommandItem(
+                            "two",
+                            "Two",
+                            items=(CommandItem("three", "Three"),),
+                        ),
+                    ),
+                ),
+            ),
+            presentation=GROUP_PRESENTATION_NESTED_MENU,
+        )
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.groups = [group]
+        configuration.button_tree = FakeSelectedActionTree(
+            "button-0-0.0.0"
+        )
+        configuration.window = FakeWindow()
+
+        with (
+            patch(
+                "context_palette.configuration_window.messagebox.showinfo"
+            ) as info,
+            patch(
+                "context_palette.configuration_window.ButtonDialog"
+            ) as dialog,
+        ):
+            configuration._add_button()
+
+        self.assertIn("3 levels", info.call_args.args[1])
+        dialog.assert_not_called()
+
     def test_quick_action_write_failure_reports_error_without_refreshing(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         configuration.command_surface_path = Path("shared-commands.json")
@@ -964,7 +1065,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.on_change.assert_not_called()
         configuration._reload.assert_not_called()
         self.assertEqual(configuration.feedback_var.value, "unchanged")
-        self.assertEqual(error.call_args.args[0], "Quick action was not saved")
+        self.assertEqual(error.call_args.args[0], "Menu level was not saved")
         self.assertIn("left unchanged", error.call_args.args[1])
 
     def test_cancelling_shared_action_deletion_preserves_action(self) -> None:
@@ -1161,9 +1262,12 @@ class ConfigurationDialogTests(unittest.TestCase):
             dialog.context_field.menu.invoke(
                 dialog.context_field.context_names.index("Mail")
             )
-            dialog.tag_field.menu.invoke(
-                dialog.tag_field.tag_names.index("sql")
-            )
+            dialog.tag_field.picker.invoke()
+            root.update()
+            sql_index = dialog.tag_field.tag_picker.visible_values.index("sql")
+            dialog.tag_field.tag_picker.listbox.selection_set(sql_index)
+            dialog.tag_field.tag_picker._selection_changed()
+            dialog.tag_field.tag_picker.apply()
             dialog._save()
 
             self.assertEqual(len(saved), 1)
@@ -1174,6 +1278,40 @@ class ConfigurationDialogTests(unittest.TestCase):
                 saved[0].description,
                 "Professional opening for a customer reply",
             )
+        finally:
+            for child in root.winfo_children():
+                child.destroy()
+            root.destroy()
+
+    def test_transform_action_dialog_uses_readable_operation_and_parameters(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        saved: list[Action] = []
+        try:
+            dialog = ActionDialog(
+                root,
+                "transform_text",
+                [],
+                lambda action: saved.append(action) or True,
+                context_names=["General"],
+            )
+            root.update_idletasks()
+            replace_label = next(
+                label
+                for label, operation in dialog.transform_operation_choices.items()
+                if operation == "literal_replace"
+            )
+            dialog.title_var.set("Remove confidential marker")
+            dialog.transform_operation_var.set(replace_label)
+            dialog._render_transform_parameters()
+            dialog.transform_parameter_vars[0].set("CONFIDENTIAL")
+            dialog.transform_parameter_vars[1].set("")
+
+            dialog._save()
+
+            self.assertEqual(len(saved), 1)
+            self.assertEqual(saved[0].value, "literal_replace")
+            self.assertEqual(saved[0].arguments, ("CONFIDENTIAL", ""))
         finally:
             for child in root.winfo_children():
                 child.destroy()
@@ -1240,6 +1378,13 @@ class ConfigurationDialogTests(unittest.TestCase):
 
             self.assertEqual(dialog.member_action_ids, ["built-in", "local"])
             self.assertEqual(dialog.member_list.size(), 2)
+            self.assertIsInstance(dialog.member_choice, ActionPickerField)
+            self.assertTrue(
+                all(
+                    isinstance(picker, ActionPickerField)
+                    for picker in dialog.slot_choices
+                )
+            )
             dialog._save()
 
             self.assertEqual(saved[0].action_ids, ("built-in", "local"))
@@ -1255,6 +1400,8 @@ class ConfigurationDialogTests(unittest.TestCase):
         dialog.original_group_id = ""
         dialog.label_var = FakeVariable("Project tools")
         dialog.id_var = FakeVariable()
+        dialog.presentation_var = FakeVariable("Nested subject menu")
+        dialog.direct_action_ids = ["direct"]
         dialog.destination_var = FakeVariable(PROJECT_DESTINATION)
         dialog.window = FakeWindow()
         captured: list[tuple[CommandGroup, str, str]] = []
@@ -1264,6 +1411,11 @@ class ConfigurationDialogTests(unittest.TestCase):
 
         self.assertEqual(captured[0][0].id, "project-tools")
         self.assertEqual(captured[0][0].label, "Project tools")
+        self.assertEqual(
+            captured[0][0].presentation,
+            GROUP_PRESENTATION_NESTED_MENU,
+        )
+        self.assertEqual(captured[0][0].action_ids, ("direct",))
         self.assertEqual(captured[0][2], PROJECT_DESTINATION)
         self.assertEqual(dialog.window.destroy_calls, 1)
 
@@ -1292,7 +1444,7 @@ class ConfigurationDialogTests(unittest.TestCase):
             )
             self.assertEqual(
                 button_dialog.window.title(),
-                "Edit built-in Quick action",
+                "Edit built-in menu level",
             )
             button_dialog.window.destroy()
         finally:
@@ -1320,6 +1472,7 @@ class ConfigurationDialogTests(unittest.TestCase):
                 "Many",
                 primary_action_id="action-0",
                 action_ids=tuple(action.id for action in actions),
+                items=(CommandItem("child", "Child"),),
             )
             dialog = ButtonDialog(
                 root,
@@ -1333,10 +1486,15 @@ class ConfigurationDialogTests(unittest.TestCase):
 
             self.assertEqual(dialog.assigned_action_ids, [action.id for action in actions])
             self.assertEqual(dialog.assignment_list.size(), 6)
+            self.assertIsInstance(dialog.action_choice, ActionPickerField)
             dialog._save()
 
             self.assertEqual(captured[0].action_ids, tuple(action.id for action in actions))
             self.assertEqual(captured[0].primary_action_id, "action-0")
+            self.assertEqual(
+                [child.id for child in captured[0].items],
+                ["child"],
+            )
         finally:
             for child in root.winfo_children():
                 child.destroy()

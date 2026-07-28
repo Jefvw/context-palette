@@ -9,7 +9,9 @@ from .cheatsheets import CheatSheetError, load_cheatsheets
 from .command_surface import (
     CommandGroup,
     CommandSurfaceError,
+    command_group_action_ids,
     command_item_action_ids,
+    iter_command_items,
     load_combined_command_groups,
 )
 from .contexts import (
@@ -139,11 +141,21 @@ def _validate_action_references(
                     f"My configuration action: {action_id}"
                 )
     for group in groups:
-        for item in group.items:
-            for action_id in command_item_action_ids(item):
+        menu_nodes = [
+            (group.label, command_group_action_ids(group)),
+            *(
+                (
+                    f"{group.label} / {item.label}",
+                    command_item_action_ids(item),
+                )
+                for _path, item in iter_command_items(group)
+            ),
+        ]
+        for menu_path, referenced_action_ids in menu_nodes:
+            for action_id in referenced_action_ids:
                 if action_id not in action_ids:
                     errors.append(
-                        f"Command item '{group.label} / {item.label}' references missing action: "
+                        f"Command item '{menu_path}' references missing action: "
                         f"{action_id}"
                     )
                 elif (
@@ -153,7 +165,7 @@ def _validate_action_references(
                     and action_id in local_action_ids
                 ):
                     errors.append(
-                        f"Built-in Quick action '{group.label} / {item.label}' "
+                        f"Built-in Quick action '{menu_path}' "
                         f"references local-only action: {action_id}"
                     )
     for action_id in palette.pinned_action_ids:

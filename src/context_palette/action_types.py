@@ -194,6 +194,16 @@ ACTION_TYPES = {
             "Portable; operation is constrained by the application.",
         ),
         _definition(
+            "transform_text",
+            "✎",
+            "Transform text",
+            "Transformation",
+            "Apply a chosen reusable text operation with guided parameters.",
+            "Reads Input / Output text.",
+            "Replaces Input / Output and clipboard text.",
+            "Portable; operations are implemented by Context Palette.",
+        ),
+        _definition(
             "transform_slashes",
             "／",
             "Convert path slashes",

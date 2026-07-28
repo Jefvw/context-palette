@@ -1,131 +1,145 @@
 {
   "groups": [
     {
-      "id": "product-systems",
-      "label": "Product systems",
+      "id": "standard",
+      "label": "Standard",
+      "presentation": "nested_menu",
+      "primary_action_id": "general-open-python-docs",
+      "action_ids": [
+        "general-open-python-docs"
+      ],
       "items": [
         {
-          "id": "colruyt",
-          "label": "Colruyt",
-          "primary_action_id": "colruyt-open-product",
-          "action_ids": ["colruyt-open-product"]
-        },
-        {
-          "id": "bioplanet",
-          "label": "Bio-Planet",
-          "primary_action_id": "product-lookup-bioplanet",
-          "action_ids": ["product-lookup-bioplanet"]
-        },
-        {
-          "id": "technical-article",
-          "label": "Technical article",
-          "primary_action_id": "product-lookup-productinfoscreen",
-          "action_ids": [
-            "product-lookup-productinfoscreen",
-            "product-lookup-fic",
-            "product-lookup-rti",
-            "product-lookup-solucious"
-          ]
-        },
-        {
-          "id": "myproduct",
-          "label": "MyProduct",
+          "id": "product-systems",
+          "label": "Product systems",
           "primary_action_id": "product-lookup-myproduct-any-id",
           "action_ids": [
-            "product-lookup-myproduct-any-id",
-            "product-lookup-myproduct-retail-article",
-            "product-lookup-myproduct-base-product",
-            "product-lookup-myproduct-gtin",
-            "product-lookup-myproduct-pss"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "navigation",
-      "label": "Navigation",
-      "items": [
-        {
-          "id": "project-folder",
-          "label": "Project folder",
-          "primary_action_id": "developing-open-project-folder",
-          "action_ids": ["developing-open-project-folder"]
-        },
-        {
-          "id": "python-docs",
-          "label": "Python docs",
-          "primary_action_id": "general-open-python-docs",
-          "action_ids": ["general-open-python-docs"]
-        },
-        {
-          "id": "vs-code",
-          "label": "VS Code",
-          "primary_action_id": "developing-open-vscode",
-          "action_ids": ["developing-open-vscode"]
-        }
-      ]
-    },
-    {
-      "id": "references",
-      "label": "References",
-      "items": [
-        {
-          "id": "archives",
-          "label": "Archives",
-          "primary_action_id": "archives-open-selected-item",
-          "action_ids": ["archives-open-selected-item"]
-        },
-        {
-          "id": "product-reference",
-          "label": "Product lookup",
-          "primary_action_id": "product-lookup-myproduct-any-id",
-          "action_ids": [
-            "product-lookup-myproduct-any-id",
-            "product-lookup-productinfoscreen",
-            "product-lookup-rti"
+            "product-lookup-myproduct-any-id"
+          ],
+          "items": [
+            {
+              "id": "shopping",
+              "label": "Shopping",
+              "primary_action_id": "colruyt-open-product",
+              "action_ids": [
+                "colruyt-open-product",
+                "product-lookup-bioplanet"
+              ]
+            },
+            {
+              "id": "technical-articles",
+              "label": "Technical articles",
+              "primary_action_id": "product-lookup-productinfoscreen",
+              "action_ids": [
+                "product-lookup-productinfoscreen",
+                "product-lookup-fic",
+                "product-lookup-rti",
+                "product-lookup-solucious"
+              ]
+            },
+            {
+              "id": "myproduct",
+              "label": "MyProduct",
+              "primary_action_id": "product-lookup-myproduct-retail-article",
+              "action_ids": [
+                "product-lookup-myproduct-retail-article",
+                "product-lookup-myproduct-base-product",
+                "product-lookup-myproduct-gtin",
+                "product-lookup-myproduct-pss"
+              ]
+            }
           ]
         },
         {
-          "id": "python-reference",
-          "label": "Python",
-          "primary_action_id": "general-open-python-docs",
-          "action_ids": ["general-open-python-docs"]
-        }
-      ]
-    },
-    {
-      "id": "clipboard-sql",
-      "label": "Clipboard & SQL",
-      "items": [
-        {
-          "id": "date-time",
-          "label": "Date & time",
-          "primary_action_id": "qtp-copy-date-time",
-          "action_ids": ["qtp-copy-date-time"]
+          "id": "work-tools",
+          "label": "Work tools",
+          "items": [
+            {
+              "id": "development",
+              "label": "Development",
+              "primary_action_id": "developing-open-project-folder",
+              "action_ids": [
+                "developing-open-project-folder",
+                "developing-open-vscode"
+              ]
+            },
+            {
+              "id": "office",
+              "label": "Office",
+              "items": [
+                {
+                  "id": "email",
+                  "label": "Email",
+                  "primary_action_id": "email-greeting",
+                  "action_ids": [
+                    "email-greeting",
+                    "email-follow-up",
+                    "email-signature"
+                  ]
+                },
+                {
+                  "id": "time-registration",
+                  "label": "Time registration",
+                  "primary_action_id": "time-registration-open-outlook",
+                  "action_ids": [
+                    "time-registration-open-outlook",
+                    "time-registration-open-dummy-app",
+                    "time-registration-copy-record-template"
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "data",
+              "label": "Data",
+              "items": [
+                {
+                  "id": "sql",
+                  "label": "SQL",
+                  "primary_action_id": "database-lines-to-sql-list",
+                  "action_ids": [
+                    "database-lines-to-sql-list",
+                    "database-select-template",
+                    "database-cte-template"
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "clipboard-paths",
+              "label": "Clipboard & paths",
+              "primary_action_id": "qtp-copy-date-time",
+              "action_ids": [
+                "qtp-copy-date-time",
+                "qtp-copy-url-encoded-clipboard",
+                "general-forward-slashes-to-backslashes",
+                "general-backslashes-to-forward-slashes"
+              ]
+            }
+          ]
         },
         {
-          "id": "url-encode",
-          "label": "URL encode",
-          "primary_action_id": "qtp-copy-url-encoded-clipboard",
-          "action_ids": ["qtp-copy-url-encoded-clipboard"]
-        },
-        {
-          "id": "sql-list",
-          "label": "SQL list",
-          "primary_action_id": "database-lines-to-sql-list",
-          "action_ids": ["database-lines-to-sql-list"]
-        },
-        {
-          "id": "sql-templates",
-          "label": "SQL templates",
-          "primary_action_id": "database-select-template",
-          "action_ids": ["database-select-template", "database-cte-template"]
-        },
-        {
-          "id": "greeting",
-          "label": "Greeting",
-          "primary_action_id": "email-greeting",
-          "action_ids": ["email-greeting", "email-follow-up", "email-signature"]
+          "id": "references",
+          "label": "References",
+          "items": [
+            {
+              "id": "windows-tips",
+              "label": "Windows tips",
+              "primary_action_id": "draft-feba1aeda53f",
+              "action_ids": [
+                "draft-feba1aeda53f",
+                "draft-8ed62547f42e"
+              ]
+            },
+            {
+              "id": "archives",
+              "label": "Archives",
+              "primary_action_id": "archives-open-selected-item",
+              "action_ids": [
+                "archives-open-selected-item"
+              ]
+            }
+          ]
         }
       ]
     }

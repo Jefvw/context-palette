@@ -129,9 +129,22 @@ class ConfigurationCheckTests(unittest.TestCase):
             )
             command_path = root / "data" / "command_surface.json"
             command_data = json.loads(command_path.read_text(encoding="utf-8"))
+            command_data["groups"][0]["presentation"] = "nested_menu"
+            command_data["groups"][0]["primary_action_id"] = "copy-one"
+            command_data["groups"][0]["action_ids"] = [
+                "copy-one",
+                "local-only",
+            ]
             command_data["groups"][0]["items"][0]["action_ids"].append(
                 "local-only"
             )
+            command_data["groups"][0]["items"][0]["items"] = [
+                {
+                    "id": "nested",
+                    "label": "Nested",
+                    "action_ids": ["local-only"],
+                }
+            ]
             write_json(command_path, command_data)
 
             report = validate_project_configuration(root)

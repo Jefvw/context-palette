@@ -1,5 +1,37 @@
 # Decisions
 
+## 2026-07-27 - Consolidate Built-in Quick actions under Standard
+
+**Decision:** Ship one editable Built-in Quick-action group named **Standard**.
+Distribute every active Built-in action exactly once across a small set of
+subject menus inside that group. Keep My configuration groups separate so the
+remaining configurable Quick-action area is user-owned.
+
+Quick-action groups support two explicit presentations. **Quick-action rows**
+retain the existing one-click subject launchers. **Nested subject menu** uses
+one visible group launcher and supports up to three submenu levels below the
+group. Actions may be assigned directly to the group or to any submenu level,
+so shorter group → action and group → level 1 → action paths remain valid.
+Standard uses the nested presentation. The bounded depth avoids arbitrary
+recursive menus while supporting practical subject hierarchies.
+
+**Reason:** Several starter groups consumed the same visible space intended for
+the user's own repeated work. One recognizable starter group preserves access
+to every shipped action while leaving the adjacent and subsequent group
+positions available to personal configuration.
+
+**Consequences:** The tracked command surface contains only **Standard**, shown
+as one launcher, while local groups continue to load after it. Group editing
+can select either presentation and assign direct group actions. Selecting a
+group or existing level before **Add menu level** creates the next child;
+creation stops after level 3. Level editing preserves its entire child subtree.
+The
+application-owned Knowledge and AI controls remain separate because they invoke
+allow-listed application behavior, not ordinary stored action IDs. Regression
+tests require every active Built-in action to appear exactly once and preserve
+recursive actions, levels, presentation, ordering, and ownership through guided
+edits.
+
 ## 2026-07-23 - Make contexts user-owned and rename storage choices
 
 **Decision:** Use **My configuration** for records that stay on one PC and
@@ -1409,3 +1441,58 @@ Structured argument fields avoid fragile command-line parsing while
 ShellExecute preserves Windows associations. Slash conversion is frequent path
 preparation and belongs in the existing workspace/clipboard transformation
 pipeline.
+
+## 2026-07-24 - Offer Edge for extension-based Markdown rendering
+
+**Decision:** Keep the fast embedded Markdown viewer and replace its generic
+default-browser command with an explicit **Edge** command. Locate Edge through
+`PATH` and its standard per-user and system installation folders, then pass
+only the current validated local Markdown file URI.
+
+**Reason:** The embedded HTML engine remains useful for searchable in-app Help
+and navigation but cannot match a modern browser plus the owner's preferred
+Markdown extension. An explicit Edge route is predictable across machines and
+avoids silently opening a different default browser.
+
+## 2026-07-24 - Share one catalogue between text menus and reusable actions
+
+**Decision:** Expand the pure Input / Output operation catalogue with common
+developer and data-analysis transformations. Add one generic `transform_text`
+action type whose guided editor selects a readable catalogue entry and renders
+only its required parameter fields. Use the same definitions for menu prompts,
+validation, execution, previews, and documentation.
+
+**Reason:** Separate action types or handwritten dialogs for every string
+operation would duplicate UI and validation logic and expose technical IDs.
+One catalogue keeps new operations easy to add while allowing every operation
+to be used interactively or saved for repeated use. Transformations remain
+local, deterministic, undoable in the workspace, and automatically copied.
+
+## 2026-07-27 - Search action references through one shared picker
+
+**Decision:** Replace the long readonly action comboboxes used for pins, context
+membership, preferred Focus slots, and Quick-action assignments with one
+searchable picker. Match multiple terms against the readable name, description,
+built-in type, context, tag, and state; retain stable action IDs behind the
+selected labels. Keep the five-pin presentation compact enough for the
+supported Configure window width.
+
+**Reason:** The main launcher and Configure tables already supported direct
+search, but eleven action-reference fields still required scrolling through
+large dropdowns. A shared dialog makes growing action collections predictable
+and keyboard-operable without redesigning Configure or weakening reference
+validation with arbitrary editable combobox text.
+
+## 2026-07-27 - Resolve encoded local targets without rewriting web URLs
+
+**Decision:** For file, folder, application, Windows-target, and working-folder
+actions, try the configured local path literally before a percent-decoded
+fallback. Decode `file:` URIs into local Windows paths. Use a fallback only when
+it resolves to an existing target of the required kind. Continue passing valid
+HTTP and HTTPS addresses to the browser unchanged.
+
+**Reason:** Paths copied from browsers and other applications commonly encode
+spaces as `%20`, but `Path` treated that text as a literal filename and rejected
+an otherwise existing local target. Literal-first resolution preserves valid
+filenames that genuinely contain percent sequences, while limiting decoding to
+the local filesystem boundary avoids altering web-address semantics.

@@ -22,11 +22,21 @@ from .action_deletion import (
     inspect_action_references,
 )
 from .action_types import ACTION_TYPES
+from .action_picker import ActionPickerField, ActionPickerOption
 from .command_surface import (
     CommandGroup,
     CommandItem,
     CommandSurfaceError,
+    GROUP_PRESENTATION_NESTED_MENU,
+    GROUP_PRESENTATION_ROWS,
+    MAX_COMMAND_MENU_LEVELS,
+    command_group_action_ids,
+    command_group_all_action_ids,
+    command_item_at_path,
+    command_item_count,
+    command_item_id_path,
     command_item_action_ids,
+    iter_command_items,
     load_combined_command_groups,
 )
 from .configuration_data import save_command_item, save_context
@@ -57,6 +67,7 @@ from .work_item_configuration import WorkItemsConfigurationPanel
 from .work_item_refresh import WorkItemIndex
 from .work_items import WorkItemSource
 from .work_item_storage import WorkItemMetadata
+from .workspace_transforms import WORKSPACE_TRANSFORM_GROUPS, WORKSPACE_TRANSFORMS
 
 
 ACTION_TYPE_EXAMPLES = {
@@ -76,6 +87,7 @@ ACTION_TYPE_EXAMPLES = {
     "build_url_open": "Example: Ask for ABC 123 and open its generated website address.",
     "build_url_selection_open": "Example: Use selected text ABC 123, copy its URL, and open it.",
     "transform_list_csv": "Example: Convert three input lines into red, green, blue.",
+    "transform_text": "Example: Keep only lines containing invoice, format JSON, or convert names to snake_case.",
     "transform_slashes": r"Example: Convert C:/work/project into C:\work\project.",
 }
 
@@ -89,6 +101,14 @@ CONFIGURATION_TAB_INDEXES = {
     "buttons": 3,
     "work_items": 4,
     "diagnostics": 5,
+}
+GROUP_PRESENTATION_LABELS = {
+    GROUP_PRESENTATION_ROWS: "Quick-action rows",
+    GROUP_PRESENTATION_NESTED_MENU: "Nested subject menu",
+}
+GROUP_PRESENTATIONS_BY_LABEL = {
+    label: presentation
+    for presentation, label in GROUP_PRESENTATION_LABELS.items()
 }
 
 
@@ -215,7 +235,7 @@ def quick_action_matches_filter(
     labels = (
         action_reference_labels(command_item_action_ids(item), actions)
         if item is not None
-        else ()
+        else action_reference_labels(command_group_action_ids(group), actions)
     )
     searchable = " ".join(
         (
@@ -228,6 +248,13 @@ def quick_action_matches_filter(
         )
     ).casefold()
     return all(term in searchable for term in terms)
+
+
+def command_item_subtree_count(item: CommandItem) -> int:
+    return 1 + sum(
+        command_item_subtree_count(child)
+        for child in item.items
+    )
 
 
 def select_first_tree_item(tree: ttk.Treeview, *, descend: bool = False) -> None:
@@ -440,22 +467,26 @@ class ConfigurationWindow:
         pins.pack(fill=tk.X, pady=(0, 8))
         self.pin_vars: list[tk.StringVar] = []
         self.pin_choices: dict[str, str] = {}
-        self.pin_comboboxes: list[ttk.Combobox] = []
+        self.pin_pickers: list[ActionPickerField] = []
         for column in range(5):
             pins.columnconfigure(column, weight=1)
             slot = ttk.Frame(pins)
             slot.grid(row=0, column=column, sticky="ew", padx=(0, 6))
             ttk.Label(slot, text=f"Slot {column + 1}").pack(anchor=tk.W)
             variable = tk.StringVar(value=EMPTY_PIN_LABEL)
-            chooser = ttk.Combobox(
+            picker = ActionPickerField(
                 slot,
-                textvariable=variable,
-                state="readonly",
-                width=12,
+                variable=variable,
+                empty_label=EMPTY_PIN_LABEL,
+                title=f"Choose action for slot {column + 1}",
+                entry_width=6,
+                button_text="Find",
+                button_width=4,
             )
-            chooser.pack(fill=tk.X, pady=(2, 0))
+            picker.pack(fill=tk.X, pady=(2, 0))
             self.pin_vars.append(variable)
-            self.pin_comboboxes.append(chooser)
+            self.pin_pickers.append(picker)
+        self.pin_comboboxes = self.pin_pickers
         self.save_pins_button = ttk.Button(
             pins,
             text="Save pins",
@@ -669,7 +700,7 @@ class ConfigurationWindow:
             tab,
             ("source", "actions"),
         )
-        self.button_tree.heading("#0", text="Group / button")
+        self.button_tree.heading("#0", text="Group / menu level")
         self.button_tree.heading("source", text="Source")
         self.button_tree.heading("actions", text="Assigned actions")
         self.button_tree.column("#0", width=190)
@@ -703,7 +734,7 @@ class ConfigurationWindow:
             before=self.button_tree_frame,
         )
         ttk.Button(controls, text="Add group", command=self._add_group).pack(side=tk.LEFT)
-        ttk.Button(controls, text="Add Quick action", command=self._add_button).pack(
+        ttk.Button(controls, text="Add menu level", command=self._add_button).pack(
             side=tk.LEFT, padx=(6, 0)
         )
         ttk.Button(controls, text="Edit selected", command=self._edit_button).pack(side=tk.LEFT, padx=(6, 0))
@@ -923,9 +954,15 @@ class ConfigurationWindow:
                 label = f"Missing action: {action_id}"
                 self.pin_choices[label] = action_id
                 labels_by_id[action_id] = label
-        values = [EMPTY_PIN_LABEL, *self.pin_choices]
-        for chooser in self.pin_comboboxes:
-            chooser.configure(values=values)
+        picker_options = _action_picker_options(
+            self.actions,
+            choices=self.pin_choices,
+        )
+        for picker in self.pin_pickers:
+            picker.set_options(
+                picker_options,
+                empty_label=EMPTY_PIN_LABEL,
+            )
         for index, variable in enumerate(self.pin_vars):
             label = EMPTY_PIN_LABEL
             if index < len(self.palette_state.pinned_action_ids):
@@ -992,25 +1029,31 @@ class ConfigurationWindow:
 
     def _render_buttons(self) -> None:
         self.button_tree.delete(*self.button_tree.get_children())
+        self.button_tree_records: dict[
+            str,
+            tuple[int, tuple[int, ...]],
+        ] = {}
         query = self.button_filter_var.get()
-        total_items = sum(len(group.items) for group in self.groups)
+        total_items = sum(command_item_count(group) for group in self.groups)
         matching_items = 0
         for group_index, group in enumerate(self.groups):
             local = bool(
                 group.source_path
                 and group.source_path.resolve() == self.local_command_surface_path.resolve()
             )
-            visible_items = [
-                (item_index, item)
-                for item_index, item in enumerate(group.items)
-                if quick_action_matches_filter(
+
+            def item_or_descendant_matches(item: CommandItem) -> bool:
+                return quick_action_matches_filter(
                     group,
                     item,
                     query,
                     actions=self.actions,
                     personal=local,
+                ) or any(
+                    item_or_descendant_matches(child)
+                    for child in item.items
                 )
-            ]
+
             group_matches = quick_action_matches_filter(
                 group,
                 None,
@@ -1018,28 +1061,82 @@ class ConfigurationWindow:
                 actions=self.actions,
                 personal=local,
             )
-            if not visible_items and not group_matches:
+            if (
+                not group_matches
+                and not any(
+                    item_or_descendant_matches(item)
+                    for item in group.items
+                )
+            ):
                 continue
-            if group_matches and not visible_items:
-                visible_items = list(enumerate(group.items))
-            matching_items += len(visible_items)
             group_iid = f"group-{group_index}"
+            group_action_labels = action_reference_labels(
+                command_group_action_ids(group),
+                self.actions,
+            )
             self.button_tree.insert(
                 "", tk.END, iid=group_iid, text=group.label,
-                values=(LOCAL_DESTINATION if local else PROJECT_DESTINATION, ""),
+                values=(
+                    LOCAL_DESTINATION if local else PROJECT_DESTINATION,
+                    (
+                        (
+                            f"Nested menu · {command_item_count(group)} levels"
+                            + (
+                                f" · Direct: {', '.join(group_action_labels)}"
+                                if group_action_labels
+                                else ""
+                            )
+                        )
+                        if group.presentation == GROUP_PRESENTATION_NESTED_MENU
+                        else ""
+                    ),
+                ),
                 tags=("local",) if local else ("shared",), open=True,
             )
-            for item_index, item in visible_items:
-                ids = command_item_action_ids(item)
-                self.button_tree.insert(
-                    group_iid, tk.END, iid=f"button-{group_index}-{item_index}",
-                    text=item.label,
-                    values=(
-                        LOCAL_DESTINATION if local else PROJECT_DESTINATION,
-                        ", ".join(action_reference_labels(ids, self.actions)),
-                    ),
-                    tags=("local",) if local else ("shared",),
-                )
+
+            def insert_items(
+                parent_iid: str,
+                items: tuple[CommandItem, ...],
+                parent_path: tuple[int, ...],
+            ) -> None:
+                nonlocal matching_items
+                for item_index, item in enumerate(items):
+                    if query.strip() and not item_or_descendant_matches(item):
+                        continue
+                    path = (*parent_path, item_index)
+                    iid = (
+                        f"button-{group_index}-"
+                        + ".".join(str(index) for index in path)
+                    )
+                    self.button_tree_records[iid] = (group_index, path)
+                    labels = action_reference_labels(
+                        command_item_action_ids(item),
+                        self.actions,
+                    )
+                    summary = ", ".join(labels)
+                    if item.items:
+                        child_summary = f"{len(item.items)} submenu(s)"
+                        summary = (
+                            f"{summary} · {child_summary}"
+                            if summary
+                            else child_summary
+                        )
+                    self.button_tree.insert(
+                        parent_iid,
+                        tk.END,
+                        iid=iid,
+                        text=item.label,
+                        values=(
+                            LOCAL_DESTINATION if local else PROJECT_DESTINATION,
+                            summary,
+                        ),
+                        tags=("local",) if local else ("shared",),
+                        open=True,
+                    )
+                    matching_items += 1
+                    insert_items(iid, item.items, path)
+
+            insert_items(group_iid, group.items, ())
         self.button_tree.tag_configure("shared", foreground="#666666")
         select_first_tree_item(self.button_tree, descend=True)
         self.button_filter_count_var.set(
@@ -1429,6 +1526,7 @@ class ConfigurationWindow:
             self.window,
             None,
             self._save_group,
+            actions=self.actions,
             choose_destination=True,
         )
 
@@ -1443,6 +1541,22 @@ class ConfigurationWindow:
             if destination == PROJECT_DESTINATION
             else self.local_command_surface_path
         )
+        local_references = [
+            action_id
+            for action_id in command_group_all_action_ids(group)
+            if action_id in getattr(self, "local_action_ids", set())
+        ]
+        if (
+            destination == PROJECT_DESTINATION
+            and local_references
+        ):
+            messagebox.showerror(
+                "Quick-action group was not saved",
+                "Built-in Quick actions can use only Built-in actions. Remove "
+                "the My configuration action assignment and try again.",
+                parent=self.window,
+            )
+            return False
         other_path = (
             self.local_command_surface_path
             if target_path.resolve() == self.command_surface_path.resolve()
@@ -1486,15 +1600,31 @@ class ConfigurationWindow:
     def _selected_button_parts(
         self,
     ) -> tuple[CommandGroup, CommandItem | None] | None:
+        record = self._selected_button_record()
+        if record is None:
+            return None
+        group, item, _path = record
+        return group, item
+
+    def _selected_button_record(
+        self,
+    ) -> tuple[CommandGroup, CommandItem | None, tuple[int, ...]] | None:
         selection = self.button_tree.selection()
         if not selection:
             return None
-        parts = selection[0].split("-")
+        iid = selection[0]
+        parts = iid.split("-")
         if parts[0] == "group" and len(parts) == 2:
-            return self.groups[int(parts[1])], None
+            return self.groups[int(parts[1])], None, ()
         if parts[0] == "button" and len(parts) == 3:
-            group = self.groups[int(parts[1])]
-            return group, group.items[int(parts[2])]
+            record = getattr(self, "button_tree_records", {}).get(iid)
+            if record is not None:
+                group_index, path = record
+            else:
+                group_index = int(parts[1])
+                path = tuple(int(index) for index in parts[2].split("."))
+            group = self.groups[group_index]
+            return group, command_item_at_path(group, path), path
         return None
 
     def _group_target_path(self, group: CommandGroup) -> Path:
@@ -1516,7 +1646,7 @@ class ConfigurationWindow:
         ]
 
     def _add_button(self) -> None:
-        selected = self._selected_button_parts()
+        selected = self._selected_button_record()
         if selected is None:
             messagebox.showinfo(
                 "Select a group",
@@ -1525,12 +1655,25 @@ class ConfigurationWindow:
                 parent=self.window,
             )
             return
-        group, _item = selected
+        group, item, path = selected
+        if len(path) >= MAX_COMMAND_MENU_LEVELS:
+            messagebox.showinfo(
+                "Maximum menu depth",
+                f"Quick-action menus support {MAX_COMMAND_MENU_LEVELS} levels "
+                "below the group. Select the group or a higher level.",
+                parent=self.window,
+            )
+            return
+        parent_item_ids = (
+            command_item_id_path(group, path)
+            if item is not None
+            else ()
+        )
         target_path = self._group_target_path(group)
         project = target_path.resolve() == self.command_surface_path.resolve()
         if project and not messagebox.askokcancel(
-            "Add built-in Quick action?",
-            "This Quick action will become part of the built-in starter "
+            "Add built-in menu level?",
+            "This menu level will become part of the built-in starter "
             "configuration tracked by Git and delivered after commit, push, "
             "and pull.\n\nContinue?",
             parent=self.window,
@@ -1541,15 +1684,19 @@ class ConfigurationWindow:
             group,
             None,
             self._actions_for_quick_action_storage(project=project),
-            lambda *args: self._save_button(*args, target_path=target_path),
+            lambda *args: self._save_button(
+                *args,
+                target_path=target_path,
+                parent_item_ids=parent_item_ids,
+            ),
             shared=project,
         )
 
     def _edit_button(self) -> None:
-        selected = self._selected_button_parts()
+        selected = self._selected_button_record()
         if selected is None:
             return
-        group, item = selected
+        group, item, _path = selected
         target_path = self._group_target_path(group)
         local = target_path.resolve() == self.local_command_surface_path.resolve()
         if not local and not messagebox.askokcancel(
@@ -1567,6 +1714,9 @@ class ConfigurationWindow:
                 self.window,
                 group,
                 self._save_group,
+                actions=self._actions_for_quick_action_storage(
+                    project=not local
+                ),
                 destination=(
                     LOCAL_DESTINATION if local else PROJECT_DESTINATION
                 ),
@@ -1586,6 +1736,7 @@ class ConfigurationWindow:
         original_group_id: str, original_item_id: str,
         *,
         target_path: Path | None = None,
+        parent_item_ids: tuple[str, ...] = (),
     ) -> bool:
         destination = target_path or self.local_command_surface_path
         project = destination.resolve() == self.command_surface_path.resolve()
@@ -1596,7 +1747,7 @@ class ConfigurationWindow:
         ]
         if project and local_references:
             messagebox.showerror(
-                "Quick action was not saved",
+                "Menu level was not saved",
                 "Built-in Quick actions can use only built-in actions. Remove "
                 "the My configuration action assignment and try again.",
                 parent=self.window,
@@ -1626,15 +1777,21 @@ class ConfigurationWindow:
                     parent=self.window,
                 )
                 return False
+            nesting_options = (
+                {"parent_item_ids": parent_item_ids}
+                if parent_item_ids
+                else {}
+            )
             save_command_item(
                 destination,
                 group_id=group_id, group_label=group_label, item=item,
                 original_group_id=original_group_id, original_item_id=original_item_id,
+                **nesting_options,
             )
         except (CommandSurfaceError, OSError) as exc:
             messagebox.showerror(
-                "Quick action was not saved",
-                f"Context Palette could not save this Quick action.\n\n{exc}\n\n"
+                "Menu level was not saved",
+                f"Context Palette could not save this menu level.\n\n{exc}\n\n"
                 "The existing Quick-action file was left unchanged. Close any program "
                 "that may be locking the file, check that its folder is available, "
                 "and try again.",
@@ -1643,21 +1800,27 @@ class ConfigurationWindow:
             return False
         self.on_change()
         self._reload()
-        self.feedback_var.set(f"Saved quick-action button: {item.label}")
+        self.feedback_var.set(f"Saved menu level: {item.label}")
         self.feedback_label.configure(style="Success.TLabel")
         return True
 
     def _delete_button(self) -> None:
-        selected = self._selected_button_parts()
+        selected = self._selected_button_record()
         if selected is None:
             return
-        group, item = selected
+        group, item, _path = selected
         target_path = self._group_target_path(group)
-        noun = "group" if item is None else "Quick action"
+        noun = "group" if item is None else "menu level"
         label = group.label if item is None else item.label
         detail = (
-            f"All {len(group.items)} Quick action(s) in this group will be removed."
+            f"All {command_item_count(group)} menu level(s) in this group will be removed."
             if item is None and group.items
+            else (
+                f"This level and its {command_item_subtree_count(item) - 1} "
+                "nested level(s) will be removed. Assigned actions remain "
+                "available elsewhere."
+            )
+            if item is not None and item.items
             else "Its assigned actions remain available elsewhere."
         )
         if not messagebox.askyesno(
@@ -1687,10 +1850,10 @@ class ConfigurationWindow:
         self.feedback_label.configure(style="Success.TLabel")
 
     def _move_button(self, offset: int) -> None:
-        selected = self._selected_button_parts()
+        selected = self._selected_button_record()
         if selected is None:
             return
-        group, item = selected
+        group, item, _path = selected
         target_path = self._group_target_path(group)
         try:
             moved = (
@@ -1714,13 +1877,13 @@ class ConfigurationWindow:
         self.feedback_label.configure(style="Success.TLabel")
 
     def _update_button_preview(self) -> None:
-        selected = self._selected_button_parts()
+        selected = self._selected_button_record()
         if selected is None:
             self.button_preview_var.set(
                 "Select a group or Quick action to see how it behaves."
             )
             return
-        group, item = selected
+        group, item, path = selected
         destination = (
             LOCAL_DESTINATION
             if self._group_target_path(group).resolve()
@@ -1728,20 +1891,41 @@ class ConfigurationWindow:
             else PROJECT_DESTINATION
         )
         if item is None:
+            presentation = GROUP_PRESENTATION_LABELS[group.presentation]
+            direct_labels = action_reference_labels(
+                command_group_action_ids(group),
+                self.actions,
+            )
             self.button_preview_var.set(
-                f'Group "{group.label}" | {len(group.items)} Quick action(s) | '
-                f"{destination}"
+                f'Group "{group.label}" | {command_item_count(group)} menu '
+                f"level(s) | Direct actions: "
+                f"{', '.join(direct_labels) if direct_labels else 'none'} | "
+                f"{presentation} | {destination}"
             )
             return
         labels = action_reference_labels(
             command_item_action_ids(item),
             self.actions,
         )
-        self.button_preview_var.set(
-            f"Left click: {labels[0] if labels else 'No action'} | "
-            f"Right-click menu: {', '.join(labels) if labels else 'empty'} | "
-            f"{destination}"
-        )
+        menu_path = [group.label]
+        current_items = group.items
+        for item_index in path:
+            current = current_items[item_index]
+            menu_path.append(current.label)
+            current_items = current.items
+        if group.presentation == GROUP_PRESENTATION_NESTED_MENU:
+            self.button_preview_var.set(
+                f"Nested menu: {' > '.join(menu_path)} | "
+                f"Actions: {', '.join(labels) if labels else 'empty'} | "
+                f"Child levels: {len(item.items)} | "
+                f"{destination}"
+            )
+        else:
+            self.button_preview_var.set(
+                f"Left click: {labels[0] if labels else 'No action'} | "
+                f"Right-click menu: {', '.join(labels) if labels else 'empty'} | "
+                f"{destination}"
+            )
 
 
 class ActionDialog:
@@ -1857,23 +2041,31 @@ class ActionDialog:
             "open_folder": "Folder path", "launch_app": "Application .exe path",
             "paste_credential": "Exact Windows or generic credential target name",
             "transform_list_csv": "Conversion mode: csv or sql_strings",
+            "transform_text": "Text operation",
             "transform_slashes": (
                 "Conversion mode: forward_to_back or back_to_forward"
             ),
         }.get(action_type, "Saved text or URL template")
         ttk.Label(outer, text=label).pack(anchor=tk.W, pady=(8, 0))
-        self.value = tk.Text(outer, height=7, wrap=tk.WORD, undo=True)
-        self.value.pack(fill=tk.BOTH, expand=True, pady=(2, 0))
-        if action:
-            self.value.insert("1.0", action.value)
-        elif action_type == "transform_list_csv":
-            self.value.insert("1.0", "csv")
-        elif action_type == "transform_slashes":
-            self.value.insert("1.0", "forward_to_back")
-        elif action_type == "open_windows_target":
-            self.value.insert("1.0", "vscode:")
-        elif action_type in {"build_url_copy", "build_url_open", "build_url_selection_open"}:
-            self.value.insert("1.0", "https://example.com/items/{id_url}")
+        self.transform_operation_choices: dict[str, str] = {}
+        self.transform_parameter_vars: list[tk.StringVar] = []
+        self.transform_parameters_frame: ttk.Frame | None = None
+        self.value: tk.Text | None = None
+        if action_type == "transform_text":
+            self._build_transform_fields(outer, action)
+        else:
+            self.value = tk.Text(outer, height=7, wrap=tk.WORD, undo=True)
+            self.value.pack(fill=tk.BOTH, expand=True, pady=(2, 0))
+            if action:
+                self.value.insert("1.0", action.value)
+            elif action_type == "transform_list_csv":
+                self.value.insert("1.0", "csv")
+            elif action_type == "transform_slashes":
+                self.value.insert("1.0", "forward_to_back")
+            elif action_type == "open_windows_target":
+                self.value.insert("1.0", "vscode:")
+            elif action_type in {"build_url_copy", "build_url_open", "build_url_selection_open"}:
+                self.value.insert("1.0", "https://example.com/items/{id_url}")
         if action_type in {"launch_app", "open_windows_target"}:
             _entry(outer, "Arguments, one per line (optional)", self.arguments_var)
             _entry(outer, "Working folder (optional)", self.working_directory_var)
@@ -1881,20 +2073,99 @@ class ActionDialog:
         self.window.grab_set()
         _focus_entry(self.window, title_entry)
 
+    def _build_transform_fields(
+        self,
+        parent: ttk.Frame,
+        action: Action | None,
+    ) -> None:
+        for group in WORKSPACE_TRANSFORM_GROUPS:
+            for transform in group.transforms:
+                self.transform_operation_choices[
+                    f"{group.label} · {transform.label.rstrip('…')}"
+                ] = transform.operation
+        labels_by_operation = {
+            operation: label
+            for label, operation in self.transform_operation_choices.items()
+        }
+        operation = (
+            action.value
+            if action and action.value in WORKSPACE_TRANSFORMS
+            else "literal_replace"
+        )
+        self.transform_operation_var = tk.StringVar(
+            value=labels_by_operation[operation]
+        )
+        chooser = ttk.Combobox(
+            parent,
+            textvariable=self.transform_operation_var,
+            values=tuple(self.transform_operation_choices),
+            state="readonly",
+        )
+        chooser.pack(fill=tk.X, pady=(2, 0))
+        self.transform_parameters_frame = ttk.Frame(parent)
+        self.transform_parameters_frame.pack(fill=tk.X)
+        chooser.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self._render_transform_parameters(),
+        )
+        self._render_transform_parameters(
+            tuple(action.arguments) if action else (),
+        )
+
+    def _selected_transform_operation(self) -> str:
+        return self.transform_operation_choices[self.transform_operation_var.get()]
+
+    def _render_transform_parameters(
+        self,
+        initial_values: tuple[str, ...] = (),
+    ) -> None:
+        assert self.transform_parameters_frame is not None
+        for child in self.transform_parameters_frame.winfo_children():
+            child.destroy()
+        definition = WORKSPACE_TRANSFORMS[self._selected_transform_operation()]
+        self.transform_parameter_vars = []
+        for index, label in enumerate(definition.parameter_labels):
+            default = (
+                initial_values[index]
+                if index < len(initial_values)
+                else definition.parameter_defaults[index]
+                if index < len(definition.parameter_defaults)
+                else ""
+            )
+            variable = tk.StringVar(value=default)
+            _entry(self.transform_parameters_frame, label, variable)
+            self.transform_parameter_vars.append(variable)
+        if not definition.parameter_labels:
+            ttk.Label(
+                self.transform_parameters_frame,
+                text="This operation needs no additional settings.",
+                style="Muted.TLabel",
+            ).pack(anchor=tk.W, pady=(4, 0))
+
     def _save(self) -> None:
         try:
             contexts = validate_context_memberships(
                 _comma_separated(self.contexts_var.get()),
                 self.context_names,
             )
+            if self.action_type == "transform_text":
+                value = self._selected_transform_operation()
+                arguments = [
+                    variable.get() for variable in self.transform_parameter_vars
+                ]
+            else:
+                assert self.value is not None
+                value = self.value.get("1.0", "end-1c")
+                arguments = self.arguments_var.get().splitlines()
             values = dict(
                 title=self.title_var.get(),
                 description=self.description_var.get(),
                 context="General",
                 contexts=contexts,
                 tags=_comma_separated(self.tags_var.get()),
-                action_type=self.action_type, value=self.value.get("1.0", "end-1c"),
-                arguments=self.arguments_var.get().splitlines(),
+                action_type=self.action_type,
+                value=value,
+                arguments=arguments,
                 working_directory=self.working_directory_var.get(),
             )
             action = (
@@ -1947,6 +2218,13 @@ class ContextDialog:
             _destination_field(outer, self.destination_var)
         preferred = context.preferred_action_ids if context else ()
         self.action_choices = _action_choices(actions)
+        self.action_picker_options = _action_picker_options(
+            actions,
+            choices=self.action_choices,
+        )
+        self.action_picker_options_by_id = {
+            option.action_id: option for option in self.action_picker_options
+        }
         labels_by_id = {action_id: label for label, action_id in self.action_choices.items()}
         self.labels_by_action_id = labels_by_id
         self.member_action_ids = list(
@@ -1972,18 +2250,19 @@ class ContextDialog:
             outer,
             text=(
                 "Actions in this context. My configuration contexts may contain "
-                "both built-in actions and your own actions."
+                "both built-in actions and your own actions. Find by name, type, "
+                "context, or tag."
             ),
             wraplength=610,
         ).pack(anchor=tk.W, pady=(9, 2))
         member_chooser = ttk.Frame(outer)
         member_chooser.pack(fill=tk.X)
         self.member_choice_var = tk.StringVar()
-        self.member_choice = ttk.Combobox(
+        self.member_choice = ActionPickerField(
             member_chooser,
-            textvariable=self.member_choice_var,
-            values=list(self.action_choices),
-            state="readonly",
+            variable=self.member_choice_var,
+            options=self.action_picker_options,
+            title="Choose action to add to context",
         )
         self.member_choice.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(
@@ -2013,22 +2292,23 @@ class ContextDialog:
         ).pack(anchor=tk.W, pady=(5, 0))
         self.slots = [
             tk.StringVar(
-                value=labels_by_id.get(preferred[index], "")
+                value=labels_by_id.get(preferred[index], EMPTY_PIN_LABEL)
                 if index < len(preferred)
-                else ""
+                else EMPTY_PIN_LABEL
             )
             for index in range(4)
         ]
-        self.slot_choices: list[ttk.Combobox] = []
+        self.slot_choices: list[ActionPickerField] = []
         ttk.Label(outer, text="Preferred actions for slots 6–9").pack(anchor=tk.W, pady=(9, 2))
         for slot, variable in enumerate(self.slots, start=6):
             row = ttk.Frame(outer)
             row.pack(fill=tk.X, pady=2)
             ttk.Label(row, text=f"Slot {slot}", width=8).pack(side=tk.LEFT)
-            chooser = ttk.Combobox(
+            chooser = ActionPickerField(
                 row,
-                textvariable=variable,
-                state="readonly",
+                variable=variable,
+                empty_label=EMPTY_PIN_LABEL,
+                title=f"Choose preferred action for slot {slot}",
             )
             chooser.pack(side=tk.LEFT, fill=tk.X, expand=True)
             self.slot_choices.append(chooser)
@@ -2052,7 +2332,7 @@ class ContextDialog:
         removed_label = self.labels_by_action_id.get(removed_id, "")
         for slot in self.slots:
             if slot.get() == removed_label:
-                slot.set("")
+                slot.set(EMPTY_PIN_LABEL)
         self._refresh_member_actions(
             select=min(selection[0], len(self.member_action_ids) - 1)
         )
@@ -2071,9 +2351,13 @@ class ContextDialog:
         if 0 <= select < len(labels):
             self.member_list.selection_set(select)
             self.member_list.see(select)
-        values = ["", *labels]
+        options = tuple(
+            self.action_picker_options_by_id[action_id]
+            for action_id in self.member_action_ids
+            if action_id in self.action_picker_options_by_id
+        )
         for chooser in self.slot_choices:
-            chooser.configure(values=values)
+            chooser.set_options(options, empty_label=EMPTY_PIN_LABEL)
 
     def _save(self) -> None:
         name = self.name.get().strip()
@@ -2113,6 +2397,7 @@ class GroupDialog:
         group: CommandGroup | None,
         on_save: Callable[[CommandGroup, str, str], bool],
         *,
+        actions: list[Action] | None = None,
         choose_destination: bool = False,
         destination: str = LOCAL_DESTINATION,
     ) -> None:
@@ -2139,6 +2424,27 @@ class GroupDialog:
         self.label_var = tk.StringVar(value=group.label if group else "")
         self.id_var = tk.StringVar(value=group.id if group else "")
         name_entry = _entry(outer, "Group heading", self.label_var)
+        self.presentation_var = tk.StringVar(
+            value=GROUP_PRESENTATION_LABELS[
+                group.presentation if group else GROUP_PRESENTATION_ROWS
+            ]
+        )
+        ttk.Label(outer, text="Presentation").pack(anchor=tk.W, pady=(7, 0))
+        ttk.Combobox(
+            outer,
+            textvariable=self.presentation_var,
+            values=tuple(GROUP_PRESENTATION_LABELS.values()),
+            state="readonly",
+        ).pack(fill=tk.X, pady=(2, 0))
+        ttk.Label(
+            outer,
+            text=(
+                "Quick-action rows keep one-click defaults. Nested subject menu "
+                "uses one launcher, then shows each Quick action as a submenu."
+            ),
+            style="Muted.TLabel",
+            wraplength=560,
+        ).pack(anchor=tk.W, pady=(2, 0))
         self.destination_var = tk.StringVar(value=destination)
         if choose_destination:
             _destination_field(outer, self.destination_var)
@@ -2148,6 +2454,81 @@ class GroupDialog:
                 text=f"Storage: {destination}",
                 style="Muted.TLabel",
             ).pack(anchor=tk.W, pady=(8, 0))
+        available_actions = actions or []
+        self.direct_action_choices = _action_choices(available_actions)
+        self.direct_picker_options = _action_picker_options(
+            available_actions,
+            choices=self.direct_action_choices,
+        )
+        self.direct_labels_by_id = {
+            action_id: label
+            for label, action_id in self.direct_action_choices.items()
+        }
+        self.direct_action_ids = list(
+            command_group_action_ids(group)
+            if group is not None
+            else ()
+        )
+        ttk.Label(
+            outer,
+            text=(
+                "Direct group actions (optional; Nested subject menu only)"
+            ),
+        ).pack(anchor=tk.W, pady=(9, 2))
+        direct_chooser = ttk.Frame(outer)
+        direct_chooser.pack(fill=tk.X)
+        self.direct_action_var = tk.StringVar()
+        self.direct_action_choice = ActionPickerField(
+            direct_chooser,
+            variable=self.direct_action_var,
+            options=self.direct_picker_options,
+            title="Choose direct group action",
+        )
+        self.direct_action_choice.pack(
+            side=tk.LEFT,
+            fill=tk.X,
+            expand=True,
+        )
+        ttk.Button(
+            direct_chooser,
+            text="Add",
+            command=self._add_direct_action,
+        ).pack(side=tk.LEFT, padx=(6, 0))
+        direct_list_frame = ttk.Frame(outer)
+        direct_list_frame.pack(fill=tk.X, pady=(6, 0))
+        self.direct_action_list = tk.Listbox(
+            direct_list_frame,
+            exportselection=False,
+            height=4,
+        )
+        self.direct_action_list.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        direct_scrollbar = ttk.Scrollbar(
+            direct_list_frame,
+            orient=tk.VERTICAL,
+            command=self.direct_action_list.yview,
+        )
+        direct_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.direct_action_list.configure(
+            yscrollcommand=direct_scrollbar.set
+        )
+        direct_controls = ttk.Frame(outer)
+        direct_controls.pack(fill=tk.X, pady=(6, 0))
+        ttk.Button(
+            direct_controls,
+            text="Remove",
+            command=self._remove_direct_action,
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            direct_controls,
+            text="Move up",
+            command=lambda: self._move_direct_action(-1),
+        ).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(
+            direct_controls,
+            text="Move down",
+            command=lambda: self._move_direct_action(1),
+        ).pack(side=tk.LEFT, padx=(6, 0))
+        self._refresh_direct_actions()
         self.window.transient(parent)
         self.window.grab_set()
         _focus_entry(self.window, name_entry)
@@ -2162,10 +2543,33 @@ class GroupDialog:
                 parent=self.window,
             )
             return
+        presentation = GROUP_PRESENTATIONS_BY_LABEL[
+            self.presentation_var.get()
+        ]
+        direct_action_ids = tuple(
+            dict.fromkeys(getattr(self, "direct_action_ids", ()))
+        )
+        if (
+            presentation != GROUP_PRESENTATION_NESTED_MENU
+            and direct_action_ids
+        ):
+            messagebox.showerror(
+                "Context Palette",
+                "Direct group actions require Nested subject menu presentation.",
+                parent=self.window,
+            )
+            return
         group = CommandGroup(
             group_id,
             label,
             self.group.items if self.group else (),
+            presentation=presentation,
+            primary_action_id=(
+                direct_action_ids[0]
+                if direct_action_ids
+                else ""
+            ),
+            action_ids=direct_action_ids,
         )
         if self.on_save(
             group,
@@ -2173,6 +2577,57 @@ class GroupDialog:
             self.destination_var.get(),
         ):
             self.window.destroy()
+
+    def _add_direct_action(self) -> None:
+        action_id = self.direct_action_choices.get(
+            self.direct_action_var.get()
+        )
+        if not action_id or action_id in self.direct_action_ids:
+            return
+        self.direct_action_ids.append(action_id)
+        self._refresh_direct_actions(
+            select=len(self.direct_action_ids) - 1
+        )
+
+    def _remove_direct_action(self) -> None:
+        selection = self.direct_action_list.curselection()
+        if not selection:
+            return
+        del self.direct_action_ids[selection[0]]
+        self._refresh_direct_actions(
+            select=min(
+                selection[0],
+                len(self.direct_action_ids) - 1,
+            )
+        )
+
+    def _move_direct_action(self, offset: int) -> None:
+        selection = self.direct_action_list.curselection()
+        if not selection:
+            return
+        index = selection[0]
+        target = index + offset
+        if target < 0 or target >= len(self.direct_action_ids):
+            return
+        self.direct_action_ids[index], self.direct_action_ids[target] = (
+            self.direct_action_ids[target],
+            self.direct_action_ids[index],
+        )
+        self._refresh_direct_actions(select=target)
+
+    def _refresh_direct_actions(self, *, select: int = -1) -> None:
+        self.direct_action_list.delete(0, tk.END)
+        for action_id in self.direct_action_ids:
+            self.direct_action_list.insert(
+                tk.END,
+                self.direct_labels_by_id.get(
+                    action_id,
+                    f"Missing action: {action_id}",
+                ),
+            )
+        if 0 <= select < len(self.direct_action_ids):
+            self.direct_action_list.selection_set(select)
+            self.direct_action_list.see(select)
 
 
 class ButtonDialog:
@@ -2185,16 +2640,21 @@ class ButtonDialog:
     ) -> None:
         self.original_group_id = group.id if group else ""
         self.original_item_id = item.id if item else ""
+        self.child_items = item.items if item else ()
+        self.nested_menu = bool(
+            group
+            and group.presentation == GROUP_PRESENTATION_NESTED_MENU
+        )
         self.project_storage = shared
         self.on_save = on_save
         self.window = tk.Toplevel(parent)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
         self.window.title(
-            "Edit built-in Quick action"
+            "Edit built-in menu level"
             if item and shared
-            else "Edit Quick action"
+            else "Edit menu level"
             if item
-            else "Add Quick action"
+            else "Add menu level"
         )
         configure_standard_window(self.window)
         outer = ttk.Frame(self.window, padding=12)
@@ -2209,28 +2669,37 @@ class ButtonDialog:
             text=f"Group: {group.label if group else 'None'}",
             style="Muted.TLabel",
         ).pack(anchor=tk.W)
-        item_entry = _entry(outer, "Quick-action name", self.item_label)
+        item_entry = _entry(outer, "Menu level name", self.item_label)
         ids = command_item_action_ids(item) if item else ()
         self.action_choices = _action_choices(actions)
+        self.action_picker_options = _action_picker_options(
+            actions,
+            choices=self.action_choices,
+        )
         labels_by_id = {action_id: label for label, action_id in self.action_choices.items()}
         self.labels_by_id = labels_by_id
         self.assigned_action_ids = list(ids)
         ttk.Label(
             outer,
             text=(
+                "Nested-menu actions: shown in this order inside the subject "
+                "submenu. Find by name, type, context, or tag."
+                if self.nested_menu
+                else
                 "Assigned actions: the first action runs on left-click; "
-                "right-click shows the complete ordered list."
+                "right-click shows the complete ordered list. Find by name, "
+                "type, context, or tag."
             ),
             wraplength=610,
         ).pack(anchor=tk.W, pady=(9, 2))
         chooser = ttk.Frame(outer)
         chooser.pack(fill=tk.X)
         self.action_choice_var = tk.StringVar()
-        self.action_choice = ttk.Combobox(
+        self.action_choice = ActionPickerField(
             chooser,
-            textvariable=self.action_choice_var,
-            values=list(self.action_choices),
-            state="readonly",
+            variable=self.action_choice_var,
+            options=self.action_picker_options,
+            title="Choose Quick action assignment",
         )
         self.action_choice.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(
@@ -2316,13 +2785,26 @@ class ButtonDialog:
         self.assignment_list.delete(0, tk.END)
         for index, action_id in enumerate(self.assigned_action_ids):
             label = self.labels_by_id.get(action_id, f"Missing action: {action_id}")
-            prefix = "Default: " if index == 0 else f"Menu {index + 1}: "
+            prefix = (
+                f"Menu {index + 1}: "
+                if self.nested_menu
+                else "Default: "
+                if index == 0
+                else f"Menu {index + 1}: "
+            )
             self.assignment_list.insert(tk.END, prefix + label)
         if 0 <= select < len(self.assigned_action_ids):
             self.assignment_list.selection_set(select)
             self.assignment_list.see(select)
         self.assignment_preview_var.set(
             (
+                (
+                    f"Nested submenu shows {len(self.assigned_action_ids)} "
+                    "action(s), starting with: "
+                    f"{self.labels_by_id.get(self.assigned_action_ids[0], self.assigned_action_ids[0])}."
+                )
+                if self.nested_menu
+                else
                 f"Left click runs: "
                 f"{self.labels_by_id.get(self.assigned_action_ids[0], self.assigned_action_ids[0])}. "
                 f"Right-click shows {len(self.assigned_action_ids)} action(s)."
@@ -2374,6 +2856,7 @@ class ButtonDialog:
             CommandItem(
                 id=item_id, label=self.item_label.get().strip(),
                 primary_action_id=ids[0] if ids else "", action_ids=ids,
+                items=getattr(self, "child_items", ()),
             ),
             self.original_group_id, self.original_item_id,
         )
@@ -2438,6 +2921,41 @@ def _action_choices(actions: list[Action]) -> dict[str, str]:
             label = f"{label} · {action.id}"
         choices[label] = action.id
     return choices
+
+
+def _action_picker_options(
+    actions: list[Action],
+    *,
+    choices: dict[str, str] | None = None,
+) -> tuple[ActionPickerOption, ...]:
+    action_choices = choices if choices is not None else _action_choices(actions)
+    actions_by_id = {action.id: action for action in actions}
+    options: list[ActionPickerOption] = []
+    for label, action_id in action_choices.items():
+        action = actions_by_id.get(action_id)
+        if action is None:
+            options.append(ActionPickerOption(action_id, label, label))
+            continue
+        definition = ACTION_TYPES[action.type]
+        options.append(
+            ActionPickerOption(
+                action_id,
+                label,
+                " ".join(
+                    (
+                        action.title,
+                        action.description,
+                        action.type,
+                        definition.label,
+                        definition.family,
+                        *action.effective_contexts,
+                        *action.effective_tags,
+                        action.state,
+                    )
+                ),
+            )
+        )
+    return tuple(options)
 
 
 def _dialog_buttons(

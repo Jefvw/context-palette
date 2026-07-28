@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from html import escape
+import os
 from pathlib import Path
 import re
+import shutil
+import subprocess
 import tkinter as tk
 from tkinter import ttk
+from collections.abc import Callable, Mapping
 from urllib.parse import unquote, urlparse
-import webbrowser
 
 from markdown_it import MarkdownIt
 from tkinterweb import HtmlFrame
@@ -166,6 +169,48 @@ def resolve_local_markdown_link(
     return candidate, unquote(parsed.fragment)
 
 
+def find_edge_executable(
+    *,
+    environment: Mapping[str, str] | None = None,
+    path_lookup: Callable[[str], str | None] | None = None,
+) -> Path | None:
+    """Locate Microsoft Edge across PATH and standard user/system installs."""
+    lookup = path_lookup or shutil.which
+    path_match = lookup("msedge.exe") or lookup("msedge")
+    if path_match:
+        candidate = Path(path_match)
+        if candidate.is_file():
+            return candidate.resolve()
+
+    values = environment if environment is not None else os.environ
+    candidates: list[Path] = []
+    for variable in ("LOCALAPPDATA", "PROGRAMFILES(X86)", "PROGRAMFILES", "PROGRAMW6432"):
+        root = values.get(variable, "").strip()
+        if root:
+            candidates.append(
+                Path(root) / "Microsoft" / "Edge" / "Application" / "msedge.exe"
+            )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
+
+
+def open_markdown_in_edge(
+    path: Path,
+    *,
+    edge_executable: Path | None = None,
+    launcher: Callable[..., object] = subprocess.Popen,
+) -> None:
+    """Open one local Markdown file in Edge for extension-based rendering."""
+    executable = edge_executable or find_edge_executable()
+    if executable is None:
+        raise FileNotFoundError(
+            "Microsoft Edge could not be found in PATH or a standard installation folder."
+        )
+    launcher([str(executable), path.resolve().as_uri()])
+
+
 class HelpWindow:
     """Searchable, high-fidelity viewer for local Context Palette Markdown pages."""
 
@@ -239,13 +284,13 @@ class HelpWindow:
             style="Compact.TButton",
         )
         self.home_button.pack(side=tk.LEFT, padx=(2, 0))
-        self.browser_button = ttk.Button(
+        self.edge_button = ttk.Button(
             header,
-            text="Browser",
-            command=self._open_in_browser,
+            text="Edge",
+            command=self._open_in_edge,
             style="Compact.TButton",
         )
-        self.browser_button.pack(side=tk.LEFT, padx=(6, 0))
+        self.edge_button.pack(side=tk.LEFT, padx=(6, 0))
         search = ttk.Entry(header, textvariable=self.search_var, width=20)
         search.pack(side=tk.RIGHT, padx=(6, 0))
         search.bind("<Return>", lambda _event: self._find_next())
@@ -379,17 +424,13 @@ class HelpWindow:
             self._load_document(self.home_path)
         return "break"
 
-    def _open_in_browser(self) -> None:
+    def _open_in_edge(self) -> None:
         try:
-            opened = webbrowser.open(self.current_path.as_uri())
+            open_markdown_in_edge(self.current_path)
         except (OSError, ValueError) as exc:
-            self.search_status_var.set(f"Could not open this document in the browser: {exc}")
+            self.search_status_var.set(f"Could not open this document in Edge: {exc}")
             return
-        self.search_status_var.set(
-            "Opened the current document in the default browser."
-            if opened
-            else "The default browser did not accept this document."
-        )
+        self.search_status_var.set("Opened the current document in Microsoft Edge.")
 
     def _open_link(self, target: str) -> None:
         candidate, anchor = resolve_local_markdown_link(

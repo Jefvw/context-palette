@@ -15,11 +15,11 @@ and retrieve it quickly in a chosen focus context.
 | Resident launcher and global shortcut | Implemented | `F9` primary, `Ctrl+Alt+P` fallback |
 | Global search and keyboard execution | Implemented | Search stays global; fixed slots use 1–9 |
 | Global pins and focus-context slots | Implemented | Machine-local pins 1–5 are directly assignable in Configure; context slots 6–9 follow the selected Focus |
-| Guided configuration | Implemented | Actions, pinned slots, contexts, and Quick actions use My configuration or Built-in ownership; context membership, order, defaults, and complete menus are editable without JSON |
+| Guided configuration | Implemented | Actions, pinned slots, contexts, and Quick actions use My configuration or Built-in ownership; one Standard group distributes Built-in actions through direct commands and up to three nested menu levels while personal groups own the remaining editable area |
 | Confirm → Active → Archived | Implemented | Creation and editing are permanent after confirmation; archiving is represented in data but has limited UI |
-| Explicit action execution | Implemented | Fourteen allow-listed types with standard icons, including user-owned Windows targets and slash conversion |
+| Explicit action execution | Implemented | Fifteen allow-listed types with standard icons, including user-owned Windows targets and reusable text operations |
 | Protected credential paste | Implemented with limitations | Exact standard Windows or generic credential target; confirmed, hotkey-originated paste only |
-| Input / Output transformations | Implemented | Selection or full field; result copied; includes both path-slash directions |
+| Input / Output transformations | Implemented | Selection or full field; result copied; includes filtering, delimiters, naming styles, JSON, URL/SQL encoding, file URIs, and path slashes |
 | Cheat sheets and promotion | Implemented | Structured local JSON sheets |
 | Attended AI assistance | Partial | Reviewable stored prompt templates and manual clipboard handoff; `copy_text` and `open_url` proposals only |
 | Context model | Partial | General root, per-PC context-owned action membership, tags, explicit focus, preferred actions; Developing Context Palette is the only shipped specific context |

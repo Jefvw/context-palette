@@ -1,10 +1,22 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import json
 from pathlib import Path
 
-from .command_surface import CommandGroup, CommandItem, CommandSurfaceError, load_command_groups
+from .command_surface import (
+    CommandGroup,
+    CommandItem,
+    CommandSurfaceError,
+    GROUP_PRESENTATIONS,
+    GROUP_PRESENTATION_NESTED_MENU,
+    GROUP_PRESENTATION_ROWS,
+    MAX_COMMAND_MENU_LEVELS,
+    command_group_action_ids,
+    command_item_action_ids,
+    iter_command_items,
+    load_command_groups,
+)
 from .contexts import ContextDefinition, ContextError, load_contexts
 from .persistence import atomic_write_json
 
@@ -52,6 +64,7 @@ def save_command_item(
     item: CommandItem,
     original_group_id: str = "",
     original_item_id: str = "",
+    parent_item_ids: tuple[str, ...] = (),
 ) -> None:
     clean_group_id = group_id.strip()
     clean_group_label = group_label.strip()
@@ -79,22 +92,41 @@ def save_command_item(
         if any(
             existing.id.casefold() == item.id.casefold()
             and existing.id.casefold() != replacement_item_key
-            for existing in group.items
+            for _item_path, existing in iter_command_items(group)
         ):
             raise CommandSurfaceError(f"Duplicate button ID in this group: {item.id}")
-        items = list(group.items)
-        replaced = False
-        for index, existing in enumerate(items):
-            if existing.id.casefold() == replacement_item_key:
-                items[index] = item
-                replaced = True
-                break
-        if not replaced:
-            items.append(item)
-        output.append(CommandGroup(clean_group_id, clean_group_label, tuple(items)))
+        if original_item_id:
+            items, replaced = _replace_command_item(
+                group.items,
+                replacement_item_key,
+                item,
+            )
+            if not replaced:
+                raise CommandSurfaceError(
+                    f"Quick action was not found in {group.id}: "
+                    f"{original_item_id}"
+                )
+        else:
+            items = _append_command_item(
+                group.items,
+                parent_item_ids,
+                item,
+            )
+        output.append(
+            replace(
+                group,
+                id=clean_group_id,
+                label=clean_group_label,
+                items=items,
+            )
+        )
     if not matched_group:
         if any(group.id.casefold() == clean_group_id.casefold() for group in output):
             raise CommandSurfaceError(f"Duplicate command-surface group ID: {clean_group_id}")
+        if parent_item_ids:
+            raise CommandSurfaceError(
+                "A submenu parent cannot be selected in a new group."
+            )
         output.append(CommandGroup(clean_group_id, clean_group_label, (item,)))
 
     save_command_groups(path, output)
@@ -118,14 +150,20 @@ def save_command_group(
     output = list(groups)
     for index, existing in enumerate(output):
         if existing.id.casefold() == replacement_key:
-            output[index] = CommandGroup(
-                group.id.strip(),
-                group.label.strip(),
-                group.items,
+            output[index] = replace(
+                group,
+                id=group.id.strip(),
+                label=group.label.strip(),
             )
             break
     else:
-        output.append(CommandGroup(group.id.strip(), group.label.strip(), group.items))
+        output.append(
+            replace(
+                group,
+                id=group.id.strip(),
+                label=group.label.strip(),
+            )
+        )
     save_command_groups(path, output)
 
 
@@ -145,11 +183,11 @@ def delete_command_item(path: Path, group_id: str, item_id: str) -> None:
         if group.id.casefold() != group_id.casefold():
             output.append(group)
             continue
-        items = tuple(
-            item for item in group.items if item.id.casefold() != item_id.casefold()
+        items, found = _delete_command_item(
+            group.items,
+            item_id.casefold(),
         )
-        found = len(items) != len(group.items)
-        output.append(CommandGroup(group.id, group.label, items))
+        output.append(replace(group, items=items))
     if not found:
         raise CommandSurfaceError(
             f"Quick action was not found in {group_id}: {item_id}"
@@ -188,18 +226,16 @@ def move_command_item(
     if group_index < 0:
         raise CommandSurfaceError(f"Quick-action group was not found: {group_id}")
     group = groups[group_index]
-    items = list(group.items)
-    item_index = next(
-        (i for i, item in enumerate(items) if item.id.casefold() == item_id.casefold()),
-        -1,
+    items, found, moved = _move_command_item(
+        group.items,
+        item_id.casefold(),
+        offset,
     )
-    target = item_index + offset
-    if item_index < 0:
+    if not found:
         raise CommandSurfaceError(f"Quick action was not found in {group_id}: {item_id}")
-    if target < 0 or target >= len(items):
+    if not moved:
         return False
-    items[item_index], items[target] = items[target], items[item_index]
-    output[group_index] = CommandGroup(group.id, group.label, tuple(items))
+    output[group_index] = replace(group, items=items)
     save_command_groups(path, output)
     return True
 
@@ -216,23 +252,7 @@ def save_command_groups(path: Path, groups: list[CommandGroup]) -> None:
         path,
         {
             "groups": [
-                {
-                    "id": group.id.strip(),
-                    "label": group.label.strip(),
-                    "items": [
-                        {
-                            "id": entry.id.strip(),
-                            "label": entry.label.strip(),
-                            **(
-                                {"primary_action_id": entry.primary_action_id}
-                                if entry.primary_action_id
-                                else {}
-                            ),
-                            "action_ids": list(entry.action_ids),
-                        }
-                        for entry in group.items
-                    ],
-                }
+                _command_group_to_data(group)
                 for group in groups
             ]
         },
@@ -242,13 +262,179 @@ def save_command_groups(path: Path, groups: list[CommandGroup]) -> None:
 def _validate_group(group: CommandGroup) -> None:
     if not group.id.strip() or not group.label.strip():
         raise CommandSurfaceError("A Quick-action group needs a visible name.")
+    if (
+        not isinstance(group.presentation, str)
+        or group.presentation not in GROUP_PRESENTATIONS
+    ):
+        raise CommandSurfaceError(
+            f"Invalid Quick-action group presentation: {group.presentation}"
+        )
+    if (
+        group.presentation != GROUP_PRESENTATION_NESTED_MENU
+        and command_group_action_ids(group)
+    ):
+        raise CommandSurfaceError(
+            "Direct group actions require Nested subject menu presentation."
+        )
     item_ids: set[str] = set()
-    for item in group.items:
-        if not item.id.strip() or not item.label.strip():
-            raise CommandSurfaceError("A Quick action needs a visible name.")
-        key = item.id.casefold()
-        if key in item_ids:
+
+    def validate_items(
+        items: tuple[CommandItem, ...],
+        depth: int,
+    ) -> None:
+        if not items:
+            return
+        if depth > MAX_COMMAND_MENU_LEVELS:
             raise CommandSurfaceError(
-                f"Duplicate button ID in this group: {item.id}"
+                f"Quick-action menus support at most "
+                f"{MAX_COMMAND_MENU_LEVELS} submenu levels."
             )
-        item_ids.add(key)
+        for item in items:
+            if not item.id.strip() or not item.label.strip():
+                raise CommandSurfaceError("A Quick action needs a visible name.")
+            key = item.id.casefold()
+            if key in item_ids:
+                raise CommandSurfaceError(
+                    f"Duplicate button ID in this group: {item.id}"
+                )
+            item_ids.add(key)
+            validate_items(item.items, depth + 1)
+
+    validate_items(group.items, 1)
+
+
+def _command_group_to_data(group: CommandGroup) -> dict[str, object]:
+    return {
+        "id": group.id.strip(),
+        "label": group.label.strip(),
+        **(
+            {"presentation": group.presentation}
+            if group.presentation != GROUP_PRESENTATION_ROWS
+            else {}
+        ),
+        **(
+            {"primary_action_id": group.primary_action_id}
+            if group.primary_action_id
+            else {}
+        ),
+        "action_ids": list(group.action_ids),
+        "items": [_command_item_to_data(item) for item in group.items],
+    }
+
+
+def _command_item_to_data(item: CommandItem) -> dict[str, object]:
+    return {
+        "id": item.id.strip(),
+        "label": item.label.strip(),
+        **(
+            {"primary_action_id": item.primary_action_id}
+            if item.primary_action_id
+            else {}
+        ),
+        "action_ids": list(item.action_ids),
+        **(
+            {"items": [_command_item_to_data(child) for child in item.items]}
+            if item.items
+            else {}
+        ),
+    }
+
+
+def _replace_command_item(
+    items: tuple[CommandItem, ...],
+    target_key: str,
+    replacement: CommandItem,
+) -> tuple[tuple[CommandItem, ...], bool]:
+    output: list[CommandItem] = []
+    found = False
+    for item in items:
+        if item.id.casefold() == target_key:
+            output.append(replacement)
+            found = True
+            continue
+        children, child_found = _replace_command_item(
+            item.items,
+            target_key,
+            replacement,
+        )
+        output.append(replace(item, items=children) if child_found else item)
+        found = found or child_found
+    return tuple(output), found
+
+
+def _append_command_item(
+    items: tuple[CommandItem, ...],
+    parent_item_ids: tuple[str, ...],
+    item: CommandItem,
+) -> tuple[CommandItem, ...]:
+    if not parent_item_ids:
+        return (*items, item)
+    parent_key = parent_item_ids[0].casefold()
+    output: list[CommandItem] = []
+    found = False
+    for existing in items:
+        if existing.id.casefold() != parent_key:
+            output.append(existing)
+            continue
+        children = _append_command_item(
+            existing.items,
+            parent_item_ids[1:],
+            item,
+        )
+        output.append(replace(existing, items=children))
+        found = True
+    if not found:
+        raise CommandSurfaceError(
+            f"Quick-action submenu parent was not found: {parent_item_ids[0]}"
+        )
+    return tuple(output)
+
+
+def _delete_command_item(
+    items: tuple[CommandItem, ...],
+    target_key: str,
+) -> tuple[tuple[CommandItem, ...], bool]:
+    output: list[CommandItem] = []
+    found = False
+    for item in items:
+        if item.id.casefold() == target_key:
+            found = True
+            continue
+        children, child_found = _delete_command_item(item.items, target_key)
+        output.append(replace(item, items=children) if child_found else item)
+        found = found or child_found
+    return tuple(output), found
+
+
+def _move_command_item(
+    items: tuple[CommandItem, ...],
+    target_key: str,
+    offset: int,
+) -> tuple[tuple[CommandItem, ...], bool, bool]:
+    current = list(items)
+    index = next(
+        (
+            item_index
+            for item_index, item in enumerate(current)
+            if item.id.casefold() == target_key
+        ),
+        -1,
+    )
+    if index >= 0:
+        target = index + offset
+        if target < 0 or target >= len(current):
+            return items, True, False
+        current[index], current[target] = current[target], current[index]
+        return tuple(current), True, True
+    output: list[CommandItem] = []
+    for item in items:
+        children, found, moved = _move_command_item(
+            item.items,
+            target_key,
+            offset,
+        )
+        output.append(replace(item, items=children) if found else item)
+        if found:
+            output.extend(items[len(output):])
+            return tuple(output), True, moved
+    return items, False, False
