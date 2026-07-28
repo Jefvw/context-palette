@@ -9,6 +9,8 @@ from typing import Callable
 from .actions import (
     Action,
     ActionError,
+    action_matches_search,
+    action_search_text,
     append_action,
     configured_action,
     edited_configured_action,
@@ -94,6 +96,11 @@ ACTION_TYPE_EXAMPLES = {
 LOCAL_DESTINATION = "My configuration"
 PROJECT_DESTINATION = "Built-in"
 EMPTY_PIN_LABEL = "Not assigned"
+BUILT_IN_ACTION_SCOPE_NOTE = (
+    "Built-in configuration lists Built-in actions only. To use a My "
+    "configuration action, add or edit a My configuration context or "
+    "Quick-action group."
+)
 CONFIGURATION_TAB_INDEXES = {
     "actions": 0,
     "types": 1,
@@ -113,23 +120,15 @@ GROUP_PRESENTATIONS_BY_LABEL = {
 
 
 def action_matches_filter(action: Action, query: str, *, personal: bool) -> bool:
-    terms = [term.casefold() for term in query.split() if term.strip()]
-    if not terms:
-        return True
-    searchable = " ".join(
-        (
-            action.title,
-            action.description,
-            ACTION_TYPES[action.type].label,
-            *action.effective_contexts,
-            *action.effective_tags,
-            action.state,
+    return action_matches_search(
+        action,
+        query,
+        extra_terms=(
             f"{LOCAL_DESTINATION} local personal"
             if personal
             else f"{PROJECT_DESTINATION} project shared",
-        )
-    ).casefold()
-    return all(term in searchable for term in terms)
+        ),
+    )
 
 
 def context_membership_count(
@@ -420,6 +419,11 @@ class ConfigurationWindow:
         self.window.after_idle(self._focus_current_tab)
         if start_work_item_creation:
             self.window.after_idle(self._start_work_item_creation)
+
+    def refresh_from_storage(self) -> None:
+        """Refresh an already-open workspace after another window changes data."""
+
+        self._reload()
 
     def _start_work_item_creation(self) -> None:
         self.work_items_panel.create_work_item()
@@ -888,8 +892,7 @@ class ConfigurationWindow:
         self.on_change()
         if self.action_filter_var.get():
             self.action_filter_var.set("")
-        else:
-            self._render_actions()
+        self._refresh_action_views()
         self.feedback_var.set(
             f"Created {destination.lower()} action: {action.display_text}"
         )
@@ -934,12 +937,17 @@ class ConfigurationWindow:
             return
         finally:
             self.window.configure(cursor="")
-        self._render_actions()
-        self._render_pinned_slots()
         self.local_context_names = {
             item.name.casefold()
             for item in (load_contexts(self.local_contexts_path) if self.local_contexts_path.exists() else [])
         }
+        self._refresh_action_views()
+
+    def _refresh_action_views(self) -> None:
+        """Refresh every Configure view derived from the current action list."""
+
+        self._render_actions()
+        self._render_pinned_slots()
         self._render_contexts()
         self._render_buttons()
         self._refresh_diagnostics()
@@ -1263,8 +1271,7 @@ class ConfigurationWindow:
         self.on_change()
         if self.action_filter_var.get():
             self.action_filter_var.set("")
-        else:
-            self._render_actions()
+        self._refresh_action_views()
         self.feedback_var.set(f"Saved action: {action.display_text}")
         self.feedback_label.configure(style="Success.TLabel")
         return True
@@ -2249,9 +2256,12 @@ class ContextDialog:
         ttk.Label(
             outer,
             text=(
+                "Actions in this Built-in context. Only Built-in actions are "
+                "available."
+                if shared
+                else
                 "Actions in this context. My configuration contexts may contain "
-                "both built-in actions and your own actions. Find by name, type, "
-                "context, or tag."
+                "both built-in actions and your own actions."
             ),
             wraplength=610,
         ).pack(anchor=tk.W, pady=(9, 2))
@@ -2263,6 +2273,7 @@ class ContextDialog:
             variable=self.member_choice_var,
             options=self.action_picker_options,
             title="Choose action to add to context",
+            scope_note=BUILT_IN_ACTION_SCOPE_NOTE if shared else None,
         )
         self.member_choice.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(
@@ -2483,6 +2494,11 @@ class GroupDialog:
             variable=self.direct_action_var,
             options=self.direct_picker_options,
             title="Choose direct group action",
+            scope_note=(
+                BUILT_IN_ACTION_SCOPE_NOTE
+                if destination == PROJECT_DESTINATION and not choose_destination
+                else None
+            ),
         )
         self.direct_action_choice.pack(
             side=tk.LEFT,
@@ -2700,6 +2716,7 @@ class ButtonDialog:
             variable=self.action_choice_var,
             options=self.action_picker_options,
             title="Choose Quick action assignment",
+            scope_note=BUILT_IN_ACTION_SCOPE_NOTE if shared else None,
         )
         self.action_choice.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(
@@ -2936,23 +2953,11 @@ def _action_picker_options(
         if action is None:
             options.append(ActionPickerOption(action_id, label, label))
             continue
-        definition = ACTION_TYPES[action.type]
         options.append(
             ActionPickerOption(
                 action_id,
                 label,
-                " ".join(
-                    (
-                        action.title,
-                        action.description,
-                        action.type,
-                        definition.label,
-                        definition.family,
-                        *action.effective_contexts,
-                        *action.effective_tags,
-                        action.state,
-                    )
-                ),
+                action_search_text(action),
             )
         )
     return tuple(options)

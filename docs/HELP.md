@@ -370,10 +370,17 @@ Configure opens with keyboard focus on the action list. Action, context, and but
 All fields that choose an existing action use the same **Find…** picker:
 pinned slots 1–5, context membership, preferred slots 6–9, and Quick-action
 assignments. Search by any combination of action name, description, built-in
-type, context, tag, or state. The result count and filtered list update while
-you type. Press Down Arrow to enter the results, then Enter to select; pressing
-Enter directly from Find selects the highlighted result. Double-click works
-with the mouse. Choose **Not assigned** to clear a pin or preferred slot.
+type, context, tag, state, stable ID, target or saved value, arguments, or
+working folder. The result count and filtered list update while you type. Press
+Down Arrow to enter the results, then Enter to select; pressing Enter directly
+from Find selects the highlighted result. Double-click works with the mouse.
+Choose **Not assigned** to clear a pin or preferred slot.
+
+Built-in contexts and the Built-in **Standard** Quick-action group deliberately
+list Built-in actions only, because tracked starter configuration cannot depend
+on one computer's private action file. Their picker states this scope and
+explains an empty result. To assign a My configuration action, create or edit a
+My configuration context or Quick-action group instead.
 
 Use **Choose…** in guided action forms to select one or more defined specific
 contexts. The adjacent field remains editable for quick keyboard entry and
@@ -409,14 +416,19 @@ Items tables resize within the Configure window instead of hiding their final
 columns. Each table has a visible vertical scrollbar for records that extend
 beyond the available height.
 
-- Actions search short name, description, built-in type, context, tag, state,
-  and storage.
+- Actions search short name, description, stable ID, built-in type, context,
+  tag, state, target or saved value, arguments, working folder, and storage.
 - Contexts search name, description, member and preferred action names, and
   storage.
 - Quick actions search group name, button name, assigned action names, and
   storage.
 
 Press Enter on a selected result to edit it.
+
+Creating or editing an action immediately refreshes the Actions table, pin
+selectors, context summaries, Quick-action summaries, and diagnostics. Actions
+created from Inbox, Harvest, or Cheat Sheets also refresh an already-open
+Configure workspace.
 
 Use **Delete selected** to remove an action. The confirmation identifies how
 many saved references will also be removed. Pins, Focus slots, context

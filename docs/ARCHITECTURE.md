@@ -156,6 +156,10 @@ Important principles:
 - Pure transformations are separated from UI callbacks.
 - Platform effects are injected through callbacks where practical, enabling tests without opening applications.
 - Clipboard access during template expansion is lazy: actions without clipboard variables do not fail when the clipboard contains a non-text format.
+- Launcher Find, Configure Find, and Configure action pickers consume one
+  canonical in-memory action search document containing identity, readable and
+  technical type metadata, organization, state, target/value, arguments, and
+  working folder. Configure adds storage ownership as surface-specific metadata.
 
 ### `action_types.py`
 
@@ -229,8 +233,9 @@ Provides the shared searchable action selector used throughout Configure.
 Pinned slots, context membership, preferred Focus slots, and Quick-action
 assignments open the same dialog instead of rendering separate long combobox
 menus. The picker matches all entered terms against the action's readable
-label, description, built-in type, context, tag, and state, while callers
-continue to persist stable action IDs.
+label and the canonical action search document, while callers continue to
+persist stable action IDs. Restricted Built-in pickers display their storage
+scope and an explicit empty-result explanation.
 
 ### `persistence.py`
 
@@ -270,6 +275,11 @@ reference existing actions without exposing technical IDs. Built-in contexts
 and Quick-action records are editable after the same developer-impact warning.
 Writes use the same atomic JSON
 replacement path as the rest of the application.
+
+Action creation and editing refresh every Configure view derived from actions,
+including pins, context and Quick-action summaries, and diagnostics. Action
+creation routes owned by other launcher windows reload an already-open
+Configure workspace from storage without raising or replacing that window.
 
 Configure list tables use the shared `treeview_utils.py` scrollable-tree
 builder. Actions, contexts, Quick actions, Work Item sources, and discovered

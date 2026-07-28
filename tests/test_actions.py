@@ -452,6 +452,28 @@ class ActionTests(unittest.TestCase):
         )
         self.assertEqual([action.id for action in search_actions(actions, "select")], ["database"])
 
+    def test_search_uses_consistent_identity_type_and_target_metadata(self):
+        action = Action(
+            "monthly-invoice",
+            "Review supplier billing",
+            "General",
+            "open_url",
+            "https://example.test/invoices/unique-target",
+            arguments=("--profile", "finance"),
+            working_directory=r"C:\Finance Workspace",
+        )
+
+        for query in (
+            "monthly-invoice",
+            "website",
+            "general",
+            "unique-target",
+            "profile finance",
+            "finance workspace",
+        ):
+            with self.subTest(query=query):
+                self.assertEqual(search_actions([action], query), [action])
+
     def test_new_action_schema_normalizes_contexts_and_tags(self):
         path = self._write_actions(
             [

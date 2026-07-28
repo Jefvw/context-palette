@@ -428,27 +428,50 @@ def edited_copy_text_action(
     )
 
 
-def search_actions(actions: Iterable[Action], query: str) -> list[Action]:
+def action_search_text(action: Action) -> str:
+    """Return the canonical local search document for an action."""
+
+    definition = ACTION_TYPES[action.type]
+    contexts = action.effective_contexts or ("General",)
+    return " ".join(
+        (
+            action.id,
+            action.title,
+            action.description,
+            action.type,
+            definition.label,
+            definition.family,
+            *contexts,
+            *action.effective_tags,
+            action.state,
+            action.value,
+            *action.arguments,
+            action.working_directory or "",
+        )
+    )
+
+
+def action_matches_search(
+    action: Action,
+    query: str,
+    *,
+    extra_terms: Iterable[str] = (),
+) -> bool:
+    """Return whether every query term occurs in canonical or supplied metadata."""
+
     terms = [term.casefold() for term in query.split() if term.strip()]
     if not terms:
-        return list(actions)
+        return True
+    searchable = " ".join((action_search_text(action), *extra_terms)).casefold()
+    return all(term in searchable for term in terms)
 
-    matches = []
-    for action in actions:
-        searchable = " ".join(
-            [
-                action.title,
-                *action.effective_tags,
-                *action.effective_contexts,
-                action.type,
-                action.value,
-                action.state,
-                action.description,
-            ]
-        ).casefold()
-        if all(term in searchable for term in terms):
-            matches.append(action)
-    return matches
+
+def search_actions(actions: Iterable[Action], query: str) -> list[Action]:
+    return [
+        action
+        for action in actions
+        if action_matches_search(action, query)
+    ]
 
 
 def execute_action(

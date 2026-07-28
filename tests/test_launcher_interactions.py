@@ -1066,6 +1066,17 @@ class LauncherInteractionTests(unittest.TestCase):
             self.assertEqual(app.local_action_ids, set())
             self.assertEqual(app.status_var.value, "Loaded 1 actions")
 
+    def test_external_action_change_refreshes_open_configuration(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app._reload = Mock()
+        app.configuration_window = Mock()
+        app.configuration_window.window.winfo_exists.return_value = True
+
+        app._reload_after_external_action_change()
+
+        app._reload.assert_called_once_with()
+        app.configuration_window.refresh_from_storage.assert_called_once_with()
+
     def test_keyboard_quick_action_runs_primary_action(self):
         app = LauncherApp.__new__(LauncherApp)
         action = Action(

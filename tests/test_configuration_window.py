@@ -200,6 +200,22 @@ class ActionReferenceLabelTests(unittest.TestCase):
 
 
 class PinnedSlotConfigurationTests(unittest.TestCase):
+    def test_action_view_refresh_updates_every_dependent_configuration_surface(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration._render_actions = Mock()
+        configuration._render_pinned_slots = Mock()
+        configuration._render_contexts = Mock()
+        configuration._render_buttons = Mock()
+        configuration._refresh_diagnostics = Mock()
+
+        configuration._refresh_action_views()
+
+        configuration._render_actions.assert_called_once_with()
+        configuration._render_pinned_slots.assert_called_once_with()
+        configuration._render_contexts.assert_called_once_with()
+        configuration._render_buttons.assert_called_once_with()
+        configuration._refresh_diagnostics.assert_called_once_with()
+
     def test_pin_labels_resolve_in_slot_order_and_close_empty_gaps(self) -> None:
         self.assertEqual(
             resolve_pinned_action_ids(
@@ -570,6 +586,8 @@ class ConfigurationDialogTests(unittest.TestCase):
         self.assertTrue(action_matches_filter(action, "website active", personal=True))
         self.assertTrue(action_matches_filter(action, "personal reference", personal=True))
         self.assertTrue(action_matches_filter(action, "official language", personal=True))
+        self.assertTrue(action_matches_filter(action, "python-docs", personal=True))
+        self.assertTrue(action_matches_filter(action, "docs.python.org", personal=True))
         self.assertFalse(action_matches_filter(action, "shared", personal=True))
         self.assertFalse(action_matches_filter(action, "project", personal=True))
 
@@ -605,7 +623,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.feedback_var = FakeVariable()
         configuration.feedback_label = Mock()
         configuration.on_change = Mock()
-        configuration._render_actions = Mock()
+        configuration._refresh_action_views = Mock()
 
         with (
             patch(
@@ -622,6 +640,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         warning.assert_called_once()
         self.assertIn("tracked by Git", warning.call_args.args[1])
         update.assert_called_once_with(Path("shared-actions.json"), action)
+        configuration._refresh_action_views.assert_called_once_with()
 
     def test_action_edit_persists_atomically_and_preserves_previous_backup(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -636,7 +655,7 @@ class ConfigurationDialogTests(unittest.TestCase):
             configuration.feedback_var = FakeVariable()
             configuration.feedback_label = Mock()
             configuration.on_change = Mock()
-            configuration._render_actions = Mock()
+            configuration._refresh_action_views = Mock()
 
             self.assertTrue(configuration._save_edited_action(updated, path))
 
@@ -647,6 +666,7 @@ class ConfigurationDialogTests(unittest.TestCase):
             )
             self.assertEqual(configuration.actions, [updated])
             configuration.on_change.assert_called_once_with()
+            configuration._refresh_action_views.assert_called_once_with()
 
     def test_action_edit_write_failure_preserves_file_and_open_editor_state(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1193,7 +1213,7 @@ class ConfigurationDialogTests(unittest.TestCase):
             configuration.feedback_var = FakeVariable()
             configuration.feedback_label = Mock()
             configuration.on_change = Mock()
-            configuration._render_actions = Mock()
+            configuration._refresh_action_views = Mock()
             action = Action(
                 "project-action",
                 "Project action",
@@ -1209,6 +1229,7 @@ class ConfigurationDialogTests(unittest.TestCase):
             self.assertEqual(load_actions(project_path), [action])
             self.assertFalse(local_path.exists())
             self.assertEqual(configuration.local_action_ids, set())
+            configuration._refresh_action_views.assert_called_once_with()
 
     def test_action_dialog_rejects_an_unknown_specific_context(self) -> None:
         dialog = ActionDialog.__new__(ActionDialog)
@@ -1379,6 +1400,7 @@ class ConfigurationDialogTests(unittest.TestCase):
             self.assertEqual(dialog.member_action_ids, ["built-in", "local"])
             self.assertEqual(dialog.member_list.size(), 2)
             self.assertIsInstance(dialog.member_choice, ActionPickerField)
+            self.assertIsNone(dialog.member_choice.scope_note)
             self.assertTrue(
                 all(
                     isinstance(picker, ActionPickerField)
@@ -1389,6 +1411,25 @@ class ConfigurationDialogTests(unittest.TestCase):
 
             self.assertEqual(saved[0].action_ids, ("built-in", "local"))
             self.assertEqual(saved[0].preferred_action_ids, ("built-in",))
+        finally:
+            for child in root.winfo_children():
+                child.destroy()
+            root.destroy()
+
+    def test_builtin_context_picker_explains_its_action_scope(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            dialog = ContextDialog(
+                root,
+                ContextDefinition("Standard"),
+                [Action("built-in", "Built in", "General", "copy_text", "one")],
+                lambda _context, _original: True,
+                shared=True,
+            )
+            root.update_idletasks()
+
+            self.assertIn("Built-in actions only", dialog.member_choice.scope_note)
         finally:
             for child in root.winfo_children():
                 child.destroy()
@@ -1530,6 +1571,7 @@ class ConfigurationDialogTests(unittest.TestCase):
             )
             root.update_idletasks()
 
+            self.assertIn("Built-in actions only", dialog.action_choice.scope_note)
             with patch(
                 "context_palette.configuration_window.messagebox.showerror"
             ) as error:

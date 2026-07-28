@@ -45,7 +45,7 @@ class ActionPickerFilterTests(unittest.TestCase):
         )
         self.assertEqual(filter_action_picker_options(options, "missing"), ())
 
-    def test_configuration_options_search_action_type_context_and_tag(self) -> None:
+    def test_configuration_options_use_complete_shared_action_metadata(self) -> None:
         options = _action_picker_options(
             [
                 Action(
@@ -57,11 +57,22 @@ class ActionPickerFilterTests(unittest.TestCase):
                     contexts=("Finance",),
                     tags=("monthly",),
                     description="Review supplier billing",
+                    arguments=("--profile", "accounts"),
+                    working_directory=r"C:\Invoice Workspace",
                 )
             ]
         )
 
-        for query in ("website", "finance", "monthly", "supplier billing"):
+        for query in (
+            "invoice",
+            "website",
+            "finance",
+            "monthly",
+            "supplier billing",
+            "example.com",
+            "profile accounts",
+            "invoice workspace",
+        ):
             with self.subTest(query=query):
                 self.assertEqual(
                     [
@@ -108,6 +119,30 @@ class ActionPickerDialogTests(unittest.TestCase):
             self.assertEqual(dialog.results.get(0), "Open invoice portal · Finance")
             dialog._select()
             self.assertEqual(selected, ["Open invoice portal · Finance"])
+        finally:
+            for child in root.winfo_children():
+                child.destroy()
+            root.destroy()
+
+    def test_dialog_explains_empty_restricted_scope(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            dialog = ActionPickerDialog(
+                root,
+                options=(),
+                current_label="",
+                on_select=lambda _label: None,
+                scope_note="Built-in actions only.",
+            )
+            root.update_idletasks()
+
+            self.assertEqual(dialog.count_var.get(), "0 actions")
+            self.assertEqual(
+                dialog.empty_result_var.get(),
+                "No matching actions in this scope.",
+            )
+            self.assertEqual(str(dialog.select_button["state"]), "disabled")
         finally:
             for child in root.winfo_children():
                 child.destroy()

@@ -4,6 +4,13 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Made action search consistent between the launcher, Configure Actions, and
+  every Configure action picker. Stable IDs, readable and technical types,
+  General context, targets or saved values, arguments, and working folders are
+  now searchable everywhere. New or edited actions immediately refresh pins,
+  context and Quick-action summaries, and an already-open Configure workspace.
+  Built-in pickers now explain that they intentionally exclude My
+  configuration actions instead of presenting an unexplained empty result.
 - Consolidated all active Built-in actions into one compact **Standard**
   launcher with direct commands and nested menu levels. Quick-action groups can
   choose direct rows or the one-launcher nested presentation; actions may live

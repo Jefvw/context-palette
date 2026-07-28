@@ -2176,6 +2176,20 @@ class LauncherApp:
                 stage_timings_ms=stage_timings_ms,
             )
 
+    def _reload_after_external_action_change(self) -> None:
+        """Reload the launcher and any Configure workspace open beside it."""
+
+        self._reload()
+        configuration = getattr(self, "configuration_window", None)
+        if configuration is None:
+            return
+        try:
+            exists = bool(configuration.window.winfo_exists())
+        except tk.TclError:
+            exists = False
+        if exists:
+            configuration.refresh_from_storage()
+
     def _toggle_selected_pin(self) -> None:
         action = self._selected_action()
         if action is None:
@@ -2698,7 +2712,7 @@ class LauncherApp:
             self.available_context_names,
             self.local_actions_path,
             self.inbox_path,
-            self._reload,
+            self._reload_after_external_action_change,
             self._show_harvest,
         )
 
@@ -2709,7 +2723,7 @@ class LauncherApp:
             context_names=self.available_context_names,
             focus_context=self.palette_state.focus_context,
             actions_path=self.local_actions_path,
-            on_change=self._reload,
+            on_change=self._reload_after_external_action_change,
         )
 
     def _show_help(self) -> None:
@@ -3086,7 +3100,12 @@ class LauncherApp:
             messagebox.showerror("Context Palette", str(exc))
             return
 
-        CheatSheetWindow(self.root, sheets, self.local_actions_path, self._reload)
+        CheatSheetWindow(
+            self.root,
+            sheets,
+            self.local_actions_path,
+            self._reload_after_external_action_change,
+        )
 
     def _handle_keypress(self, event: tk.Event) -> str | None:
         keysym = str(event.keysym)

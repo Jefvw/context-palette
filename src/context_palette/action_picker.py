@@ -50,12 +50,14 @@ class ActionPickerField(ttk.Frame):
         entry_width: int | None = None,
         button_text: str = "Find…",
         button_width: int | None = None,
+        scope_note: str | None = None,
     ) -> None:
         super().__init__(parent)
         self.variable = variable
         self.options = tuple(options)
         self.empty_label = empty_label
         self.title = title
+        self.scope_note = scope_note
 
         entry_options: dict[str, object] = {
             "textvariable": variable,
@@ -96,6 +98,7 @@ class ActionPickerField(ttk.Frame):
             on_select=self.variable.set,
             empty_label=self.empty_label,
             title=self.title,
+            scope_note=self.scope_note,
         )
 
 
@@ -111,11 +114,13 @@ class ActionPickerDialog:
         on_select: Callable[[str], None],
         empty_label: str | None = None,
         title: str = "Choose action",
+        scope_note: str | None = None,
     ) -> None:
         self.options = tuple(options)
         self.current_label = current_label
         self.on_select = on_select
         self.empty_label = empty_label
+        self.scope_note = scope_note
         self.filtered_options: tuple[ActionPickerOption, ...] = ()
         self.previous_grab = parent.grab_current()
         self.closed = False
@@ -147,6 +152,14 @@ class ActionPickerDialog:
             style="Muted.TLabel",
         ).pack(side=tk.RIGHT)
 
+        if self.scope_note:
+            ttk.Label(
+                outer,
+                text=self.scope_note,
+                style="Muted.TLabel",
+                wraplength=720,
+            ).pack(fill=tk.X, pady=(0, 6))
+
         list_frame = ttk.Frame(outer)
         list_frame.pack(fill=tk.BOTH, expand=True)
         scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL)
@@ -160,11 +173,19 @@ class ActionPickerDialog:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.results.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
+        self.empty_result_var = tk.StringVar()
+        ttk.Label(
+            outer,
+            textvariable=self.empty_result_var,
+            style="Muted.TLabel",
+            wraplength=720,
+        ).pack(fill=tk.X, pady=(6, 0))
         ttk.Label(
             outer,
             text=(
-                "Searches action name, description, built-in type, context, "
-                "tag, and state. Use Down Arrow, Enter, or double-click."
+                "Searches action name, description, ID, built-in type, context, "
+                "tag, state, target, arguments, and working folder. Use Down "
+                "Arrow, Enter, or double-click."
             ),
             style="Muted.TLabel",
             wraplength=720,
@@ -232,7 +253,13 @@ class ActionPickerDialog:
             state=tk.NORMAL if display_options else tk.DISABLED
         )
         if not display_options:
+            self.empty_result_var.set(
+                "No matching actions in this scope."
+                if self.scope_note
+                else "No matching actions. Try fewer or different words."
+            )
             return
+        self.empty_result_var.set("")
 
         selected = next(
             (
