@@ -21,8 +21,8 @@ from context_palette.launcher import (
     MINIMUM_WORKSPACE_HEIGHT,
     LauncherApp,
 )
-from context_palette.actions import Action
-from context_palette.action_types import ACTION_TYPES
+from context_palette.actions import Action, transform_text_file
+from context_palette.action_types import ACTION_TYPES, CREATABLE_ACTION_TYPES
 from context_palette.command_surface import (
     CommandGroup,
     CommandItem,
@@ -34,10 +34,50 @@ from context_palette.configuration_window import (
 )
 from context_palette.contexts import ContextDefinition
 from context_palette.workspace_transforms import WORKSPACE_TRANSFORM_GROUPS
+from context_palette.workspace_panel import WorkspacePanel
 
 
 @unittest.skipUnless(sys.platform == "win32", "The launcher smoke test requires Windows Tk.")
 class LauncherSmokeTests(unittest.TestCase):
+    def test_file_transform_preview_exposes_guarded_replace_and_clears_on_new_input(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            source = Path(temporary_directory) / "source.txt"
+            source.write_text("Alpha\r\n", encoding="utf-8", newline="")
+            preview = transform_text_file(str(source), ("uppercase",))
+            root = tk.Tk()
+            root.withdraw()
+            host = ttk.Frame(root)
+            host.pack(fill=tk.BOTH, expand=True)
+            statuses: list[str] = []
+            panel = WorkspacePanel(
+                host,
+                clipboard_getter=lambda: "",
+                clipboard_setter=lambda _value: None,
+                status_setter=statuses.append,
+                tooltip_adder=lambda _widget, _text: None,
+            )
+            try:
+                panel.show_file_preview(preview)
+                root.update_idletasks()
+
+                self.assertTrue(panel.file_preview_frame.winfo_manager())
+                self.assertEqual(panel.raw_text(), "ALPHA\r\n")
+                self.assertIn(str(source), panel.file_preview_path_var.get())
+                with patch(
+                    "context_palette.workspace_panel.messagebox.askyesno",
+                    return_value=True,
+                ):
+                    panel.replace_preview_source()
+                with source.open(encoding="utf-8", newline="") as stream:
+                    self.assertEqual(stream.read(), "ALPHA\r\n")
+                self.assertIn("Replaced original text file", statuses[-1])
+
+                panel.set_text("Unrelated workspace text")
+                self.assertIsNone(panel.file_preview)
+                self.assertFalse(panel.file_preview_frame.winfo_manager())
+            finally:
+                root.destroy()
+
     def test_clean_pc_loads_built_in_configuration_without_creating_local_files(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             data = Path(temporary_directory)
@@ -311,7 +351,7 @@ class LauncherSmokeTests(unittest.TestCase):
                         configuration.pins_frame.winfo_reqwidth(),
                         configuration.window.winfo_width(),
                     )
-                    for index, definition in enumerate(ACTION_TYPES.values()):
+                    for index, definition in enumerate(CREATABLE_ACTION_TYPES.values()):
                         self.assertTrue(
                             configuration.type_list.get(index).startswith(
                                 f"{definition.icon} "
@@ -1071,7 +1111,7 @@ class LauncherSmokeTests(unittest.TestCase):
 
                     for keysym, expected_tab in (
                         ("a", "Actions"),
-                        ("t", "Built-in action types"),
+                        ("t", "Create action"),
                         ("c", "Contexts"),
                         ("q", "Quick actions"),
                         ("d", "Diagnostics"),

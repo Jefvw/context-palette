@@ -36,7 +36,7 @@ AltGr-, plain number-row, and numpad input never execute action slots.
 | Shortcut | Result |
 | --- | --- |
 | `Alt+A` | Open Actions. |
-| `Alt+T` | Open Built-in action types. |
+| `Alt+T` | Open Create action. |
 | `Alt+C` | Open Contexts. |
 | `Alt+Q` | Open Quick actions. |
 | `Alt+W` | Open Work Items. |

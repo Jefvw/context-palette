@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import codecs
 from dataclasses import dataclass
 from datetime import datetime
+from hashlib import sha256
 import json
+import locale
 import os
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 from typing import Callable, Iterable
 from urllib.parse import quote, unquote, urlparse
 from uuid import uuid4
@@ -21,6 +25,9 @@ ACTIVE_STATE = "Active"
 ARCHIVED_STATE = "Archived"
 VISIBLE_STATES = {ACTIVE_STATE}
 LEGACY_ACTIVE_STATES = {"Draft", "Trusted"}
+MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024
+
+
 class ActionError(Exception):
     """Raised when an action cannot be loaded or executed safely."""
 
@@ -71,6 +78,17 @@ class Action:
                 title = title[len(prefix):].strip()
                 break
         return f"{ACTION_TYPES[self.type].icon} {title}"
+
+
+@dataclass(frozen=True)
+class TextFileTransformPreview:
+    """A transformed file result plus enough provenance for a guarded save-back."""
+
+    source_path: Path
+    result: str
+    source_digest: str
+    encoding: str
+    bom: bytes = b""
 
 
 def normalize_contexts(values: Iterable[str]) -> tuple[str, ...]:
@@ -323,11 +341,15 @@ def configured_action(
 
     clean_arguments = (
         tuple(arguments)
-        if action_type == "transform_text"
+        if action_type in {"transform_text", "transform_file_text"}
         else tuple(argument.strip() for argument in arguments if argument.strip())
     )
     if action_type == "transform_text":
         validate_text_transform(clean_value, clean_arguments)
+    elif action_type == "transform_file_text":
+        source_path = validate_text_file_source(clean_value, require_existing=True)
+        _decode_text_file(_read_bounded_text_file(source_path), source_path)
+        validate_file_text_transform(clean_arguments)
 
     return Action(
         id=f"action-{uuid4().hex[:12]}",
@@ -483,6 +505,7 @@ def execute_action(
     selected_text: str | None = None,
     input_text: str | None = None,
     output_setter: Callable[[str], None] | None = None,
+    file_preview_setter: Callable[[TextFileTransformPreview], None] | None = None,
     credential_paster: Callable[[Action], str] | None = None,
     opener: Callable[[Action], None] | None = None,
 ) -> str:
@@ -502,6 +525,22 @@ def execute_action(
             "Loaded the AI prompt into Input / Output and copied it."
             if action.type == "ai_prompt"
             else "Loaded the template into Input / Output and copied it."
+        )
+
+    if action.type == "transform_file_text":
+        preview = transform_text_file(
+            action.value,
+            action.arguments,
+        )
+        if file_preview_setter is not None:
+            file_preview_setter(preview)
+        elif output_setter is not None:
+            output_setter(preview.result)
+        if clipboard_setter is not None:
+            clipboard_setter(preview.result)
+        return (
+            f"Previewed transformed file: {preview.source_path.name}. "
+            "The original is unchanged."
         )
 
     if action.type == "transform_list_csv":
@@ -666,6 +705,30 @@ def validate_text_transform(operation: str, arguments: tuple[str, ...] = ()) -> 
         raise ActionError("Find cannot be empty.")
 
 
+def validate_file_text_transform(arguments: tuple[str, ...]) -> None:
+    if not arguments:
+        raise ActionError("Choose a text operation.")
+    validate_text_transform(arguments[0], arguments[1:])
+
+
+def validate_text_file_source(
+    value: str,
+    *,
+    require_existing: bool = False,
+) -> Path:
+    path = _resolve_local_path(value, Path.is_file)
+    if require_existing and not path.is_file():
+        raise ActionError(f"Text file does not exist: {path}")
+    if path.exists() and not path.is_file():
+        raise ActionError(f"Text file path is not a file: {path}")
+    if path.is_file():
+        try:
+            return path.resolve(strict=True)
+        except OSError as exc:
+            raise ActionError(f"Could not resolve text file: {path}\n\n{exc}") from exc
+    return path
+
+
 def validate_credential_target(value: str) -> None:
     if not value.strip():
         raise ActionError("Windows credential target name cannot be empty.")
@@ -684,6 +747,8 @@ def validate_action_value(action_type: str, value: str) -> None:
         validate_http_url(clean_value, label="Action URL")
     elif action_type == "open_windows_target":
         validate_windows_target(clean_value)
+    elif action_type == "transform_file_text":
+        validate_text_file_source(clean_value)
     elif action_type == "transform_text":
         if clean_value not in WORKSPACE_TRANSFORMS:
             raise ActionError("Choose a supported text operation.")
@@ -776,6 +841,9 @@ def transform_text(
         needle = arguments[0].casefold()
         return _filter_and_join_lines(value, lambda line: needle not in line.casefold())
     if operation == "prefix_suffix_lines":
+        if arguments:
+            validate_text_transform(operation, arguments)
+            prefix, suffix = arguments
         return _affix_each_line(value, prefix, suffix)
     if operation == "remove_blank_lines":
         return _filter_and_join_lines(
@@ -841,6 +909,229 @@ def transform_text(
     if operation == "file_uri_to_path":
         return _file_uri_to_windows_path(value)
     raise ActionError(f"Unsupported text transformation: {operation}")
+
+
+def transform_text_file(
+    source_value: str,
+    arguments: tuple[str, ...],
+) -> TextFileTransformPreview:
+    """Read and transform one text file without changing it."""
+
+    validate_file_text_transform(arguments)
+    source_path = validate_text_file_source(source_value, require_existing=True)
+    source_bytes = _read_bounded_text_file(source_path)
+    source_text, encoding, bom = _decode_text_file(source_bytes, source_path)
+    result = transform_text(
+        source_text,
+        arguments[0],
+        arguments=arguments[1:],
+    )
+    if any(ending in source_text for ending in ("\r\n", "\r", "\n")):
+        result = re.sub(
+            r"\r\n|\r|\n",
+            lambda _match: _line_separator(source_text),
+            result,
+        )
+    return TextFileTransformPreview(
+        source_path=source_path,
+        result=result,
+        source_digest=sha256(source_bytes).hexdigest(),
+        encoding=encoding,
+        bom=bom,
+    )
+
+
+def replace_text_file_from_preview(
+    preview: TextFileTransformPreview,
+    value: str,
+) -> TextFileTransformPreview:
+    """Atomically replace an unchanged preview source with reviewed text."""
+
+    try:
+        current_bytes = preview.source_path.read_bytes()
+    except OSError as exc:
+        raise ActionError(
+            f"Could not read the original text file: {preview.source_path}\n\n{exc}"
+        ) from exc
+    if sha256(current_bytes).hexdigest() != preview.source_digest:
+        raise ActionError(
+            "The original text file changed after the preview was created. "
+            "Run the action again before replacing it."
+        )
+    output = _encode_preview_text(preview, value)
+    _atomic_write_bytes(
+        preview.source_path,
+        output,
+        expected_digest=preview.source_digest,
+    )
+    return TextFileTransformPreview(
+        source_path=preview.source_path,
+        result=value,
+        source_digest=sha256(output).hexdigest(),
+        encoding=preview.encoding,
+        bom=preview.bom,
+    )
+
+
+def save_text_file_preview_as(
+    preview: TextFileTransformPreview,
+    destination: Path,
+    value: str,
+) -> TextFileTransformPreview | None:
+    """Atomically save reviewed preview text to another file."""
+
+    target = destination.expanduser()
+    if not target.is_absolute():
+        target = Path.cwd() / target
+    if not target.parent.is_dir():
+        raise ActionError(f"Destination folder does not exist: {target.parent}")
+    try:
+        same_source = target.resolve() == preview.source_path.resolve()
+    except OSError:
+        same_source = target.absolute() == preview.source_path.absolute()
+    if same_source:
+        return replace_text_file_from_preview(preview, value)
+    _atomic_write_bytes(target, _encode_preview_text(preview, value))
+    return None
+
+
+def ensure_default_text_action_file(path: Path) -> Path:
+    """Create the machine-local default source file only when it is missing."""
+
+    target = path.expanduser()
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("x", encoding="utf-8", newline="") as stream:
+            stream.write("")
+    except FileExistsError:
+        if not target.is_file():
+            raise ActionError(f"Default text file path is not a file: {target}")
+    except OSError as exc:
+        raise ActionError(
+            f"Could not create the default text file: {target}\n\n{exc}"
+        ) from exc
+    return target
+
+
+def _read_bounded_text_file(path: Path) -> bytes:
+    try:
+        size = path.stat().st_size
+        if size > MAX_TEXT_FILE_BYTES:
+            raise ActionError(
+                f"Text file is too large ({size:,} bytes). "
+                f"The maximum is {MAX_TEXT_FILE_BYTES:,} bytes."
+            )
+        return path.read_bytes()
+    except ActionError:
+        raise
+    except OSError as exc:
+        raise ActionError(f"Could not read text file: {path}\n\n{exc}") from exc
+
+
+def _decode_text_file(data: bytes, path: Path) -> tuple[str, str, bytes]:
+    bom_codecs = (
+        (codecs.BOM_UTF32_LE, "utf-32-le"),
+        (codecs.BOM_UTF32_BE, "utf-32-be"),
+        (codecs.BOM_UTF8, "utf-8"),
+        (codecs.BOM_UTF16_LE, "utf-16-le"),
+        (codecs.BOM_UTF16_BE, "utf-16-be"),
+    )
+    for bom, encoding in bom_codecs:
+        if data.startswith(bom):
+            try:
+                value = data[len(bom):].decode(encoding)
+            except UnicodeDecodeError as exc:
+                raise ActionError(
+                    f"Text file has invalid {encoding} content: {path}"
+                ) from exc
+            _reject_binary_text(value, path)
+            return value, encoding, bom
+
+    encodings = list(
+        dict.fromkeys(
+            (
+                "utf-8",
+                locale.getpreferredencoding(False),
+                "cp1252",
+            )
+        )
+    )
+    for encoding in encodings:
+        try:
+            value = data.decode(encoding)
+        except (LookupError, UnicodeDecodeError):
+            continue
+        _reject_binary_text(value, path)
+        return value, encoding, b""
+    raise ActionError(
+        f"Text file encoding is not supported: {path}. "
+        "Use UTF-8, UTF-16/32 with a byte-order mark, or Windows text encoding."
+    )
+
+
+def _reject_binary_text(value: str, path: Path) -> None:
+    if "\x00" in value:
+        raise ActionError(f"File appears to contain binary data: {path}")
+    controls = sum(
+        1
+        for character in value
+        if ord(character) < 32 and character not in "\t\n\r\f"
+    )
+    if controls > max(2, len(value) // 100):
+        raise ActionError(f"File appears to contain binary data: {path}")
+
+
+def _encode_preview_text(
+    preview: TextFileTransformPreview,
+    value: str,
+) -> bytes:
+    try:
+        return preview.bom + value.encode(preview.encoding)
+    except (LookupError, UnicodeEncodeError) as exc:
+        raise ActionError(
+            f"The reviewed text cannot be encoded as {preview.encoding}. "
+            "Remove characters that the source file's encoding cannot represent."
+        ) from exc
+
+
+def _atomic_write_bytes(
+    path: Path,
+    value: bytes,
+    *,
+    expected_digest: str | None = None,
+) -> None:
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(value)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        if expected_digest is not None:
+            try:
+                current_digest = sha256(path.read_bytes()).hexdigest()
+            except OSError as exc:
+                raise ActionError(
+                    f"Could not recheck the original text file: {path}\n\n{exc}"
+                ) from exc
+            if current_digest != expected_digest:
+                raise ActionError(
+                    "The original text file changed while replacement was being "
+                    "prepared. Run the action again before replacing it."
+                )
+        os.replace(temporary_path, path)
+        temporary_path = None
+    except OSError as exc:
+        raise ActionError(f"Could not save text file: {path}\n\n{exc}") from exc
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def _sentence_case(value: str) -> str:
@@ -1095,16 +1386,17 @@ def open_action_target(action: Action) -> None:
         local_target = _existing_local_target_path(action.value)
         if local_target is not None:
             target = str(local_target)
-        arguments = (
-            subprocess.list2cmdline(action.arguments) if action.arguments else None
-        )
+        start_options: dict[str, str] = {}
+        if action.arguments:
+            start_options["arguments"] = subprocess.list2cmdline(action.arguments)
         cwd = _resolve_working_directory(action.working_directory)
+        if cwd is not None:
+            start_options["cwd"] = cwd
         try:
             os.startfile(  # type: ignore[attr-defined]
                 target,
                 "open",
-                arguments,
-                cwd,
+                **start_options,
             )
         except OSError as exc:
             raise ActionError(
@@ -1172,6 +1464,11 @@ def _parse_action(item: object, index: int) -> Action:
     if action_type == "transform_text":
         try:
             validate_text_transform(item["value"], tuple(arguments))
+        except ActionError as exc:
+            raise ActionError(f"Action #{index}: {exc}") from exc
+    elif action_type == "transform_file_text":
+        try:
+            validate_file_text_transform(tuple(arguments))
         except ActionError as exc:
             raise ActionError(f"Action #{index}: {exc}") from exc
 

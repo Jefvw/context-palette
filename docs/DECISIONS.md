@@ -1496,3 +1496,24 @@ spaces as `%20`, but `Path` treated that text as a literal filename and rejected
 an otherwise existing local target. Literal-first resolution preserves valid
 filenames that genuinely contain percent sequences, while limiting decoding to
 the local filesystem boundary avoids altering web-address semantics.
+
+## 2026-07-28 - Give new reusable text actions a file-oriented preview workflow
+
+**Decision:** Keep the Input / Output Transform menu as the direct scratchpad
+workflow. Add one new `transform_file_text` action that stores an existing
+source path plus an operation from the shared transformation catalogue. Running
+it reads and transforms the file into Input / Output without writing the
+source. Show source provenance with explicit replace, save-as, and dismiss
+commands. Replacement must recheck the original byte hash, preserve the
+detected encoding and BOM, and use an atomic same-directory write. Keep the
+older Input / Output transformation action types loadable and editable but omit
+them from the new-action catalogue. Rename that catalogue tab to **Create
+action**.
+
+**Reason:** Immediate workspace commands and reusable actions previously exposed
+the same transformations without a distinct purpose, making the flat type list
+look duplicated. Binding a reusable action to a recurring text file creates a
+clear repeated-work workflow while retaining one operation catalogue.
+Preview-before-write and stale-source detection make the external file effect
+explicit and prevent silent overwrites. A new action type avoids changing the
+meaning of existing saved actions or requiring a data migration.

@@ -334,8 +334,11 @@ complete guided configuration workspace:
   Empty pin choices are closed automatically when saved. New actions default
   to **My configuration**; choose **Built-in** only when deliberately changing
   shipped starter data.
-- **Built-in action types:** inspect what each built-in type reads and does, see
-  a concrete example, then create a validated permanent personal action.
+- **Create action:** inspect what each available action reads and does, see a
+  concrete example, then create a validated permanent action. Older
+  Input / Output transformation types remain editable for compatibility but
+  are not offered for new actions; use the Transform menu for immediate text
+  changes or **Transform a text file** for a repeated file workflow.
 - **Contexts:** add, edit, or delete contexts, assign any built-in or personal
   actions as members, and choose defaults for slots 6–9. My configuration
   contexts stay on this PC.
@@ -356,7 +359,7 @@ complete guided configuration workspace:
   problem or **Copy safe summary** when asking for help. Raw log messages,
   pasted text, credentials, action values, paths, and window titles are not
   included. `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, and `Alt+D` directly select
-  Actions, Built-in action types, Contexts, Quick actions, and Diagnostics.
+  Actions, Create action, Contexts, Quick actions, and Diagnostics.
   `Ctrl+Tab` cycles through all Configure tabs. Both paths move focus into the
   selected tab's main content.
 
@@ -365,7 +368,12 @@ Manage focuses, right-clicking an action, or opening Work Item configuration
 raises that same window and moves it to the requested tab or record. Close it
 when finished; the next request creates a fresh Configure window.
 
-Configure opens with keyboard focus on the action list. Action, context, and button dialogs focus and select their first editable field, so typing can begin immediately.
+Configure opens with keyboard focus on the action list. Action, context, and
+button dialogs focus and select their first editable field, so typing can begin
+immediately. Action create/edit forms keep **Create/Save action** and **Cancel**
+visible at the bottom. Scroll the form body with its vertical scrollbar or the
+mouse wheel; moving through fields with Tab automatically reveals the focused
+field.
 
 All fields that choose an existing action use the same **Find…** picker:
 pinned slots 1–5, context membership, preferred slots 6–9, and Quick-action
@@ -597,7 +605,7 @@ action also copies it to the clipboard. Right-click **Prompts** to choose any
 stored prompt or open **Manage AI prompts…**.
 
 Stored prompts reuse the normal action lifecycle. In Configure, choose
-**Built-in action types**, select **AI prompt**, and create a personal action.
+**Create action**, select **AI prompt**, and create a personal action.
 Enter the visible prompt name and prompt text; no technical tag is required.
 Active AI prompt actions appear automatically, while Archived
 prompts do not. Personal prompt text stays in ignored `data/local_actions.json`
@@ -668,9 +676,10 @@ compact symbol:
 | `🔗` | Build and copy a URL |
 | `⇱` | Build and open a URL |
 | `⇗` | Build a URL from selected text |
-| `⇄` | Convert lines to a list |
-| `✎` | Transform text |
-| `／` | Convert path slashes |
+| `↻` | Transform a text file |
+| `⇄` | Convert Input / Output lines to a list |
+| `✎` | Transform Input / Output |
+| `／` | Convert Input / Output path slashes |
 
 The complete built-in action type and description remain available beside the
 icon in filters and Configure, and in hover help and Action info. Symbols never
@@ -698,10 +707,35 @@ Available groups include:
 Operations ending in **…** ask only for the values they need. Enter `\t`, `\n`,
 or `\r` when a delimiter should be a tab or line break.
 
-For repeated use, open **Configure**, choose **Actions**, and create a
-**Transform text** action. Choose the operation by its readable name; parameter
-fields change with the selection. Running the saved action transforms Input /
-Output and copies the result in exactly the same way as the menu.
+The menu is the direct way to transform text already in Input / Output.
+Existing saved **Transform Input / Output** actions remain editable and
+executable for compatibility, but new repeated transformations are
+file-oriented.
+
+### Transform a text file
+
+Open **Configure**, choose **Create action**, then select **Transform a text
+file**. Select an existing local text file, choose an operation by its readable
+name, and fill only the parameters required by that operation. New forms start
+with an ignored machine-local default file beside the personal configuration;
+browse to a different file when the action belongs to another recurring source.
+
+Running the action reads the file again, applies the operation, copies the
+result, and shows it in Input / Output. A source strip identifies the complete
+resolved path and states that the original is unchanged. Review or edit the
+result, then choose:
+
+- **Replace original…** to confirm an atomic save back to the source. Context
+  Palette refuses when another program changed the file after the preview was
+  created.
+- **Save as…** to write the reviewed result to another file.
+- **Dismiss** to detach the workspace from the source without writing.
+
+UTF-8, UTF-8 with BOM, UTF-16/32 with BOM, and normal Windows text encodings
+are supported up to 10 MiB. Replacement preserves the detected encoding, BOM,
+and line endings. Files that appear binary or cannot be decoded are rejected.
+If a configured path is temporarily unavailable, the action still loads and
+remains editable, but running it reports the missing source.
 
 ### Open or run Windows targets
 
@@ -738,6 +772,10 @@ Palette does not inspect or sandbox what Windows starts. Targets may execute
 code. Configure only targets you intend to run; the application does not add a
 confirmation prompt.
 
+Protocol targets such as `onenote:`, `vscode:`, and `shell:` work without
+arguments or a working folder. Context Palette omits those unset options when
+calling Windows, while still forwarding either option when configured.
+
 The main palette keeps its compact width. Its eight management commands use the
 single character strip documented above, keeping every command directly
 available without reducing the action console or transformation workspace.
@@ -757,7 +795,7 @@ as direct buttons. Selecting one starts its destination confirmation
 immediately. Pinned credential actions appear first in pin order; remaining
 positions use other Active credential actions.
 
-Press `Ctrl+,`, then choose **Built-in action types → Paste a Windows
+Press `Ctrl+,`, then choose **Create action → Paste a Windows
 credential** to create a permanent personal action. The action stores only an exact target
 from the **Windows Credentials** or **Generic Credentials** section of
 Credential Manager; it never stores the username or password.
@@ -825,6 +863,8 @@ The `Company Reference Prefixes` sheet documents known Archive and ServiceNow pr
 - `data/local_work_item_sources.json`: ignored machine-local Work Item sources.
 - `data/local_work_item_metadata.json`: ignored personal Work Item tags.
 - `data/local_work_item_settings.json`: ignored generic Excel template path.
+- `data/local_text_action_source.txt`: ignored default source offered when
+  creating a personal text-file transformation.
 - `data/cheatsheets`: reviewed cheat sheets shared through Git.
 - `data/context-palette.log*`: ignored bounded local diagnostics.
 

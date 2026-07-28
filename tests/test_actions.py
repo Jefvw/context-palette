@@ -24,6 +24,7 @@ from context_palette.actions import (
     copy_text_action,
     open_url_action,
     edited_copy_text_action,
+    ensure_default_text_action_file,
     execute_action,
     expand_template,
     load_actions,
@@ -31,7 +32,10 @@ from context_palette.actions import (
     list_to_sql_values,
     load_combined_actions,
     open_action_target,
+    replace_text_file_from_preview,
+    save_text_file_preview_as,
     search_actions,
+    transform_text_file,
     transform_text,
     update_action,
     validate_credential_target,
@@ -774,18 +778,51 @@ class ActionTests(unittest.TestCase):
         with self.assertRaisesRegex(ActionError, "too long"):
             validate_windows_target("x" * 32_768)
 
-    def test_open_windows_target_uses_windows_shell_execute(self):
+    def test_open_windows_target_omits_unset_shell_execute_options(self):
+        targets = (
+            "vscode://file/c:/work/project/",
+            (
+                "onenote:https://d.docs.live.net/example/Documents/"
+                "Quick%20Notes.one#LINK&page-id={PAGE}&end"
+            ),
+            "shell:AppsFolder",
+            "file:///C:/work/project/read%20me.txt",
+            r"C:\work\project\read me.txt",
+        )
+
+        for target in targets:
+            action = Action(
+                f"open-{len(target)}",
+                "Open target",
+                "General",
+                "open_windows_target",
+                target,
+            )
+            with (
+                self.subTest(target=target),
+                patch.object(os, "startfile", create=True) as startfile,
+            ):
+                open_action_target(action)
+
+            startfile.assert_called_once_with(target, "open")
+
+    def test_open_windows_target_passes_arguments_without_working_folder(self):
         action = Action(
             "open-code",
             "Open VS Code",
             "General",
             "open_windows_target",
             "vscode://file/c:/work/project/",
+            arguments=("--reuse-window",),
         )
         with patch.object(os, "startfile", create=True) as startfile:
             open_action_target(action)
 
-        startfile.assert_called_once_with(action.value, "open", None, None)
+        startfile.assert_called_once_with(
+            action.value,
+            "open",
+            arguments=subprocess.list2cmdline(action.arguments),
+        )
 
     def test_open_windows_target_passes_arguments_and_working_folder(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -804,8 +841,8 @@ class ActionTests(unittest.TestCase):
         startfile.assert_called_once_with(
             r"C:\Tools\script.cmd",
             "open",
-            subprocess.list2cmdline(action.arguments),
-            directory,
+            arguments=subprocess.list2cmdline(action.arguments),
+            cwd=directory,
         )
 
     def test_open_windows_target_decodes_existing_local_target_and_working_folder(self):
@@ -830,8 +867,7 @@ class ActionTests(unittest.TestCase):
         startfile.assert_called_once_with(
             str(target),
             "open",
-            None,
-            str(working_directory),
+            cwd=str(working_directory),
         )
 
     def test_open_windows_target_leaves_relative_target_for_its_working_folder(self):
@@ -853,8 +889,7 @@ class ActionTests(unittest.TestCase):
         startfile.assert_called_once_with(
             action.value,
             "open",
-            None,
-            str(working_directory),
+            cwd=str(working_directory),
         )
 
     def test_open_windows_target_reports_unavailable_target(self):
@@ -1086,6 +1121,174 @@ class ActionTests(unittest.TestCase):
                 action_type="transform_text",
                 value="keep_lines_containing",
             )
+
+    def test_file_text_transform_requires_an_existing_source_when_configured(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.txt"
+            source.write_text("CONFIDENTIAL\nKeep", encoding="utf-8", newline="")
+            action = configured_action(
+                title="Clean recurring export",
+                context="General",
+                action_type="transform_file_text",
+                value=str(source),
+                arguments=("literal_replace", "CONFIDENTIAL\n", ""),
+            )
+
+            self.assertEqual(action.value, str(source))
+            self.assertEqual(
+                action.arguments,
+                ("literal_replace", "CONFIDENTIAL\n", ""),
+            )
+
+            with self.assertRaisesRegex(ActionError, "does not exist"):
+                configured_action(
+                    title="Missing export",
+                    context="General",
+                    action_type="transform_file_text",
+                    value=str(source.with_name("missing.txt")),
+                    arguments=("uppercase",),
+                )
+
+    def test_file_text_transform_previews_without_changing_utf8_bom_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.txt"
+            original = b"\xef\xbb\xbfAlpha\r\nbeta\r\n"
+            source.write_bytes(original)
+            action = Action(
+                "uppercase-file",
+                "Uppercase file",
+                "General",
+                "transform_file_text",
+                str(source),
+                arguments=("uppercase",),
+            )
+            copied: list[str] = []
+            previews = []
+
+            message = execute_action(
+                action,
+                clipboard_setter=copied.append,
+                file_preview_setter=previews.append,
+            )
+
+            self.assertEqual(source.read_bytes(), original)
+            self.assertEqual(previews[0].result, "ALPHA\r\nBETA\r\n")
+            self.assertEqual(copied, [previews[0].result])
+            self.assertEqual(previews[0].bom, b"\xef\xbb\xbf")
+            self.assertIn("original is unchanged", message)
+
+    def test_file_text_transform_uses_catalogue_parameters(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.txt"
+            source.write_text("one\r\ntwo", encoding="utf-8", newline="")
+
+            preview = transform_text_file(
+                str(source),
+                ("prefix_suffix_lines", "[", "]"),
+            )
+
+            self.assertEqual(preview.result, "[one]\r\n[two]")
+
+    def test_file_text_transform_keeps_detected_line_ending_style(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.json"
+            source.write_text(
+                '{\r\n"name":"Context Palette"\r\n}',
+                encoding="utf-8",
+                newline="",
+            )
+
+            preview = transform_text_file(str(source), ("json_pretty",))
+
+            self.assertIn("\r\n", preview.result)
+            self.assertNotIn("\n", preview.result.replace("\r\n", ""))
+
+    def test_file_text_preview_replacement_is_atomic_and_preserves_encoding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.txt"
+            source.write_bytes(b"\xff\xfeA\x00l\x00p\x00h\x00a\x00\r\x00\n\x00")
+            preview = transform_text_file(str(source), ("uppercase",))
+
+            updated = replace_text_file_from_preview(preview, preview.result)
+
+            self.assertEqual(
+                source.read_bytes(),
+                b"\xff\xfeA\x00L\x00P\x00H\x00A\x00\r\x00\n\x00",
+            )
+            self.assertNotEqual(updated.source_digest, preview.source_digest)
+            self.assertFalse(any(source.parent.glob(f".{source.name}.*.tmp")))
+
+    def test_file_text_preview_refuses_to_replace_changed_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.txt"
+            source.write_text("Alpha", encoding="utf-8", newline="")
+            preview = transform_text_file(str(source), ("uppercase",))
+            source.write_text("Changed elsewhere", encoding="utf-8", newline="")
+
+            with self.assertRaisesRegex(ActionError, "changed after the preview"):
+                replace_text_file_from_preview(preview, preview.result)
+
+            self.assertEqual(
+                source.read_text(encoding="utf-8"),
+                "Changed elsewhere",
+            )
+
+    def test_file_text_preview_can_save_reviewed_result_as_another_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.txt"
+            destination = Path(directory) / "reviewed.txt"
+            source.write_text("Alpha", encoding="utf-8", newline="")
+            preview = transform_text_file(str(source), ("uppercase",))
+
+            save_text_file_preview_as(preview, destination, "Reviewed")
+
+            self.assertEqual(source.read_text(encoding="utf-8"), "Alpha")
+            self.assertEqual(destination.read_text(encoding="utf-8"), "Reviewed")
+
+    def test_file_text_transform_rejects_binary_content(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.bin"
+            source.write_bytes(b"plain\x00binary")
+
+            with self.assertRaisesRegex(ActionError, "binary data"):
+                transform_text_file(str(source), ("uppercase",))
+
+    def test_saved_file_text_action_can_load_while_source_is_temporarily_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            actions_path = Path(directory) / "actions.json"
+            missing_source = Path(directory) / "offline" / "source.txt"
+            actions_path.write_text(
+                json.dumps(
+                    {
+                        "actions": [
+                            {
+                                "id": "offline-source",
+                                "title": "Clean offline source",
+                                "type": "transform_file_text",
+                                "value": str(missing_source),
+                                "arguments": ["uppercase"],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            loaded = load_actions(actions_path)
+
+            self.assertEqual(loaded[0].value, str(missing_source))
+            with self.assertRaisesRegex(ActionError, "does not exist"):
+                execute_action(loaded[0])
+
+    def test_default_text_action_file_is_created_without_overwriting_content(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "private" / "default.txt"
+
+            self.assertEqual(ensure_default_text_action_file(source), source)
+            source.write_text("Keep me", encoding="utf-8")
+            ensure_default_text_action_file(source)
+
+            self.assertEqual(source.read_text(encoding="utf-8"), "Keep me")
 
     def test_workspace_template_updates_output_and_clipboard(self):
         copied = []

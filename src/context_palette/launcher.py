@@ -2241,6 +2241,7 @@ class LauncherApp:
     def _execute_action(self, action: Action) -> None:
         destination = self.source_foreground_handle
         self.source_foreground_handle = None
+        workspace_component = getattr(self, "workspace_component", None)
         try:
             message = execute_action(
                 action,
@@ -2250,6 +2251,11 @@ class LauncherApp:
                 selected_text=self._workspace_text() or self.captured_selection,
                 input_text=self._workspace_text(),
                 output_setter=self._set_workspace_text,
+                file_preview_setter=(
+                    workspace_component.show_file_preview
+                    if workspace_component is not None
+                    else None
+                ),
                 credential_paster=lambda selected: self._paste_credential_action(
                     selected,
                     destination,
@@ -2599,6 +2605,32 @@ class LauncherApp:
         if action.type == "build_url_selection_open":
             selected = self._workspace_text() or self.captured_selection or "(no input available)"
             return f"Selected ID: {selected}\nCopy URL and open it:\n{action.value}"
+        if action.type == "transform_file_text":
+            operation = (
+                WORKSPACE_TRANSFORMS.get(action.arguments[0])
+                if action.arguments
+                else None
+            )
+            lines = [
+                f"Read text file:\n{action.value}",
+                (
+                    "Operation: "
+                    + operation.label.rstrip("…")
+                    if operation is not None
+                    else "Operation: unavailable"
+                ),
+            ]
+            if operation is not None:
+                for label, argument in zip(
+                    operation.parameter_labels,
+                    action.arguments[1:],
+                ):
+                    lines.append(f"{label}: {argument or '(empty)'}")
+            lines.append(
+                "The result is shown in Input / Output. "
+                "The source changes only after explicit replacement."
+            )
+            return "\n".join(lines)
         if action.type == "transform_list_csv":
             mode = "quoted SQL strings" if action.value == "sql_strings" else "comma-separated values"
             return f"Transform Input / Output lines into {mode}.\nThe result replaces the field and is copied."

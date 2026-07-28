@@ -26,7 +26,7 @@ class DocumentationNavigationTests(unittest.TestCase):
         self.assertIn("press `Ctrl+,`, then open **Actions**", help_document)
         self.assertIn("Choose **Configure**", help_document)
         self.assertIn(
-            "Press `Ctrl+,`, then choose **Built-in action types",
+            "Press `Ctrl+,`, then choose **Create action",
             help_document,
         )
         self.assertNotIn("Configure >", help_document)

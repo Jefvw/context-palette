@@ -6,13 +6,24 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from context_palette.action_types import ACTION_TYPES, SUPPORTED_ACTION_TYPES, render_action_type_overview
+from context_palette.action_types import (
+    ACTION_TYPES,
+    CREATABLE_ACTION_TYPES,
+    SUPPORTED_ACTION_TYPES,
+    render_action_type_overview,
+)
 
 
 class ActionTypeCatalogueTests(unittest.TestCase):
     def test_catalogue_covers_every_supported_action_type(self):
         self.assertEqual(set(ACTION_TYPES), SUPPORTED_ACTION_TYPES)
-        self.assertEqual(len(ACTION_TYPES), 15)
+        self.assertEqual(len(ACTION_TYPES), 16)
+
+    def test_new_action_catalogue_hides_legacy_workspace_transform_types(self):
+        self.assertIn("transform_file_text", CREATABLE_ACTION_TYPES)
+        self.assertNotIn("transform_text", CREATABLE_ACTION_TYPES)
+        self.assertNotIn("transform_list_csv", CREATABLE_ACTION_TYPES)
+        self.assertNotIn("transform_slashes", CREATABLE_ACTION_TYPES)
 
     def test_every_definition_has_user_and_ai_adaptation_metadata(self):
         for action_type, definition in ACTION_TYPES.items():

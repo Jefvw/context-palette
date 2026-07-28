@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk
+from pathlib import Path
+from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Callable
 
-from .actions import ActionError, transform_text
+from .actions import (
+    ActionError,
+    TextFileTransformPreview,
+    replace_text_file_from_preview,
+    save_text_file_preview_as,
+    transform_text,
+)
 from .workspace_transforms import WORKSPACE_TRANSFORM_GROUPS, WorkspaceTransform
 
 
@@ -80,6 +87,32 @@ class WorkspacePanel:
             text="Selection, clipboard, and transformation workspace",
             style="Muted.TLabel",
         ).pack(side=tk.LEFT, padx=(8, 0))
+
+        self.file_preview: TextFileTransformPreview | None = None
+        self.file_preview_frame = ttk.Frame(self.frame)
+        self.file_preview_path_var = tk.StringVar()
+        ttk.Label(
+            self.file_preview_frame,
+            textvariable=self.file_preview_path_var,
+            style="Muted.TLabel",
+            wraplength=430,
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(
+            self.file_preview_frame,
+            text="Replace original…",
+            command=self.replace_preview_source,
+        ).pack(side=tk.RIGHT)
+        ttk.Button(
+            self.file_preview_frame,
+            text="Save as…",
+            command=self.save_preview_as,
+        ).pack(side=tk.RIGHT, padx=(0, 6))
+        ttk.Button(
+            self.file_preview_frame,
+            text="Dismiss",
+            command=self.clear_file_preview,
+            style="Compact.TButton",
+        ).pack(side=tk.RIGHT, padx=(0, 6))
 
         body = ttk.Frame(self.frame)
         body.pack(fill=tk.BOTH, expand=True)
@@ -168,8 +201,101 @@ class WorkspacePanel:
         return self.text.get("1.0", "end-1c").strip()
 
     def set_text(self, value: str) -> None:
+        self.clear_file_preview()
+        self._replace_text(value)
+
+    def _replace_text(self, value: str) -> None:
         self.text.delete("1.0", tk.END)
         self.text.insert("1.0", value)
+
+    def show_file_preview(self, preview: TextFileTransformPreview) -> None:
+        self.file_preview = preview
+        self._replace_text(preview.result)
+        self.file_preview_path_var.set(
+            f"Preview from {preview.source_path} — original unchanged"
+        )
+        if not self.file_preview_frame.winfo_manager():
+            self.file_preview_frame.pack(
+                fill=tk.X,
+                pady=(0, 5),
+                before=self.text.master,
+            )
+
+    def clear_file_preview(self) -> None:
+        self.file_preview = None
+        if self.file_preview_frame.winfo_manager():
+            self.file_preview_frame.pack_forget()
+        self.file_preview_path_var.set("")
+
+    def replace_preview_source(self) -> None:
+        preview = self.file_preview
+        if preview is None:
+            return
+        if not messagebox.askyesno(
+            "Replace original text file?",
+            "Replace the original file with the current Input / Output text?\n\n"
+            f"{preview.source_path}\n\n"
+            "Context Palette will refuse if another program changed the file "
+            "after this preview was created.",
+            parent=self.text.winfo_toplevel(),
+        ):
+            return
+        try:
+            self.file_preview = replace_text_file_from_preview(
+                preview,
+                self.raw_text(),
+            )
+        except ActionError as exc:
+            messagebox.showerror(
+                "Original file was not replaced",
+                str(exc),
+                parent=self.text.winfo_toplevel(),
+            )
+            return
+        self.file_preview_path_var.set(
+            f"Saved to {preview.source_path} — preview is current"
+        )
+        self.status_setter(f"Replaced original text file: {preview.source_path}")
+
+    def save_preview_as(self) -> None:
+        preview = self.file_preview
+        if preview is None:
+            return
+        selected = filedialog.asksaveasfilename(
+            parent=self.text.winfo_toplevel(),
+            title="Save transformed text as",
+            initialdir=str(preview.source_path.parent),
+            initialfile=preview.source_path.name,
+            confirmoverwrite=True,
+            filetypes=(
+                ("Text files", "*.txt *.csv *.tsv *.json *.md *.xml *.sql *.log"),
+                ("All files", "*.*"),
+            ),
+        )
+        if not selected:
+            return
+        try:
+            updated_preview = save_text_file_preview_as(
+                preview,
+                Path(selected),
+                self.raw_text(),
+            )
+        except ActionError as exc:
+            messagebox.showerror(
+                "Transformed text was not saved",
+                str(exc),
+                parent=self.text.winfo_toplevel(),
+            )
+            return
+        if updated_preview is not None:
+            self.file_preview = updated_preview
+            self.file_preview_path_var.set(
+                f"Saved to {preview.source_path} — preview is current"
+            )
+        self.status_setter(f"Saved transformed text as: {selected}")
+
+    def raw_text(self) -> str:
+        return self.text.get("1.0", "end-1c")
 
     def select_all(self, _event: tk.Event | None = None) -> str:
         self.text.tag_add(tk.SEL, "1.0", "end-1c")

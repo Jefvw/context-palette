@@ -4,6 +4,24 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Made every action create/edit form vertically scrollable while keeping
+  **Create/Save action** and **Cancel** fixed at the bottom. Mouse-wheel
+  scrolling works across normal fields, and keyboard focus automatically
+  reveals fields reached with Tab on short or high-DPI screens.
+- Added preview-first **Transform a text file** actions. A guided action selects
+  one existing source file plus any shared text operation, then reads and
+  transforms it into Input / Output without changing the original. The source
+  strip offers guarded **Replace original…**, **Save as…**, and **Dismiss**;
+  replacement preserves encoding, BOM, and line endings, writes atomically,
+  and refuses when the source changed after preview. New actions receive an
+  ignored machine-local default text file. The configuration tab is now
+  **Create action**, while older Input / Output transformation action types
+  remain editable and executable without being offered for new creation.
+- Fixed Windows-target actions without optional arguments, including
+  `onenote:`, `vscode:`, `shell:`, file URIs, associated documents, and plain
+  paths. Unset ShellExecute options are now omitted instead of being passed as
+  invalid `None` arguments; argument-only, working-folder-only, and combined
+  launches remain supported.
 - Made action search consistent between the launcher, Configure Actions, and
   every Configure action picker. Stable IDs, readable and technical types,
   General context, targets or saved values, arguments, and working folders are
@@ -34,8 +52,8 @@ This project has not published a versioned release. Changes are recorded under *
   case-insensitive line filtering, custom split/join delimiters, blank-line
   cleanup, six naming styles, JSON formatting/minification, URL
   encoding/decoding, SQL quote escaping, and Windows path/file-URI conversion.
-  Every operation is also available through the guided reusable **Transform
-  text** action type, including readable parameter fields and action previews.
+  The same catalogue supplies readable operations and parameter fields for
+  preview-first text-file actions.
 - Replaced the Markdown viewer's generic Browser button with a direct **Edge**
   button. It finds Microsoft Edge across `PATH` and standard user/system
   installations, then opens the current validated local Markdown file for the

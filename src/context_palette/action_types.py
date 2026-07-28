@@ -14,6 +14,7 @@ class ActionTypeDefinition:
     input_description: str
     output_description: str
     portability: str
+    creatable: bool = True
     ai_proposable: bool = False
     ai_guidance: str = ""
 
@@ -32,6 +33,7 @@ def _definition(
     output_description: str,
     portability: str,
     *,
+    creatable: bool = True,
     ai_proposable: bool = False,
     ai_guidance: str = "",
 ) -> ActionTypeDefinition:
@@ -45,6 +47,7 @@ def _definition(
         input_description=input_description,
         output_description=output_description,
         portability=portability,
+        creatable=creatable,
         ai_proposable=ai_proposable,
         ai_guidance=ai_guidance,
     )
@@ -184,39 +187,57 @@ ACTION_TYPES = {
             "Portable when the URL template is suitable for sharing.",
         ),
         _definition(
+            "transform_file_text",
+            "↻",
+            "Transform a text file",
+            "Text file",
+            "Read one configured text file, apply a chosen operation, and show the result for review.",
+            "Reads the configured existing local text file when the action runs.",
+            "Shows the transformed text in Input / Output and copies it; the source remains unchanged until explicitly replaced.",
+            "The source path is normally machine-local. Relative paths can be portable when every computer uses the same project layout.",
+        ),
+        _definition(
             "transform_list_csv",
             "⇄",
-            "Convert lines to a list",
-            "Transformation",
+            "Convert Input / Output lines to a list",
+            "Input / Output transformation",
             "Convert workspace lines into a comma-separated plain or SQL string list.",
             "Reads Input / Output text.",
             "Replaces Input / Output and clipboard text.",
             "Portable; operation is constrained by the application.",
+            creatable=False,
         ),
         _definition(
             "transform_text",
             "✎",
-            "Transform text",
-            "Transformation",
+            "Transform Input / Output",
+            "Input / Output transformation",
             "Apply a chosen reusable text operation with guided parameters.",
             "Reads Input / Output text.",
             "Replaces Input / Output and clipboard text.",
             "Portable; operations are implemented by Context Palette.",
+            creatable=False,
         ),
         _definition(
             "transform_slashes",
             "／",
-            "Convert path slashes",
-            "Transformation",
+            "Convert Input / Output path slashes",
+            "Input / Output transformation",
             "Replace every forward slash with a backslash, or every backslash with a forward slash.",
             "Reads Input / Output text.",
             "Replaces Input / Output and clipboard text.",
             "Portable; operation is constrained by the application.",
+            creatable=False,
         ),
     )
 }
 
 SUPPORTED_ACTION_TYPES = frozenset(ACTION_TYPES)
+CREATABLE_ACTION_TYPES = {
+    action_type: definition
+    for action_type, definition in ACTION_TYPES.items()
+    if definition.creatable
+}
 
 
 def render_action_type_overview() -> str:
@@ -251,6 +272,8 @@ def render_action_type_overview() -> str:
             "## AI guidance boundary",
             "",
             "AI-proposable types use the shared request safety rules plus their catalogue-specific guidance. An enabled type creates a validated permanent local action after confirmation. Types marked **Not yet** remain available for ordinary actions but cannot be proposed through the Inbox AI workflow.",
+            "",
+            "The **Create action** catalogue can omit compatibility-only types. Those types remain loadable and editable so existing saved actions keep their behavior.",
             "",
         )
     )

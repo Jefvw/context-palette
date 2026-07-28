@@ -17,9 +17,10 @@ and retrieve it quickly in a chosen focus context.
 | Global pins and focus-context slots | Implemented | Machine-local pins 1–5 are directly assignable in Configure; context slots 6–9 follow the selected Focus |
 | Guided configuration | Implemented | Actions, pinned slots, contexts, and Quick actions use My configuration or Built-in ownership; one Standard group distributes Built-in actions through direct commands and up to three nested menu levels while personal groups own the remaining editable area |
 | Confirm → Active → Archived | Implemented | Creation and editing are permanent after confirmation; archiving is represented in data but has limited UI |
-| Explicit action execution | Implemented | Fifteen allow-listed types with standard icons, including user-owned Windows targets and reusable text operations |
+| Explicit action execution | Implemented | Sixteen allow-listed types with standard icons, including user-owned Windows targets and preview-first text-file transformations |
 | Protected credential paste | Implemented with limitations | Exact standard Windows or generic credential target; confirmed, hotkey-originated paste only |
 | Input / Output transformations | Implemented | Selection or full field; result copied; includes filtering, delimiters, naming styles, JSON, URL/SQL encoding, file URIs, and path slashes |
+| Text-file transformations | Implemented | One configured existing local text source; result is reviewed in Input / Output; guarded explicit replace or save-as preserves encoding and refuses stale overwrites |
 | Cheat sheets and promotion | Implemented | Structured local JSON sheets |
 | Attended AI assistance | Partial | Reviewable stored prompt templates and manual clipboard handoff; `copy_text` and `open_url` proposals only |
 | Context model | Partial | General root, per-PC context-owned action membership, tags, explicit focus, preferred actions; Developing Context Palette is the only shipped specific context |

@@ -144,8 +144,10 @@ Important principles:
 - Windows target actions pass one configured target, optional structured
   arguments, and an optional working folder to `os.startfile()`/ShellExecute.
   Registered protocols, file URIs, drive paths, documents, and associated
-  scripts are deliberately accepted. The action preview makes clear that the
-  target can execute code and is not sandboxed.
+  scripts are deliberately accepted. Unset optional ShellExecute parameters are
+  omitted rather than passed as `None`, matching Python's real Windows API
+  contract. The action preview makes clear that the target can execute code and
+  is not sandboxed.
 - Local file, folder, application, Windows-target, and working-folder paths
   resolve the literal configured value first. When that target is unavailable,
   a percent-decoded path or decoded `file:` URI is accepted if it resolves to
@@ -165,7 +167,9 @@ Important principles:
 
 Defines the machine-readable catalogue for every supported action type: icon,
 user label, family, description, required fields, input/output effects,
-portability, AI eligibility, and type-specific AI guidance. `actions.py`
+portability, new-action visibility, AI eligibility, and type-specific AI
+guidance. Supported legacy types can remain loadable and editable while the
+Create action catalogue omits them. `actions.py`
 derives its supported-type set and compact row icon from this catalogue, and AI
 prompt generation consumes the same definitions.
 
@@ -176,7 +180,7 @@ The catalogue renders `docs/ACTION_TYPES.md`; an automated test requires the use
 Defines the ordered, user-facing catalogue for Input / Output transformations:
 menu groups, labels, operation keys, completion feedback, and readable
 parameter definitions. The workspace menu and guided reusable action editor
-both consume this catalogue, while the launcher renders action previews
+for text files both consume this catalogue, while the launcher renders action previews
 without duplicating operation names. The launcher renders its Transform menu
 from this catalogue instead of repeating every command in the UI orchestrator.
 Pure transformation algorithms and validation remain in `actions.py`.
@@ -185,9 +189,11 @@ Pure transformation algorithms and validation remain in `actions.py`.
 
 Owns the complete Input / Output UI component: text widget, edit and Transform
 menus, selection-first replacement, undo boundaries, prefix/suffix prompting,
-clipboard copy and replacement, and transformation feedback. It depends on
-small injected callbacks for clipboard access, status messages, and tooltip
-registration. `launcher.py` retains compatibility delegates for action
+clipboard copy and replacement, transformation feedback, and file-transform
+preview provenance. A file preview exposes explicit replace, save-as, and
+dismiss commands; ordinary workspace replacement clears that provenance. It
+depends on small injected callbacks for clipboard access, status messages, and
+tooltip registration. `launcher.py` retains compatibility delegates for action
 execution and integration flows, but no longer owns workspace widget mechanics.
 
 ### `action_discovery_panel.py`
@@ -280,6 +286,11 @@ Action creation and editing refresh every Configure view derived from actions,
 including pins, context and Quick-action summaries, and diagnostics. Action
 creation routes owned by other launcher windows reload an already-open
 Configure workspace from storage without raising or replacing that window.
+All action-type editors use one vertically scrollable canvas body with a fixed
+save/cancel footer. The embedded form tracks the canvas width, recomputes its
+scroll region when operation-specific fields change, handles mouse-wheel input
+without stealing scrolling from multiline text widgets or comboboxes, and
+brings a newly focused field into view for keyboard traversal.
 
 Configure list tables use the shared `treeview_utils.py` scrollable-tree
 builder. Actions, contexts, Quick actions, Work Item sources, and discovered
@@ -744,8 +755,13 @@ The current allow-list includes:
 - `build_url_copy`
 - `build_url_open`
 - `build_url_selection_open`
+- `transform_file_text`
 - `transform_list_csv`
+- `transform_text`
+- `transform_slashes`
 - `workspace_template`
+- `ai_prompt`
+- `open_windows_target`
 
 Action types that cause external effects use constrained implementations.
 `launch_app`, for example, accepts an existing absolute `.exe`, fixed argument
@@ -767,6 +783,7 @@ captured_selection
 Input / Output workspace <---- Paste / manual edit
         |
         +-- transformation -> replace workspace + copy result
+        +-- file-transform preview -> review/edit -> replace source or save as
         +-- URL builder -> consume workspace -> copy/open URL
         `-- saved-text action -> clipboard -> fresh captured destination, or manual-paste fallback
 
@@ -786,12 +803,24 @@ warning logging, and dispatch failures retain their exception at error level.
 
 Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `workspace_panel.py` owns selection ranges, one-step Undo grouping, clipboard updates, and menus. The launcher injects clipboard and status callbacks and retains orchestration delegates. Action explanations and application status share a slim bottom communication line.
 
-The generic `transform_text` action persists one catalogue operation key and
-only that operation's ordered parameters. Configure presents readable
-operation and parameter labels; technical keys remain internal. Literal
-replacement intentionally preserves an empty replacement. Invalid JSON,
-delimiters, paths, file URIs, and parameter counts fail before replacing the
-workspace.
+The legacy generic `transform_text` action persists one catalogue operation key
+and only that operation's ordered parameters. It remains loadable and editable
+for compatibility but is no longer offered for new actions. New
+`transform_file_text` actions persist a source path plus the shared catalogue
+operation and its ordered parameters. Configure requires an existing decodable
+text file when creating or editing one; loading remains tolerant when a
+machine-local source is temporarily unavailable.
+
+Execution reads at most 10 MiB, detects common Unicode BOMs plus ordinary
+Windows text encoding, preserves exact decoded line endings, and rejects likely
+binary content. It puts the transformed result in Input / Output without
+writing the source. The preview retains the resolved path, source-byte hash,
+encoding, and BOM. Explicit replacement rechecks that hash and writes through a
+temporary sibling plus `os.replace`; a stale preview cannot overwrite a source
+changed by another program. Save-as uses the same encoding-preserving atomic
+writer. Literal replacement intentionally preserves an empty replacement.
+Invalid JSON, delimiters, paths, file URIs, and parameter counts fail before
+replacing the workspace or source file.
 
 The transformation menu groups deterministic operations into Case, Whitespace,
 and Lines. Line operations preserve the detected line-ending style and final

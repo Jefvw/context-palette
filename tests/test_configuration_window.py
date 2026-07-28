@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import tempfile
 import tkinter as tk
+from tkinter import ttk
 import unittest
 from unittest.mock import Mock, patch
 
@@ -1337,6 +1338,103 @@ class ConfigurationDialogTests(unittest.TestCase):
             for child in root.winfo_children():
                 child.destroy()
             root.destroy()
+
+    def test_file_transform_dialog_saves_source_operation_and_parameters(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.txt"
+            source.write_text("Alpha", encoding="utf-8")
+            root = tk.Tk()
+            root.withdraw()
+            saved: list[Action] = []
+            try:
+                dialog = ActionDialog(
+                    root,
+                    "transform_file_text",
+                    [],
+                    lambda action: saved.append(action) or True,
+                    context_names=["General"],
+                    default_text_file_path=source,
+                )
+                root.update_idletasks()
+                uppercase_label = next(
+                    label
+                    for label, operation in dialog.transform_operation_choices.items()
+                    if operation == "uppercase"
+                )
+                dialog.title_var.set("Uppercase recurring export")
+                dialog.transform_operation_var.set(uppercase_label)
+                dialog._render_transform_parameters()
+
+                dialog._save()
+
+                self.assertEqual(len(saved), 1)
+                self.assertEqual(saved[0].value, str(source))
+                self.assertEqual(saved[0].arguments, ("uppercase",))
+            finally:
+                for child in root.winfo_children():
+                    child.destroy()
+                root.destroy()
+
+    def test_action_dialog_scrolls_fields_and_keeps_footer_visible(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.txt"
+            source.write_text("Alpha", encoding="utf-8")
+            root = tk.Tk()
+            root.geometry("1x1+0+0")
+            try:
+                dialog = ActionDialog(
+                    root,
+                    "transform_file_text",
+                    [],
+                    lambda _action: True,
+                    context_names=["General", "Mail"],
+                    choose_destination=True,
+                    default_text_file_path=source,
+                )
+                dialog.window.geometry("700x480")
+                root.update()
+                dialog.form_canvas.yview_moveto(0.0)
+                root.update_idletasks()
+
+                self.assertEqual(dialog.form_scrollbar.winfo_manager(), "pack")
+                self.assertTrue(dialog.window.bind("<FocusIn>"))
+                self.assertTrue(dialog.window.bind("<MouseWheel>"))
+                self.assertLess(
+                    dialog.form_canvas.yview()[1],
+                    1.0,
+                    "The constrained form should have scrollable content.",
+                )
+                self.assertLessEqual(
+                    dialog.controls_frame.winfo_y()
+                    + dialog.controls_frame.winfo_height(),
+                    dialog.controls_frame.master.winfo_height(),
+                )
+
+                dialog._scroll_form(
+                    Mock(widget=dialog.form_canvas, delta=-120)
+                )
+                root.update()
+                self.assertGreater(dialog.form_canvas.yview()[0], 0.0)
+
+                parameter_entries = [
+                    child
+                    for child in dialog.transform_parameters_frame.winfo_children()
+                    if isinstance(child, ttk.Entry)
+                ]
+                self.assertTrue(parameter_entries)
+                parameter_entries[-1].focus_set()
+                dialog._show_form_widget(parameter_entries[-1])
+                root.update()
+                self.assertLessEqual(
+                    parameter_entries[-1].winfo_rooty()
+                    + parameter_entries[-1].winfo_height(),
+                    dialog.form_canvas.winfo_rooty()
+                    + dialog.form_canvas.winfo_height(),
+                )
+            finally:
+                for child in root.winfo_children():
+                    child.destroy()
+                root.destroy()
 
     def test_context_dialog_stays_open_when_save_callback_fails(self) -> None:
         dialog = ContextDialog.__new__(ContextDialog)

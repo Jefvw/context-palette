@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
 import re
 from typing import Callable
@@ -14,6 +14,7 @@ from .actions import (
     append_action,
     configured_action,
     edited_configured_action,
+    ensure_default_text_action_file,
     load_combined_actions,
     update_action,
     validate_context_memberships,
@@ -23,7 +24,7 @@ from .action_deletion import (
     delete_action_and_references,
     inspect_action_references,
 )
-from .action_types import ACTION_TYPES
+from .action_types import ACTION_TYPES, CREATABLE_ACTION_TYPES
 from .action_picker import ActionPickerField, ActionPickerOption
 from .command_surface import (
     CommandGroup,
@@ -88,6 +89,7 @@ ACTION_TYPE_EXAMPLES = {
     "build_url_copy": "Example: Ask for ABC 123 and copy https://example.com/items/ABC%20123.",
     "build_url_open": "Example: Ask for ABC 123 and open its generated website address.",
     "build_url_selection_open": "Example: Use selected text ABC 123, copy its URL, and open it.",
+    "transform_file_text": "Example: Reformat a recurring UTF-8 JSON or text export and review it before replacing the file.",
     "transform_list_csv": "Example: Convert three input lines into red, green, blue.",
     "transform_text": "Example: Keep only lines containing invoice, format JSON, or convert names to snake_case.",
     "transform_slashes": r"Example: Convert C:/work/project into C:\work\project.",
@@ -96,6 +98,7 @@ ACTION_TYPE_EXAMPLES = {
 LOCAL_DESTINATION = "My configuration"
 PROJECT_DESTINATION = "Built-in"
 EMPTY_PIN_LABEL = "Not assigned"
+DEFAULT_TEXT_ACTION_FILENAME = "local_text_action_source.txt"
 BUILT_IN_ACTION_SCOPE_NOTE = (
     "Built-in configuration lists Built-in actions only. To use a My "
     "configuration action, add or edit a My configuration context or "
@@ -542,7 +545,7 @@ class ConfigurationWindow:
         )
         ttk.Button(
             controls,
-            text="Create from built-in type",
+            text="Create action",
             command=lambda: notebook.select(1),
             style="Accent.TButton",
         ).pack(side=tk.LEFT)
@@ -587,12 +590,12 @@ class ConfigurationWindow:
 
     def _build_types_tab(self, notebook: ttk.Notebook) -> None:
         tab = ttk.Frame(notebook, padding=10)
-        notebook.add(tab, text="Built-in action types", underline=16)
+        notebook.add(tab, text="Create action", underline=4)
         panes = ttk.Panedwindow(tab, orient=tk.HORIZONTAL)
         panes.pack(fill=tk.BOTH, expand=True)
-        self.type_ids = list(ACTION_TYPES)
+        self.type_ids = list(CREATABLE_ACTION_TYPES)
         self.type_list = tk.Listbox(panes, exportselection=False, width=30)
-        for definition in ACTION_TYPES.values():
+        for definition in CREATABLE_ACTION_TYPES.values():
             self.type_list.insert(tk.END, definition.display_label)
         panes.add(self.type_list, weight=1)
         detail = ttk.Frame(panes, padding=(12, 0, 0, 0))
@@ -606,7 +609,7 @@ class ConfigurationWindow:
         self.type_detail.configure(state=tk.DISABLED)
         create_button = ttk.Button(
             detail,
-            text="Create action from this type",
+            text="Create this action",
             command=self._create_action,
             style="Accent.TButton",
         )
@@ -861,13 +864,30 @@ class ConfigurationWindow:
     def _create_action(self) -> None:
         selected = self.type_list.curselection()
         if selected:
+            action_type = self.type_ids[selected[0]]
+            default_text_file_path: Path | None = None
+            if action_type == "transform_file_text":
+                try:
+                    default_text_file_path = ensure_default_text_action_file(
+                        self.local_actions_path.with_name(
+                            DEFAULT_TEXT_ACTION_FILENAME
+                        )
+                    )
+                except ActionError as exc:
+                    messagebox.showerror(
+                        "Could not prepare the default text file",
+                        str(exc),
+                        parent=self.window,
+                    )
+                    return
             ActionDialog(
                 self.window,
-                self.type_ids[selected[0]],
+                action_type,
                 self.actions,
                 self._save_action,
                 context_names=[context.name for context in self.contexts],
                 choose_destination=True,
+                default_text_file_path=default_text_file_path,
             )
 
     def _save_action(
@@ -1250,6 +1270,11 @@ class ConfigurationWindow:
             lambda edited: self._save_edited_action(edited, target_path),
             action=action,
             context_names=[context.name for context in self.contexts],
+            default_text_file_path=(
+                self.local_actions_path.with_name(DEFAULT_TEXT_ACTION_FILENAME)
+                if action.type == "transform_file_text"
+                else None
+            ),
         )
 
     def _save_edited_action(self, action: Action, target_path: Path) -> bool:
@@ -1943,11 +1968,13 @@ class ActionDialog:
         action: Action | None = None,
         context_names: list[str] | None = None,
         choose_destination: bool = False,
+        default_text_file_path: Path | None = None,
     ) -> None:
         self.action_type = action_type
         self.action = action
         self.on_save = on_save
         self.choose_destination = choose_destination
+        self.default_text_file_path = default_text_file_path
         self.context_names = tuple(context_names or ())
         definition = ACTION_TYPES[action_type]
         self.window = tk.Toplevel(parent)
@@ -1960,22 +1987,55 @@ class ActionDialog:
         configure_standard_window(self.window)
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
-        controls = ttk.Frame(outer)
-        controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
+        self.controls_frame = ttk.Frame(outer)
+        self.controls_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
         ttk.Button(
-            controls,
+            self.controls_frame,
             text="Save action" if action else "Create action",
             command=self._save,
             style="Accent.TButton",
         ).pack(side=tk.LEFT)
-        ttk.Button(controls, text="Cancel", command=self.window.destroy).pack(side=tk.RIGHT)
+        ttk.Button(
+            self.controls_frame,
+            text="Cancel",
+            command=self.window.destroy,
+        ).pack(side=tk.RIGHT)
+
+        form_host = ttk.Frame(outer)
+        form_host.pack(fill=tk.BOTH, expand=True)
+        self.form_canvas = tk.Canvas(
+            form_host,
+            borderwidth=0,
+            highlightthickness=0,
+            background=self.window.cget("background"),
+            takefocus=False,
+        )
+        self.form_scrollbar = ttk.Scrollbar(
+            form_host,
+            orient=tk.VERTICAL,
+            command=self.form_canvas.yview,
+        )
+        self.form_canvas.configure(yscrollcommand=self.form_scrollbar.set)
+        self.form_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.form_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.form_frame = ttk.Frame(self.form_canvas)
+        self.form_window_id = self.form_canvas.create_window(
+            (0, 0),
+            window=self.form_frame,
+            anchor=tk.NW,
+        )
+        self.form_frame.bind("<Configure>", self._update_form_scrollregion)
+        self.form_canvas.bind("<Configure>", self._resize_form_width)
+        self.window.bind("<MouseWheel>", self._scroll_form, add="+")
+        self.window.bind("<FocusIn>", self._keep_focused_field_visible, add="+")
+        form = self.form_frame
         ttk.Label(
-            outer,
+            form,
             text=definition.display_label,
             style="Heading.TLabel",
         ).pack(anchor=tk.W)
         ttk.Label(
-            outer,
+            form,
             text=(
                 f"{definition.description}\n{definition.output_description}\n"
                 f"{ACTION_TYPE_EXAMPLES[action_type]}"
@@ -1984,7 +2044,7 @@ class ActionDialog:
         ).pack(anchor=tk.W, pady=(2, 6))
         self.destination_var = tk.StringVar(value=LOCAL_DESTINATION)
         if choose_destination:
-            _destination_field(outer, self.destination_var)
+            _destination_field(form, self.destination_var)
         self.title_var = tk.StringVar(value=action.title if action else "")
         self.description_var = tk.StringVar(
             value=action.description if action else ""
@@ -2002,17 +2062,17 @@ class ActionDialog:
             value=action.working_directory or "" if action else ""
         )
         title_entry = _entry(
-            outer,
+            form,
             "Short name (shown in action lists)",
             self.title_var,
         )
         _entry(
-            outer,
+            form,
             "Description (optional; searchable, shown in Action info)",
             self.description_var,
         )
         self.context_field = ContextMembershipField(
-            outer,
+            form,
             self.contexts_var,
             self.context_names,
             label="Specific contexts (optional; General always includes it)",
@@ -2020,7 +2080,7 @@ class ActionDialog:
         known_contexts = specific_context_names(self.context_names)
         if known_contexts:
             ttk.Label(
-                outer,
+                form,
                 text="Choose one or more defined contexts, or type their names separated by commas.",
                 style="Muted.TLabel",
                 wraplength=610,
@@ -2030,13 +2090,13 @@ class ActionDialog:
             key=str.casefold,
         )
         self.tag_field = TagSelectionField(
-            outer,
+            form,
             self.tags_var,
             known_tags,
         )
         if known_tags:
             ttk.Label(
-                outer,
+                form,
                 text="Choose tags already in use, or type new tags separated by commas.",
                 style="Muted.TLabel",
                 wraplength=610,
@@ -2047,21 +2107,26 @@ class ActionDialog:
             "open_file": "File path",
             "open_folder": "Folder path", "launch_app": "Application .exe path",
             "paste_credential": "Exact Windows or generic credential target name",
+            "transform_file_text": "Source text file and operation",
             "transform_list_csv": "Conversion mode: csv or sql_strings",
             "transform_text": "Text operation",
             "transform_slashes": (
                 "Conversion mode: forward_to_back or back_to_forward"
             ),
         }.get(action_type, "Saved text or URL template")
-        ttk.Label(outer, text=label).pack(anchor=tk.W, pady=(8, 0))
+        ttk.Label(form, text=label).pack(anchor=tk.W, pady=(8, 0))
         self.transform_operation_choices: dict[str, str] = {}
         self.transform_parameter_vars: list[tk.StringVar] = []
         self.transform_parameters_frame: ttk.Frame | None = None
         self.value: tk.Text | None = None
-        if action_type == "transform_text":
-            self._build_transform_fields(outer, action)
+        if action_type in {"transform_text", "transform_file_text"}:
+            self._build_transform_fields(
+                form,
+                action,
+                file_source=action_type == "transform_file_text",
+            )
         else:
-            self.value = tk.Text(outer, height=7, wrap=tk.WORD, undo=True)
+            self.value = tk.Text(form, height=7, wrap=tk.WORD, undo=True)
             self.value.pack(fill=tk.BOTH, expand=True, pady=(2, 0))
             if action:
                 self.value.insert("1.0", action.value)
@@ -2074,17 +2139,120 @@ class ActionDialog:
             elif action_type in {"build_url_copy", "build_url_open", "build_url_selection_open"}:
                 self.value.insert("1.0", "https://example.com/items/{id_url}")
         if action_type in {"launch_app", "open_windows_target"}:
-            _entry(outer, "Arguments, one per line (optional)", self.arguments_var)
-            _entry(outer, "Working folder (optional)", self.working_directory_var)
+            _entry(form, "Arguments, one per line (optional)", self.arguments_var)
+            _entry(form, "Working folder (optional)", self.working_directory_var)
         self.window.transient(parent)
         self.window.grab_set()
         _focus_entry(self.window, title_entry)
+
+    def _update_form_scrollregion(self, _event: tk.Event | None = None) -> None:
+        bounds = self.form_canvas.bbox("all")
+        if bounds is not None:
+            self.form_canvas.configure(scrollregion=bounds)
+
+    def _resize_form_width(self, event: tk.Event) -> None:
+        self.form_canvas.itemconfigure(
+            self.form_window_id,
+            width=max(1, int(event.width)),
+        )
+
+    def _scroll_form(self, event: tk.Event) -> str | None:
+        if isinstance(event.widget, (tk.Text, tk.Listbox, ttk.Combobox)):
+            return None
+        first, last = self.form_canvas.yview()
+        if first <= 0.0 and last >= 1.0:
+            return None
+        direction = -1 if int(event.delta) > 0 else 1
+        visible_fraction = max(0.0, last - first)
+        maximum_start = max(0.0, 1.0 - visible_fraction)
+        self.form_canvas.yview_moveto(
+            max(0.0, min(first + direction * 0.08, maximum_start))
+        )
+        return "break"
+
+    def _keep_focused_field_visible(self, event: tk.Event) -> None:
+        widget = event.widget
+        if not self._is_form_widget(widget):
+            return
+        self.window.after_idle(
+            lambda focused=widget: self._show_form_widget(focused)
+        )
+
+    def _is_form_widget(self, widget: tk.Misc) -> bool:
+        current: tk.Misc | None = widget
+        while current is not None:
+            if current is self.form_frame:
+                return True
+            if current is self.window:
+                return False
+            current = getattr(current, "master", None)
+        return False
+
+    def _show_form_widget(self, widget: tk.Misc) -> None:
+        try:
+            if not widget.winfo_exists() or not self._is_form_widget(widget):
+                return
+            self.form_canvas.update_idletasks()
+            viewport_height = self.form_canvas.winfo_height()
+            content_bounds = self.form_canvas.bbox("all")
+            if viewport_height <= 1 or content_bounds is None:
+                return
+            content_height = max(1, content_bounds[3] - content_bounds[1])
+            widget_top = widget.winfo_rooty() - self.form_frame.winfo_rooty()
+            widget_bottom = widget_top + widget.winfo_height()
+            viewport_top = self.form_canvas.canvasy(0)
+            viewport_bottom = viewport_top + viewport_height
+            padding = 8
+            target_top: float | None = None
+            if widget_top < viewport_top + padding:
+                target_top = widget_top - padding
+            elif widget_bottom > viewport_bottom - padding:
+                target_top = widget_bottom - viewport_height + padding
+            if target_top is not None:
+                maximum_top = max(0, content_height - viewport_height)
+                self.form_canvas.yview_moveto(
+                    max(0.0, min(float(target_top), maximum_top))
+                    / content_height
+                )
+        except tk.TclError:
+            return
 
     def _build_transform_fields(
         self,
         parent: ttk.Frame,
         action: Action | None,
+        *,
+        file_source: bool = False,
     ) -> None:
+        self.transform_file_path_var: tk.StringVar | None = None
+        if file_source:
+            default_path = (
+                action.value
+                if action
+                else str(self.default_text_file_path or "")
+            )
+            self.transform_file_path_var = tk.StringVar(value=default_path)
+            path_row = ttk.Frame(parent)
+            path_row.pack(fill=tk.X, pady=(2, 6))
+            path_entry = ttk.Entry(
+                path_row,
+                textvariable=self.transform_file_path_var,
+            )
+            path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            ttk.Button(
+                path_row,
+                text="Browse…",
+                command=self._choose_transform_file,
+            ).pack(side=tk.RIGHT, padx=(6, 0))
+            ttk.Label(
+                parent,
+                text=(
+                    "The file must exist. Running the action reads it again and "
+                    "shows a reviewable result without changing the source."
+                ),
+                style="Muted.TLabel",
+                wraplength=610,
+            ).pack(anchor=tk.W, pady=(0, 6))
         for group in WORKSPACE_TRANSFORM_GROUPS:
             for transform in group.transforms:
                 self.transform_operation_choices[
@@ -2095,8 +2263,13 @@ class ActionDialog:
             for label, operation in self.transform_operation_choices.items()
         }
         operation = (
-            action.value
-            if action and action.value in WORKSPACE_TRANSFORMS
+            action.arguments[0]
+            if file_source
+            and action
+            and action.arguments
+            and action.arguments[0] in WORKSPACE_TRANSFORMS
+            else action.value
+            if not file_source and action and action.value in WORKSPACE_TRANSFORMS
             else "literal_replace"
         )
         self.transform_operation_var = tk.StringVar(
@@ -2116,8 +2289,32 @@ class ActionDialog:
             lambda _event: self._render_transform_parameters(),
         )
         self._render_transform_parameters(
-            tuple(action.arguments) if action else (),
+            tuple(action.arguments[1:])
+            if file_source and action
+            else tuple(action.arguments)
+            if action
+            else (),
         )
+
+    def _choose_transform_file(self) -> None:
+        assert self.transform_file_path_var is not None
+        current = Path(self.transform_file_path_var.get()).expanduser()
+        selected = filedialog.askopenfilename(
+            parent=self.window,
+            title="Choose source text file",
+            initialdir=str(
+                current.parent
+                if current.parent.is_dir()
+                else Path.home()
+            ),
+            initialfile=current.name if current.name else "",
+            filetypes=(
+                ("Text files", "*.txt *.csv *.tsv *.json *.md *.xml *.sql *.log"),
+                ("All files", "*.*"),
+            ),
+        )
+        if selected:
+            self.transform_file_path_var.set(selected)
 
     def _selected_transform_operation(self) -> str:
         return self.transform_operation_choices[self.transform_operation_var.get()]
@@ -2155,11 +2352,18 @@ class ActionDialog:
                 _comma_separated(self.contexts_var.get()),
                 self.context_names,
             )
-            if self.action_type == "transform_text":
-                value = self._selected_transform_operation()
-                arguments = [
+            if self.action_type in {"transform_text", "transform_file_text"}:
+                operation = self._selected_transform_operation()
+                parameters = [
                     variable.get() for variable in self.transform_parameter_vars
                 ]
+                if self.action_type == "transform_file_text":
+                    assert self.transform_file_path_var is not None
+                    value = self.transform_file_path_var.get()
+                    arguments = [operation, *parameters]
+                else:
+                    value = operation
+                    arguments = parameters
             else:
                 assert self.value is not None
                 value = self.value.get("1.0", "end-1c")
