@@ -4,6 +4,11 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Made multi-PC setup reject and safely rebuild virtual environments that lack
+  pip, while requiring every discovered base Python to provide both pip and
+  Tkinter. Windows setup tests now distinguish an installed but incompatible
+  Python from a usable candidate and ignore inherited machine-local overrides
+  when testing the no-Python failure path.
 - Made every action create/edit form vertically scrollable while keeping
   **Create/Save action** and **Cancel** fixed at the bottom. Mouse-wheel
   scrolling works across normal fields, and keyboard focus automatically

@@ -41,7 +41,7 @@ confirms creation; Archived actions remain outside normal retrieval. See
 ## Requirements
 
 - Windows 10 or Windows 11.
-- Python 3.12 or newer 3.x with Tcl/Tk support.
+- Python 3.12 or newer 3.x with pip and Tcl/Tk support.
 - A user-writable folder; administrator rights are not required.
 
 The application primarily uses the Python standard library and Tkinter. Its
@@ -78,10 +78,11 @@ The tracked `.python-version` declares the minimum supported Python family;
 `requirements.txt` and the setup scripts complete the portable environment
 recipe. The ignored `.venv` is a disposable local result.
 Setup detects an environment from another repository location, an unavailable
-base installation, or the wrong Python family. It preserves a failed environment
-as `.venv-unusable*` and recreates it only after a compatible base Python can
-run and validate the repair path. If neither Python can launch, setup leaves
-`.venv` untouched and asks for a normal Windows retry or Python repair.
+base installation, the wrong Python family, or a missing pip installation. It
+preserves a failed environment as `.venv-unusable*` and recreates it only after
+a compatible base Python with pip and Tkinter can run and validate the repair
+path. If no compatible Python can launch, setup leaves `.venv` untouched and
+asks for a normal Windows retry or Python repair.
 Personal Context Palette data lives outside `.venv` and is not removed during
 repair. Existing environments are adopted by writing an ignored
 repository-location marker on their first successful setup.

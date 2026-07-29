@@ -35,6 +35,11 @@ loaded inside the viewer.
 
 Multi-PC cloning, GitHub publishing, portable paths, and shared/local data are
 documented in [Multi-PC development](MULTI_PC_DEVELOPMENT.md).
+Each development computer creates its own ignored `.venv` by running
+`setup-context-palette.bat` or `develop-context-palette.bat`. Setup accepts
+Python 3.12 or newer 3.x only when pip and Tkinter are available; it preserves
+an incompatible local environment as `.venv-unusable*` before rebuilding.
+Personal Context Palette data is stored outside `.venv`.
 
 Power Automate Desktop setup is documented in
 [Power Automate integration](../integrations/README.md).

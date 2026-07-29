@@ -26,6 +26,7 @@ class WindowsScriptTests(unittest.TestCase):
             "minimum=tuple(map(int, os.environ['PYTHON_VERSION'].split('.')))",
             script,
         )
+        self.assertIn("import os, pathlib, pip, sys, tkinter", script)
         self.assertIn("actual[0] == minimum[0] and actual >= minimum", script)
         self.assertIn("marker_matches=not marker.exists()", script)
         self.assertIn('> ".venv\\.context-palette-root" echo %CD%', script)
@@ -91,6 +92,7 @@ class WindowsScriptTests(unittest.TestCase):
             environment["PROGRAMFILES(X86)"] = str(
                 root / "missing-program-files-x86"
             )
+            environment.pop("CONTEXT_PALETTE_PYTHON", None)
 
             result = subprocess.run(
                 [
@@ -189,6 +191,7 @@ class WindowsScriptTests(unittest.TestCase):
             environment["PROGRAMFILES(X86)"] = str(
                 root / "missing-program-files-x86"
             )
+            environment.pop("CONTEXT_PALETTE_PYTHON", None)
 
             result = subprocess.run(
                 [
@@ -270,6 +273,16 @@ class WindowsScriptTests(unittest.TestCase):
         )
         if not standard_python.exists():
             self.skipTest("Python 3.12 is not installed in the per-user location")
+        compatibility = subprocess.run(
+            [standard_python, "-c", "import pip, tkinter"],
+            capture_output=True,
+            timeout=15,
+            check=False,
+        )
+        if compatibility.returncode:
+            self.skipTest(
+                "Per-user Python 3.12 does not provide both pip and Tkinter"
+            )
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -307,6 +320,72 @@ class WindowsScriptTests(unittest.TestCase):
                 result.stdout,
             )
             self.assertTrue((root / ".venv" / "Scripts" / "python.exe").exists())
+
+    @unittest.skipUnless(os.name == "nt", "Windows batch behavior")
+    def test_setup_rebuilds_an_existing_environment_without_pip(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "setup-context-palette.bat").write_text(
+                (ROOT / "setup-context-palette.bat").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (root / ".python-version").write_text("3.12\n", encoding="utf-8")
+            subprocess.run(
+                [
+                    sys._base_executable,
+                    "-m",
+                    "venv",
+                    "--without-pip",
+                    str(root / ".venv"),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=True,
+            )
+            environment = os.environ.copy()
+            environment["PATH"] = ""
+            environment["CONTEXT_PALETTE_PYTHON"] = sys._base_executable
+
+            result = subprocess.run(
+                [
+                    os.environ.get("COMSPEC", r"C:\Windows\System32\cmd.exe"),
+                    "/d",
+                    "/c",
+                    "setup-context-palette.bat",
+                    "--skip-tests",
+                ],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=45,
+                check=False,
+            )
+
+            self.assertIn(
+                "Preserved the old environment as .venv-unusable.",
+                result.stdout,
+            )
+            self.assertTrue(
+                (root / ".venv-unusable" / "Scripts" / "python.exe").exists()
+            )
+            pip_check = subprocess.run(
+                [
+                    root / ".venv" / "Scripts" / "python.exe",
+                    "-c",
+                    "import pip",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+            self.assertEqual(
+                pip_check.returncode,
+                0,
+                msg=f"stdout:\n{pip_check.stdout}\nstderr:\n{pip_check.stderr}",
+            )
 
     @unittest.skipUnless(os.name == "nt", "Windows batch behavior")
     def test_setup_moves_failed_venv_only_after_base_python_is_confirmed(
@@ -358,8 +437,8 @@ class WindowsScriptTests(unittest.TestCase):
     def test_setup_checks_real_interpreters_in_fallback_order(self) -> None:
         script = (ROOT / "setup-context-palette.bat").read_text(encoding="utf-8")
 
-        preferred = 'py -!PYTHON_VERSION! -c "import sys, tkinter"'
-        path_fallback = 'python -c "import os, sys, tkinter;'
+        preferred = 'py -!PYTHON_VERSION! -c "import pip, sys, tkinter"'
+        path_fallback = 'python -c "import os, pip, sys, tkinter;'
 
         self.assertLess(script.index(preferred), script.index(path_fallback))
         self.assertIn("EnableDelayedExpansion", script)

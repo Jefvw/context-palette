@@ -1517,3 +1517,24 @@ clear repeated-work workflow while retaining one operation catalogue.
 Preview-before-write and stale-source detection make the external file effect
 explicit and prevent silent overwrites. A new action type avoids changing the
 meaning of existing saved actions or requiring a data migration.
+
+## 2026-07-29 - Require pip in portable environment validation
+
+**Decision:** Treat both existing virtual environments and base-Python
+candidates as compatible only when they meet the tracked Python baseline and
+can import pip and Tkinter. Preserve and rebuild an otherwise runnable
+environment when pip is absent. Make Windows setup tests isolate inherited
+machine overrides and test standard installation candidates for actual
+compatibility rather than executable existence.
+
+**Reason:** A Codex-provided Python runtime can create a runnable Tkinter
+environment with `--without-pip`. The former health check accepted that
+environment and failed only when dependency installation began. Separately, a
+standard per-user Python executable may exist without optional Tcl/Tk support,
+so its path alone does not prove that setup should select it.
+
+**Consequences:** Every development computer follows the same explicit
+Python-version, pip, and Tkinter contract. Incompatible machine-local
+environments remain recoverable through the existing non-destructive
+`.venv-unusable*` flow, and environment-specific installations no longer cause
+false setup-test failures.
