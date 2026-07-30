@@ -17,7 +17,7 @@ from .harvest import (
     normalize_url_for_comparison,
     update_candidate_values,
 )
-from .window_geometry import configure_standard_window
+from .window_geometry import configure_standard_window, place_child_window
 
 
 class HarvestWindow:
@@ -46,7 +46,7 @@ class HarvestWindow:
 
         self.window = tk.Toplevel(parent)
         self.window.title("Harvest actions")
-        configure_standard_window(self.window)
+        configure_standard_window(self.window, parent)
         self.window.geometry("900x700")
         self.window.minsize(760, 560)
         self.window.protocol("WM_DELETE_WINDOW", self._close)
@@ -89,6 +89,7 @@ class HarvestWindow:
         self._build_candidates(panes)
 
         self.window.transient(parent)
+        place_child_window(self.window, parent, size=(900, 700))
         self.window.lift()
         self.window.after_idle(self.add_documents)
 
@@ -588,7 +589,7 @@ class HarvestWindow:
             return
         preview = tk.Toplevel(self.window)
         preview.title("Harvest action preview")
-        configure_standard_window(preview)
+        configure_standard_window(preview, self.window)
         def close_preview() -> None:
             preview.destroy()
             self.window.after_idle(self.candidate_tree.focus_set)

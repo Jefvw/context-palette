@@ -34,7 +34,7 @@ class AIGuidanceWindow:
 
         self.window = tk.Toplevel(parent)
         self.window.title("Ask AI for Action Proposals")
-        configure_standard_window(self.window)
+        configure_standard_window(self.window, parent)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
 
         outer = ttk.Frame(self.window, padding=12)

@@ -89,6 +89,10 @@ version.
 - Start once with `run-context-palette.bat`.
 - Press `F9` or `Ctrl+Alt+P` to capture the current text selection and show the resident palette. On laptops in media-key mode, use `Fn+F9` or enable Fn Lock.
 - The palette uses the mouse cursor position at shortcut time as its top-left corner. Near a monitor edge it shifts only as far as needed to keep the complete window visible.
+- Configuration, Help, action editors, pickers, Sheets, AI, Inbox, Harvest, and
+  Work Item windows open relative to their owner and stay inside the usable
+  area of the monitor containing the main palette. Moving the main palette to
+  another monitor before opening a window moves that window policy with it.
 - Press `Esc`, click `Hide`, or close the window to hide it.
 - Press `Ctrl+L` or `Ctrl+K` to return keyboard focus to Find.
 - Press `Ctrl+I` to capture clipboard text, `Ctrl+,` to open Configure, or `F1` to open Help.

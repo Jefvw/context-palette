@@ -25,6 +25,7 @@ from .work_item_storage import (
     work_item_metadata_key,
 )
 from .treeview_utils import scrollable_tree
+from .window_geometry import place_child_window
 
 
 class WorkItemsConfigurationPanel:
@@ -502,6 +503,7 @@ class SourceDialog:
         self.name.trace_add("write", self._suggest_id)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
         self.window.bind("<Return>", lambda _event: self._save())
+        place_child_window(self.window, parent)
         self.window.after_idle(self.name_entry.focus_set)
 
     def _field(self, parent: ttk.Frame, label: str, variable: tk.StringVar) -> ttk.Entry:
@@ -564,6 +566,7 @@ class TagDialog:
         ttk.Button(controls, text="Cancel", command=self.window.destroy).pack(side=tk.RIGHT, padx=(0, 6))
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
         self.window.bind("<Return>", lambda _event: self._save())
+        place_child_window(self.window, parent)
         entry.focus_set()
 
     def _save(self) -> None:
@@ -623,6 +626,7 @@ class CreateWorkItemDialog:
         self.final_name.trace_add("write", self._update_preview)
         self._update_suggestion()
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
+        place_child_window(self.window, parent)
         self.window.after_idle(self.subject_entry.focus_set)
 
     def _row(self, parent: ttk.Frame, label: str) -> ttk.Frame:

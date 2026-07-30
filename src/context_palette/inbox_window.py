@@ -55,7 +55,7 @@ class InboxWindow:
         self.on_harvest = on_harvest
         self.window = tk.Toplevel(parent)
         self.window.title("Context Palette Inbox")
-        configure_standard_window(self.window)
+        configure_standard_window(self.window, parent)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
 
         outer = ttk.Frame(self.window, padding=12)
@@ -228,7 +228,7 @@ class ActionCreator:
         self.context_names = tuple(context_names)
         self.window = tk.Toplevel(parent)
         self.window.title("Create Action")
-        configure_standard_window(self.window)
+        configure_standard_window(self.window, parent)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
 
         tags = sorted(

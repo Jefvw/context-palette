@@ -4,6 +4,10 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Kept application child windows on the monitor containing the main palette.
+  Standard dialogs center relative to their owning window, compact selection
+  popups stay near their invoking control, and every child is clamped to that
+  monitor's usable work area, including negative-coordinate displays.
 - Made multi-PC setup reject and safely rebuild virtual environments that lack
   pip, while requiring every discovered base Python to provide both pip and
   Tkinter. Windows setup tests now distinguish an installed but incompatible

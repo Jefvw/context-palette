@@ -897,7 +897,7 @@ class LauncherApp:
     def _show_action_info_dialog(self) -> None:
         window = tk.Toplevel(self.root)
         window.title("Context Palette information")
-        configure_standard_window(window)
+        configure_standard_window(window, self.root)
         outer = ttk.Frame(window, padding=10)
         outer.pack(fill=tk.BOTH, expand=True)
         close_button = ttk.Button(outer, text="Close", command=window.destroy)

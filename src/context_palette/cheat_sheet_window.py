@@ -38,7 +38,7 @@ class CheatSheetWindow:
         self.search_var.trace_add("write", lambda *_args: self._refresh_items())
         self.window = tk.Toplevel(parent)
         self.window.title("Context Palette Cheat Sheets")
-        configure_standard_window(self.window)
+        configure_standard_window(self.window, parent)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
 
         outer = ttk.Frame(self.window, padding=12)

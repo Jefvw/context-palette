@@ -685,10 +685,16 @@ additional exact tag filter.
 This separation allows visual simplification without losing retrieval power.
 
 Secondary application screens share a `780x600` default and `700x480` minimum
-through `window_geometry.py`. The main window keeps the same `780` width but
-uses available monitor height up to `1000` pixels, while retaining a compact
-screen-aware minimum. Hotkey placement reduces an oversized window before
-clamping it into the cursor monitor's work area.
+through `window_geometry.py`. Every application child resolves the Windows work
+area of the monitor containing the main Tk root. Standard dialogs center on
+their owning top-level and clamp completely into that work area; compact
+selection popups remain anchored to their control, move above it when needed,
+and use the same clamp. Auto-sized Work Item dialogs and the larger Harvest
+window use the same policy. Native menus and widget tooltips retain their
+control-anchored placement paths. The main window keeps the same `780` width
+but uses available monitor height up to `1000` pixels, while retaining a
+compact screen-aware minimum. Hotkey placement reduces an oversized window
+before clamping it into the cursor monitor's work area.
 
 The main content is a user-adjustable vertical split: approximately 52% for
 action discovery and 48% for Input / Output. The ratio scales with window

@@ -1554,3 +1554,20 @@ an unrelated F5 reset to leave the mode. Single-launcher groups also spent a
 full extra row repeating context already conveyed by the launcher. Reversible
 state and one label per compact group make both areas easier to understand
 while preserving menu structure and direct-row group identity.
+
+## 2026-07-30 - Anchor application children to the main-window monitor
+
+**Decision:** Resolve the Windows work area from the monitor containing the
+main Tk root whenever an application child opens. Center full dialogs on their
+owning top-level, keep compact selection popups below or above their invoking
+control, reduce an oversized child when necessary, and clamp the result inside
+that work area. Route fixed-size application windows and auto-sized Work Item
+dialogs through the shared geometry policy. Leave native menus and widget
+tooltips on their existing control-anchored paths.
+
+**Reason:** Tk ownership and `transient` establish stacking relationships but
+do not reliably choose the parent's monitor. Size-only geometry allowed Windows
+to place configuration and editor windows on another display, while the tag
+picker could extend beyond an edge. One main-monitor policy makes window
+placement predictable across mixed layouts and supports monitors whose desktop
+coordinates are negative.

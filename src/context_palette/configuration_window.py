@@ -346,7 +346,7 @@ class ConfigurationWindow:
 
         self.window = tk.Toplevel(parent)
         self.window.title("Configure Context Palette")
-        configure_standard_window(self.window)
+        configure_standard_window(self.window, parent)
         self.window.bind("<Escape>", self._close_on_plain_escape)
         self.window.bind("<KeyPress>", self._handle_configure_keypress, add="+")
         outer = ttk.Frame(self.window, padding=12)
@@ -1984,7 +1984,7 @@ class ActionDialog:
             if action
             else f"Create action · {definition.display_label}"
         )
-        configure_standard_window(self.window)
+        configure_standard_window(self.window, parent)
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
         self.controls_frame = ttk.Frame(outer)
@@ -2416,7 +2416,7 @@ class ContextDialog:
             if context
             else "Add context"
         )
-        configure_standard_window(self.window)
+        configure_standard_window(self.window, parent)
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
         _dialog_buttons(outer, self._save, self.window.destroy)
@@ -2624,7 +2624,7 @@ class GroupDialog:
         self.window.title(
             "Edit Quick-action group" if group else "Add Quick-action group"
         )
-        configure_standard_window(self.window)
+        configure_standard_window(self.window, parent)
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
         _dialog_buttons(outer, self._save, self.window.destroy)
@@ -2876,7 +2876,7 @@ class ButtonDialog:
             if item
             else "Add menu level"
         )
-        configure_standard_window(self.window)
+        configure_standard_window(self.window, parent)
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
         _dialog_buttons(outer, self._save, self.window.destroy)

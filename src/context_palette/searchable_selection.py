@@ -4,6 +4,8 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Callable, Iterable
 
+from .window_geometry import place_child_window
+
 
 class SearchableSelectionPopup:
     """Small searchable chooser for a finite set of short labels.
@@ -97,10 +99,10 @@ class SearchableSelectionPopup:
         self.window.after_idle(self.search_entry.focus_set)
 
     def _place_near_owner(self) -> None:
-        self.window.update_idletasks()
-        self.window.geometry(
-            f"+{self.owner.winfo_rootx()}"
-            f"+{self.owner.winfo_rooty() + self.owner.winfo_height()}"
+        place_child_window(
+            self.window,
+            self.owner,
+            below_owner=True,
         )
 
     def _entries(self) -> tuple[str, ...]:

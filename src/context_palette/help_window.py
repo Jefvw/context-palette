@@ -223,7 +223,7 @@ class HelpWindow:
     ) -> None:
         self.window = tk.Toplevel(parent)
         self.window.title(title)
-        configure_standard_window(self.window)
+        configure_standard_window(self.window, parent)
         self.window.resizable(True, True)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
         self.search_var = tk.StringVar()

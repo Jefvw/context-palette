@@ -127,7 +127,7 @@ class ActionPickerDialog:
 
         self.window = tk.Toplevel(parent)
         self.window.title(title)
-        configure_standard_window(self.window)
+        configure_standard_window(self.window, parent)
         self.window.protocol("WM_DELETE_WINDOW", self._close)
         self.window.bind("<Escape>", lambda _event: self._close())
 
