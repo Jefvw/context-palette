@@ -384,6 +384,7 @@ class LauncherApp:
         self.results_container = results_container
         self.workspace_container = workspace_container
         self.main_split_ratio = 0.52
+        self.main_split_customized = False
         self.main_content.bind("<Configure>", self._resize_main_split)
         self.main_content.bind("<ButtonRelease-1>", self._remember_main_split)
         self.root.after_idle(self._set_initial_main_split)
@@ -394,27 +395,51 @@ class LauncherApp:
         if available_height <= 1:
             self.root.after(10, self._set_initial_main_split)
             return
+        self.main_split_customized = False
+        self._sync_main_split(available_height)
+
+    def _resize_main_split(self, event: tk.Event) -> None:
+        if event.height > 1:
+            self._sync_main_split(event.height)
+
+    def _sync_main_split(self, available_height: int | None = None) -> None:
+        height = available_height or self.main_content.winfo_height()
+        if height <= 1:
+            return
+        if self.main_split_customized:
+            ratio = self.main_split_ratio
+        else:
+            ratio = self._compact_action_console_height() / height
         self.main_content.sashpos(
             0,
             bounded_sash_position(
-                available_height,
-                self.main_split_ratio,
+                height,
+                ratio,
                 MINIMUM_ACTION_CONSOLE_HEIGHT,
                 MINIMUM_WORKSPACE_HEIGHT,
             ),
         )
 
-    def _resize_main_split(self, event: tk.Event) -> None:
-        if event.height > 1:
-            self.main_content.sashpos(
-                0,
-                bounded_sash_position(
-                    event.height,
-                    self.main_split_ratio,
-                    MINIMUM_ACTION_CONSOLE_HEIGHT,
-                    MINIMUM_WORKSPACE_HEIGHT,
-                ),
-            )
+    def _compact_action_console_height(self) -> int:
+        """Match the result-list body to the visible action-control stack."""
+        body_offset = max(
+            0,
+            self.actions_list_frame.winfo_rooty()
+            - self.results_container.winfo_rooty(),
+        )
+        control_bottom = max(
+            (
+                child.winfo_y()
+                + max(child.winfo_height(), child.winfo_reqheight())
+                for child in self.actions_tool_rail.winfo_children()
+                if child.winfo_manager()
+            ),
+            default=MINIMUM_ACTION_CONSOLE_HEIGHT,
+        )
+        return max(
+            MINIMUM_ACTION_CONSOLE_HEIGHT,
+            body_offset + control_bottom,
+        )
 
     def _remember_main_split(self, _event: tk.Event) -> None:
         available_height = self.main_content.winfo_height()
@@ -427,6 +452,7 @@ class LauncherApp:
             )
             self.main_content.sashpos(0, position)
             self.main_split_ratio = position / available_height
+            self.main_split_customized = True
 
     def _build_header(self, outer: ttk.Frame) -> None:
 
@@ -558,6 +584,8 @@ class LauncherApp:
             project_codes=self._available_work_project_codes(),
             tags=self._available_work_tags() if enabled else action_tags,
         )
+        if not self.main_split_customized:
+            self.root.after_idle(self._sync_main_split)
         self._sync_filter_indicators()
         if not enabled:
             self.actions_heading_var.set("Actions")
@@ -774,6 +802,8 @@ class LauncherApp:
                 )
             )
             self.action_discovery_panel.set_work_item_mode(False, tags=action_tags)
+            if not self.main_split_customized:
+                self.root.after_idle(self._sync_main_split)
             self._sync_filter_indicators()
         self.captured_selection = None
         self.source_foreground_handle = None

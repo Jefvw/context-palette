@@ -89,6 +89,10 @@ version.
 ## Open and close the palette
 
 - Start once with `run-context-palette.bat`.
+- The main window opens at a compact `780x600` on an ordinary monitor. By
+  default, the action list ends level with its adjacent action buttons and
+  scrolls longer results; drag the divider above Input / Output if you want a
+  different balance for the current session.
 - Press `F9` or `Ctrl+Alt+P` to capture the current text selection and show the resident palette. On laptops in media-key mode, use `Fn+F9` or enable Fn Lock.
 - The palette uses the mouse cursor position at shortcut time as its top-left corner. Near a monitor edge it shifts only as far as needed to keep the complete window visible.
 - Configuration, Help, action editors, pickers, Sheets, AI, Inbox, Harvest, and
@@ -491,15 +495,17 @@ to selected text or the complete field. The normal workflow is: capture or
 enter text, find and apply an action, inspect or refine the result, then copy
 or reuse it.
 
-The main window uses available monitor height without becoming wider. Actions
-and Quick actions receive roughly 52% of the responsive content area and Input
-/ Output receives roughly 48%, keeping both parts of the workflow immediately
-useful. Drag the horizontal divider to adjust that balance. On smaller screens
-the same areas shrink and retain their existing scrolling. Divider movement is
-bounded so neither side can be accidentally collapsed. A fresh application
-start leaves the workspace empty. Reopening the resident palette can show the
-current clipboard or captured selection. Actions can read or replace it. Its
-compact heading explains the field without adding a separate toolbar.
+The main window opens at a compact screen-aware size. The Actions and Quick
+actions area is initially only tall enough for the visible action-control
+stack, so its list scrolls instead of creating empty height. Input / Output
+receives the remaining space. Drag the horizontal divider to adjust that
+balance; the chosen ratio follows later resizing for the current session. On
+smaller screens the same areas shrink and retain their scrolling. Divider
+movement is bounded so neither side can be accidentally collapsed. A fresh
+application start leaves the workspace empty. Reopening the resident palette
+can show the current clipboard or captured selection. Actions can read or
+replace it. Its compact heading explains the field without adding a separate
+toolbar.
 
 Numbered action triggering is deliberately active only while Find has focus. In every other control—including Clipboard / Input / Output, the result list, context selector, and buttons—`1` through `9` do not execute actions. This makes Find the explicit keyboard command mode. Standard text editing remains available in the workspace.
 

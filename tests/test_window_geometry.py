@@ -6,7 +6,6 @@ from unittest.mock import patch
 from context_palette.window_geometry import (
     DEFAULT_WINDOW_HEIGHT,
     DEFAULT_WINDOW_WIDTH,
-    MAXIMUM_MAIN_WINDOW_HEIGHT,
     MINIMUM_WINDOW_HEIGHT,
     MINIMUM_WINDOW_WIDTH,
     centered_window_position,
@@ -103,23 +102,20 @@ class WindowGeometryTests(unittest.TestCase):
         self.assertEqual(window.geometry_value, "592x304")
         self.assertEqual(window.minimum_size, (592, 304))
 
-    def test_main_window_uses_extra_vertical_space_without_growing_wider(self) -> None:
+    def test_main_window_uses_compact_standard_size(self) -> None:
         window = FakeWindow(1920, 1080)
 
         configure_main_window(window)  # type: ignore[arg-type]
 
-        self.assertEqual(window.geometry_value, "780x984")
+        self.assertEqual(window.geometry_value, "780x600")
         self.assertEqual(window.minimum_size, (700, 480))
 
-    def test_main_window_height_is_capped_near_twice_the_original(self) -> None:
+    def test_large_monitor_does_not_inflate_main_window(self) -> None:
         window = FakeWindow(2560, 1440)
 
         configure_main_window(window)  # type: ignore[arg-type]
 
-        self.assertEqual(
-            window.geometry_value,
-            f"780x{MAXIMUM_MAIN_WINDOW_HEIGHT}",
-        )
+        self.assertEqual(window.geometry_value, "780x600")
 
     def test_centered_position_uses_negative_coordinate_monitor(self) -> None:
         position = centered_window_position(

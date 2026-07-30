@@ -190,6 +190,11 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
 1. Start with `run-context-palette.bat`; verify only one resident instance is created.
 2. Press `F9`, then `Ctrl+Alt+P`; verify the palette appears and selected text is captured where the source application permits simulated copy.
 3. Verify `Esc` hides, `Ctrl+L` focuses Find, `Ctrl+,` opens Configure, and `F1` opens Help.
+   On initial display, verify the action list ends level with the bottom of the
+   adjacent action-button stack and longer results scroll. Switch to Work and
+   back, resize the window taller, and verify the compact alignment follows the
+   visible buttons while Input / Output receives the extra height. Drag the
+   divider and verify the manual balance remains adjustable for the session.
 4. Enter Find text, activate type/tag filters and Focus Actions, and put text in
    Input / Output. Press `F5`; verify those transient values clear, Find regains
    focus, and saved Focus, pins, and context slots remain unchanged.

@@ -8,7 +8,6 @@ import tkinter as tk
 
 DEFAULT_WINDOW_WIDTH = 780
 DEFAULT_WINDOW_HEIGHT = 600
-MAXIMUM_MAIN_WINDOW_HEIGHT = 1000
 MINIMUM_WINDOW_WIDTH = 700
 MINIMUM_WINDOW_HEIGHT = 480
 SCREEN_HORIZONTAL_MARGIN = 48
@@ -183,17 +182,5 @@ def configure_standard_window(
 
 
 def configure_main_window(window: tk.Tk) -> None:
-    """Use extra monitor height for the editor-focused main window only."""
-    width, minimum_height = standard_window_size(
-        window.winfo_screenwidth(),
-        window.winfo_screenheight(),
-    )
-    height = max(
-        minimum_height,
-        min(MAXIMUM_MAIN_WINDOW_HEIGHT, window.winfo_screenheight() - SCREEN_VERTICAL_MARGIN),
-    )
-    window.geometry(f"{width}x{height}")
-    window.minsize(
-        min(MINIMUM_WINDOW_WIDTH, width),
-        min(MINIMUM_WINDOW_HEIGHT, height),
-    )
+    """Give the main launcher the same compact screen-aware size as other screens."""
+    configure_standard_window(window)

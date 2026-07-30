@@ -706,24 +706,26 @@ their owning top-level and clamp completely into that work area; compact
 selection popups remain anchored to their control, move above it when needed,
 and use the same clamp. Auto-sized Work Item dialogs and the larger Harvest
 window use the same policy. Native menus and widget tooltips retain their
-control-anchored placement paths. The main window keeps the same `780` width
-but uses available monitor height up to `1000` pixels, while retaining a
-compact screen-aware minimum. Hotkey placement reduces an oversized window
-before clamping it into the cursor monitor's work area.
+control-anchored placement paths. The main window uses the same compact
+screen-aware `780x600` default and `700x480` minimum as other full screens.
+Hotkey placement still reduces an oversized user-resized window before
+clamping it into the cursor monitor's work area.
 
-The main content is a user-adjustable vertical split: approximately 52% for
-action discovery and 48% for Input / Output. The ratio scales with window
-height; after the user moves the divider, their chosen ratio is used for later
-resizing in that session. Sash positions are bounded to keep both panes usable;
-when a display cannot fit both preferred minimums, the available space is
-divided proportionally. Inside the upper area, a responsive horizontal pane
-starts at approximately 44% for the Actions workspace and 56% for the global
-quick-action surface. The Actions workspace owns its heading/count, Find entry,
-numbered scrolling list, and an 88-pixel rail containing the existing
-Passwords, Types, Run, and action-Help controls. The Quick-action side retains
-its vertical menu launchers and independent scrolling. The horizontal pane
-retains a user-adjusted ratio during later resizing and applies the same
-bounded-sash behavior. Fixed bottom action and
+The main content is a user-adjustable vertical split. By default, the action
+area derives its absolute height from the bottom of the visible action-control
+stack, so the scrolling result list ends alongside those buttons and Input /
+Output receives the remaining space. Work Items mode recomputes that compact
+height for its additional controls. After the user moves the divider, their
+chosen ratio is used for later resizing in that session. Sash positions remain
+bounded to keep both panes usable; when a display cannot fit both preferred
+minimums, the available space is divided proportionally. Inside the upper area,
+a responsive horizontal pane starts at approximately 44% for the Actions
+workspace and 56% for the global quick-action surface. The Actions workspace
+owns its heading/count, Find entry, numbered scrolling list, and an 88-pixel
+rail containing Passwords, Work, Types, Tags, Run, and action-Help controls.
+The Quick-action side retains its vertical menu launchers and independent
+scrolling. The horizontal pane retains a user-adjusted ratio during later
+resizing and applies the same bounded-sash behavior. Fixed bottom action and
 status rows remain outside the vertical split, preventing them from being
 displaced. Management buttons use a single compact symbol row with name-first
 tooltips.

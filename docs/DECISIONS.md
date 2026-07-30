@@ -1595,3 +1595,23 @@ records no longer store a duplicate context list. Personal contexts may still
 compose Built-in and personal actions, but Built-in contexts cannot reference
 ignored personal action IDs. Legacy records remain parseable for migration and
 compatibility.
+
+## 2026-07-30 - Size the action list from its controls, not monitor height
+
+**Decision:** Open the main launcher at the compact screen-aware `780x600`
+standard instead of expanding it to the monitor height. Until the user moves
+the vertical divider, set the action area's absolute height from the bottom of
+the currently visible action-control stack. Recompute it when Work mode changes
+that stack, keep both panes bounded, and preserve the existing manual
+ratio-based override after a divider drag.
+
+**Reason:** On a tall display, the former 52% proportional split stretched a
+short scrolling action list far below its adjacent buttons and made the whole
+launcher unnecessarily large. The number of actions does not require visible
+empty height because the list already scrolls.
+
+**Consequences:** Action mode and Work mode remain compact without clipping
+their different controls, Input / Output receives unused vertical space, and a
+user can still enlarge either pane for the current session. This supersedes the
+2026-07-19 choice to consume monitor height by default; the horizontal Actions
+/ Quick actions split and all execution behavior are unchanged.

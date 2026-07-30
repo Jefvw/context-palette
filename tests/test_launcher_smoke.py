@@ -597,7 +597,8 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertTrue(root.winfo_exists())
                     self.assertIsNotNone(app.search_entry)
                     self.assertEqual(root.winfo_width(), 780)
-                    self._assert_balanced_panes(app)
+                    self.assertEqual(root.winfo_height(), 600)
+                    self._assert_compact_action_pane(app)
                     self.assertIs(app.passwords_button.master, app.actions_tool_rail)
                     self.assertIs(app.new_work_item_button.master, app.actions_tool_rail)
                     self.assertIs(app.send_work_item_inbox_button.master, app.actions_tool_rail)
@@ -681,6 +682,7 @@ class LauncherSmokeTests(unittest.TestCase):
                         + app.action_help_button.winfo_height(),
                         app.actions_tool_rail.winfo_height(),
                     )
+                    self._assert_compact_action_pane(app)
                     self.assertEqual(app.work_project_filter_var.get(), "All project codes")
 
                     app._select_work_project_filter("AB9C")
@@ -710,6 +712,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertFalse(app.new_work_item_button.winfo_manager())
                     self.assertFalse(app.send_work_item_inbox_button.winfo_manager())
                     self.assertFalse(app.copy_file_to_work_item_button.winfo_manager())
+                    self._assert_compact_action_pane(app)
 
                     opened_action_ids: list[str] = []
                     original_show_configuration = app._show_configuration
@@ -938,7 +941,7 @@ class LauncherSmokeTests(unittest.TestCase):
 
                     root.geometry("780x600")
                     root.update()
-                    self._assert_balanced_panes(app)
+                    self._assert_compact_action_pane(app)
                     self.assertGreater(app.results_container.winfo_height(), 150)
                     self.assertGreater(app.workspace_container.winfo_height(), 130)
                     root_bottom = root.winfo_rooty() + root.winfo_height()
@@ -1084,7 +1087,11 @@ class LauncherSmokeTests(unittest.TestCase):
 
                     root.geometry("780x1000")
                     root.update()
-                    self._assert_balanced_panes(app)
+                    self._assert_compact_action_pane(app)
+                    self.assertGreater(
+                        app.workspace_container.winfo_height(),
+                        app.results_container.winfo_height(),
+                    )
 
                     pane_height = app.main_content.winfo_height()
                     app.main_content.sashpos(0, int(pane_height * 0.60))
@@ -1107,6 +1114,8 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     app.main_split_ratio = 0.52
                     app._set_initial_main_split()
+                    root.update_idletasks()
+                    self._assert_compact_action_pane(app)
 
                     console_width = app.action_console.winfo_width()
                     app.action_console.sashpos(0, 0)
@@ -1426,12 +1435,17 @@ class LauncherSmokeTests(unittest.TestCase):
             descendants.extend(self._descendants(child, seen))
         return descendants
 
-    def _assert_balanced_panes(self, app: LauncherApp) -> None:
-        action_height = app.results_container.winfo_height()
-        workspace_height = app.workspace_container.winfo_height()
-        action_share = action_height / (action_height + workspace_height)
-        self.assertGreaterEqual(action_share, 0.50)
-        self.assertLessEqual(action_share, 0.55)
+    def _assert_compact_action_pane(self, app: LauncherApp) -> None:
+        control_bottom = max(
+            child.winfo_y() + max(child.winfo_height(), child.winfo_reqheight())
+            for child in app.actions_tool_rail.winfo_children()
+            if child.winfo_manager()
+        )
+        self.assertAlmostEqual(
+            app.actions_list_frame.winfo_height(),
+            control_bottom,
+            delta=4,
+        )
 
 
 if __name__ == "__main__":

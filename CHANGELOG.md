@@ -4,6 +4,11 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Reduced the main launcher to a compact screen-aware `780x600` default. The
+  action list now ends alongside the visible action-control stack instead of
+  expanding with monitor height; Work mode accounts for its extra controls,
+  longer results scroll, Input / Output receives the remaining height, and the
+  divider remains manually adjustable.
 - Synchronized action context membership around one source of truth. Context
   definitions now drive Focus Actions, action search/table metadata, and slot
   membership; every action creation and edit route writes through to those
