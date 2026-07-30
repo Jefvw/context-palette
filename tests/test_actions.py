@@ -113,6 +113,37 @@ class ActionTests(unittest.TestCase):
                 value="not-a-url",
             )
 
+    def test_action_bound_quick_menu_path_round_trips_and_is_limited_to_three_levels(self):
+        action = configured_action(
+            title="Open reports",
+            context="General",
+            action_type="open_folder",
+            value=".",
+            quick_action_path=("Work", "Reports"),
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "actions.json"
+            append_action(path, action)
+            loaded = load_actions(path)
+
+        self.assertEqual(loaded[0].quick_action_path, ("Work", "Reports"))
+        with self.assertRaisesRegex(ActionError, "at most 3 levels"):
+            configured_action(
+                title="Too deep",
+                context="General",
+                action_type="open_folder",
+                value=".",
+                quick_action_path=("One", "Two", "Three", "Four"),
+            )
+        with self.assertRaisesRegex(ActionError, "only for Password, Folder"):
+            configured_action(
+                title="Website",
+                context="General",
+                action_type="open_url",
+                value="https://example.com",
+                quick_action_path=("Work",),
+            )
+
     def test_guided_creation_and_json_loading_reject_invalid_list_conversion_mode(self):
         with self.assertRaisesRegex(ActionError, "csv or sql_strings"):
             configured_action(
@@ -944,22 +975,24 @@ class ActionTests(unittest.TestCase):
         browser_open.assert_not_called()
         self.assertNotIn("secret", str(raised.exception))
 
-    def test_execute_build_url_can_copy_or_open(self):
+    def test_execute_prompted_build_url_copies_and_opens(self):
         copied = []
         opened = []
-        copy_action = Action(
-            "copy-url", "Copy item URL", "Work", "build_url_copy", "https://example.com/{id_url}"
-        )
         open_action = Action(
             "open-url", "Open item URL", "Work", "build_url_open", "https://example.com/{id_url}"
         )
 
-        execute_action(copy_action, input_provider=lambda _prompt: "ABC 12", clipboard_setter=copied.append)
-        execute_action(open_action, input_provider=lambda _prompt: "ABC 12", opener=opened.append)
+        message = execute_action(
+            open_action,
+            input_provider=lambda _prompt: "ABC 12",
+            clipboard_setter=copied.append,
+            opener=opened.append,
+        )
 
         self.assertEqual(copied, ["https://example.com/ABC%2012"])
         self.assertEqual(opened[0].type, "open_url")
         self.assertEqual(opened[0].value, "https://example.com/ABC%2012")
+        self.assertIn("Copied", message)
 
     def test_execute_build_url_from_selection_copies_and_opens(self):
         copied = []
@@ -1446,6 +1479,22 @@ class ActionTests(unittest.TestCase):
                     "title": "Open item",
                     "context": "Work",
                     "type": "build_url_open",
+                    "value": "https://example.com/items/{id_url}",
+                    "state": "Active",
+                }
+            ]
+        )
+
+        self.assertEqual(load_actions(path)[0].type, "build_url_open")
+
+    def test_load_action_maps_legacy_copy_url_to_prompted_copy_and_open(self):
+        path = self._write_actions(
+            [
+                {
+                    "id": "item-url",
+                    "title": "Open item",
+                    "context": "Work",
+                    "type": "build_url_copy",
                     "value": "https://example.com/items/{id_url}",
                     "state": "Active",
                 }

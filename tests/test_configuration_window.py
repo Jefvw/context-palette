@@ -1334,6 +1334,100 @@ class ConfigurationDialogTests(unittest.TestCase):
                 child.destroy()
             root.destroy()
 
+    def test_application_action_dialog_accepts_one_argument_per_line(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            application = Path(directory) / "control.exe"
+            application.write_bytes(b"test")
+            root = tk.Tk()
+            root.withdraw()
+            saved: list[Action] = []
+            try:
+                dialog = ActionDialog(
+                    root,
+                    "launch_app",
+                    [],
+                    lambda action: saved.append(action) or True,
+                    context_names=["General"],
+                )
+                root.update_idletasks()
+                self.assertIsInstance(dialog.arguments_text, tk.Text)
+                dialog.title_var.set("Open Credential Manager")
+                dialog.value.insert("1.0", str(application))
+                dialog.arguments_text.insert(
+                    "1.0",
+                    "/name\nMicrosoft.CredentialManager",
+                )
+
+                dialog._save()
+
+                self.assertEqual(len(saved), 1)
+                self.assertEqual(
+                    saved[0].arguments,
+                    ("/name", "Microsoft.CredentialManager"),
+                )
+            finally:
+                for child in root.winfo_children():
+                    child.destroy()
+                root.destroy()
+
+    def test_action_bound_dialog_saves_nested_quick_menu_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = tk.Tk()
+            root.withdraw()
+            saved: list[Action] = []
+            try:
+                dialog = ActionDialog(
+                    root,
+                    "open_folder",
+                    [],
+                    lambda action: saved.append(action) or True,
+                    context_names=["General"],
+                )
+                root.update_idletasks()
+                dialog.title_var.set("Open reports")
+                dialog.value.insert("1.0", directory)
+                dialog.quick_action_path_var.set("Work > Reports > Monthly")
+
+                dialog._save()
+
+                self.assertEqual(len(saved), 1)
+                self.assertEqual(
+                    saved[0].quick_action_path,
+                    ("Work", "Reports", "Monthly"),
+                )
+            finally:
+                for child in root.winfo_children():
+                    child.destroy()
+                root.destroy()
+
+    def test_action_dialog_uses_compact_inline_fields_and_tooltip_guidance(self) -> None:
+        root = tk.Tk()
+        root.geometry("780x600+0+0")
+        try:
+            dialog = ActionDialog(
+                root,
+                "copy_text",
+                [],
+                lambda _action: True,
+                context_names=["General", "Mail"],
+                choose_destination=True,
+            )
+            root.update()
+
+            self.assertLessEqual(dialog.window.winfo_width(), 700)
+            self.assertLessEqual(dialog.window.winfo_height(), 520)
+            self.assertEqual(dialog.context_field.label.pack_info()["side"], "left")
+            self.assertEqual(dialog.tag_field.label.pack_info()["side"], "left")
+            tooltip_widgets = {tooltip.widget for tooltip in dialog.tooltips}
+            self.assertIn(dialog.destination_field, tooltip_widgets)
+            self.assertIn(dialog.context_field.entry, tooltip_widgets)
+            self.assertIn(dialog.tag_field.entry, tooltip_widgets)
+            self.assertIn(dialog.value, tooltip_widgets)
+        finally:
+            for child in root.winfo_children():
+                child.destroy()
+            root.destroy()
+
     def test_transform_action_dialog_uses_readable_operation_and_parameters(self) -> None:
         root = tk.Tk()
         root.withdraw()
@@ -1420,7 +1514,8 @@ class ConfigurationDialogTests(unittest.TestCase):
                     choose_destination=True,
                     default_text_file_path=source,
                 )
-                dialog.window.geometry("700x480")
+                dialog.window.minsize(1, 1)
+                dialog.window.geometry("700x300")
                 root.update()
                 dialog.form_canvas.yview_moveto(0.0)
                 root.update_idletasks()
@@ -1447,7 +1542,8 @@ class ConfigurationDialogTests(unittest.TestCase):
 
                 parameter_entries = [
                     child
-                    for child in dialog.transform_parameters_frame.winfo_children()
+                    for row in dialog.transform_parameters_frame.winfo_children()
+                    for child in row.winfo_children()
                     if isinstance(child, ttk.Entry)
                 ]
                 self.assertTrue(parameter_entries)

@@ -10,6 +10,7 @@ from .persistence import atomic_write_json
 
 RETIRED_ACTION_TYPES = frozenset({"window_layout", "restore_window_snapshot"})
 RETIRED_ACTION_IDS = frozenset({"developing-arrange-three-explorers"})
+LEGACY_ACTION_TYPE_MIGRATIONS = {"build_url_copy": "build_url_open"}
 
 
 class RetirementCleanupError(Exception):
@@ -21,6 +22,7 @@ class RetirementCleanupReport:
     actions_removed: int = 0
     references_removed: int = 0
     files_changed: int = 0
+    actions_migrated: int = 0
 
 
 def cleanup_retired_local_configuration(root: Path) -> RetirementCleanupReport:
@@ -28,6 +30,7 @@ def cleanup_retired_local_configuration(root: Path) -> RetirementCleanupReport:
     actions_path = data / "local_actions.json"
     removed_ids = set(RETIRED_ACTION_IDS)
     actions_removed = 0
+    actions_migrated = 0
     references_removed = 0
     files_changed = 0
 
@@ -46,6 +49,14 @@ def cleanup_retired_local_configuration(root: Path) -> RetirementCleanupReport:
                 actions_removed += 1
                 actions_changed = True
             else:
+                if isinstance(action, dict):
+                    replacement_type = LEGACY_ACTION_TYPE_MIGRATIONS.get(
+                        action.get("type")
+                    )
+                    if replacement_type is not None:
+                        action["type"] = replacement_type
+                        actions_migrated += 1
+                        actions_changed = True
                 if (
                     isinstance(action, dict)
                     and action.get("state") in {"Draft", "Trusted"}
@@ -87,7 +98,12 @@ def cleanup_retired_local_configuration(root: Path) -> RetirementCleanupReport:
             references_removed += removed
             files_changed += 1
 
-    return RetirementCleanupReport(actions_removed, references_removed, files_changed)
+    return RetirementCleanupReport(
+        actions_removed,
+        references_removed,
+        files_changed,
+        actions_migrated,
+    )
 
 
 def _read_optional_object(path: Path) -> dict[str, object] | None:
@@ -193,8 +209,9 @@ def main() -> int:
         return 1
     if report.files_changed:
         print(
-            "Removed retired local configuration: "
+            "Updated retired local configuration: "
             f"{report.actions_removed} action(s), "
+            f"{report.actions_migrated} migrated action(s), "
             f"{report.references_removed} reference(s), "
             f"{report.files_changed} file(s)."
         )

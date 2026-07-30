@@ -26,6 +26,11 @@ ARCHIVED_STATE = "Archived"
 VISIBLE_STATES = {ACTIVE_STATE}
 LEGACY_ACTIVE_STATES = {"Draft", "Trusted"}
 MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024
+LEGACY_ACTION_TYPE_ALIASES = {"build_url_copy": "build_url_open"}
+ACTION_BOUND_QUICK_TYPES = frozenset(
+    {"ai_prompt", "open_folder", "paste_credential"}
+)
+MAX_QUICK_ACTION_PATH_LEVELS = 3
 
 
 class ActionError(Exception):
@@ -47,6 +52,7 @@ class Action:
     contexts: tuple[str, ...] = ()
     tags: tuple[str, ...] = ()
     description: str = ""
+    quick_action_path: tuple[str, ...] = ()
 
     @property
     def effective_contexts(self) -> tuple[str, ...]:
@@ -116,6 +122,20 @@ def normalize_tags(values: Iterable[str]) -> tuple[str, ...]:
         seen.add(clean)
         normalized.append(clean)
     return tuple(normalized)
+
+
+def normalize_quick_action_path(values: Iterable[str]) -> tuple[str, ...]:
+    """Return a compact, validated path for an action-bound Quick-action menu."""
+
+    path = tuple(" ".join(value.strip().split()) for value in values if value.strip())
+    if len(path) > MAX_QUICK_ACTION_PATH_LEVELS:
+        raise ActionError(
+            "Quick menu paths support at most "
+            f"{MAX_QUICK_ACTION_PATH_LEVELS} levels."
+        )
+    if any(">" in value for value in path):
+        raise ActionError("Quick menu level names cannot contain >.")
+    return path
 
 
 def validate_context_memberships(
@@ -317,7 +337,7 @@ def build_url_action(
     tags: Iterable[str] = (),
     description: str = "",
 ) -> Action:
-    allowed_types = {"build_url_copy", "build_url_open", "build_url_selection_open"}
+    allowed_types = {"build_url_open", "build_url_selection_open"}
     if action_type not in allowed_types:
         raise ActionError("Unsupported URL-builder action type.")
     clean_title = title.strip()
@@ -354,6 +374,7 @@ def configured_action(
     arguments: Iterable[str] = (),
     working_directory: str = "",
     description: str = "",
+    quick_action_path: Iterable[str] = (),
 ) -> Action:
     """Create a validated active action from the built-in action catalogue."""
     clean_title = title.strip()
@@ -364,6 +385,11 @@ def configured_action(
         raise ActionError(f"Unsupported action type: {action_type}")
     validate_action_value(action_type, clean_value)
     clean_contexts = normalize_contexts((*contexts, context))
+    clean_quick_action_path = normalize_quick_action_path(quick_action_path)
+    if clean_quick_action_path and action_type not in ACTION_BOUND_QUICK_TYPES:
+        raise ActionError(
+            "Quick menu paths are supported only for Password, Folder, and AI prompt actions."
+        )
 
     clean_arguments = (
         tuple(arguments)
@@ -391,6 +417,7 @@ def configured_action(
         contexts=clean_contexts,
         tags=normalize_tags(tags),
         description=description.strip(),
+        quick_action_path=clean_quick_action_path,
     )
 
 
@@ -408,6 +435,7 @@ def edited_configured_action(
     arguments: Iterable[str] = (),
     working_directory: str = "",
     description: str = "",
+    quick_action_path: Iterable[str] = (),
 ) -> Action:
     """Validate edits while preserving an action's stable identity and maturity."""
     validated = configured_action(
@@ -422,6 +450,7 @@ def edited_configured_action(
         arguments=arguments,
         working_directory=working_directory,
         description=description,
+        quick_action_path=quick_action_path,
     )
     return Action(
         id=action.id,
@@ -437,6 +466,7 @@ def edited_configured_action(
         contexts=validated.contexts,
         tags=validated.tags,
         description=validated.description,
+        quick_action_path=validated.quick_action_path,
     )
 
 
@@ -473,6 +503,7 @@ def edited_copy_text_action(
         contexts=clean_contexts,
         tags=normalize_tags(tags),
         description=action.description if description is None else description.strip(),
+        quick_action_path=action.quick_action_path,
     )
 
 
@@ -495,6 +526,7 @@ def action_search_text(action: Action) -> str:
             action.value,
             *action.arguments,
             action.working_directory or "",
+            *action.quick_action_path,
         )
     )
 
@@ -636,11 +668,9 @@ def execute_action(
         if identifier is None:
             return "URL action cancelled."
         url = build_url(action.value, identifier)
-        if action.type == "build_url_copy":
-            if clipboard_setter is None:
-                raise ActionError("No clipboard is available for copying the URL.")
-            clipboard_setter(url)
-            return "Copied the built URL to the clipboard."
+        if clipboard_setter is None:
+            raise ActionError("No clipboard is available for copying the URL.")
+        clipboard_setter(url)
         selected_opener = opener or open_action_target
         selected_opener(
             Action(
@@ -655,7 +685,7 @@ def execute_action(
                 description=action.description,
             )
         )
-        return "Opened the built URL."
+        return "Copied the built URL and opened it in the browser."
 
     expanded = expanded_action(action, clipboard_getter=clipboard_getter)
     if action.type == "copy_text":
@@ -780,7 +810,7 @@ def validate_action_value(action_type: str, value: str) -> None:
             raise ActionError("Choose a supported text operation.")
     elif action_type == "paste_credential":
         validate_credential_target(clean_value)
-    elif action_type in {"build_url_copy", "build_url_open", "build_url_selection_open"}:
+    elif action_type in {"build_url_open", "build_url_selection_open"}:
         build_url(clean_value, "example")
     elif action_type == "transform_list_csv" and clean_value not in {"csv", "sql_strings"}:
         raise ActionError("List conversion must use csv or sql_strings.")
@@ -1357,6 +1387,7 @@ def expanded_action(
         contexts=action.contexts,
         tags=action.tags,
         description=action.description,
+        quick_action_path=action.quick_action_path,
     )
 
 
@@ -1465,7 +1496,7 @@ def _parse_action(item: object, index: int) -> Action:
     if missing:
         raise ActionError(f"Action #{index} is missing text fields: {', '.join(missing)}")
 
-    action_type = item["type"]
+    action_type = LEGACY_ACTION_TYPE_ALIASES.get(item["type"], item["type"])
     if action_type not in SUPPORTED_ACTION_TYPES:
         raise ActionError(f"Action #{index} has unsupported type: {action_type}")
     try:
@@ -1522,6 +1553,20 @@ def _parse_action(item: object, index: int) -> Action:
     description = item.get("description", "")
     if not isinstance(description, str):
         raise ActionError(f"Action #{index} has an invalid description.")
+    raw_quick_action_path = item.get("quick_action_path", [])
+    if not isinstance(raw_quick_action_path, list) or not all(
+        isinstance(value, str) for value in raw_quick_action_path
+    ):
+        raise ActionError(f"Action #{index} has an invalid Quick menu path.")
+    try:
+        quick_action_path = normalize_quick_action_path(raw_quick_action_path)
+    except ActionError as exc:
+        raise ActionError(f"Action #{index}: {exc}") from exc
+    if quick_action_path and action_type not in ACTION_BOUND_QUICK_TYPES:
+        raise ActionError(
+            f"Action #{index}: Quick menu paths are supported only for "
+            "Password, Folder, and AI prompt actions."
+        )
     contexts = normalize_contexts(raw_contexts)
     primary_context = contexts[0] if contexts else legacy_context.strip() or "General"
 
@@ -1539,6 +1584,7 @@ def _parse_action(item: object, index: int) -> Action:
         contexts=contexts,
         tags=normalize_tags(raw_tags),
         description=description.strip(),
+        quick_action_path=quick_action_path,
     )
 
 
@@ -1585,6 +1631,8 @@ def _action_to_dict(action: Action) -> dict[str, object]:
         data["tags"] = list(action.effective_tags)
     if action.description:
         data["description"] = action.description
+    if action.quick_action_path:
+        data["quick_action_path"] = list(action.quick_action_path)
     return data
 
 

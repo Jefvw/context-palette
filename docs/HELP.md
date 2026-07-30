@@ -324,7 +324,9 @@ Quick-action rows or one compact nested-menu launcher.
 - In a nested-menu group, the one group-labelled launcher replaces a separate
   group heading. Click, right-click, Enter, or Space on it to open the group.
   Choose zero to three submenu levels, then an action.
-- Shift+click or Ctrl+click a label to open its technical menu configuration and corresponding action file in the default JSON editor.
+- Shift+click or Ctrl+click a configured group to open its technical menu and
+  action files. The same gesture on Passwords, Folders, or Prompts opens guided
+  action configuration.
 - Every item uses the same selected text, Input / Output, clipboard, and safe action executor as the search list.
 - Configure shared groups in `data/command_surface.json` and private groups in `data/local_command_surface.json`.
 - Press `Ctrl+,`, then use **Quick actions** to add or edit personal groups
@@ -334,6 +336,16 @@ Quick-action rows or one compact nested-menu launcher.
   distributes all active Built-in actions across direct commands and three
   first-level sections with deeper subject levels, leaving the other editable
   group positions for **My configuration**.
+- **Passwords**, **Folders**, and **Prompts** are permanent action-bound nested
+  menus. They automatically include every Active `paste_credential`,
+  `open_folder`, or `ai_prompt` action respectively, including actions created
+  after the launcher opens and reloads.
+- Edit one of those actions and set **Quick menu** to as many as three levels
+  separated by `>`, such as `Work > Reports > Monthly`. Leave it empty to put
+  the action under **Unsorted**. Archiving or deleting the action removes it
+  from its generated menu without maintaining a second assignment.
+- The fixed first rows are **Standard | Passwords** and **Folders | Prompts**.
+  Personal configured groups continue below them in their configured order.
 - Groups remain in configured order across two columns. Subjects remain in
   configured order from top to bottom inside each group.
 - The group and every menu level accept any number of ordered actions. Nesting
@@ -390,9 +402,11 @@ when finished; the next request creates a fresh Configure window.
 Configure opens with keyboard focus on the action list. Action, context, and
 button dialogs focus and select their first editable field, so typing can begin
 immediately. Action create/edit forms keep **Create/Save action** and **Cancel**
-visible at the bottom. Scroll the form body with its vertical scrollbar or the
-mouse wheel; moving through fields with Tab automatically reveals the focused
-field.
+visible at the bottom. Their compact rows place labels beside fields; hover over
+or move keyboard focus to a field for its explanation, or use the action
+type's **?** button for complete input, effect, and example guidance. Scroll the
+form body with its vertical scrollbar or the mouse wheel; moving through fields
+with Tab automatically reveals the focused field.
 
 All fields that choose an existing action use the same **Find…** picker:
 pinned slots 1–5, context membership, preferred slots 6–9, and Quick-action
@@ -602,30 +616,33 @@ The standard action catalogue and current AI eligibility are documented in
 `open_url`. Website proposals require a complete HTTP or HTTPS address and are
 validated again before permanent creation.
 
-For a URL built from selected or copied text, choose **Build URL — open from selected or copied ID** and use a template such as:
+For a URL built from selected or copied text, choose **Build URL — selection,
+copy, and open** and use a template such as:
 
 ```text
 https://domain-product.atlassian.net/browse/{id_url}
 ```
 
-If the Inbox item already contains only the stable base URL, such as `https://domain-product.atlassian.net/browse/`, the creator appends `{id_url}` for you when you pick that action type. `{id_url}` is replaced with URL-encoded text from Input / Output, the captured selection, or the clipboard. The creator displays a live example before saving. Copy-only and open-only variants can instead ask for input when run.
+If the Inbox item already contains only the stable base URL, such as
+`https://domain-product.atlassian.net/browse/`, the creator appends `{id_url}`
+for you when you pick that action type. `{id_url}` is replaced with URL-encoded
+text from Input / Output, the captured selection, or the clipboard. Choose
+**Build URL — prompt, copy, and open** when the action should ask for the value
+instead. Both variants copy the completed URL and open it. The creator displays
+a live example before saving.
 
 ### Sheets
 
-Open **Quick actions → Sheets** to open searchable local cheat sheets. The
-compact **Sheets** launcher represents the built-in Knowledge group without a
-second heading. It stays directly below Frequent passwords and before the
-configurable groups; those groups retain their configured order and continue
-scrolling when needed. Individual cheat-sheet entries can be promoted to
-permanent Active actions.
+Open **Help**, then choose **Cheat sheets**, to open the searchable local
+reference sheets. Sheets remain structured Git-tracked JSON under
+`data/cheatsheets`, and an individual entry can still be promoted to a
+permanent Active action. They no longer occupy a primary Quick-action position.
 
 ### AI prompts
 
-The compact **Prompts** launcher represents the built-in AI group beside
-**Sheets**. Left-click **Prompts** to load the first stored prompt into Input /
-Output for review; the reusable-template action also copies it to the
-clipboard. Right-click **Prompts** to choose any stored prompt or open
-**Manage AI prompts…**.
+The fixed **Prompts** launcher opens a nested menu containing all Active AI
+prompt actions. Choosing a prompt loads it into Input / Output for review and
+copies it to the clipboard.
 
 Stored prompts reuse the normal action lifecycle. In Configure, choose
 **Create action**, select **AI prompt**, and create a personal action.
@@ -696,9 +713,8 @@ compact symbol:
 | `📁` | Open a folder |
 | `▶` | Run an application |
 | `🔑` | Paste a Windows credential |
-| `🔗` | Build and copy a URL |
-| `⇱` | Build and open a URL |
-| `⇗` | Build a URL from selected text |
+| `⇱` | Build and open a URL from a prompt |
+| `⇗` | Build and open a URL from selection |
 | `↻` | Transform a text file |
 | `⇄` | Convert Input / Output lines to a list |
 | `✎` | Transform Input / Output |
@@ -774,11 +790,11 @@ C:\work\project\readme.md
 C:\Tools\script.cmd
 ```
 
-Optional arguments are entered one per line so spaces and quoting remain
-predictable. An optional working folder can also be set. Registered protocols
-work only when an installed application owns that protocol. If Windows cannot
-resolve a path, association, or protocol, Context Palette reports an actionable
-error.
+Optional arguments are entered in a multiline box, one argument per line, so
+spaces and quoting remain predictable. Press Enter to start the next argument.
+An optional working folder can also be set. Registered protocols work only when
+an installed application owns that protocol. If Windows cannot resolve a path,
+association, or protocol, Context Palette reports an actionable error.
 
 File, folder, application, Windows-target, and working-folder fields accept
 normal paths, URL-encoded local paths such as
@@ -813,10 +829,11 @@ actions. The highlighted button remains active while ordinary Find text
 narrows that password list; choose **Passwords** again to return to all
 actions.
 
-Up to four Active credential actions also appear under **Frequent passwords**
-as direct buttons. Selecting one starts its destination confirmation
-immediately. Pinned credential actions appear first in pin order; remaining
-positions use other Active credential actions.
+Every Active credential action also appears automatically under the fixed
+**Passwords** Quick-action menu. Choosing one starts the existing protected
+destination confirmation. Set its optional **Quick menu** path when creating or
+editing it to organize credentials into as many as three nested levels; leave
+the path empty for **Unsorted**.
 
 Press `Ctrl+,`, then choose **Create action → Paste a Windows
 credential** to create a permanent personal action. The action stores only an exact target

@@ -72,6 +72,13 @@ Only the first family and constrained window preparation are currently implement
 Searchable structured cheat sheets are implemented. They keep shortcuts,
 reference notes, and procedures available without opening a browser, and
 individual entries can become permanent Active actions after confirmation.
+Because this is secondary reference retrieval rather than frequent execution,
+Sheets is reached from Help instead of consuming a fixed Quick-action position.
+
+Frequently executed credentials, folders, and prompts are first-class actions.
+Their fixed launcher menus derive membership from action type and derive
+optional nesting from the action's own Quick menu path, preserving one source
+of truth as those action collections grow.
 
 Future work may add richer context knowledge, maintenance queues, and attended
 AI assistance. AI assistance remains reviewable: the user sees what leaves the
@@ -92,6 +99,9 @@ permanently only after confirmation.
 7. **Progressive complexity:** ordinary configuration uses names and guided forms; advanced JSON remains reviewable.
 8. **Recoverable changes:** persistence and future multi-step behavior should define failure recovery.
 9. **No framework for its own sake:** add dependencies only when product value outweighs portability and maintenance cost.
+10. **Compact screens:** keep labels beside fields where practical, reserve
+    permanent space for current values and decisions, and move supplementary
+    explanations into keyboard-accessible tooltips or on-demand help.
 
 ## Success
 

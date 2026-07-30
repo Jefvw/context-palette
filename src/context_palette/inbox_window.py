@@ -226,9 +226,8 @@ class InboxWindow:
 class ActionCreator:
     ACTION_TYPES = {
         "Copy captured text": "copy_text",
-        "Build URL — open from selected or copied ID": "build_url_selection_open",
-        "Build URL — copy only and ask for input": "build_url_copy",
-        "Build URL — open only and ask for input": "build_url_open",
+        "Build URL — prompt, copy, and open": "build_url_open",
+        "Build URL — selection, copy, and open": "build_url_selection_open",
     }
 
     def __init__(
@@ -376,10 +375,18 @@ class ActionCreator:
             self.guidance_var.set("The Inbox capture becomes the reusable text produced by this action.")
         else:
             self.content_label.configure(text="URL template")
+            input_guidance = (
+                "This action asks for the value when it runs."
+                if action_type == "build_url_open"
+                else (
+                    "This action reads selected text first, then falls back to "
+                    "Input / Output or copied text."
+                )
+            )
             self.guidance_var.set(
-                "Keep the stable base URL from Inbox and put {id_url} where the runtime ID belongs. "
-                "This action reads the selected text first, then falls back to copied text. "
-                "Example: https://domain-product.atlassian.net/browse/{id_url}"
+                "Keep the stable base URL from Inbox and put {id_url} where the "
+                f"runtime ID belongs. {input_guidance} Example: "
+                "https://domain-product.atlassian.net/browse/{id_url}"
             )
             current = self.content.get("1.0", "end-1c")
             suggested = suggest_url_template(current)
@@ -396,10 +403,9 @@ class ActionCreator:
         template = self.content.get("1.0", "end-1c").strip()
         try:
             example = build_url(template, "ABC 123")
-            effect = "copy and open" if action_type == "build_url_selection_open" else (
-                "copy" if action_type == "build_url_copy" else "open"
+            self.example_var.set(
+                f"Example input: ABC 123  →  {example}\nEffect: copy and open"
             )
-            self.example_var.set(f"Example input: ABC 123  →  {example}\nEffect: {effect}")
         except ActionError as exc:
             self.example_var.set(f"Template needs attention: {exc}")
 

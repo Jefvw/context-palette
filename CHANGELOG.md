@@ -4,6 +4,21 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Replaced the prominent Sheets launcher and four-item Frequent passwords strip
+  with consistent action-bound **Passwords**, **Folders**, and **Prompts**
+  nested menus beside **Standard**. Active matching actions appear
+  automatically; an optional three-level Quick menu path organizes each action,
+  with unassigned actions under **Unsorted**. Cheat sheets remain available
+  from Help without occupying the primary Quick-action surface.
+- Consolidated URL builders into two choices based on input: prompt or
+  selection. Both now copy and open the generated URL; existing copy-only
+  personal actions migrate atomically to the prompted behavior with a backup.
+- Made Create/Edit Action substantially more compact with a smaller monitor-safe
+  window, labels beside fields, shorter multiline editors, and
+  keyboard-accessible tooltips plus on-demand action-type guidance.
+- Replaced the misleading single-line argument field for application and Windows
+  target actions with a compact multiline editor. Each argument can now be
+  entered visibly on its own line as the action runner already expects.
 - Reduced the main launcher to a compact screen-aware `780x600` default. The
   action list now ends alongside the visible action-control stack instead of
   expanding with monitor height; Work mode accounts for its extra controls,

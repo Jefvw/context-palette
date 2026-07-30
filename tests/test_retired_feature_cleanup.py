@@ -30,6 +30,11 @@ class RetiredFeatureCleanupTests(unittest.TestCase):
                         {"id": "one", "type": "copy_text", "state": "Draft"},
                         {"id": "two", "type": "copy_text", "state": "Trusted"},
                         {"id": "old", "type": "copy_text", "state": "Archived"},
+                        {
+                            "id": "prompted-url",
+                            "type": "build_url_copy",
+                            "state": "Active",
+                        },
                     ]
                 },
             )
@@ -52,16 +57,31 @@ class RetiredFeatureCleanupTests(unittest.TestCase):
                     (data / "local_actions.json").read_text(encoding="utf-8")
                 )["actions"]
             ]
+            action_types = [
+                item["type"]
+                for item in json.loads(
+                    (data / "local_actions.json").read_text(encoding="utf-8")
+                )["actions"]
+            ]
             inbox_states = [
                 item["state"]
                 for item in json.loads(
                     (data / "inbox.json").read_text(encoding="utf-8")
                 )["items"]
             ]
-            self.assertEqual(action_states, ["Active", "Active", "Archived"])
+            self.assertEqual(
+                action_states,
+                ["Active", "Active", "Archived", "Active"],
+            )
+            self.assertEqual(
+                action_types,
+                ["copy_text", "copy_text", "copy_text", "build_url_open"],
+            )
             self.assertEqual(inbox_states, ["Converted", "Inbox"])
             self.assertEqual(report.files_changed, 2)
+            self.assertEqual(report.actions_migrated, 1)
             self.assertEqual(second_report.files_changed, 0)
+            self.assertEqual(second_report.actions_migrated, 0)
 
     def test_removes_retired_actions_and_every_local_reference_atomically(self):
         with tempfile.TemporaryDirectory() as directory:

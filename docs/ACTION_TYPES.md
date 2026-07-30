@@ -2,6 +2,11 @@
 
 This overview is generated from `context_palette.action_types`, the shared source of truth used by validation and AI guidance.
 
+AI prompt, folder, and credential actions also accept an optional **Quick
+menu** path of up to three levels. Their fixed Prompts, Folders, and Passwords
+menus include every Active matching action automatically; an empty path appears
+under **Unsorted**.
+
 | Action type | Icon | User label | Family | Input | Output | Portability | AI proposals |
 |---|---|---|---|---|---|---|---|
 | `copy_text` | ⧉ | Paste saved text | Saved content | A fresh destination captured by F9 or Ctrl+Alt+P is optional. | Replaces clipboard text, then pastes into a fresh destination when available; Input / Output is unchanged. | Portable when the saved text contains no private information. | Enabled |
@@ -13,9 +18,8 @@ This overview is generated from `context_palette.action_types`, the shared sourc
 | `open_folder` | 📁 | Open a folder | Open target | No runtime input. | Opens the configured folder. | Machine-local unless the path uses a supported portable placeholder. | Not yet |
 | `launch_app` | ▶ | Run an application | Open target | Uses fixed reviewed arguments and working directory. | Starts the validated .exe target. | Usually machine-local; requires an installed executable. | Not yet |
 | `paste_credential` | 🔑 | Paste a Windows credential | Protected credential | Requires a fresh F9 or Ctrl+Alt+P invocation from the destination field. | Confirms the destination, pastes through a no-history/no-cloud clipboard item, then clears it conditionally. | Windows-only and machine-local; the action stores only the credential target name. | Not yet |
-| `build_url_copy` | 🔗 | Build and copy a URL | URL builder | Prompts for an identifier or value. | Copies the complete URL without opening it. | Portable when the URL template is suitable for sharing. | Not yet |
-| `build_url_open` | ⇱ | Build and open a URL | URL builder | Prompts for an identifier or value. | Opens the complete URL without copying it. | Portable when the URL template is suitable for sharing. | Not yet |
-| `build_url_selection_open` | ⇗ | Build a URL from selected text | URL builder | Reads selected text, Input / Output, or clipboard text. | Copies and opens the complete URL. | Portable when the URL template is suitable for sharing. | Not yet |
+| `build_url_open` | ⇱ | Build and open a URL from a prompt | URL builder | Prompts for an identifier or value. | Copies and opens the complete URL. | Portable when the URL template is suitable for sharing. | Not yet |
+| `build_url_selection_open` | ⇗ | Build and open a URL from selection | URL builder | Reads selected text, Input / Output, or clipboard text. | Copies and opens the complete URL. | Portable when the URL template is suitable for sharing. | Not yet |
 | `transform_file_text` | ↻ | Transform a text file | Text file | Reads the configured existing local text file when the action runs. | Shows the transformed text in Input / Output and copies it; the source remains unchanged until explicitly replaced. | The source path is normally machine-local. Relative paths can be portable when every computer uses the same project layout. | Not yet |
 | `transform_list_csv` | ⇄ | Convert Input / Output lines to a list | Input / Output transformation | Reads Input / Output text. | Replaces Input / Output and clipboard text. | Portable; operation is constrained by the application. | Not yet |
 | `transform_text` | ✎ | Transform Input / Output | Input / Output transformation | Reads Input / Output text. | Replaces Input / Output and clipboard text. | Portable; operations are implemented by Context Palette. | Not yet |

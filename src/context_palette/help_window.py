@@ -220,6 +220,7 @@ class HelpWindow:
         help_path: Path,
         *,
         title: str = "Context Palette Help",
+        related_actions: tuple[tuple[str, Callable[[], None]], ...] = (),
     ) -> None:
         self.window = tk.Toplevel(parent)
         self.window.title(title)
@@ -291,6 +292,13 @@ class HelpWindow:
             style="Compact.TButton",
         )
         self.edge_button.pack(side=tk.LEFT, padx=(6, 0))
+        for label, command in related_actions:
+            ttk.Button(
+                header,
+                text=label,
+                command=command,
+                style="Compact.TButton",
+            ).pack(side=tk.LEFT, padx=(6, 0))
         search = ttk.Entry(header, textvariable=self.search_var, width=20)
         search.pack(side=tk.RIGHT, padx=(6, 0))
         search.bind("<Return>", lambda _event: self._find_next())

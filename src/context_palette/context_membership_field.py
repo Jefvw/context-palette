@@ -41,6 +41,8 @@ class CommaSeparatedPickerField:
         empty_text: str,
         mnemonic: str,
         searchable: bool = False,
+        inline: bool = False,
+        label_width: int = 0,
     ) -> None:
         self.variable = variable
         self.names = tuple(names)
@@ -50,22 +52,27 @@ class CommaSeparatedPickerField:
         self._syncing = False
 
         self.frame = ttk.Frame(parent)
-        self.frame.pack(fill=tk.X, pady=(8, 0))
+        self.frame.pack(fill=tk.X, pady=(5 if inline else 8, 0))
         mnemonic_index = label.casefold().find(mnemonic.casefold())
         self.label = ttk.Label(
             self.frame,
             text=label,
             underline=mnemonic_index,
+            width=label_width,
         )
-        self.label.pack(anchor=tk.W)
 
-        row = ttk.Frame(self.frame)
-        row.pack(fill=tk.X, pady=(3, 0))
-        self.entry = ttk.Entry(row, textvariable=variable)
+        self.row = ttk.Frame(self.frame)
+        if inline:
+            self.label.pack(side=tk.LEFT, anchor=tk.W, padx=(0, 8))
+            self.row.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        else:
+            self.label.pack(anchor=tk.W)
+            self.row.pack(fill=tk.X, pady=(3, 0))
+        self.entry = ttk.Entry(self.row, textvariable=variable)
         self.entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         picker_class = ttk.Button if searchable else ttk.Menubutton
         self.picker = picker_class(
-            row,
+            self.row,
             text="Choose…",
             style="Compact.TButton",
         )
@@ -174,6 +181,8 @@ class ContextMembershipField(CommaSeparatedPickerField):
         context_names: Iterable[str],
         *,
         label: str = "Specific contexts",
+        inline: bool = False,
+        label_width: int = 0,
     ) -> None:
         names = specific_context_names(context_names)
         self.context_names = names
@@ -184,6 +193,8 @@ class ContextMembershipField(CommaSeparatedPickerField):
             label=label,
             empty_text="No specific contexts defined",
             mnemonic="c",
+            inline=inline,
+            label_width=label_width,
         )
 
 
@@ -197,6 +208,8 @@ class TagSelectionField(CommaSeparatedPickerField):
         tags: Iterable[str],
         *,
         label: str = "Tags (optional)",
+        inline: bool = False,
+        label_width: int = 0,
     ) -> None:
         names = reusable_tag_names(tags)
         self.tag_names = names
@@ -208,6 +221,8 @@ class TagSelectionField(CommaSeparatedPickerField):
             empty_text="No existing tags",
             mnemonic="t",
             searchable=True,
+            inline=inline,
+            label_width=label_width,
         )
 
     def _show_searchable_picker(self) -> None:

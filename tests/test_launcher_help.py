@@ -17,7 +17,7 @@ from context_palette.help_window import (
     render_markdown_html,
     resolve_local_markdown_link,
 )
-from context_palette.inbox_window import suggest_url_template
+from context_palette.inbox_window import ActionCreator, suggest_url_template
 from context_palette.launcher import HelpWindow
 
 
@@ -263,6 +263,21 @@ class MarkdownRenderingTests(unittest.TestCase):
             root.destroy()
 
 class ActionCreatorHelperTests(unittest.TestCase):
+    def test_url_builder_choices_differ_only_by_input_source(self):
+        url_choices = {
+            label: action_type
+            for label, action_type in ActionCreator.ACTION_TYPES.items()
+            if action_type != "copy_text"
+        }
+
+        self.assertEqual(
+            url_choices,
+            {
+                "Build URL — prompt, copy, and open": "build_url_open",
+                "Build URL — selection, copy, and open": "build_url_selection_open",
+            },
+        )
+
     def test_suggest_url_template_appends_identifier_placeholder_to_base_url(self):
         self.assertEqual(
             suggest_url_template("https://domain-product.atlassian.net/browse/"),

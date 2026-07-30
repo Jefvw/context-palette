@@ -17,10 +17,8 @@ from context_palette.command_surface import (
     GROUP_PRESENTATION_NESTED_MENU,
 )
 from context_palette.launcher import (
-    BUILTIN_QUICK_COMMAND_OPEN_SHEETS,
     LauncherApp,
-    ai_prompt_actions,
-    execute_builtin_quick_command,
+    action_bound_quick_groups,
 )
 
 
@@ -81,57 +79,35 @@ class FakeMenu:
 
 
 class LauncherCommandSurfaceTests(unittest.TestCase):
-    def test_ai_prompts_are_active_first_class_prompt_actions(self):
+    def test_action_bound_groups_include_matching_active_actions_and_nested_paths(self):
         actions = [
+            Action("password", "Database", "General", "paste_credential", "database"),
+            Action(
+                "folder",
+                "Reports",
+                "General",
+                "open_folder",
+                ".",
+                quick_action_path=("Work", "Reports"),
+            ),
             Action("one", "First prompt", "General", "ai_prompt", "Review this", "Active"),
-            Action("two", "Second prompt", "General", "ai_prompt", "Explain this", "Active"),
             Action("template", "Not a prompt", "General", "workspace_template", "text", "Active"),
             Action("old", "Archived", "General", "ai_prompt", "old", "Archived"),
         ]
 
-        self.assertEqual([action.id for action in ai_prompt_actions(actions)], ["one", "two"])
+        passwords, folders, prompts = action_bound_quick_groups(actions)
 
-    def test_ai_prompt_primary_loads_first_prompt_and_menu_lists_all(self):
-        app = self._app()
-        app.actions = [
-            Action("first", "Review text", "General", "ai_prompt", "Review", "Active"),
-            Action("second", "Explain code", "General", "ai_prompt", "Explain", "Active"),
-        ]
-        app._show_configuration = lambda **options: setattr(app, "configuration_options", options)
-
-        self.assertEqual(app._execute_ai_prompt_primary(), "break")
-        self.assertEqual(app._execute_action_calls, ["first"])
-        with patch("context_palette.launcher.tk.Menu", FakeMenu):
-            self.assertEqual(app._show_ai_prompt_menu(FakeEvent()), "break")
-
-        menu = FakeMenu.last_instance
-        self.assertEqual(
-            menu.labels,
-            ["Review text", "Explain code", "---", "Manage AI prompts…"],
-        )
-        menu.commands[1]()
-        self.assertEqual(app._execute_action_calls, ["first", "second"])
-        menu.commands[-1]()
-        self.assertEqual(app.configuration_options, {"initial_tab": "actions"})
-
-    def test_empty_ai_prompt_group_explains_how_to_configure_it(self):
-        app = self._app()
-
-        self.assertEqual(app._execute_ai_prompt_primary(), "break")
-
-        self.assertIn("AI prompt action", app.status_var.value)
-
-    def test_builtin_quick_command_allow_list_opens_only_sheets(self):
-        calls: list[str] = []
-
-        execute_builtin_quick_command(
-            BUILTIN_QUICK_COMMAND_OPEN_SHEETS,
-            open_sheets=lambda: calls.append("sheets"),
-        )
-
-        self.assertEqual(calls, ["sheets"])
-        with self.assertRaisesRegex(ValueError, "Unknown built-in"):
-            execute_builtin_quick_command("arbitrary_method", open_sheets=lambda: None)
+        self.assertEqual([group.label for group in (passwords, folders, prompts)], [
+            "Passwords",
+            "Folders",
+            "Prompts",
+        ])
+        self.assertEqual(passwords.items[0].label, "Unsorted")
+        self.assertEqual(passwords.items[0].action_ids, ("password",))
+        self.assertEqual(folders.items[0].label, "Work")
+        self.assertEqual(folders.items[0].items[0].label, "Reports")
+        self.assertEqual(folders.items[0].items[0].action_ids, ("folder",))
+        self.assertEqual(prompts.items[0].action_ids, ("one",))
 
     def test_failed_reload_preserves_last_known_good_buttons(self):
         app = self._app()

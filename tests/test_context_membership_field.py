@@ -137,6 +137,25 @@ class ContextMembershipFieldTests(unittest.TestCase):
         finally:
             root.destroy()
 
+    def test_inline_picker_places_label_beside_the_editable_row(self):
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            field = ContextMembershipField(
+                root,
+                tk.StringVar(),
+                ("Mail",),
+                label="Contexts",
+                inline=True,
+                label_width=14,
+            )
+
+            self.assertEqual(field.label.pack_info()["side"], "left")
+            self.assertEqual(field.row.pack_info()["side"], "left")
+            self.assertEqual(int(field.label.cget("width")), 14)
+        finally:
+            root.destroy()
+
 
 if __name__ == "__main__":
     unittest.main()

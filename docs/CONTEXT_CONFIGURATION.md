@@ -74,8 +74,8 @@ remain readable.
 | --- | --- |
 | Reusable snippet | `copy_text` |
 | Date, time, or clipboard template | `copy_text` with supported variables |
-| Build a URL from selected text | `build_url_selection_open` |
-| Prompt for an ID and copy/open a URL | `build_url_copy`, `build_url_open` |
+| Build, copy, and open a URL from selected text | `build_url_selection_open` |
+| Prompt for an ID, then build, copy, and open a URL | `build_url_open` |
 | Turn lines into query values | `transform_list_csv` |
 | Reusable editable form | `workspace_template` |
 | Open a reviewed target | `open_url`, `open_file`, `open_folder`, `launch_app` |

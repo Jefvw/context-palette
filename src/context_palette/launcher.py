@@ -123,8 +123,12 @@ MINIMUM_ACTION_CONSOLE_HEIGHT = 140
 MINIMUM_WORKSPACE_HEIGHT = 140
 MINIMUM_ACTIONS_WIDTH = 300
 MINIMUM_QUICK_ACTIONS_WIDTH = 320
-BUILTIN_QUICK_COMMAND_OPEN_SHEETS = "open_sheets"
-BUILTIN_QUICK_COMMANDS = frozenset({BUILTIN_QUICK_COMMAND_OPEN_SHEETS})
+STANDARD_QUICK_GROUP_ID = "standard"
+ACTION_BOUND_QUICK_MENU_SPECS = (
+    ("passwords", "Passwords", "paste_credential"),
+    ("folders", "Folders", "open_folder"),
+    ("prompts", "Prompts", "ai_prompt"),
+)
 
 
 def bounded_sash_position(
@@ -143,46 +147,77 @@ def bounded_sash_position(
     return max(first_minimum, min(requested, available_size - second_minimum))
 
 
-def frequent_credential_actions(
+def action_bound_quick_group(
     actions: list[Action],
-    pinned_action_ids: tuple[str, ...],
     *,
-    limit: int = 4,
-) -> list[Action]:
-    """Return direct-paste credentials, prioritizing the user's global pin order."""
-    eligible = {
-        action.id: action
+    group_id: str,
+    label: str,
+    action_type: str,
+) -> CommandGroup:
+    """Build one nested menu directly from active actions of a single type."""
+
+    entries = [
+        (action.quick_action_path or ("Unsorted",), action)
         for action in actions
-        if action.type == "paste_credential"
-    }
-    selected = [
-        eligible[action_id]
-        for action_id in pinned_action_ids
-        if action_id in eligible
+        if action.type == action_type and action.state != "Archived"
     ]
-    selected_ids = {action.id for action in selected}
-    selected.extend(
-        action
-        for action in actions
-        if action.id in eligible and action.id not in selected_ids
+    item_counter = 0
+
+    def build_items(
+        values: list[tuple[tuple[str, ...], Action]],
+        depth: int,
+    ) -> tuple[CommandItem, ...]:
+        nonlocal item_counter
+        grouped: dict[str, tuple[str, list[tuple[tuple[str, ...], Action]]]] = {}
+        for path, action in values:
+            key = path[depth].casefold()
+            if key not in grouped:
+                grouped[key] = (path[depth], [])
+            grouped[key][1].append((path, action))
+
+        items: list[CommandItem] = []
+        for visible_label, grouped_values in grouped.values():
+            item_counter += 1
+            direct_action_ids = tuple(
+                action.id
+                for path, action in grouped_values
+                if len(path) == depth + 1
+            )
+            nested_values = [
+                (path, action)
+                for path, action in grouped_values
+                if len(path) > depth + 1
+            ]
+            items.append(
+                CommandItem(
+                    id=f"{group_id}-level-{item_counter}",
+                    label=visible_label,
+                    action_ids=direct_action_ids,
+                    items=build_items(nested_values, depth + 1)
+                    if nested_values
+                    else (),
+                )
+            )
+        return tuple(items)
+
+    return CommandGroup(
+        id=f"action-bound-{group_id}",
+        label=label,
+        items=build_items(entries, 0) if entries else (),
+        presentation=GROUP_PRESENTATION_NESTED_MENU,
     )
-    return selected[:limit]
 
 
-def execute_builtin_quick_command(command_id: str, *, open_sheets: Callable[[], None]) -> None:
-    """Execute one explicitly allow-listed application command."""
-    if command_id == BUILTIN_QUICK_COMMAND_OPEN_SHEETS:
-        open_sheets()
-        return
-    raise ValueError(f"Unknown built-in quick command: {command_id}")
-
-
-def ai_prompt_actions(actions: list[Action]) -> list[Action]:
-    return [
-        action
-        for action in actions
-        if action.type == "ai_prompt" and action.state != "Archived"
-    ]
+def action_bound_quick_groups(actions: list[Action]) -> tuple[CommandGroup, ...]:
+    return tuple(
+        action_bound_quick_group(
+            actions,
+            group_id=group_id,
+            label=label,
+            action_type=action_type,
+        )
+        for group_id, label, action_type in ACTION_BOUND_QUICK_MENU_SPECS
+    )
 
 
 def _warn_if_slow(
@@ -1363,261 +1398,168 @@ class LauncherApp:
         self.command_surface_tooltips.clear()
         for child in self.command_tiles_frame.winfo_children():
             child.destroy()
-        credential_actions = frequent_credential_actions(
-            self.actions,
-            self.palette_state.pinned_action_ids,
+        standard_group = next(
+            (
+                group
+                for group in self.command_groups
+                if group.id.casefold() == STANDARD_QUICK_GROUP_ID
+            ),
+            CommandGroup(
+                id=STANDARD_QUICK_GROUP_ID,
+                label="Standard",
+                presentation=GROUP_PRESENTATION_NESTED_MENU,
+            ),
         )
-        button_count = 1 + len(credential_actions) + sum(
-            command_group_launcher_count(group)
+        configured_groups = [
+            group
             for group in self.command_groups
+            if group.id.casefold() != STANDARD_QUICK_GROUP_ID
+        ]
+        bound_groups = action_bound_quick_groups(self.actions)
+        button_count = 4 + sum(
+            command_group_launcher_count(group)
+            for group in configured_groups
         )
         self.surface_count_var.set(
             f"{button_count} button" if button_count == 1 else f"{button_count} buttons"
         )
         for column in range(2):
             self.command_tiles_frame.columnconfigure(column, weight=1, uniform="surface")
-        group_row_offset = 0
-        if credential_actions:
-            password_area = ttk.LabelFrame(
+        self._render_configured_quick_group(standard_group, row=0, column=0)
+        self._render_action_bound_quick_group(bound_groups[0], row=0, column=1)
+        self._render_action_bound_quick_group(bound_groups[1], row=1, column=0)
+        self._render_action_bound_quick_group(bound_groups[2], row=1, column=1)
+        for index, group in enumerate(configured_groups):
+            row, column = divmod(index, 2)
+            self._render_configured_quick_group(
+                group,
+                row=row + 2,
+                column=column,
+            )
+
+    def _render_configured_quick_group(
+        self,
+        group: CommandGroup,
+        *,
+        row: int,
+        column: int,
+    ) -> None:
+        compact_group = (
+            group.presentation == GROUP_PRESENTATION_NESTED_MENU
+            or len(group.items) == 1
+        )
+        area = (
+            ttk.Frame(self.command_tiles_frame, padding=4)
+            if compact_group
+            else ttk.LabelFrame(
                 self.command_tiles_frame,
-                text="Frequent passwords",
+                text=group.label,
                 padding=4,
             )
-            password_area.grid(
-                row=0,
-                column=0,
-                columnspan=2,
-                sticky=tk.NSEW,
-                padx=2,
-                pady=2,
+        )
+        area.grid(row=row, column=column, sticky=tk.NSEW, padx=2, pady=2)
+        area.columnconfigure(0, weight=1)
+        if group.presentation == GROUP_PRESENTATION_NESTED_MENU:
+            control = self._surface_menu_label(area, group.label)
+            self._command_surface_tooltip(
+                control,
+                "Open the nested subject menus. Shift/Ctrl+click edits configuration.",
             )
-            for column in range(4):
-                password_area.columnconfigure(column, weight=1, uniform="passwords")
-            for column, action in enumerate(credential_actions):
-                control = ttk.Button(
-                    password_area,
-                    text=action.title,
-                    command=lambda selected_action=action: self._execute_action(selected_action),
-                    style="Compact.TButton",
-                )
-                control.grid(
-                    row=0,
-                    column=column,
-                    sticky=tk.EW,
-                    padx=1,
-                    pady=1,
-                )
-                self._command_surface_tooltip(
+            self._bind_surface_menu_control(
+                control,
+                on_click=lambda event: self._show_group_menu(event, group),
+                on_menu=lambda event: self._show_group_menu(event, group),
+                on_keyboard=lambda _event: self._show_group_menu_at_control(
                     control,
-                    "Paste this credential directly. The destination confirmation remains required.",
-                )
-            group_row_offset = 1
-        self._render_knowledge_quick_action(group_row_offset)
-        self._render_ai_quick_action(group_row_offset)
-        group_row_offset += 1
-        for index, group in enumerate(self.command_groups):
-            row, column = divmod(index, 2)
-            row += group_row_offset
-            compact_group = (
-                group.presentation == GROUP_PRESENTATION_NESTED_MENU
-                or len(group.items) == 1
+                    group,
+                ),
             )
-            if compact_group:
-                area = ttk.Frame(self.command_tiles_frame, padding=4)
-            else:
-                area = ttk.LabelFrame(
-                    self.command_tiles_frame,
-                    text=group.label,
-                    padding=4,
-                )
-            area.grid(row=row, column=column, sticky=tk.NSEW, padx=2, pady=2)
-            area.columnconfigure(0, weight=1)
-            if group.presentation == GROUP_PRESENTATION_NESTED_MENU:
-                control = ttk.Label(
-                    area,
-                    text=f"{group.label} ▾",
-                    style="SurfaceMenu.TLabel",
-                    anchor=tk.W,
-                    relief=tk.SOLID,
-                    cursor="hand2",
-                    takefocus=True,
-                )
-                control.grid(row=0, column=0, sticky=tk.EW, padx=1, pady=1)
-                self._command_surface_tooltip(
-                    control,
-                    "Open the nested subject menus. Shift/Ctrl+click edits configuration.",
-                )
-                self._bind_surface_menu_control(
-                    control,
-                    on_click=lambda event, selected_group=group: self._show_group_menu(
-                        event,
-                        selected_group,
-                    ),
-                    on_menu=lambda event, selected_group=group: self._show_group_menu(
-                        event,
-                        selected_group,
-                    ),
-                    on_keyboard=lambda _event, selected_group=group, anchor=control: self._show_group_menu_at_control(
-                        anchor,
-                        selected_group,
-                    ),
-                )
-                continue
-            for item_index, item in enumerate(group.items):
-                control = ttk.Label(
-                    area,
-                    text=item.label,
-                    style="SurfaceMenu.TLabel",
-                    anchor=tk.W,
-                    relief=tk.SOLID,
-                    cursor="hand2",
-                    takefocus=True,
-                )
-                control.grid(
-                    row=item_index,
-                    column=0,
-                    sticky=tk.EW,
-                    padx=1,
-                    pady=1,
-                )
-                self._command_surface_tooltip(
-                    control,
-                    "Left-click or Enter runs the primary action. Right-click chooses an action. Shift/Ctrl+click edits configuration.",
-                )
-                self._bind_surface_menu_control(
-                    control,
-                    on_click=lambda event, selected_group=group, selected_item=item: self._handle_command_item_left_click(
-                        event,
-                        selected_group,
-                        selected_item,
-                    ),
-                    on_menu=lambda event, selected_item=item: self._show_item_menu(
-                        event, selected_item
-                    ),
-                    on_keyboard=lambda _event, selected_item=item, anchor=control: self._activate_item_at_control(
-                        anchor,
-                        selected_item,
-                    ),
-                )
+            return
+        for item_index, item in enumerate(group.items):
+            control = self._surface_menu_label(
+                area,
+                item.label,
+                row=item_index,
+                dropdown=False,
+            )
+            self._command_surface_tooltip(
+                control,
+                "Left-click or Enter runs the primary action. Right-click chooses "
+                "an action. Shift/Ctrl+click edits configuration.",
+            )
+            self._bind_surface_menu_control(
+                control,
+                on_click=lambda event, selected_item=item: self._handle_command_item_left_click(
+                    event,
+                    group,
+                    selected_item,
+                ),
+                on_menu=lambda event, selected_item=item: self._show_item_menu(
+                    event,
+                    selected_item,
+                ),
+                on_keyboard=lambda _event, selected_item=item, anchor=control: self._activate_item_at_control(
+                    anchor,
+                    selected_item,
+                ),
+            )
 
-    def _render_knowledge_quick_action(self, row: int) -> None:
-        knowledge_area = ttk.Frame(
-            self.command_tiles_frame,
-            padding=4,
+    def _render_action_bound_quick_group(
+        self,
+        group: CommandGroup,
+        *,
+        row: int,
+        column: int,
+    ) -> None:
+        area = ttk.Frame(self.command_tiles_frame, padding=4)
+        area.grid(row=row, column=column, sticky=tk.NSEW, padx=2, pady=2)
+        area.columnconfigure(0, weight=1)
+        control = self._surface_menu_label(area, group.label)
+        self._command_surface_tooltip(
+            control,
+            f"{group.label} — Active matching actions appear automatically. "
+            "Edit an action's Quick menu path to organize it.",
         )
-        knowledge_area.grid(
-            row=row,
-            column=0,
-            sticky=tk.NSEW,
-            padx=2,
-            pady=2,
+        self._bind_surface_menu_control(
+            control,
+            on_click=lambda event: self._show_action_bound_group_menu(event, group),
+            on_menu=lambda event: self._show_action_bound_group_menu(event, group),
+            on_keyboard=lambda _event: self._post_group_menu(
+                group,
+                control.winfo_rootx(),
+                control.winfo_rooty() + control.winfo_height(),
+            ),
         )
-        knowledge_area.columnconfigure(0, weight=1)
-        sheets_control = ttk.Label(
-            knowledge_area,
-            text="Sheets ▾",
+
+    def _surface_menu_label(
+        self,
+        parent: ttk.Frame,
+        label: str,
+        *,
+        row: int = 0,
+        dropdown: bool = True,
+    ) -> ttk.Label:
+        control = ttk.Label(
+            parent,
+            text=f"{label} ▾" if dropdown else label,
             style="SurfaceMenu.TLabel",
             anchor=tk.W,
             relief=tk.SOLID,
             cursor="hand2",
             takefocus=True,
         )
-        sheets_control.grid(row=0, column=0, sticky=tk.EW, padx=1, pady=1)
-        self._command_surface_tooltip(
-            sheets_control,
-            "Sheets — Open searchable local cheat sheets. Right-click for the available command.",
-        )
-        self._bind_surface_menu_control(
-            sheets_control,
-            on_click=lambda _event: self._execute_builtin_quick_command(
-                BUILTIN_QUICK_COMMAND_OPEN_SHEETS
-            ),
-            on_menu=lambda event: self._show_builtin_quick_menu(
-                event,
-                BUILTIN_QUICK_COMMAND_OPEN_SHEETS,
-            ),
-            on_keyboard=lambda _event: self._execute_builtin_quick_command(
-                BUILTIN_QUICK_COMMAND_OPEN_SHEETS
-            ),
-        )
+        control.grid(row=row, column=0, sticky=tk.EW, padx=1, pady=1)
+        return control
 
-    def _render_ai_quick_action(self, row: int) -> None:
-        ai_area = ttk.Frame(
-            self.command_tiles_frame,
-            padding=4,
-        )
-        ai_area.grid(row=row, column=1, sticky=tk.NSEW, padx=2, pady=2)
-        ai_area.columnconfigure(0, weight=1)
-        prompts_control = ttk.Label(
-            ai_area,
-            text="Prompts ▾",
-            style="SurfaceMenu.TLabel",
-            anchor=tk.W,
-            relief=tk.SOLID,
-            cursor="hand2",
-            takefocus=True,
-        )
-        prompts_control.grid(row=0, column=0, sticky=tk.EW, padx=1, pady=1)
-        self._command_surface_tooltip(
-            prompts_control,
-            "Prompts — Load the first stored AI prompt into Input / Output. Right-click chooses another prompt.",
-        )
-        self._bind_surface_menu_control(
-            prompts_control,
-            on_click=lambda _event: self._execute_ai_prompt_primary(),
-            on_menu=self._show_ai_prompt_menu,
-            on_keyboard=lambda _event: self._execute_ai_prompt_primary(),
-        )
-
-    def _execute_ai_prompt_primary(self) -> str:
-        prompts = ai_prompt_actions(self.actions)
-        if not prompts:
-            self.status_var.set(
-                "No AI prompts configured. Create an AI prompt action in Configure."
-            )
+    def _show_action_bound_group_menu(
+        self,
+        event: tk.Event,
+        group: CommandGroup,
+    ) -> str:
+        if event.state & (0x0001 | 0x0004):
+            self._show_configuration(initial_tab="actions")
             return "break"
-        self._execute_action(prompts[0])
-        return "break"
-
-    def _show_ai_prompt_menu(self, event: tk.Event) -> str:
-        menu = tk.Menu(self.root, tearoff=False)
-        prompts = ai_prompt_actions(self.actions)
-        if prompts:
-            for action in prompts:
-                menu.add_command(
-                    label=action.title,
-                    command=lambda selected=action: self._execute_action(selected),
-                )
-            menu.add_separator()
-        else:
-            menu.add_command(label="No stored AI prompts", state=tk.DISABLED)
-            menu.add_separator()
-        menu.add_command(
-            label="Manage AI prompts…",
-            command=lambda: self._show_configuration(initial_tab="actions"),
-        )
-        try:
-            menu.tk_popup(event.x_root, event.y_root)
-        finally:
-            menu.grab_release()
-        return "break"
-
-    def _execute_builtin_quick_command(self, command_id: str) -> None:
-        execute_builtin_quick_command(command_id, open_sheets=self._show_cheatsheets)
-
-    def _show_builtin_quick_menu(self, event: tk.Event, command_id: str) -> str:
-        if command_id not in BUILTIN_QUICK_COMMANDS:
-            raise ValueError(f"Unknown built-in quick command: {command_id}")
-        menu = tk.Menu(self.root, tearoff=False)
-        menu.add_command(
-            label="Open Sheets",
-            command=lambda: self._execute_builtin_quick_command(command_id),
-        )
-        try:
-            menu.tk_popup(event.x_root, event.y_root)
-        finally:
-            menu.grab_release()
-        return "break"
+        return self._post_group_menu(group, event.x_root, event.y_root)
 
     def _execute_item_primary(self, item: CommandItem) -> str:
         action = self._primary_action_for_item(item)
@@ -2689,10 +2631,8 @@ class LauncherApp:
                 f"Credential target: {action.value}\n"
                 "Requires a fresh hotkey invocation from the destination field."
             )
-        if action.type == "build_url_copy":
-            return f"Ask for an ID, then copy this URL:\n{action.value}"
         if action.type == "build_url_open":
-            return f"Ask for an ID, then open this URL:\n{action.value}"
+            return f"Ask for an ID, then copy and open this URL:\n{action.value}"
         if action.type == "build_url_selection_open":
             selected = self._workspace_text() or self.captured_selection or "(no input available)"
             return f"Selected ID: {selected}\nCopy URL and open it:\n{action.value}"
@@ -2854,7 +2794,11 @@ class LauncherApp:
         )
 
     def _show_help(self) -> None:
-        HelpWindow(self.root, DOCUMENTATION_DIR / "HELP.md")
+        HelpWindow(
+            self.root,
+            DOCUMENTATION_DIR / "HELP.md",
+            related_actions=(("Cheat sheets", self._show_cheatsheets),),
+        )
 
     def _show_shortcuts(self) -> None:
         HelpWindow(

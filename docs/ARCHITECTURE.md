@@ -276,8 +276,9 @@ before source compilation and the complete unit suite.
 Owns narrow, idempotent migrations for deliberately removed local features.
 Setup and application startup remove retired action records and their references
 from ignored local actions, contexts, quick buttons, and palette state. It also
-normalizes legacy Draft/Trusted actions to Active and converted Inbox items to
-Converted. Every
+normalizes legacy Draft/Trusted actions to Active, converts old copy-only URL
+builders to prompted copy-and-open actions, and changes converted Inbox items
+to Converted. Every
 changed file is written through `persistence.py`, preserving its previous
 contents as an ignored `.bak`. The migration stores and logs aggregate counts
 only; it does not inspect credential secrets or delete legacy snapshot files.
@@ -302,11 +303,14 @@ creation routes owned by other launcher windows reload an already-open
 Configure workspace from storage without raising or replacing that window.
 Configure, Inbox conversion, document harvesting, and cheat-sheet promotion
 all persist action context choices through `context_membership.py`.
-All action-type editors use one vertically scrollable canvas body with a fixed
-save/cancel footer. The embedded form tracks the canvas width, recomputes its
-scroll region when operation-specific fields change, handles mouse-wheel input
-without stealing scrolling from multiline text widgets or comboboxes, and
-brings a newly focused field into view for keyboard traversal.
+All action-type editors use one compact vertically scrollable canvas body with
+a fixed save/cancel footer. Ordinary labels sit beside their fields, action
+type and field explanations use keyboard-accessible tooltips/on-demand help,
+and multiline content retains an appropriately sized editor. The embedded form
+tracks the canvas width, recomputes its scroll region when operation-specific
+fields change, handles mouse-wheel input without stealing scrolling from
+multiline text widgets or comboboxes, and brings a newly focused field into
+view for keyboard traversal.
 
 Configure list tables use the shared `treeview_utils.py` scrollable-tree
 builder. Actions, contexts, Quick actions, Work Item sources, and discovered
@@ -649,9 +653,14 @@ value
 state
 arguments
 working_directory
+quick_action_path
 ```
 
-`description`, `contexts`, and `tags` are optional. `title` remains the
+`description`, `contexts`, `tags`, and `quick_action_path` are optional.
+`quick_action_path` is accepted only for AI prompt, folder, and credential
+actions and contains at most three labels. It controls presentation in the
+corresponding generated Quick-action menu; it does not duplicate membership or
+execution configuration. `title` remains the
 backward-compatible stored field for the compact name shown in action lists;
 `description` holds a longer searchable explanation that appears in hover and
 Action info surfaces. Every action belongs to the virtual
@@ -744,10 +753,14 @@ represent the group without a duplicate heading; direct groups with multiple
 rows retain their visible heading.
 Ignored local groups load after it and occupy the remaining editable positions.
 They retain direct rows unless configured for nested presentation.
-Application-owned Knowledge and AI controls remain separate because they are
-not ordinary stored action-ID configuration. Their single **Sheets** and
-**Prompts** launchers likewise represent the group without a duplicate heading.
-Shift/Ctrl+click opens the owning menu and action configuration files. The data
+Three application-owned action-bound groups remain separate from stored
+command-surface configuration. **Passwords**, **Folders**, and **Prompts**
+derive their complete membership from Active `paste_credential`,
+`open_folder`, and `ai_prompt` actions. Their position is fixed beside
+**Standard**, and each action's optional `quick_action_path` produces as many
+as three native submenu levels. An empty path is projected into **Unsorted**.
+Shift/Ctrl+click on a configured group opens its menu and action files;
+Shift/Ctrl+click on an action-bound group opens action configuration. The data
 model places no numeric limit on a node's ordered actions, but supports at most
 group → level 1 → level 2 → level 3 → action and provides no search or
 app-managed scrolling inside native menus.
@@ -764,11 +777,10 @@ without expanding the fixed-size main-window layout. They prefer the space
 below a control, move above it near the bottom edge, and remain inside the
 virtual desktop, including secondary monitors with negative coordinates.
 
-Configured Quick-action rows, nested group launchers, and allow-listed built-in
-subjects share one mouse/keyboard binding contract for left click, right click,
-Enter, and Space. Their dispatch callbacks remain separate, so consolidating
-interaction wiring does not broaden the built-in command allow-list or action
-execution model.
+Configured Quick-action rows, nested group launchers, and action-bound
+launchers share one mouse/keyboard binding contract for left click, right
+click, Enter, and Space. Every action leaf still uses the ordinary constrained
+action executor.
 
 ## Supported action types
 
@@ -780,7 +792,6 @@ The current allow-list includes:
 - `open_folder`
 - `launch_app`
 - `paste_credential`
-- `build_url_copy`
 - `build_url_open`
 - `build_url_selection_open`
 - `transform_file_text`
@@ -812,7 +823,7 @@ Input / Output workspace <---- Paste / manual edit
         |
         +-- transformation -> replace workspace + copy result
         +-- file-transform preview -> review/edit -> replace source or save as
-        +-- URL builder -> consume workspace -> copy/open URL
+        +-- URL builder -> prompt or consume workspace -> copy + open URL
         `-- saved-text action -> clipboard -> fresh captured destination, or manual-paste fallback
 
 Windows Credential Manager -- exact target --> protected clipboard --> captured destination
@@ -880,16 +891,16 @@ Focus Actions only when that mode remains active. Tags do not create folders
 in this view because they are independent filters rather than structural
 ownership.
 
-Quick actions remain action-ID configuration. Built-in application commands
-are not configurable strings or method names: the launcher contains a closed,
-testable allow-list whose sole member is `open_sheets`, which invokes the
-existing Sheets window. The headerless Sheets and Prompts launchers represent
-the stable built-in Knowledge and AI groups in the first two-column row before
-configurable groups. AI prompt discovery is a pure filter over active
-first-class `ai_prompt` actions; execution still uses the ordinary constrained
-action path. Its initial executor intentionally shares review-first
+Configured Quick actions remain action-ID configuration. The launcher first
+renders **Standard | Passwords**, then **Folders | Prompts**, followed by
+personal configured groups. The last three menus are pure projections over
+Active first-class actions and their optional `quick_action_path`; creating,
+archiving, or deleting an action therefore updates menu membership without a
+second configuration record. AI prompt execution still shares review-first
 workspace/clipboard behavior with templates while retaining a separate type
-identity for future prompt-specific evolution.
+identity for future prompt-specific evolution. Cheat sheets remain a
+searchable reference subsystem and are opened as a secondary command from the
+Help window rather than occupying a Quick-action slot.
 
 Focus and pin changes are applied in memory only after the updated palette state
 has been persisted successfully. A write failure keeps the prior state visible

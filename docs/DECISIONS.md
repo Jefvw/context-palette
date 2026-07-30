@@ -1,5 +1,38 @@
 # Decisions
 
+## 2026-07-30 - Consolidate URL builders around copy and open
+
+**Decision:** Keep two current URL-builder action types: one prompts for a
+value, and one consumes selected text, Input / Output, or clipboard text. Both
+build, copy, and open the completed URL. Migrate the former copy-only type to
+the prompted copy-and-open type.
+
+**Reason:** Copy-only versus open-only created three catalogue choices for one
+workflow. The meaningful choice is where the identifier comes from; retaining
+the completed URL on the clipboard is useful in both cases.
+
+**Consequences:** `build_url_copy` is removed from the current catalogue.
+Loading an older file maps it to `build_url_open`, while setup and startup
+rewrite personal action records atomically and retain an ignored backup.
+Existing copy-only actions will now also open their generated URL.
+
+## 2026-07-30 - Prefer compact configuration screens
+
+**Decision:** Treat screen space as working space. Configuration dialogs should
+place short labels beside ordinary fields, keep multiline editors only where
+the value is genuinely multiline, and move supplementary explanations to
+keyboard-accessible tooltips or explicit on-demand help.
+
+**Reason:** Stacked labels and permanently visible instructions made routine
+forms much taller than their editable content, forcing unnecessary scrolling
+and obscuring lower fields on scaled or smaller displays.
+
+**Consequences:** Create/Edit Action uses a smaller monitor-safe window,
+horizontal field rows, concise labels, and an action-type help control. Its
+fixed footer and scrollable body remain, and field semantics, validation, and
+stored data are unchanged. New screens should follow the same compact default
+while preserving clear labels and keyboard access.
+
 ## 2026-07-27 - Consolidate Built-in Quick actions under Standard
 
 **Decision:** Ship one editable Built-in Quick-action group named **Standard**.
@@ -1615,3 +1648,27 @@ their different controls, Input / Output receives unused vertical space, and a
 user can still enlarge either pane for the current session. This supersedes the
 2026-07-19 choice to consume monitor height by default; the horizontal Actions
 / Quick actions split and all execution behavior are unchanged.
+
+## 2026-07-30 - Generate frequent Quick-action menus from their actions
+
+**Decision:** Reserve the first two Quick-action rows for **Standard |
+Passwords** and **Folders | Prompts**. Keep Standard as the one tracked
+configured group. Generate the other three nested menus from every Active
+`paste_credential`, `open_folder`, and `ai_prompt` action. Store an optional
+three-level `quick_action_path` on those actions and place an action with no
+path under **Unsorted**. Move Cheat Sheets to a secondary button in Help while
+retaining its JSON data, search, and action-promotion workflow.
+
+**Reason:** Credentials, folders, and prompts are frequently executed
+first-class actions, so maintaining separate menu membership can become stale
+after creation, editing, archiving, or deletion. Keeping placement on the
+action makes menu membership and lifecycle automatic while still allowing
+nested organization. Cheat sheets are manually maintained reference material;
+they remain useful but do not justify one of the four most prominent launcher
+positions.
+
+**Consequences:** The three generated menus behave consistently and are present
+even when empty. New matching actions appear under Unsorted until organized;
+archived or deleted actions disappear without another edit. Existing
+configured personal groups remain below the fixed rows. Cheat-sheet data is
+not migrated or deleted.

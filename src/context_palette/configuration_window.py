@@ -7,6 +7,7 @@ import re
 from typing import Callable
 
 from .actions import (
+    ACTION_BOUND_QUICK_TYPES,
     Action,
     ActionError,
     action_matches_search,
@@ -65,10 +66,10 @@ from .palette_state import PaletteState, load_palette_state, save_palette_state
 from .context_membership_field import (
     ContextMembershipField,
     TagSelectionField,
-    specific_context_names,
 )
 from .treeview_utils import scrollable_tree
-from .window_geometry import configure_standard_window
+from .tooltips import WidgetTooltip
+from .window_geometry import configure_standard_window, place_child_window
 from .work_item_configuration import WorkItemsConfigurationPanel
 from .work_item_refresh import WorkItemIndex
 from .work_items import WorkItemSource
@@ -89,8 +90,7 @@ ACTION_TYPE_EXAMPLES = {
     "open_folder": r"Example: Open %PROJECT_ROOT%\docs in File Explorer.",
     "launch_app": r"Example: Start C:\Tools\Example\Example.exe with reviewed arguments.",
     "paste_credential": "Example: Paste the Windows or generic credential target oracle-pc17.",
-    "build_url_copy": "Example: Ask for ABC 123 and copy https://example.com/items/ABC%20123.",
-    "build_url_open": "Example: Ask for ABC 123 and open its generated website address.",
+    "build_url_open": "Example: Ask for ABC 123, then copy and open its generated website address.",
     "build_url_selection_open": "Example: Use selected text ABC 123, copy its URL, and open it.",
     "transform_file_text": "Example: Reformat a recurring UTF-8 JSON or text export and review it before replacing the file.",
     "transform_list_csv": "Example: Convert three input lines into red, green, blue.",
@@ -102,6 +102,9 @@ LOCAL_DESTINATION = "My configuration"
 PROJECT_DESTINATION = "Built-in"
 EMPTY_PIN_LABEL = "Not assigned"
 DEFAULT_TEXT_ACTION_FILENAME = "local_text_action_source.txt"
+ACTION_DIALOG_SIZE = (700, 520)
+ACTION_DIALOG_MINIMUM_SIZE = (620, 420)
+ACTION_DIALOG_LABEL_WIDTH = 14
 BUILT_IN_ACTION_SCOPE_NOTE = (
     "Built-in configuration lists Built-in actions only. To use a My "
     "configuration action, add or edit a My configuration context or "
@@ -2013,11 +2016,25 @@ class ActionDialog:
             if action
             else f"Create action · {definition.display_label}"
         )
-        configure_standard_window(self.window, parent)
-        outer = ttk.Frame(self.window, padding=12)
+        width, height, _x, _y = place_child_window(
+            self.window,
+            parent,
+            size=ACTION_DIALOG_SIZE,
+        )
+        self.window.minsize(
+            min(ACTION_DIALOG_MINIMUM_SIZE[0], width),
+            min(ACTION_DIALOG_MINIMUM_SIZE[1], height),
+        )
+        self.tooltips: list[WidgetTooltip] = []
+        self.action_guidance = (
+            f"{definition.description}\n"
+            f"{definition.output_description}\n"
+            f"{ACTION_TYPE_EXAMPLES[action_type]}"
+        )
+        outer = ttk.Frame(self.window, padding=10)
         outer.pack(fill=tk.BOTH, expand=True)
         self.controls_frame = ttk.Frame(outer)
-        self.controls_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
+        self.controls_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(7, 0))
         ttk.Button(
             self.controls_frame,
             text="Save action" if action else "Create action",
@@ -2058,22 +2075,40 @@ class ActionDialog:
         self.window.bind("<MouseWheel>", self._scroll_form, add="+")
         self.window.bind("<FocusIn>", self._keep_focused_field_visible, add="+")
         form = self.form_frame
-        ttk.Label(
-            form,
+        header = ttk.Frame(form)
+        header.pack(fill=tk.X, pady=(0, 3))
+        action_type_label = ttk.Label(
+            header,
             text=definition.display_label,
             style="Heading.TLabel",
-        ).pack(anchor=tk.W)
-        ttk.Label(
-            form,
-            text=(
-                f"{definition.description}\n{definition.output_description}\n"
-                f"{ACTION_TYPE_EXAMPLES[action_type]}"
-            ),
-            style="Muted.TLabel", wraplength=610,
-        ).pack(anchor=tk.W, pady=(2, 6))
+        )
+        action_type_label.pack(side=tk.LEFT, anchor=tk.W)
+        action_help = ttk.Button(
+            header,
+            text="?",
+            width=3,
+            command=self._show_action_type_help,
+            style="Compact.TButton",
+        )
+        action_help.pack(side=tk.RIGHT)
+        self._tooltip(action_type_label, self.action_guidance)
+        self._tooltip(
+            action_help,
+            "Show what this action reads, changes, and an example.",
+        )
         self.destination_var = tk.StringVar(value=LOCAL_DESTINATION)
         if choose_destination:
-            _destination_field(form, self.destination_var)
+            self.destination_field = self._compact_combobox(
+                form,
+                "Storage",
+                self.destination_var,
+                (LOCAL_DESTINATION, PROJECT_DESTINATION),
+                help_text=(
+                    "My configuration stays on this PC. Built-in changes the "
+                    "starter configuration tracked through Git and is intended "
+                    "for developers."
+                ),
+            )
         self.title_var = tk.StringVar(value=action.title if action else "")
         self.description_var = tk.StringVar(
             value=action.description if action else ""
@@ -2084,36 +2119,47 @@ class ActionDialog:
         self.tags_var = tk.StringVar(
             value=", ".join(action.effective_tags) if action else ""
         )
+        self.quick_action_path_var = tk.StringVar(
+            value=" > ".join(action.quick_action_path) if action else ""
+        )
         self.arguments_var = tk.StringVar(
             value="\n".join(action.arguments) if action else ""
         )
+        self.arguments_text: tk.Text | None = None
         self.working_directory_var = tk.StringVar(
             value=action.working_directory or "" if action else ""
         )
-        title_entry = _entry(
+        title_entry = self._compact_entry(
             form,
-            "Short name (shown in action lists)",
+            "Name",
             self.title_var,
+            help_text="Short name shown in action lists and search results.",
         )
-        _entry(
+        self._compact_entry(
             form,
-            "Description (optional; searchable, shown in Action info)",
+            "Description",
             self.description_var,
+            help_text="Optional searchable explanation shown in Action info.",
         )
         self.context_field = ContextMembershipField(
             form,
             self.contexts_var,
             self.context_names,
-            label="Specific contexts (optional; General always includes it)",
+            label="Contexts",
+            inline=True,
+            label_width=ACTION_DIALOG_LABEL_WIDTH,
         )
-        known_contexts = specific_context_names(self.context_names)
-        if known_contexts:
-            ttk.Label(
-                form,
-                text="Choose one or more defined contexts, or type their names separated by commas.",
-                style="Muted.TLabel",
-                wraplength=610,
-            ).pack(anchor=tk.W, pady=(2, 0))
+        self._tooltip(
+            self.context_field.entry,
+            (
+                "Optional. Choose defined contexts or type comma-separated "
+                "names. General always includes the action."
+            ),
+        )
+        self._tooltip(
+            self.context_field.picker,
+            "Choose one or more defined contexts.",
+        )
         known_tags = sorted(
             {tag for item in actions for tag in item.effective_tags},
             key=str.casefold,
@@ -2122,28 +2168,43 @@ class ActionDialog:
             form,
             self.tags_var,
             known_tags,
+            label="Tags",
+            inline=True,
+            label_width=ACTION_DIALOG_LABEL_WIDTH,
         )
-        if known_tags:
-            ttk.Label(
-                form,
-                text="Choose tags already in use, or type new tags separated by commas.",
-                style="Muted.TLabel",
-                wraplength=610,
-            ).pack(anchor=tk.W, pady=(2, 0))
-        label = {
-            "open_url": "Complete website address",
-            "open_windows_target": "Windows target, URI, path, or script",
-            "open_file": "File path",
-            "open_folder": "Folder path", "launch_app": "Application .exe path",
-            "paste_credential": "Exact Windows or generic credential target name",
-            "transform_file_text": "Source text file and operation",
-            "transform_list_csv": "Conversion mode: csv or sql_strings",
-            "transform_text": "Text operation",
-            "transform_slashes": (
-                "Conversion mode: forward_to_back or back_to_forward"
+        self._tooltip(
+            self.tag_field.entry,
+            (
+                "Optional. Type new comma-separated tags or choose tags "
+                "already in use."
             ),
-        }.get(action_type, "Saved text or URL template")
-        ttk.Label(form, text=label).pack(anchor=tk.W, pady=(8, 0))
+        )
+        self._tooltip(
+            self.tag_field.picker,
+            "Search and choose tags already in use.",
+        )
+        if action_type in ACTION_BOUND_QUICK_TYPES:
+            self._compact_entry(
+                form,
+                "Quick menu",
+                self.quick_action_path_var,
+                help_text=(
+                    "Optional nested placement in the fixed Quick-action menu. "
+                    "Separate up to three levels with >. Leave blank for Unsorted."
+                ),
+            )
+        label = {
+            "open_url": "Website",
+            "open_windows_target": "Windows target",
+            "open_file": "File",
+            "open_folder": "Folder",
+            "launch_app": "Application",
+            "paste_credential": "Credential",
+            "transform_file_text": "Text file",
+            "transform_list_csv": "Mode",
+            "transform_text": "Operation",
+            "transform_slashes": "Mode",
+        }.get(action_type, "Text")
         self.transform_operation_choices: dict[str, str] = {}
         self.transform_parameter_vars: list[tk.StringVar] = []
         self.transform_parameters_frame: ttk.Frame | None = None
@@ -2155,8 +2216,17 @@ class ActionDialog:
                 file_source=action_type == "transform_file_text",
             )
         else:
-            self.value = tk.Text(form, height=7, wrap=tk.WORD, undo=True)
-            self.value.pack(fill=tk.BOTH, expand=True, pady=(2, 0))
+            value_height = (
+                5
+                if action_type in {"copy_text", "workspace_template", "ai_prompt"}
+                else 2
+            )
+            self.value = self._compact_text(
+                form,
+                label,
+                height=value_height,
+                help_text=self.action_guidance,
+            )
             if action:
                 self.value.insert("1.0", action.value)
             elif action_type == "transform_list_csv":
@@ -2165,14 +2235,104 @@ class ActionDialog:
                 self.value.insert("1.0", "forward_to_back")
             elif action_type == "open_windows_target":
                 self.value.insert("1.0", "vscode:")
-            elif action_type in {"build_url_copy", "build_url_open", "build_url_selection_open"}:
+            elif action_type in {"build_url_open", "build_url_selection_open"}:
                 self.value.insert("1.0", "https://example.com/items/{id_url}")
         if action_type in {"launch_app", "open_windows_target"}:
-            _entry(form, "Arguments, one per line (optional)", self.arguments_var)
-            _entry(form, "Working folder (optional)", self.working_directory_var)
+            self.arguments_text = self._compact_text(
+                form,
+                "Arguments",
+                height=3,
+                help_text=(
+                    "Optional. Enter one argument per line; press Enter to "
+                    "start the next argument."
+                ),
+            )
+            self.arguments_text.insert("1.0", self.arguments_var.get())
+            self._compact_entry(
+                form,
+                "Working folder",
+                self.working_directory_var,
+                help_text="Optional working folder used when the action starts.",
+            )
         self.window.transient(parent)
         self.window.grab_set()
         _focus_entry(self.window, title_entry)
+
+    def _tooltip(self, widget: tk.Widget, text: str) -> None:
+        self.tooltips.append(WidgetTooltip(widget, text))
+
+    def _compact_row(
+        self,
+        parent: ttk.Frame,
+        label: str,
+    ) -> tuple[ttk.Frame, ttk.Label]:
+        row = ttk.Frame(parent)
+        row.pack(fill=tk.X, pady=(5, 0))
+        label_widget = ttk.Label(
+            row,
+            text=label,
+            width=ACTION_DIALOG_LABEL_WIDTH,
+        )
+        label_widget.pack(side=tk.LEFT, anchor=tk.W, padx=(0, 8))
+        return row, label_widget
+
+    def _compact_entry(
+        self,
+        parent: ttk.Frame,
+        label: str,
+        variable: tk.StringVar,
+        *,
+        help_text: str,
+    ) -> ttk.Entry:
+        row, label_widget = self._compact_row(parent, label)
+        entry = ttk.Entry(row, textvariable=variable)
+        entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._tooltip(label_widget, help_text)
+        self._tooltip(entry, help_text)
+        return entry
+
+    def _compact_combobox(
+        self,
+        parent: ttk.Frame,
+        label: str,
+        variable: tk.StringVar,
+        values: tuple[str, ...],
+        *,
+        help_text: str,
+    ) -> ttk.Combobox:
+        row, label_widget = self._compact_row(parent, label)
+        chooser = ttk.Combobox(
+            row,
+            textvariable=variable,
+            values=values,
+            state="readonly",
+        )
+        chooser.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._tooltip(label_widget, help_text)
+        self._tooltip(chooser, help_text)
+        return chooser
+
+    def _compact_text(
+        self,
+        parent: ttk.Frame,
+        label: str,
+        *,
+        height: int,
+        help_text: str,
+    ) -> tk.Text:
+        row, label_widget = self._compact_row(parent, label)
+        text = tk.Text(row, height=height, wrap=tk.WORD, undo=True)
+        text.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._tooltip(label_widget, help_text)
+        self._tooltip(text, help_text)
+        return text
+
+    def _show_action_type_help(self) -> None:
+        messagebox.showinfo(
+            ACTION_TYPES[self.action_type].display_label,
+            self.action_guidance,
+            parent=self.window,
+        )
 
     def _update_form_scrollregion(self, _event: tk.Event | None = None) -> None:
         bounds = self.form_canvas.bbox("all")
@@ -2261,8 +2421,7 @@ class ActionDialog:
                 else str(self.default_text_file_path or "")
             )
             self.transform_file_path_var = tk.StringVar(value=default_path)
-            path_row = ttk.Frame(parent)
-            path_row.pack(fill=tk.X, pady=(2, 6))
+            path_row, path_label = self._compact_row(parent, "Text file")
             path_entry = ttk.Entry(
                 path_row,
                 textvariable=self.transform_file_path_var,
@@ -2273,15 +2432,12 @@ class ActionDialog:
                 text="Browse…",
                 command=self._choose_transform_file,
             ).pack(side=tk.RIGHT, padx=(6, 0))
-            ttk.Label(
-                parent,
-                text=(
-                    "The file must exist. Running the action reads it again and "
-                    "shows a reviewable result without changing the source."
-                ),
-                style="Muted.TLabel",
-                wraplength=610,
-            ).pack(anchor=tk.W, pady=(0, 6))
+            file_help = (
+                "Choose an existing text file. Running the action reads it "
+                "again and shows a reviewable result without changing it."
+            )
+            self._tooltip(path_label, file_help)
+            self._tooltip(path_entry, file_help)
         for group in WORKSPACE_TRANSFORM_GROUPS:
             for transform in group.transforms:
                 self.transform_operation_choices[
@@ -2304,13 +2460,17 @@ class ActionDialog:
         self.transform_operation_var = tk.StringVar(
             value=labels_by_operation[operation]
         )
+        operation_row, operation_label = self._compact_row(parent, "Operation")
         chooser = ttk.Combobox(
-            parent,
+            operation_row,
             textvariable=self.transform_operation_var,
             values=tuple(self.transform_operation_choices),
             state="readonly",
         )
-        chooser.pack(fill=tk.X, pady=(2, 0))
+        chooser.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        operation_help = "Choose the text operation to apply."
+        self._tooltip(operation_label, operation_help)
+        self._tooltip(chooser, operation_help)
         self.transform_parameters_frame = ttk.Frame(parent)
         self.transform_parameters_frame.pack(fill=tk.X)
         chooser.bind(
@@ -2366,7 +2526,12 @@ class ActionDialog:
                 else ""
             )
             variable = tk.StringVar(value=default)
-            _entry(self.transform_parameters_frame, label, variable)
+            self._compact_entry(
+                self.transform_parameters_frame,
+                label,
+                variable,
+                help_text=f"Value used for {label.casefold()}.",
+            )
             self.transform_parameter_vars.append(variable)
         if not definition.parameter_labels:
             ttk.Label(
@@ -2396,7 +2561,13 @@ class ActionDialog:
             else:
                 assert self.value is not None
                 value = self.value.get("1.0", "end-1c")
-                arguments = self.arguments_var.get().splitlines()
+                arguments_text = getattr(self, "arguments_text", None)
+                arguments = (
+                    arguments_text.get("1.0", "end-1c").splitlines()
+                    if arguments_text is not None
+                    else self.arguments_var.get().splitlines()
+                )
+            quick_action_path_var = getattr(self, "quick_action_path_var", None)
             values = dict(
                 title=self.title_var.get(),
                 description=self.description_var.get(),
@@ -2407,6 +2578,11 @@ class ActionDialog:
                 value=value,
                 arguments=arguments,
                 working_directory=self.working_directory_var.get(),
+                quick_action_path=_quick_action_path(
+                    quick_action_path_var.get()
+                    if quick_action_path_var is not None
+                    else ""
+                ),
             )
             action = (
                 edited_configured_action(self.action, **values)
@@ -3154,6 +3330,18 @@ def _stable_id(label: str) -> str:
 
 def _comma_separated(value: str) -> tuple[str, ...]:
     return tuple(part.strip() for part in value.split(",") if part.strip())
+
+
+def _quick_action_path(value: str) -> tuple[str, ...]:
+    clean = value.strip()
+    if not clean:
+        return ()
+    parts = tuple(part.strip() for part in clean.split(">"))
+    if any(not part for part in parts):
+        raise ActionError(
+            "Quick menu paths cannot contain an empty level between > separators."
+        )
+    return parts
 
 
 def _action_choices(actions: list[Action]) -> dict[str, str]:

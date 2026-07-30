@@ -61,8 +61,10 @@ def main(arguments: list[str] | None = None) -> None:
         cleanup_report = cleanup_retired_local_configuration(root)
         if cleanup_report.files_changed:
             logger.info(
-                "Removed retired local configuration: actions=%d references=%d files=%d",
+                "Updated retired local configuration: "
+                "removed_actions=%d migrated_actions=%d references=%d files=%d",
                 cleanup_report.actions_removed,
+                cleanup_report.actions_migrated,
                 cleanup_report.references_removed,
                 cleanup_report.files_changed,
             )

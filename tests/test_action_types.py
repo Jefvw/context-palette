@@ -17,7 +17,16 @@ from context_palette.action_types import (
 class ActionTypeCatalogueTests(unittest.TestCase):
     def test_catalogue_covers_every_supported_action_type(self):
         self.assertEqual(set(ACTION_TYPES), SUPPORTED_ACTION_TYPES)
-        self.assertEqual(len(ACTION_TYPES), 16)
+        self.assertEqual(len(ACTION_TYPES), 15)
+        self.assertNotIn("build_url_copy", ACTION_TYPES)
+        self.assertEqual(
+            {
+                action_type
+                for action_type, definition in ACTION_TYPES.items()
+                if definition.family == "URL builder"
+            },
+            {"build_url_open", "build_url_selection_open"},
+        )
 
     def test_new_action_catalogue_hides_legacy_workspace_transform_types(self):
         self.assertIn("transform_file_text", CREATABLE_ACTION_TYPES)

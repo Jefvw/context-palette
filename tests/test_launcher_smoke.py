@@ -854,46 +854,47 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertGreaterEqual(action_share, 0.42)
                     self.assertLessEqual(action_share, 0.46)
 
-                    surface_areas = [
-                        child
-                        for child in app.command_tiles_frame.winfo_children()
-                        if not (
-                            isinstance(child, ttk.LabelFrame)
-                            and child.cget("text") == "Frequent passwords"
+                    surface_areas = app.command_tiles_frame.winfo_children()
+                    self.assertEqual(
+                        len(surface_areas),
+                        4
+                        + len(
+                            [
+                                group
+                                for group in app.command_groups
+                                if group.id.casefold() != "standard"
+                            ]
+                        ),
+                    )
+                    for area, (label, expected_row, expected_column) in zip(
+                        surface_areas[:4],
+                        (
+                            ("Standard ▾", 0, 0),
+                            ("Passwords ▾", 0, 1),
+                            ("Folders ▾", 1, 0),
+                            ("Prompts ▾", 1, 1),
+                        ),
+                    ):
+                        self.assertIsInstance(area, ttk.Frame)
+                        self.assertNotIsInstance(area, ttk.LabelFrame)
+                        self.assertEqual(int(area.grid_info()["row"]), expected_row)
+                        self.assertEqual(int(area.grid_info()["column"]), expected_column)
+                        self.assertEqual(
+                            [child.cget("text") for child in area.winfo_children()],
+                            [label],
                         )
+                    configurable_groups = [
+                        group
+                        for group in app.command_groups
+                        if group.id.casefold() != "standard"
                     ]
-                    self.assertEqual(len(surface_areas), 2 + len(app.command_groups))
-                    password_row_count = 1 if any(
-                        isinstance(child, ttk.LabelFrame)
-                        and child.cget("text") == "Frequent passwords"
-                        for child in app.command_tiles_frame.winfo_children()
-                    ) else 0
-                    knowledge_area = surface_areas[0]
-                    self.assertIsInstance(knowledge_area, ttk.Frame)
-                    self.assertNotIsInstance(knowledge_area, ttk.LabelFrame)
-                    self.assertEqual(int(knowledge_area.grid_info()["row"]), password_row_count)
-                    self.assertEqual(int(knowledge_area.grid_info()["column"]), 0)
-                    self.assertEqual(
-                        [child.cget("text") for child in knowledge_area.winfo_children()],
-                        ["Sheets ▾"],
-                    )
-                    ai_area = surface_areas[1]
-                    self.assertIsInstance(ai_area, ttk.Frame)
-                    self.assertNotIsInstance(ai_area, ttk.LabelFrame)
-                    self.assertEqual(int(ai_area.grid_info()["row"]), password_row_count)
-                    self.assertEqual(int(ai_area.grid_info()["column"]), 1)
-                    self.assertEqual(
-                        [child.cget("text") for child in ai_area.winfo_children()],
-                        ["Prompts ▾"],
-                    )
-                    group_row_offset = password_row_count + 1
                     for index, (area, group) in enumerate(
-                        zip(surface_areas[2:], app.command_groups)
+                        zip(surface_areas[4:], configurable_groups)
                     ):
                         expected_row, expected_column = divmod(index, 2)
                         self.assertEqual(
                             int(area.grid_info()["row"]),
-                            expected_row + group_row_offset,
+                            expected_row + 2,
                         )
                         self.assertEqual(
                             int(area.grid_info()["column"]),
@@ -1369,6 +1370,15 @@ class LauncherSmokeTests(unittest.TestCase):
                             and child.title() == "Context Palette Help"
                         ]
                         self.assertEqual(len(help_windows), 1)
+                        self.assertEqual(
+                            [
+                                child.cget("text")
+                                for child in self._descendants(help_windows[0])
+                                if isinstance(child, ttk.Button)
+                                and child.cget("text") == "Cheat sheets"
+                            ],
+                            ["Cheat sheets"],
+                        )
                         help_windows[0].destroy()
                         root.update()
 
