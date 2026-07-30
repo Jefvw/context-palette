@@ -1538,3 +1538,19 @@ Python-version, pip, and Tkinter contract. Incompatible machine-local
 environments remain recoverable through the existing non-destructive
 `.venv-unusable*` flow, and environment-specific installations no longer cause
 false setup-test failures.
+
+## 2026-07-29 - Let compact controls represent their temporary UI modes
+
+**Decision:** Make **Focus actions** a visibly active toggle whose second
+activation restores the normal action list. For every Quick-action group
+rendered as one menu launcher, omit the duplicate group heading. Put a
+configured nested group's name on its launcher, let one direct row represent
+its group, and retain the already meaningful **Sheets** and **Prompts** names
+for the built-in Knowledge and AI launchers. Keep headings for groups that
+render multiple direct rows.
+
+**Reason:** Focus Actions previously behaved like a one-way command and required
+an unrelated F5 reset to leave the mode. Single-launcher groups also spent a
+full extra row repeating context already conveyed by the launcher. Reversible
+state and one label per compact group make both areas easier to understand
+while preserving menu structure and direct-row group identity.

@@ -148,7 +148,8 @@ Focus. The list stays flat and follows the normal action order. General contains
 every action; a specific Focus contains actions assigned to that context.
 Select an action and use Run, Enter, or double-click as usual. Activating
 **Focus actions** moves keyboard focus directly into the list so arrow-key
-navigation can begin immediately.
+navigation can begin immediately. The button stays highlighted while this mode
+is active; choose it again to return to the normal action list.
 
 Find remains global. Typing while Focus Actions is active temporarily shows the
 existing flat global results; it does not limit search to the Focus. Clearing
@@ -306,17 +307,19 @@ subareas and stays visible when Focus changes. A group can use direct
 Quick-action rows or one compact nested-menu launcher.
 
 - In a Quick-action-row group, left-click a subject to execute its primary
-  action; right-click opens its complete assigned-action menu.
-- In a nested-menu group, click, right-click, Enter, or Space on **Browse
-  actions** to open the group. Choose zero to three submenu levels, then an
-  action.
+  action; right-click opens its complete assigned-action menu. A group with one
+  row uses that row as its visible identity instead of repeating a heading;
+  groups with multiple rows retain their heading.
+- In a nested-menu group, the one group-labelled launcher replaces a separate
+  group heading. Click, right-click, Enter, or Space on it to open the group.
+  Choose zero to three submenu levels, then an action.
 - Shift+click or Ctrl+click a label to open its technical menu configuration and corresponding action file in the default JSON editor.
 - Every item uses the same selected text, Input / Output, clipboard, and safe action executor as the search list.
 - Configure shared groups in `data/command_surface.json` and private groups in `data/local_command_surface.json`.
 - Press `Ctrl+,`, then use **Quick actions** to add or edit personal groups
   and menu levels without editing JSON. Choose existing actions from lists; stable
   IDs are generated from the visible names when left blank.
-- **Standard** is the single Built-in group. Its one **Browse actions** launcher
+- **Standard** is the single Built-in group. Its one **Standard** launcher
   distributes all active Built-in actions across direct commands and three
   first-level sections with deeper subject levels, leaving the other editable
   group positions for **My configuration**.
@@ -596,18 +599,20 @@ If the Inbox item already contains only the stable base URL, such as `https://do
 
 ### Sheets
 
-Open **Quick actions → Knowledge → Sheets** to open searchable local cheat
-sheets. Knowledge stays directly below Frequent passwords so Sheets remains
-visible before the configurable groups; those groups retain their configured
-order and continue scrolling when needed. Individual cheat-sheet entries can
-be promoted to permanent Active actions.
+Open **Quick actions → Sheets** to open searchable local cheat sheets. The
+compact **Sheets** launcher represents the built-in Knowledge group without a
+second heading. It stays directly below Frequent passwords and before the
+configurable groups; those groups retain their configured order and continue
+scrolling when needed. Individual cheat-sheet entries can be promoted to
+permanent Active actions.
 
 ### AI prompts
 
-The **AI** group appears beside **Knowledge**. Left-click **Prompts** to load
-the first stored prompt into Input / Output for review; the reusable-template
-action also copies it to the clipboard. Right-click **Prompts** to choose any
-stored prompt or open **Manage AI prompts…**.
+The compact **Prompts** launcher represents the built-in AI group beside
+**Sheets**. Left-click **Prompts** to load the first stored prompt into Input /
+Output for review; the reusable-template action also copies it to the
+clipboard. Right-click **Prompts** to choose any stored prompt or open
+**Manage AI prompts…**.
 
 Stored prompts reuse the normal action lifecycle. In Configure, choose
 **Create action**, select **AI prompt**, and create a personal action.

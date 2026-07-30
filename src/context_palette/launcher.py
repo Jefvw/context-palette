@@ -432,7 +432,11 @@ class LauncherApp:
         )
         self._tooltip(
             focus_actions_button,
-            "Show actions belonging to the active Focus. General contains every action.",
+            lambda: (
+                "Return to all actions."
+                if self.focus_actions_mode
+                else "Show actions belonging to the active Focus. General contains every action."
+            ),
         )
         self._tooltip(
             configure_button,
@@ -447,10 +451,19 @@ class LauncherApp:
         self.focus_actions_button = focus_actions_button
 
     def _activate_focus_actions(self) -> None:
+        enabled = not self.focus_actions_mode
         self._set_work_items_mode(False)
-        self.focus_actions_mode = True
+        self._set_focus_actions_mode(enabled)
         self._refresh_results()
         self.root.after_idle(self._focus_active_results)
+
+    def _set_focus_actions_mode(self, enabled: bool) -> None:
+        self.focus_actions_mode = enabled
+        button = getattr(self, "focus_actions_button", None)
+        if button is not None:
+            button.configure(
+                style="Accent.TButton" if enabled else "Compact.TButton"
+            )
 
     def _focus_active_results(self) -> None:
         """Move keyboard users into the result view they explicitly opened."""
@@ -497,7 +510,7 @@ class LauncherApp:
     def _set_work_items_mode(self, enabled: bool) -> None:
         self.work_items_mode = enabled
         if enabled:
-            self.focus_actions_mode = False
+            self._set_focus_actions_mode(False)
             if self.work_item_sources and not self.work_item_refresh.running:
                 self._start_work_item_refresh()
         action_tags = tuple(
@@ -706,7 +719,7 @@ class LauncherApp:
 
     def _reset_main_window(self, _event: tk.Event | None = None) -> str:
         """Restore the transient main-window state used by a fresh startup."""
-        self.focus_actions_mode = False
+        self._set_focus_actions_mode(False)
         self.action_type_filter = None
         self.action_tag_filter = None
         self.work_project_filter = None
@@ -1341,13 +1354,24 @@ class LauncherApp:
         for index, group in enumerate(self.command_groups):
             row, column = divmod(index, 2)
             row += group_row_offset
-            area = ttk.LabelFrame(self.command_tiles_frame, text=group.label, padding=4)
+            compact_group = (
+                group.presentation == GROUP_PRESENTATION_NESTED_MENU
+                or len(group.items) == 1
+            )
+            if compact_group:
+                area = ttk.Frame(self.command_tiles_frame, padding=4)
+            else:
+                area = ttk.LabelFrame(
+                    self.command_tiles_frame,
+                    text=group.label,
+                    padding=4,
+                )
             area.grid(row=row, column=column, sticky=tk.NSEW, padx=2, pady=2)
             area.columnconfigure(0, weight=1)
             if group.presentation == GROUP_PRESENTATION_NESTED_MENU:
                 control = ttk.Label(
                     area,
-                    text="Browse actions ▾",
+                    text=f"{group.label} ▾",
                     style="SurfaceMenu.TLabel",
                     anchor=tk.W,
                     relief=tk.SOLID,
@@ -1413,9 +1437,8 @@ class LauncherApp:
                 )
 
     def _render_knowledge_quick_action(self, row: int) -> None:
-        knowledge_area = ttk.LabelFrame(
+        knowledge_area = ttk.Frame(
             self.command_tiles_frame,
-            text="Knowledge",
             padding=4,
         )
         knowledge_area.grid(
@@ -1455,9 +1478,8 @@ class LauncherApp:
         )
 
     def _render_ai_quick_action(self, row: int) -> None:
-        ai_area = ttk.LabelFrame(
+        ai_area = ttk.Frame(
             self.command_tiles_frame,
-            text="AI",
             padding=4,
         )
         ai_area.grid(row=row, column=1, sticky=tk.NSEW, padx=2, pady=2)

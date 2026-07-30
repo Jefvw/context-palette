@@ -9,6 +9,12 @@ This project has not published a versioned release. Changes are recorded under *
   Tkinter. Windows setup tests now distinguish an installed but incompatible
   Python from a usable candidate and ignore inherited machine-local overrides
   when testing the no-Python failure path.
+- Made **Focus actions** a highlighted toggle: the first click opens the active
+  Focus list and the second restores the normal action list. Compact
+  single-launcher Quick-action groups no longer repeat their name in a separate
+  heading; configured nested groups use the group name on the launcher,
+  one-row groups use that row directly, and **Sheets** and **Prompts**
+  represent their built-in groups directly.
 - Made every action create/edit form vertically scrollable while keeping
   **Create/Save action** and **Cancel** fixed at the bottom. Mouse-wheel
   scrolling works across normal fields, and keyboard focus automatically

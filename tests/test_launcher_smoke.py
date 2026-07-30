@@ -490,6 +490,40 @@ class LauncherSmokeTests(unittest.TestCase):
                 data / "command_surface.json",
                 {"groups": []},
             )
+            local_command_surface_path = self._write_json(
+                data / "local_command_surface.json",
+                {
+                    "groups": [
+                        {
+                            "id": "single-row",
+                            "label": "Single-row group",
+                            "items": [
+                                {
+                                    "id": "single-row-action",
+                                    "label": "Single row",
+                                    "primary_action_id": "general-first",
+                                }
+                            ],
+                        },
+                        {
+                            "id": "multiple-rows",
+                            "label": "Multiple-row group",
+                            "items": [
+                                {
+                                    "id": "first-row",
+                                    "label": "First row",
+                                    "primary_action_id": "general-first",
+                                },
+                                {
+                                    "id": "second-row",
+                                    "label": "Second row",
+                                    "primary_action_id": "general-second",
+                                },
+                            ],
+                        },
+                    ]
+                },
+            )
             palette_path = self._write_json(data / "palette.json", {})
             inbox_path = self._write_json(data / "inbox.json", {"items": []})
             cheatsheets_dir = data / "cheatsheets"
@@ -548,7 +582,7 @@ class LauncherSmokeTests(unittest.TestCase):
                         contexts_path,
                         data / "local_contexts.json",
                         command_surface_path,
-                        data / "local_command_surface.json",
+                        local_command_surface_path,
                         palette_path,
                         inbox_path,
                         cheatsheets_dir,
@@ -745,6 +779,10 @@ class LauncherSmokeTests(unittest.TestCase):
                     app._activate_focus_actions()
                     root.update()
                     self.assertEqual(app.results_view, "focus")
+                    self.assertEqual(
+                        app.focus_actions_button.cget("style"),
+                        "Accent.TButton",
+                    )
                     self.assertIs(root.focus_get(), app.focus_tree)
                     self.assertEqual(
                         {action.id for action in app.focus_tree_actions.values()},
@@ -798,8 +836,14 @@ class LauncherSmokeTests(unittest.TestCase):
                         {"database-only"},
                     )
 
-                    app.focus_actions_mode = False
-                    app._refresh_results()
+                    app._activate_focus_actions()
+                    root.update()
+                    self.assertFalse(app.focus_actions_mode)
+                    self.assertEqual(app.results_view, "flat")
+                    self.assertEqual(
+                        app.focus_actions_button.cget("style"),
+                        "Compact.TButton",
+                    )
                     action_share = (
                         app.actions_panel.winfo_width()
                         / app.action_console.winfo_width()
@@ -807,30 +851,41 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertGreaterEqual(action_share, 0.42)
                     self.assertLessEqual(action_share, 0.46)
 
-                    group_areas = [
+                    surface_areas = [
                         child
                         for child in app.command_tiles_frame.winfo_children()
-                        if isinstance(child, ttk.LabelFrame)
-                        and child.cget("text") != "Frequent passwords"
+                        if not (
+                            isinstance(child, ttk.LabelFrame)
+                            and child.cget("text") == "Frequent passwords"
+                        )
                     ]
-                    self.assertEqual(
-                        [area.cget("text") for area in group_areas],
-                        ["Knowledge", "AI"] + [group.label for group in app.command_groups],
-                    )
+                    self.assertEqual(len(surface_areas), 2 + len(app.command_groups))
                     password_row_count = 1 if any(
                         isinstance(child, ttk.LabelFrame)
                         and child.cget("text") == "Frequent passwords"
                         for child in app.command_tiles_frame.winfo_children()
                     ) else 0
-                    knowledge_area = group_areas[0]
+                    knowledge_area = surface_areas[0]
+                    self.assertIsInstance(knowledge_area, ttk.Frame)
+                    self.assertNotIsInstance(knowledge_area, ttk.LabelFrame)
                     self.assertEqual(int(knowledge_area.grid_info()["row"]), password_row_count)
                     self.assertEqual(int(knowledge_area.grid_info()["column"]), 0)
-                    ai_area = group_areas[1]
+                    self.assertEqual(
+                        [child.cget("text") for child in knowledge_area.winfo_children()],
+                        ["Sheets ▾"],
+                    )
+                    ai_area = surface_areas[1]
+                    self.assertIsInstance(ai_area, ttk.Frame)
+                    self.assertNotIsInstance(ai_area, ttk.LabelFrame)
                     self.assertEqual(int(ai_area.grid_info()["row"]), password_row_count)
                     self.assertEqual(int(ai_area.grid_info()["column"]), 1)
+                    self.assertEqual(
+                        [child.cget("text") for child in ai_area.winfo_children()],
+                        ["Prompts ▾"],
+                    )
                     group_row_offset = password_row_count + 1
                     for index, (area, group) in enumerate(
-                        zip(group_areas[2:], app.command_groups)
+                        zip(surface_areas[2:], app.command_groups)
                     ):
                         expected_row, expected_column = divmod(index, 2)
                         self.assertEqual(
@@ -841,6 +896,15 @@ class LauncherSmokeTests(unittest.TestCase):
                             int(area.grid_info()["column"]),
                             expected_column,
                         )
+                        if (
+                            group.presentation == GROUP_PRESENTATION_NESTED_MENU
+                            or len(group.items) == 1
+                        ):
+                            self.assertIsInstance(area, ttk.Frame)
+                            self.assertNotIsInstance(area, ttk.LabelFrame)
+                        else:
+                            self.assertIsInstance(area, ttk.LabelFrame)
+                            self.assertEqual(area.cget("text"), group.label)
                         menu_launchers = [
                             child
                             for child in area.winfo_children()
@@ -848,7 +912,7 @@ class LauncherSmokeTests(unittest.TestCase):
                             and child.cget("style") == "SurfaceMenu.TLabel"
                         ]
                         expected_launcher_labels = (
-                            ["Browse actions ▾"]
+                            [f"{group.label} ▾"]
                             if group.presentation
                             == GROUP_PRESENTATION_NESTED_MENU
                             else [item.label for item in group.items]
@@ -860,7 +924,7 @@ class LauncherSmokeTests(unittest.TestCase):
                         for row, control in enumerate(menu_launchers):
                             self.assertEqual(int(control.grid_info()["row"]), row)
                             self.assertEqual(int(control.grid_info()["column"]), 0)
-                            self.assertEqual(control.cget("anchor"), "w")
+                            self.assertEqual(str(control.cget("anchor")), "w")
                             self.assertTrue(control.cget("takefocus"))
                             for sequence in (
                                 "<Button-1>",

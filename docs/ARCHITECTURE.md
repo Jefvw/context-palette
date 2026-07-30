@@ -712,17 +712,22 @@ Passwords is a direct shortcut into that same filter state.
 Each group renders in stable row-major order within a two-column grid. The
 tracked command surface contributes one **Standard** group containing every
 active Built-in action exactly once across subject menus. Standard's nested
-presentation renders one **Browse actions** launcher. Direct group actions
-become root commands; recursive menu levels become native cascades; and actions
-assigned at any level appear before that level's child cascades.
+presentation renders one **Standard** launcher without a duplicate group
+heading. Direct group actions become root commands; recursive menu levels
+become native cascades; and actions assigned at any level appear before that
+level's child cascades. Every configured nested group uses the same compact
+group-labelled launcher. A direct group with one row also lets that row
+represent the group without a duplicate heading; direct groups with multiple
+rows retain their visible heading.
 Ignored local groups load after it and occupy the remaining editable positions.
 They retain direct rows unless configured for nested presentation.
 Application-owned Knowledge and AI controls remain separate because they are
-not ordinary stored action-ID configuration. Shift/Ctrl+click opens the owning
-menu and action configuration files. The data model places no numeric limit on
-a node's ordered actions, but supports at most group → level 1 → level 2 →
-level 3 → action and provides no search or app-managed scrolling inside native
-menus.
+not ordinary stored action-ID configuration. Their single **Sheets** and
+**Prompts** launchers likewise represent the group without a duplicate heading.
+Shift/Ctrl+click opens the owning menu and action configuration files. The data
+model places no numeric limit on a node's ordered actions, but supports at most
+group → level 1 → level 2 → level 3 → action and provides no search or
+app-managed scrolling inside native menus.
 
 Quick-action labels participate in keyboard focus. Enter or Space executes a
 row's first available primary action or opens a nested group at its launcher.
@@ -842,23 +847,25 @@ other rows  ordinary search matches
 
 Changing the focus context changes slots 6–9 only. Search always remains global.
 
-The **Focus actions** control is a separate presentation mode. With Find empty,
-it shows a flat list of visible actions belonging to the active Focus in
-canonical action order. General contains every action; a specific Focus uses the
-action's `contexts` memberships. Typing in Find swaps this view for the global
-flat results, and clearing Find restores Focus Actions only when that mode was
-explicitly activated. Tags do not create folders in this view because they are
+The **Focus actions** control is a reversible, visibly active presentation
+mode. With Find empty, it shows a flat list of visible actions belonging to the
+active Focus in canonical action order. Choosing the control again returns to
+the normal action list. General contains every action; a specific Focus uses
+the action's `contexts` memberships. Typing in Find swaps this view for the
+global flat results, and clearing Find restores Focus Actions only when that
+mode remains active. Tags do not create folders in this view because they are
 independent filters rather than structural ownership.
 
-Quick actions remain action-ID configuration. Built-in application commands are
-not configurable strings or method names: the launcher contains a closed,
+Quick actions remain action-ID configuration. Built-in application commands
+are not configurable strings or method names: the launcher contains a closed,
 testable allow-list whose sole member is `open_sheets`, which invokes the
-existing Sheets window. Knowledge and AI are stable built-in groups in the
-first two-column row before configurable groups. AI prompt discovery is a pure
-filter over active first-class `ai_prompt` actions; execution still uses the
-ordinary constrained action path. Its initial executor intentionally shares
-review-first workspace/clipboard behavior with templates while retaining a
-separate type identity for future prompt-specific evolution.
+existing Sheets window. The headerless Sheets and Prompts launchers represent
+the stable built-in Knowledge and AI groups in the first two-column row before
+configurable groups. AI prompt discovery is a pure filter over active
+first-class `ai_prompt` actions; execution still uses the ordinary constrained
+action path. Its initial executor intentionally shares review-first
+workspace/clipboard behavior with templates while retaining a separate type
+identity for future prompt-specific evolution.
 
 Focus and pin changes are applied in memory only after the updated palette state
 has been persisted successfully. A write failure keeps the prior state visible

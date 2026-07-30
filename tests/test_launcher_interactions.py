@@ -480,6 +480,29 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertEqual(app.passwords_button.options["style"], "Compact.TButton")
         self.assertEqual(refreshes, [True, True])
 
+    def test_focus_actions_button_toggles_focus_mode_and_visual_state(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.focus_actions_mode = False
+        app.focus_actions_button = FakeButton()
+        app.root = Mock()
+        work_item_changes: list[bool] = []
+        refreshes: list[bool] = []
+        app._set_work_items_mode = work_item_changes.append
+        app._refresh_results = lambda: refreshes.append(True)
+
+        app._activate_focus_actions()
+
+        self.assertTrue(app.focus_actions_mode)
+        self.assertEqual(app.focus_actions_button.options["style"], "Accent.TButton")
+
+        app._activate_focus_actions()
+
+        self.assertFalse(app.focus_actions_mode)
+        self.assertEqual(app.focus_actions_button.options["style"], "Compact.TButton")
+        self.assertEqual(work_item_changes, [False, False])
+        self.assertEqual(refreshes, [True, True])
+        self.assertEqual(app.root.after_idle.call_count, 2)
+
     def test_any_action_type_can_be_selected_as_a_filter(self):
         app = LauncherApp.__new__(LauncherApp)
         app.action_type_filter = None
