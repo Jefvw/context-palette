@@ -50,9 +50,22 @@ def save_context(
     updated = [item for item in contexts if item.name.casefold() != replacement_key]
     updated.append(context)
     updated.sort(key=lambda item: item.name.casefold())
+    save_contexts(path, updated)
+
+
+def save_contexts(
+    path: Path,
+    contexts: list[ContextDefinition],
+) -> None:
+    names: set[str] = set()
+    for context in contexts:
+        key = context.name.casefold()
+        if key in names:
+            raise ContextError(f"Duplicate configured context: {context.name}")
+        names.add(key)
     atomic_write_json(
         path,
-        {"contexts": [_context_to_data(item) for item in updated]},
+        {"contexts": [_context_to_data(item) for item in contexts]},
     )
 
 

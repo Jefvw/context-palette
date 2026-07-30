@@ -11,12 +11,10 @@ from .actions import (
     ActionError,
     action_matches_search,
     action_search_text,
-    append_action,
     configured_action,
     edited_configured_action,
     ensure_default_text_action_file,
     load_combined_actions,
-    update_action,
     validate_context_memberships,
 )
 from .action_deletion import (
@@ -51,6 +49,11 @@ from .configuration_data import (
     save_command_group,
 )
 from .contexts import ContextDefinition, ContextError, load_combined_contexts, load_contexts
+from .context_membership import (
+    actions_with_canonical_contexts,
+    append_actions_with_context_memberships,
+    update_action_with_context_memberships,
+)
 from .context_deletion import (
     ContextDeletionError,
     delete_context_and_memberships,
@@ -568,6 +571,8 @@ class ConfigurationWindow:
             context_names=[context.name for context in self.contexts],
             focus_context=self.focus_context,
             actions_path=self.local_actions_path,
+            shared_contexts_path=self.contexts_path,
+            local_contexts_path=self.local_contexts_path,
             on_change=self._harvest_changed,
         )
 
@@ -898,21 +903,24 @@ class ConfigurationWindow:
         local = destination != PROJECT_DESTINATION
         target_path = self.local_actions_path if local else self.shared_actions_path
         try:
-            append_action(target_path, action)
-        except (ActionError, OSError) as exc:
+            append_actions_with_context_memberships(
+                target_path,
+                [action],
+                actions_are_local=local,
+                shared_contexts_path=self.contexts_path,
+                local_contexts_path=self.local_contexts_path,
+            )
+        except (ActionError, ContextError, OSError) as exc:
             messagebox.showerror(
                 "Action was not created",
                 f"Context Palette could not create this action.\n\n{exc}",
                 parent=self.window,
             )
             return False
-        self.actions.append(action)
-        if local:
-            self.local_action_ids.add(action.id)
         self.on_change()
         if self.action_filter_var.get():
             self.action_filter_var.set("")
-        self._refresh_action_views()
+        self._reload()
         self.feedback_var.set(
             f"Created {destination.lower()} action: {action.display_text}"
         )
@@ -948,6 +956,10 @@ class ConfigurationWindow:
             )
             self.palette_state = load_palette_state(self.palette_path)
             self.contexts = load_combined_contexts(self.contexts_path, self.local_contexts_path)
+            self.actions = actions_with_canonical_contexts(
+                self.actions,
+                self.contexts,
+            )
             self.groups = load_combined_command_groups(
                 self.command_surface_path, self.local_command_surface_path
             )
@@ -1008,6 +1020,7 @@ class ConfigurationWindow:
                 action_ids,
                 self.palette_state.focus_context,
                 self.palette_state.context_slots,
+                self.palette_state.context_membership_version,
             )
             save_palette_state(self.palette_path, updated)
         except (ActionError, OSError) as exc:
@@ -1278,9 +1291,28 @@ class ConfigurationWindow:
         )
 
     def _save_edited_action(self, action: Action, target_path: Path) -> bool:
+        previous_action = next(
+            (existing for existing in self.actions if existing.id == action.id),
+            None,
+        )
+        if previous_action is None:
+            messagebox.showerror(
+                "Action was not saved",
+                f"Action was not found: {action.id}",
+                parent=self.window,
+            )
+            return False
+        local = target_path == self.local_actions_path
         try:
-            update_action(target_path, action)
-        except (ActionError, OSError) as exc:
+            update_action_with_context_memberships(
+                target_path,
+                action,
+                previous_action,
+                action_is_local=local,
+                shared_contexts_path=self.contexts_path,
+                local_contexts_path=self.local_contexts_path,
+            )
+        except (ActionError, ContextError, OSError) as exc:
             messagebox.showerror(
                 "Action was not saved",
                 f"Context Palette could not save this action.\n\n{exc}\n\n"
@@ -1290,13 +1322,10 @@ class ConfigurationWindow:
                 parent=self.window,
             )
             return False
-        self.actions[:] = [
-            action if existing.id == action.id else existing for existing in self.actions
-        ]
         self.on_change()
         if self.action_filter_var.get():
             self.action_filter_var.set("")
-        self._refresh_action_views()
+        self._reload()
         self.feedback_var.set(f"Saved action: {action.display_text}")
         self.feedback_label.configure(style="Success.TLabel")
         return True

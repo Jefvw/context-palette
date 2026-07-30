@@ -61,6 +61,7 @@ def resolve_focus_state(
             palette_state.pinned_action_ids,
             focus_context,
             configured_slots,
+            palette_state.context_membership_version,
         ),
         available_names,
     )

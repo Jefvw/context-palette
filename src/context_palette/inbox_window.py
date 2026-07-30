@@ -8,15 +8,15 @@ from typing import Callable
 from .actions import (
     Action,
     ActionError,
-    append_action,
-    append_actions,
     build_url,
     build_url_action,
     copy_text_action,
     validate_context_memberships,
 )
 from .ai_guidance_window import AIGuidanceWindow
+from .context_membership import append_actions_with_context_memberships
 from .context_membership_field import ContextMembershipField, TagSelectionField
+from .contexts import ContextError
 from .inbox import InboxError, InboxItem, load_inbox_items, update_inbox_item_state
 from .style import COLORS
 from .window_geometry import configure_standard_window
@@ -44,6 +44,9 @@ class InboxWindow:
         inbox_path: Path,
         on_change: Callable[[], None],
         on_harvest: Callable[[], None] | None = None,
+        *,
+        shared_contexts_path: Path,
+        local_contexts_path: Path,
     ) -> None:
         self.items = items
         self.actions = actions
@@ -51,6 +54,8 @@ class InboxWindow:
         self.context_names = context_names
         self.actions_path = actions_path
         self.inbox_path = inbox_path
+        self.shared_contexts_path = shared_contexts_path
+        self.local_contexts_path = local_contexts_path
         self.on_change = on_change
         self.on_harvest = on_harvest
         self.window = tk.Toplevel(parent)
@@ -182,7 +187,13 @@ class InboxWindow:
 
     def _save_ai_actions(self, item: InboxItem, actions: list[Action]) -> None:
         try:
-            append_actions(self.actions_path, actions)
+            append_actions_with_context_memberships(
+                self.actions_path,
+                actions,
+                actions_are_local=True,
+                shared_contexts_path=self.shared_contexts_path,
+                local_contexts_path=self.local_contexts_path,
+            )
             update_inbox_item_state(self.inbox_path, item.id, "Converted")
             self.items = load_inbox_items(self.inbox_path)
             self._load_items()
@@ -192,17 +203,23 @@ class InboxWindow:
                 f"Created {len(actions)} permanent local action(s).",
                 parent=self.window,
             )
-        except (ActionError, InboxError) as exc:
+        except (ActionError, ContextError, InboxError) as exc:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
 
     def _save_created_action(self, item: InboxItem, action: Action) -> None:
         try:
-            append_action(self.actions_path, action)
+            append_actions_with_context_memberships(
+                self.actions_path,
+                [action],
+                actions_are_local=True,
+                shared_contexts_path=self.shared_contexts_path,
+                local_contexts_path=self.local_contexts_path,
+            )
             update_inbox_item_state(self.inbox_path, item.id, "Converted")
             self.items = load_inbox_items(self.inbox_path)
             self._load_items()
             self.on_change()
-        except (ActionError, InboxError) as exc:
+        except (ActionError, ContextError, InboxError) as exc:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
 
 

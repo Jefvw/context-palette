@@ -617,6 +617,8 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.local_action_ids = set()
         configuration.shared_actions_path = Path("shared-actions.json")
         configuration.local_actions_path = Path("local-actions.json")
+        configuration.contexts_path = Path("contexts.json")
+        configuration.local_contexts_path = Path("local-contexts.json")
         configuration.action_tree = FakeSelectedActionTree("action-0")
         configuration.contexts = []
         configuration.window = FakeWindow()
@@ -624,7 +626,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.feedback_var = FakeVariable()
         configuration.feedback_label = Mock()
         configuration.on_change = Mock()
-        configuration._refresh_action_views = Mock()
+        configuration._reload = Mock()
 
         with (
             patch(
@@ -632,7 +634,9 @@ class ConfigurationDialogTests(unittest.TestCase):
                 return_value=True,
             ) as warning,
             patch("context_palette.configuration_window.ActionDialog") as dialog,
-            patch("context_palette.configuration_window.update_action") as update,
+            patch(
+                "context_palette.configuration_window.update_action_with_context_memberships"
+            ) as update,
         ):
             configuration._edit_action()
             save_callback = dialog.call_args.args[3]
@@ -640,8 +644,15 @@ class ConfigurationDialogTests(unittest.TestCase):
 
         warning.assert_called_once()
         self.assertIn("tracked by Git", warning.call_args.args[1])
-        update.assert_called_once_with(Path("shared-actions.json"), action)
-        configuration._refresh_action_views.assert_called_once_with()
+        update.assert_called_once_with(
+            Path("shared-actions.json"),
+            action,
+            action,
+            action_is_local=False,
+            shared_contexts_path=Path("contexts.json"),
+            local_contexts_path=Path("local-contexts.json"),
+        )
+        configuration._reload.assert_called_once_with()
 
     def test_action_edit_persists_atomically_and_preserves_previous_backup(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -649,14 +660,20 @@ class ConfigurationDialogTests(unittest.TestCase):
             original = Action("shared", "Original", "General", "copy_text", "Before")
             updated = Action("shared", "Updated", "General", "copy_text", "After")
             append_action(path, original)
+            contexts_path = Path(directory) / "contexts.json"
+            contexts_path.write_text('{"contexts": []}\n', encoding="utf-8")
             configuration = ConfigurationWindow.__new__(ConfigurationWindow)
             configuration.actions = [original]
+            configuration.shared_actions_path = path
+            configuration.local_actions_path = Path(directory) / "local_actions.json"
+            configuration.contexts_path = contexts_path
+            configuration.local_contexts_path = Path(directory) / "local_contexts.json"
             configuration.window = FakeWindow()
             configuration.action_filter_var = FakeVariable()
             configuration.feedback_var = FakeVariable()
             configuration.feedback_label = Mock()
             configuration.on_change = Mock()
-            configuration._refresh_action_views = Mock()
+            configuration._reload = Mock()
 
             self.assertTrue(configuration._save_edited_action(updated, path))
 
@@ -665,9 +682,8 @@ class ConfigurationDialogTests(unittest.TestCase):
                 load_actions(path.with_name("actions.json.bak"))[0],
                 original,
             )
-            self.assertEqual(configuration.actions, [updated])
             configuration.on_change.assert_called_once_with()
-            configuration._refresh_action_views.assert_called_once_with()
+            configuration._reload.assert_called_once_with()
 
     def test_action_edit_write_failure_preserves_file_and_open_editor_state(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -675,14 +691,21 @@ class ConfigurationDialogTests(unittest.TestCase):
             original = Action("shared", "Original", "General", "copy_text", "Before")
             updated = Action("shared", "Updated", "General", "copy_text", "After")
             append_action(path, original)
+            contexts_path = Path(directory) / "contexts.json"
+            contexts_path.write_text('{"contexts": []}\n', encoding="utf-8")
             configuration = ConfigurationWindow.__new__(ConfigurationWindow)
             configuration.actions = [original]
+            configuration.shared_actions_path = path
+            configuration.local_actions_path = Path(directory) / "local_actions.json"
+            configuration.contexts_path = contexts_path
+            configuration.local_contexts_path = Path(directory) / "local_contexts.json"
             configuration.window = FakeWindow()
             configuration.action_filter_var = FakeVariable()
             configuration.feedback_var = FakeVariable("unchanged")
             configuration.feedback_label = Mock()
             configuration.on_change = Mock()
             configuration._render_actions = Mock()
+            configuration._reload = Mock()
 
             with (
                 patch(
@@ -1207,6 +1230,12 @@ class ConfigurationDialogTests(unittest.TestCase):
             configuration = ConfigurationWindow.__new__(ConfigurationWindow)
             configuration.shared_actions_path = project_path
             configuration.local_actions_path = local_path
+            configuration.contexts_path = root / "contexts.json"
+            configuration.contexts_path.write_text(
+                '{"contexts": []}\n',
+                encoding="utf-8",
+            )
+            configuration.local_contexts_path = root / "local_contexts.json"
             configuration.actions = []
             configuration.local_action_ids = set()
             configuration.window = FakeWindow()
@@ -1214,7 +1243,7 @@ class ConfigurationDialogTests(unittest.TestCase):
             configuration.feedback_var = FakeVariable()
             configuration.feedback_label = Mock()
             configuration.on_change = Mock()
-            configuration._refresh_action_views = Mock()
+            configuration._reload = Mock()
             action = Action(
                 "project-action",
                 "Project action",
@@ -1230,7 +1259,7 @@ class ConfigurationDialogTests(unittest.TestCase):
             self.assertEqual(load_actions(project_path), [action])
             self.assertFalse(local_path.exists())
             self.assertEqual(configuration.local_action_ids, set())
-            configuration._refresh_action_views.assert_called_once_with()
+            configuration._reload.assert_called_once_with()
 
     def test_action_dialog_rejects_an_unknown_specific_context(self) -> None:
         dialog = ActionDialog.__new__(ActionDialog)

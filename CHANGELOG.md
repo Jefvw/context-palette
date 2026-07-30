@@ -4,6 +4,12 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Synchronized action context membership around one source of truth. Context
+  definitions now drive Focus Actions, action search/table metadata, and slot
+  membership; every action creation and edit route writes through to those
+  definitions. A one-time compatibility migration unions legacy action-side
+  memberships without allowing personal action IDs into Git-tracked Built-in
+  contexts, and transactional rollback prevents half-saved new actions.
 - Kept application child windows on the monitor containing the main palette.
   Standard dialogs center relative to their owning window, compact selection
   popups stay near their invoking control, and every child is clamped to that

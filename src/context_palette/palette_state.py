@@ -13,6 +13,7 @@ class PaletteState:
     pinned_action_ids: tuple[str, ...] = ()
     focus_context: str = "General"
     context_slots: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    context_membership_version: int = 0
 
 
 def load_palette_state(path: Path) -> PaletteState:
@@ -30,6 +31,7 @@ def load_palette_state(path: Path) -> PaletteState:
     pinned = raw.get("pinned_action_ids", [])
     focus = raw.get("focus_context", "General")
     slots = raw.get("context_slots", {})
+    context_membership_version = raw.get("context_membership_version", 0)
     if not isinstance(pinned, list) or not all(isinstance(item, str) for item in pinned):
         raise ActionError("Palette pins must be a list of action IDs.")
     if len(pinned) > 5:
@@ -38,6 +40,12 @@ def load_palette_state(path: Path) -> PaletteState:
         raise ActionError("Palette focus context must be text.")
     if not isinstance(slots, dict):
         raise ActionError("Palette context slots must be an object.")
+    if (
+        not isinstance(context_membership_version, int)
+        or isinstance(context_membership_version, bool)
+        or context_membership_version < 0
+    ):
+        raise ActionError("Palette context membership version must be a non-negative integer.")
 
     parsed_slots: dict[str, tuple[str, ...]] = {}
     for context, ids in slots.items():
@@ -46,7 +54,12 @@ def load_palette_state(path: Path) -> PaletteState:
         if len(ids) > 4 or not all(isinstance(item, str) for item in ids):
             raise ActionError("Each context can have at most four action IDs.")
         parsed_slots[context] = tuple(ids)
-    return PaletteState(tuple(pinned), focus.strip() or "General", parsed_slots)
+    return PaletteState(
+        tuple(pinned),
+        focus.strip() or "General",
+        parsed_slots,
+        context_membership_version,
+    )
 
 
 def save_palette_state(path: Path, state: PaletteState) -> None:
@@ -58,6 +71,8 @@ def save_palette_state(path: Path, state: PaletteState) -> None:
             context: list(ids[:4]) for context, ids in (state.context_slots or {}).items()
         },
     }
+    if state.context_membership_version:
+        data["context_membership_version"] = state.context_membership_version
     atomic_write_json(path, data)
 
 
@@ -95,4 +110,9 @@ def toggle_pin(state: PaletteState, action_id: str) -> PaletteState:
         raise ActionError("All five pinned slots are occupied. Unpin an action first.")
     else:
         pins.append(action_id)
-    return PaletteState(tuple(pins), state.focus_context, state.context_slots)
+    return PaletteState(
+        tuple(pins),
+        state.focus_context,
+        state.context_slots,
+        state.context_membership_version,
+    )

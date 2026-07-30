@@ -35,6 +35,10 @@ from .command_surface import (
     load_combined_command_groups,
 )
 from .configuration_window import ConfigurationWindow
+from .context_membership import (
+    actions_with_canonical_contexts,
+    migrate_legacy_action_contexts,
+)
 from .focus_model import actions_for_context, resolve_focus_state
 from .hotkeys import (
     GlobalHotkey,
@@ -295,6 +299,7 @@ class LauncherApp:
         self.search_var.trace_add("write", lambda *_args: self._schedule_refresh_results())
 
         self._build_ui()
+        self._migrate_context_memberships()
         self._load_actions()
         self._load_command_surface(render=False)
         self._load_contexts()
@@ -321,6 +326,35 @@ class LauncherApp:
         self._poll_work_item_inbox()
         self._start_work_item_refresh()
         self._audit_tooltips()
+
+    def _migrate_context_memberships(self) -> None:
+        try:
+            report = migrate_legacy_action_contexts(
+                shared_actions_path=self.actions_path,
+                local_actions_path=self.local_actions_path,
+                shared_contexts_path=self.contexts_path,
+                local_contexts_path=self.local_contexts_path,
+                palette_path=self.palette_path,
+            )
+        except (ActionError, ContextError, OSError) as exc:
+            LOGGER.exception("Context membership migration failed")
+            messagebox.showwarning(
+                "Context memberships could not be synchronized",
+                "Context Palette could not complete the one-time context "
+                "membership migration. Existing files were kept or restored.\n\n"
+                f"{exc}",
+                parent=self.root,
+            )
+            return
+        if report.incompatible_memberships_skipped:
+            messagebox.showwarning(
+                "Some context memberships need attention",
+                f"{report.incompatible_memberships_skipped} personal action "
+                "membership(s) pointed to a Built-in context and could not be "
+                "copied into the tracked configuration. Assign those actions "
+                "to a My configuration context in Configure.",
+                parent=self.root,
+            )
 
     def _build_ui(self) -> None:
         self.root.title("Context Palette")
@@ -1742,6 +1776,10 @@ class LauncherApp:
                 self.contexts_path,
                 self.local_contexts_path,
             )
+            self.actions = actions_with_canonical_contexts(
+                self.actions,
+                self.context_definitions,
+            )
         except ContextError as exc:
             self.status_var.set(
                 f"Contexts could not be loaded; kept {len(self.context_definitions)} previous context(s)."
@@ -1805,6 +1843,7 @@ class LauncherApp:
             self.palette_state.pinned_action_ids,
             context,
             self.palette_state.context_slots,
+            self.palette_state.context_membership_version,
         )
         try:
             save_palette_state(self.palette_path, updated_state)
@@ -2768,6 +2807,8 @@ class LauncherApp:
             self.inbox_path,
             self._reload_after_external_action_change,
             self._show_harvest,
+            shared_contexts_path=self.contexts_path,
+            local_contexts_path=self.local_contexts_path,
         )
 
     def _show_harvest(self) -> None:
@@ -2777,6 +2818,8 @@ class LauncherApp:
             context_names=self.available_context_names,
             focus_context=self.palette_state.focus_context,
             actions_path=self.local_actions_path,
+            shared_contexts_path=self.contexts_path,
+            local_contexts_path=self.local_contexts_path,
             on_change=self._reload_after_external_action_change,
         )
 
@@ -3159,6 +3202,8 @@ class LauncherApp:
             sheets,
             self.local_actions_path,
             self._reload_after_external_action_change,
+            shared_contexts_path=self.contexts_path,
+            local_contexts_path=self.local_contexts_path,
         )
 
     def _handle_keypress(self, event: tk.Event) -> str | None:

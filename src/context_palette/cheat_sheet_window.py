@@ -5,13 +5,15 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Callable
 
-from .actions import ActionError, append_action
+from .actions import ActionError
 from .cheatsheets import (
     CheatSheet,
     CheatSheetItem,
     action_from_cheatsheet_item,
     filter_cheatsheet,
 )
+from .context_membership import append_actions_with_context_memberships
+from .contexts import ContextError
 from .style import COLORS
 from .window_geometry import configure_standard_window
 
@@ -25,9 +27,14 @@ class CheatSheetWindow:
         sheets: list[CheatSheet],
         actions_path: Path,
         on_change: Callable[[], None],
+        *,
+        shared_contexts_path: Path,
+        local_contexts_path: Path,
     ) -> None:
         self.sheets = sheets
         self.actions_path = actions_path
+        self.shared_contexts_path = shared_contexts_path
+        self.local_contexts_path = local_contexts_path
         self.on_change = on_change
         self.filtered_items: list[tuple[CheatSheet, str, CheatSheetItem]] = []
         self.selected_sheet_index = 0
@@ -200,7 +207,14 @@ class CheatSheetWindow:
         sheet, _section_title, item = selected
         try:
             action = action_from_cheatsheet_item(sheet, item)
-            append_action(self.actions_path, action)
+            append_actions_with_context_memberships(
+                self.actions_path,
+                [action],
+                actions_are_local=True,
+                shared_contexts_path=self.shared_contexts_path,
+                local_contexts_path=self.local_contexts_path,
+                create_missing_local_contexts=True,
+            )
             self.on_change()
             self.status_var.set(f"Promoted: {item.label}")
             messagebox.showinfo(
@@ -208,7 +222,7 @@ class CheatSheetWindow:
                 f"Created permanent action:\n\n{sheet.title} > {item.label}",
                 parent=self.window,
             )
-        except ActionError as exc:
+        except (ActionError, ContextError) as exc:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
 
     def focus_search(self) -> None:

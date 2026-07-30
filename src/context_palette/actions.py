@@ -144,7 +144,7 @@ def validate_context_memberships(
     return tuple(canonical_by_key[context.casefold()] for context in contexts)
 
 
-def load_actions(path: Path) -> list[Action]:
+def load_stored_actions(path: Path) -> list[Action]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
@@ -157,6 +157,11 @@ def load_actions(path: Path) -> list[Action]:
 
     actions = [_parse_action(item, index) for index, item in enumerate(raw["actions"], start=1)]
     _ensure_unique_action_ids(actions, path)
+    return actions
+
+
+def load_actions(path: Path) -> list[Action]:
+    actions = load_stored_actions(path)
     return [action for action in actions if action.state in VISIBLE_STATES]
 
 
@@ -210,6 +215,27 @@ def update_action(path: Path, updated_action: Action) -> None:
     if not changed:
         raise ActionError(f"Action was not found: {updated_action.id}")
 
+    atomic_write_json(path, data)
+
+
+def delete_actions(path: Path, action_ids: Iterable[str]) -> None:
+    ids = {action_id for action_id in action_ids if action_id}
+    if not ids:
+        return
+    data = _load_action_data(path)
+    retained = [
+        item
+        for item in data["actions"]
+        if not (
+            isinstance(item, dict)
+            and isinstance(item.get("id"), str)
+            and item["id"] in ids
+        )
+    ]
+    found = len(data["actions"]) - len(retained)
+    if found != len(ids):
+        raise ActionError("One or more actions could not be removed during rollback.")
+    data["actions"] = retained
     atomic_write_json(path, data)
 
 

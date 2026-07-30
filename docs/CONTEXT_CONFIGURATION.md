@@ -16,8 +16,9 @@ the actions themselves. **Built-in** is developer-owned starter configuration
 tracked through Git. General is implicit, and **Developing Context Palette** is
 the only shipped specific context.
 
-Deletion clears saved Focus state and legacy action-side memberships before
-removing the definition.
+Deletion clears saved Focus state and any legacy action-side metadata before
+removing the definition. Removing a context assignment never deletes its
+actions.
 
 ## Advanced JSON files
 
@@ -55,8 +56,13 @@ should be a subset of `action_ids`. Explicit per-machine slots in
 Every action belongs to the virtual **General** root. Current context membership
 belongs in the context's `action_ids`, allowing each PC to organize Built-in
 actions without changing Git-tracked action records. Legacy action records may
-still carry a `contexts` list and remain readable. Tags remain independent
-discovery terms. Search remains global regardless of Focus.
+still carry a `contexts` list. At startup, compatible legacy memberships are
+united into context definitions once; all screens then read only the canonical
+definitions. New and edited actions write their context choices back to those
+definitions and do not persist a second membership copy. A personal action
+cannot be assigned to a Built-in context because that would put a private ID
+in a Git-tracked file; use a My configuration context instead. Tags remain
+independent discovery terms. Search remains global regardless of Focus.
 
 Do not create a General context definition; it is implied for every action.
 Existing personal files using singular `context`, `technology`, and `task`

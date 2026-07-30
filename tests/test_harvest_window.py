@@ -49,10 +49,14 @@ def ready_candidate(*, selected: bool = True) -> HarvestCandidate:
 
 
 def minimal_window(path: Path, candidate: HarvestCandidate) -> HarvestWindow:
+    shared_contexts_path = path.with_name("contexts.json")
+    shared_contexts_path.write_text('{"contexts": []}\n', encoding="utf-8")
     window = HarvestWindow.__new__(HarvestWindow)
     window.batch = HarvestBatch(candidates=[candidate])
     window.actions = []
     window.actions_path = path
+    window.shared_contexts_path = shared_contexts_path
+    window.local_contexts_path = path.with_name("local_contexts.json")
     window.submitting = False
     window.create_button = FakeButton()
     window.status_var = FakeVariable()
@@ -114,7 +118,7 @@ class HarvestCreationTests(unittest.TestCase):
             candidate = ready_candidate()
             candidate.classification = "Unsupported"
             window = minimal_window(path, candidate)
-            with patch("context_palette.harvest_window.append_actions") as append, patch(
+            with patch("context_palette.harvest_window.append_actions_with_context_memberships") as append, patch(
                 "context_palette.harvest_window.messagebox.showerror"
             ) as showerror:
                 window._create()
@@ -127,7 +131,7 @@ class HarvestCreationTests(unittest.TestCase):
             path = Path(temporary) / "actions.json"
             window = minimal_window(path, ready_candidate())
             window.submitting = True
-            with patch("context_palette.harvest_window.append_actions") as append:
+            with patch("context_palette.harvest_window.append_actions_with_context_memberships") as append:
                 window._create()
         append.assert_not_called()
 
@@ -151,7 +155,7 @@ class HarvestCreationTests(unittest.TestCase):
                 encoding="utf-8",
             )
             window = minimal_window(path, ready_candidate())
-            with patch("context_palette.harvest_window.append_actions") as append, patch(
+            with patch("context_palette.harvest_window.append_actions_with_context_memberships") as append, patch(
                 "context_palette.harvest_window.messagebox.showerror"
             ) as showerror:
                 window._create()
@@ -174,7 +178,7 @@ class HarvestCreationTests(unittest.TestCase):
             ), patch(
                 "context_palette.harvest_window.messagebox.showerror"
             ) as showerror, patch(
-                "context_palette.harvest_window.append_actions"
+                "context_palette.harvest_window.append_actions_with_context_memberships"
             ) as append:
                 window._create()
 
@@ -210,12 +214,16 @@ class HarvestWindowSmokeTests(unittest.TestCase):
             ):
                 actions_path = Path(temporary) / "actions.json"
                 actions_path.write_text(json.dumps({"actions": []}), encoding="utf-8")
+                contexts_path = Path(temporary) / "contexts.json"
+                contexts_path.write_text(json.dumps({"contexts": []}), encoding="utf-8")
                 window = HarvestWindow(
                     root,
                     actions=[],
                     context_names=("General", "Database"),
                     focus_context="Database",
                     actions_path=actions_path,
+                    shared_contexts_path=contexts_path,
+                    local_contexts_path=Path(temporary) / "local_contexts.json",
                     on_change=lambda: None,
                 )
                 root.update()
@@ -273,12 +281,16 @@ class HarvestWindowSmokeTests(unittest.TestCase):
             ):
                 actions_path = Path(temporary) / "actions.json"
                 actions_path.write_text(json.dumps({"actions": []}), encoding="utf-8")
+                contexts_path = Path(temporary) / "contexts.json"
+                contexts_path.write_text(json.dumps({"contexts": []}), encoding="utf-8")
                 window = HarvestWindow(
                     root,
                     actions=[],
                     context_names=("General",),
                     focus_context="General",
                     actions_path=actions_path,
+                    shared_contexts_path=contexts_path,
+                    local_contexts_path=Path(temporary) / "local_contexts.json",
                     on_change=lambda: None,
                 )
                 root.update()

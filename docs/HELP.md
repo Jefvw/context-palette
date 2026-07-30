@@ -74,11 +74,13 @@ are readable; formulas are never calculated. Unsupported targets stay visible
 but cannot be selected.
 
 Choose **Preview selected actions**, then **Create selected actions**. All selected
-actions are validated again and written to the personal action file in one
-atomic operation. They are permanent Active actions. Cancelling the scan or
-closing the review window creates nothing. Per-file failures do not discard successful
-results from other files, and size, compression, worksheet, cell, occurrence,
-and candidate limits keep scans bounded.
+actions are validated again and written to the personal action file together;
+their Focus memberships are synchronized to My configuration context
+definitions, with rollback if either write fails. They are permanent Active
+actions. Cancelling the scan or closing the review window creates nothing.
+Per-file failures do not discard successful results from other files, and
+size, compression, worksheet, cell, occurrence, and candidate limits keep
+scans bounded.
 
 Folder scanning, drag and drop, OneNote extraction, PDF/HTML/email parsing,
 recursive crawling, remote fetching, and automatic trust are not part of this
@@ -187,7 +189,8 @@ Search matches tags, contexts, short name, description, type, and content.
 - Right-click an action row to open the Actions tab in Configure with that
   exact action highlighted. Personal actions can then be edited, including
   short name, description, contexts, tags, type-specific value, and supported
-  launch settings.
+  launch settings. Context changes update the same context definitions used by
+  Focus Actions, slots, search, and the Contexts tab.
   Built-in actions can also be edited after acknowledging their developer warning.
 - Plain number-row and numpad digits remain ordinary Find text.
 - Shift plus a physical top-row number key executes slots 1 through 9 only

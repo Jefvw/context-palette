@@ -1571,3 +1571,27 @@ to place configuration and editor windows on another display, while the tag
 picker could extend beyond an edge. One main-monitor policy makes window
 placement predictable across mixed layouts and supports monitors whose desktop
 coordinates are negative.
+
+## 2026-07-30 - Make context definitions the synchronized membership source
+
+**Decision:** Treat context definitions and their ordered `action_ids` as the
+only current source of specific action membership. Project those memberships
+onto in-memory actions before rendering or searching. Route action creation and
+editing from Configure, Inbox, Harvest, and cheat sheets through a shared
+recoverable persistence operation that updates the action and context files
+together. Import compatible legacy action-side memberships once, while
+rejecting a My configuration action reference from a Built-in context.
+
+**Reason:** Configure's Actions table previously displayed action-side
+`contexts`, while Focus Actions obeyed a context definition's explicit
+`action_ids`. Both views were internally correct but could disagree, as in a
+context showing many apparently assigned actions while Focus Actions showed
+one. Updating only one side when creating or editing an action preserved the
+contradiction.
+
+**Consequences:** Actions, search, slots, Contexts, and Focus Actions now show
+the same membership immediately after a save or reload. New and edited action
+records no longer store a duplicate context list. Personal contexts may still
+compose Built-in and personal actions, but Built-in contexts cannot reference
+ignored personal action IDs. Legacy records remain parseable for migration and
+compatibility.

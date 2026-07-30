@@ -226,6 +226,20 @@ rules. Underlined Windows mnemonics move focus directly to each field, and
 `Alt+Down`/`F4` opens either Tk's native context checklist or the searchable
 tag picker.
 
+### `context_membership.py`
+
+Owns the single source of truth for action-to-context membership. Context
+definitions supply the canonical ordered `action_ids`; action objects used by
+the launcher and Configure are projected from those definitions so search,
+the Actions table, slots, and Focus Actions all see the same memberships.
+Action create/edit flows write the action record and context definitions as
+one recoverable operation, remove context metadata from newly persisted action
+records, and reject a My configuration action reference from a Built-in
+context. Startup performs an idempotent one-time union of compatible legacy
+action-side memberships into context definitions. Legacy metadata remains
+readable for pre-migration definitions but is not an independent current
+membership source.
+
 ### `searchable_selection.py`
 
 Provides the compact searchable tag popup shared by guided multi-select tag
@@ -286,6 +300,8 @@ Action creation and editing refresh every Configure view derived from actions,
 including pins, context and Quick-action summaries, and diagnostics. Action
 creation routes owned by other launcher windows reload an already-open
 Configure workspace from storage without raising or replacing that window.
+Configure, Inbox conversion, document harvesting, and cheat-sheet promotion
+all persist action context choices through `context_membership.py`.
 All action-type editors use one vertically scrollable canvas body with a fixed
 save/cancel footer. The embedded form tracks the canvas width, recomputes its
 scroll region when operation-specific fields change, handles mouse-wheel input
@@ -322,12 +338,11 @@ edited JSON.
 ### `context_deletion.py`
 
 Owns dependency-aware context deletion and renaming across the defining file,
-project and local action memberships, and palette Focus state. Deletion removes
-references before the definition so an interrupted sequence leaves an unused
-context rather than actions pointing at a missing one. A material rename first
-writes a safe intermediate definition containing both names, updates every
-reference, and then removes the old definition. The final write preserves the
-true pre-rename definition as the context file's backup.
+legacy project/local action metadata, and palette Focus state. Canonical action
+membership is removed with the defining context itself. A material rename
+first writes a safe intermediate definition containing both names, updates
+legacy and palette references, and then removes the old definition. The final
+write preserves the true pre-rename definition as the context file's backup.
 
 ### `action_deletion.py`
 
@@ -857,10 +872,11 @@ The **Focus actions** control is a reversible, visibly active presentation
 mode. With Find empty, it shows a flat list of visible actions belonging to the
 active Focus in canonical action order. Choosing the control again returns to
 the normal action list. General contains every action; a specific Focus uses
-the action's `contexts` memberships. Typing in Find swaps this view for the
-global flat results, and clearing Find restores Focus Actions only when that
-mode remains active. Tags do not create folders in this view because they are
-independent filters rather than structural ownership.
+the matching context definition's canonical `action_ids` membership. Typing in
+Find swaps this view for the global flat results, and clearing Find restores
+Focus Actions only when that mode remains active. Tags do not create folders
+in this view because they are independent filters rather than structural
+ownership.
 
 Quick actions remain action-ID configuration. Built-in application commands
 are not configurable strings or method names: the launcher contains a closed,
@@ -893,9 +909,10 @@ All data is local and inspectable.
 Reviewed portable action records shared through Git.
 
 Action IDs are unique case-insensitively within a file and across shared/local files. This keeps pins, context slots, command-surface references, edits, and trust promotion unambiguous.
-New records store optional `contexts` and `tags` arrays. Omitting `contexts`
-means General-only membership; General itself is never persisted as a specific
-membership.
+New records store optional `tags`; specific context membership is stored only
+in context definitions. Legacy `context` and `contexts` fields remain readable
+for migration. Omitting them does not remove canonical membership because the
+context files own it. General itself is always implicit.
 
 ### `data/contexts.json` and `data/local_contexts.json`
 

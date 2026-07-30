@@ -5,7 +5,9 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Callable, Iterable
 
-from .actions import Action, ActionError, append_actions, load_actions
+from .actions import Action, ActionError, load_actions
+from .context_membership import append_actions_with_context_memberships
+from .contexts import ContextError
 from .harvest import (
     HarvestBatch,
     HarvestCandidate,
@@ -31,12 +33,16 @@ class HarvestWindow:
         context_names: Iterable[str],
         focus_context: str,
         actions_path: Path,
+        shared_contexts_path: Path,
+        local_contexts_path: Path,
         on_change: Callable[[], None],
     ) -> None:
         self.actions = actions
         self.context_names = tuple(context_names)
         self.focus_context = focus_context
         self.actions_path = actions_path
+        self.shared_contexts_path = shared_contexts_path
+        self.local_contexts_path = local_contexts_path
         self.on_change = on_change
         self.batch = HarvestBatch()
         self.source_paths: list[Path] = []
@@ -638,9 +644,15 @@ class HarvestWindow:
         self.submitting = True
         self.create_button.configure(state=tk.DISABLED)
         try:
-            append_actions(self.actions_path, actions)
+            append_actions_with_context_memberships(
+                self.actions_path,
+                actions,
+                actions_are_local=True,
+                shared_contexts_path=self.shared_contexts_path,
+                local_contexts_path=self.local_contexts_path,
+            )
             self.on_change()
-        except (ActionError, OSError) as exc:
+        except (ActionError, ContextError, OSError) as exc:
             self.submitting = False
             self._update_create_state()
             messagebox.showerror("Harvest actions", str(exc), parent=self.window)
