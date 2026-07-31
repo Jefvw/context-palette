@@ -379,8 +379,14 @@ complete guided configuration workspace:
   and choose **Add menu level** for level 1; select an existing level and use
   the same command to add its child, up to level 3. Edit any level to assign its
   ordered actions. In row presentation, the first action is the left-click
-  default; in nested presentation, actions appear before child submenus. A
-  preview shows the full selected path.
+  default. The automatic **Passwords**, **Folders**, and **Prompts** groups also
+  appear in this table. Expand one and choose **Edit selected**, press Enter, or
+  double-click an action leaf to edit that action and its **Quick menu** path.
+  Editing an automatic group or level opens the matching Actions list. Add,
+  delete, and reorder commands apply only to configured groups; automatic menu
+  structure is changed through each action's **Quick menu** field. In nested
+  presentation, actions appear before child submenus. A preview shows the full
+  selected path.
   The single Built-in **Standard** group offers only Built-in actions, keeping
   starter buttons usable
   without one PC's private files. My configuration groups may use both
@@ -461,8 +467,9 @@ beyond the available height.
   tag, state, target or saved value, arguments, working folder, and storage.
 - Contexts search name, description, member and preferred action names, and
   storage.
-- Quick actions search group name, button name, assigned action names, and
-  storage.
+- Quick actions search group name, menu level, assigned action name, action
+  metadata, and storage. **Unsorted** finds action-bound entries whose
+  **Quick menu** field is empty.
 
 Press Enter on a selected result to edit it.
 

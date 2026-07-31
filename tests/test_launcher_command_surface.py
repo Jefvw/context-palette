@@ -10,16 +10,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.actions import Action
+from context_palette.action_bound_quick_actions import action_bound_quick_groups
 from context_palette.command_surface import (
     CommandGroup,
     CommandItem,
     CommandSurfaceError,
     GROUP_PRESENTATION_NESTED_MENU,
 )
-from context_palette.launcher import (
-    LauncherApp,
-    action_bound_quick_groups,
-)
+from context_palette.launcher import LauncherApp
 
 
 class FakeStatusVar:

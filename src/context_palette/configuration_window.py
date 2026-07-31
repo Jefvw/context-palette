@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from dataclasses import dataclass
 from pathlib import Path
 import re
 from typing import Callable
 
 from .actions import (
+    ACTION_BOUND_QUICK_MENU_SPECS,
     ACTION_BOUND_QUICK_TYPES,
     Action,
     ActionError,
@@ -24,6 +26,7 @@ from .action_deletion import (
     inspect_action_references,
 )
 from .action_types import ACTION_TYPES, CREATABLE_ACTION_TYPES
+from .action_bound_quick_actions import action_bound_quick_groups
 from .action_picker import ActionPickerField, ActionPickerOption
 from .command_surface import (
     CommandGroup,
@@ -126,6 +129,14 @@ GROUP_PRESENTATIONS_BY_LABEL = {
     label: presentation
     for presentation, label in GROUP_PRESENTATION_LABELS.items()
 }
+
+
+@dataclass(frozen=True)
+class ActionBoundQuickSelection:
+    group_label: str
+    action_type: str
+    path: tuple[str, ...] = ()
+    action_id: str = ""
 
 
 def action_matches_filter(action: Action, query: str, *, personal: bool) -> bool:
@@ -690,7 +701,10 @@ class ConfigurationWindow:
         notebook.add(tab, text="Quick actions", underline=0)
         ttk.Label(
             tab,
-            text="Buttons safely reference existing actions; they never contain commands.",
+            text=(
+                "Configured groups reference actions. Passwords, Folders, and "
+                "Prompts are automatic; edit their action leaves to organize them."
+            ),
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(0, 6))
         filter_row = ttk.Frame(tab)
@@ -1077,9 +1091,24 @@ class ConfigurationWindow:
             str,
             tuple[int, tuple[int, ...]],
         ] = {}
+        self.action_bound_button_records: dict[
+            str,
+            ActionBoundQuickSelection,
+        ] = {}
         query = self.button_filter_var.get()
-        total_items = sum(command_item_count(group) for group in self.groups)
-        matching_items = 0
+        action_bound_groups = action_bound_quick_groups(self.actions)
+        total_items = (
+            sum(command_item_count(group) for group in self.groups)
+            + sum(
+                command_item_count(group)
+                + len(command_group_all_action_ids(group))
+                for group in action_bound_groups
+            )
+        )
+        matching_items = self._render_action_bound_button_groups(
+            action_bound_groups,
+            query,
+        )
         for group_index, group in enumerate(self.groups):
             local = bool(
                 group.source_path
@@ -1190,6 +1219,142 @@ class ConfigurationWindow:
         )
         self._update_button_preview()
 
+    def _render_action_bound_button_groups(
+        self,
+        groups: tuple[CommandGroup, ...],
+        query: str,
+    ) -> int:
+        actions_by_id = {action.id: action for action in self.actions}
+        terms = [term.casefold() for term in query.split() if term.strip()]
+        matching_items = 0
+        action_counter = 0
+
+        for (_group_id, _label, action_type), group in zip(
+            ACTION_BOUND_QUICK_MENU_SPECS,
+            groups,
+        ):
+            eligible_actions = [
+                action
+                for action in self.actions
+                if action.type == action_type and action.state != "Archived"
+            ]
+            group_searchable = f"{group.label} automatic action-bound".casefold()
+            group_matches = bool(terms) and all(
+                term in group_searchable for term in terms
+            )
+            visible_action_ids = {
+                action.id
+                for action in eligible_actions
+                if not terms
+                or group_matches
+                or (
+                    not action.quick_action_path
+                    and all(term in "unsorted" for term in terms)
+                )
+                or action_matches_filter(
+                    action,
+                    query,
+                    personal=action.id in self.local_action_ids,
+                )
+            }
+            if terms and not group_matches and not visible_action_ids:
+                continue
+
+            group_iid = f"automatic-group-{action_type}"
+            self.action_bound_button_records[group_iid] = ActionBoundQuickSelection(
+                group.label,
+                action_type,
+            )
+            self.button_tree.insert(
+                "",
+                tk.END,
+                iid=group_iid,
+                text=group.label,
+                values=(
+                    "Automatic",
+                    f"{len(eligible_actions)} Active action(s) · edit actions to organize",
+                ),
+                tags=("automatic",),
+                open=True,
+            )
+
+            def item_has_visible_action(item: CommandItem) -> bool:
+                return any(
+                    action_id in visible_action_ids
+                    for action_id in command_item_action_ids(item)
+                ) or any(item_has_visible_action(child) for child in item.items)
+
+            def insert_items(
+                parent_iid: str,
+                items: tuple[CommandItem, ...],
+                parent_path: tuple[str, ...],
+            ) -> None:
+                nonlocal matching_items, action_counter
+                for item_index, item in enumerate(items):
+                    if not item_has_visible_action(item):
+                        continue
+                    path = (*parent_path, item.label)
+                    item_iid = (
+                        f"automatic-level-{action_type}-{matching_items}-{item_index}"
+                    )
+                    self.action_bound_button_records[item_iid] = (
+                        ActionBoundQuickSelection(group.label, action_type, path)
+                    )
+                    direct_action_ids = tuple(
+                        action_id
+                        for action_id in command_item_action_ids(item)
+                        if action_id in visible_action_ids
+                    )
+                    self.button_tree.insert(
+                        parent_iid,
+                        tk.END,
+                        iid=item_iid,
+                        text=item.label,
+                        values=(
+                            "Automatic",
+                            f"{len(direct_action_ids)} action(s)"
+                            + (f" · {len(item.items)} submenu(s)" if item.items else ""),
+                        ),
+                        tags=("automatic",),
+                        open=True,
+                    )
+                    matching_items += 1
+                    for action_id in direct_action_ids:
+                        action = actions_by_id[action_id]
+                        action_counter += 1
+                        action_iid = f"automatic-action-{action_type}-{action_counter}"
+                        self.action_bound_button_records[action_iid] = (
+                            ActionBoundQuickSelection(
+                                group.label,
+                                action_type,
+                                path,
+                                action.id,
+                            )
+                        )
+                        self.button_tree.insert(
+                            item_iid,
+                            tk.END,
+                            iid=action_iid,
+                            text=action.compact_display_text,
+                            values=(
+                                LOCAL_DESTINATION
+                                if action.id in self.local_action_ids
+                                else PROJECT_DESTINATION,
+                                "Edit action to change its Quick menu path",
+                            ),
+                            tags=(
+                                "local"
+                                if action.id in self.local_action_ids
+                                else "shared",
+                            ),
+                        )
+                        matching_items += 1
+                    insert_items(item_iid, item.items, path)
+
+            insert_items(group_iid, group.items, ())
+
+        return matching_items
+
     def _refresh_diagnostics(self) -> None:
         summary = summarize_diagnostics(
             self.shared_actions_path.parent / "context-palette.log"
@@ -1267,6 +1432,9 @@ class ConfigurationWindow:
         if not selection:
             return
         action = self.actions[int(selection[0].split("-")[1])]
+        self._edit_action_record(action)
+
+    def _edit_action_record(self, action: Action) -> None:
         local = action.id in self.local_action_ids
         if not local and not messagebox.askokcancel(
                 "Edit built-in action?",
@@ -1670,6 +1838,14 @@ class ConfigurationWindow:
         group, item, _path = record
         return group, item
 
+    def _selected_action_bound_button_record(
+        self,
+    ) -> ActionBoundQuickSelection | None:
+        selection = self.button_tree.selection()
+        if not selection:
+            return None
+        return getattr(self, "action_bound_button_records", {}).get(selection[0])
+
     def _selected_button_record(
         self,
     ) -> tuple[CommandGroup, CommandItem | None, tuple[int, ...]] | None:
@@ -1710,6 +1886,10 @@ class ConfigurationWindow:
         ]
 
     def _add_button(self) -> None:
+        action_bound = self._selected_action_bound_button_record()
+        if action_bound is not None:
+            self._show_action_bound_quick_guidance(action_bound)
+            return
         selected = self._selected_button_record()
         if selected is None:
             messagebox.showinfo(
@@ -1757,6 +1937,27 @@ class ConfigurationWindow:
         )
 
     def _edit_button(self) -> None:
+        action_bound = self._selected_action_bound_button_record()
+        if action_bound is not None:
+            if action_bound.action_id:
+                action = next(
+                    (
+                        candidate
+                        for candidate in self.actions
+                        if candidate.id == action_bound.action_id
+                    ),
+                    None,
+                )
+                if action is not None:
+                    self._edit_action_record(action)
+                else:
+                    self.feedback_var.set(
+                        "That automatic Quick-action entry is no longer available."
+                    )
+                    self._reload()
+                return
+            self._manage_action_bound_quick_selection(action_bound)
+            return
         selected = self._selected_button_record()
         if selected is None:
             return
@@ -1793,6 +1994,36 @@ class ConfigurationWindow:
             self._actions_for_quick_action_storage(project=not local),
             lambda *args: self._save_button(*args, target_path=target_path),
             shared=not local,
+        )
+
+    def _manage_action_bound_quick_selection(
+        self,
+        selection: ActionBoundQuickSelection,
+    ) -> None:
+        query_parts = [ACTION_TYPES[selection.action_type].label]
+        if selection.path and selection.path != ("Unsorted",):
+            query_parts.extend(selection.path)
+        self.notebook.select(CONFIGURATION_TAB_INDEXES["actions"])
+        self.action_filter_var.set(" ".join(query_parts))
+        self.action_filter_entry.focus_set()
+        self.action_filter_entry.selection_range(0, tk.END)
+        self.feedback_var.set(
+            f"Edit a {selection.group_label} action and change Quick menu to reorganize it."
+        )
+        self.feedback_label.configure(style="Success.TLabel")
+
+    def _show_action_bound_quick_guidance(
+        self,
+        selection: ActionBoundQuickSelection,
+    ) -> None:
+        messagebox.showinfo(
+            "Automatic Quick-action menu",
+            f"{selection.group_label} is generated from Active "
+            f"{ACTION_TYPES[selection.action_type].display_label} actions.\n\n"
+            "Choose Edit selected, then edit an action's Quick menu field to "
+            "create, rename, or move nested levels. Create another matching "
+            "action to add it automatically.",
+            parent=self.window,
         )
 
     def _save_button(
@@ -1869,6 +2100,10 @@ class ConfigurationWindow:
         return True
 
     def _delete_button(self) -> None:
+        action_bound = self._selected_action_bound_button_record()
+        if action_bound is not None:
+            self._show_action_bound_quick_guidance(action_bound)
+            return
         selected = self._selected_button_record()
         if selected is None:
             return
@@ -1914,6 +2149,10 @@ class ConfigurationWindow:
         self.feedback_label.configure(style="Success.TLabel")
 
     def _move_button(self, offset: int) -> None:
+        action_bound = self._selected_action_bound_button_record()
+        if action_bound is not None:
+            self._show_action_bound_quick_guidance(action_bound)
+            return
         selected = self._selected_button_record()
         if selected is None:
             return
@@ -1941,6 +2180,32 @@ class ConfigurationWindow:
         self.feedback_label.configure(style="Success.TLabel")
 
     def _update_button_preview(self) -> None:
+        action_bound = self._selected_action_bound_button_record()
+        if action_bound is not None:
+            path = " > ".join(
+                (action_bound.group_label, *action_bound.path)
+            )
+            if action_bound.action_id:
+                action = next(
+                    (
+                        candidate
+                        for candidate in self.actions
+                        if candidate.id == action_bound.action_id
+                    ),
+                    None,
+                )
+                self.button_preview_var.set(
+                    f"Automatic menu: {path} | Action: "
+                    f"{action.title if action is not None else 'Unavailable'} | "
+                    "Edit selected changes the action and its Quick menu path."
+                )
+            else:
+                self.button_preview_var.set(
+                    f"Automatic menu: {path} | Membership follows Active "
+                    f"{ACTION_TYPES[action_bound.action_type].display_label} actions. "
+                    "Edit selected opens the matching Actions list."
+                )
+            return
         selected = self._selected_button_record()
         if selected is None:
             self.button_preview_var.set(

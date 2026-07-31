@@ -1672,3 +1672,20 @@ even when empty. New matching actions appear under Unsorted until organized;
 archived or deleted actions disappear without another edit. Existing
 configured personal groups remain below the fixed rows. Cheat-sheet data is
 not migrated or deleted.
+
+## 2026-07-31 - Show generated Quick actions in the configuration hierarchy
+
+**Decision:** Build Passwords, Folders, and Prompts through one shared hierarchy
+builder used by both the launcher and Configure. Show their nested levels and
+action leaves in Configure -> Quick actions. Editing a leaf opens the owning
+action; editing a generated group or level opens the corresponding filtered
+Actions list. Add, delete, and move remain operations for persisted groups.
+
+**Reason:** The launcher exposed the generated menus, but Configure listed only
+persisted command-surface records. A user could see Folders without being able
+to find or manage that same hierarchy in the configuration screen. Reusing the
+generated model prevents a second source of membership and ordering truth.
+
+**Consequences:** Automatic menu contents can now be inspected and managed from
+the expected Quick-actions tab. Their structure still follows action type,
+lifecycle, and `quick_action_path`; no duplicate command-surface data is saved.

@@ -19,6 +19,7 @@ from .actions import (
     open_action_target,
     search_actions,
 )
+from .action_bound_quick_actions import action_bound_quick_groups
 from .action_discovery_panel import ActionDiscoveryPanel
 from .action_types import ACTION_TYPES
 from .cheat_sheet_window import CheatSheetWindow
@@ -124,11 +125,6 @@ MINIMUM_WORKSPACE_HEIGHT = 140
 MINIMUM_ACTIONS_WIDTH = 300
 MINIMUM_QUICK_ACTIONS_WIDTH = 320
 STANDARD_QUICK_GROUP_ID = "standard"
-ACTION_BOUND_QUICK_MENU_SPECS = (
-    ("passwords", "Passwords", "paste_credential"),
-    ("folders", "Folders", "open_folder"),
-    ("prompts", "Prompts", "ai_prompt"),
-)
 
 
 def bounded_sash_position(
@@ -145,79 +141,6 @@ def bounded_sash_position(
         return round(available_size * first_minimum / combined_minimum)
     requested = round(available_size * ratio)
     return max(first_minimum, min(requested, available_size - second_minimum))
-
-
-def action_bound_quick_group(
-    actions: list[Action],
-    *,
-    group_id: str,
-    label: str,
-    action_type: str,
-) -> CommandGroup:
-    """Build one nested menu directly from active actions of a single type."""
-
-    entries = [
-        (action.quick_action_path or ("Unsorted",), action)
-        for action in actions
-        if action.type == action_type and action.state != "Archived"
-    ]
-    item_counter = 0
-
-    def build_items(
-        values: list[tuple[tuple[str, ...], Action]],
-        depth: int,
-    ) -> tuple[CommandItem, ...]:
-        nonlocal item_counter
-        grouped: dict[str, tuple[str, list[tuple[tuple[str, ...], Action]]]] = {}
-        for path, action in values:
-            key = path[depth].casefold()
-            if key not in grouped:
-                grouped[key] = (path[depth], [])
-            grouped[key][1].append((path, action))
-
-        items: list[CommandItem] = []
-        for visible_label, grouped_values in grouped.values():
-            item_counter += 1
-            direct_action_ids = tuple(
-                action.id
-                for path, action in grouped_values
-                if len(path) == depth + 1
-            )
-            nested_values = [
-                (path, action)
-                for path, action in grouped_values
-                if len(path) > depth + 1
-            ]
-            items.append(
-                CommandItem(
-                    id=f"{group_id}-level-{item_counter}",
-                    label=visible_label,
-                    action_ids=direct_action_ids,
-                    items=build_items(nested_values, depth + 1)
-                    if nested_values
-                    else (),
-                )
-            )
-        return tuple(items)
-
-    return CommandGroup(
-        id=f"action-bound-{group_id}",
-        label=label,
-        items=build_items(entries, 0) if entries else (),
-        presentation=GROUP_PRESENTATION_NESTED_MENU,
-    )
-
-
-def action_bound_quick_groups(actions: list[Action]) -> tuple[CommandGroup, ...]:
-    return tuple(
-        action_bound_quick_group(
-            actions,
-            group_id=group_id,
-            label=label,
-            action_type=action_type,
-        )
-        for group_id, label, action_type in ACTION_BOUND_QUICK_MENU_SPECS
-    )
 
 
 def _warn_if_slow(

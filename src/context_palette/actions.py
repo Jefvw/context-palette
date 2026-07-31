@@ -27,8 +27,13 @@ VISIBLE_STATES = {ACTIVE_STATE}
 LEGACY_ACTIVE_STATES = {"Draft", "Trusted"}
 MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024
 LEGACY_ACTION_TYPE_ALIASES = {"build_url_copy": "build_url_open"}
+ACTION_BOUND_QUICK_MENU_SPECS = (
+    ("passwords", "Passwords", "paste_credential"),
+    ("folders", "Folders", "open_folder"),
+    ("prompts", "Prompts", "ai_prompt"),
+)
 ACTION_BOUND_QUICK_TYPES = frozenset(
-    {"ai_prompt", "open_folder", "paste_credential"}
+    action_type for _group_id, _label, action_type in ACTION_BOUND_QUICK_MENU_SPECS
 )
 MAX_QUICK_ACTION_PATH_LEVELS = 3
 

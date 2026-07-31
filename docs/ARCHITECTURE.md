@@ -75,8 +75,8 @@ Presentation and application orchestration.
   previous one closes.
 - Renders numbered slots, global flat search results, or an explicitly activated
   flat list of actions belonging to the selected Focus.
-- Renders a global JSON-configured quick-action surface beside search results,
-  plus an explicit allow-listed `open_sheets` application command.
+- Renders the global JSON-configured Quick-action surface beside search results
+  and the fixed action-bound Passwords, Folders, and Prompts hierarchies.
 - Owns Input / Output, the communication line, systematic widget tooltips, Inbox, sheets, Help, and action editors.
 - Connects platform-independent action execution to Windows-specific callbacks.
 - Ensures Tk operations stay on the Tk main thread.
@@ -162,6 +162,16 @@ Important principles:
   canonical in-memory action search document containing identity, readable and
   technical type metadata, organization, state, target/value, arguments, and
   working folder. Configure adds storage ownership as surface-specific metadata.
+
+### `action_bound_quick_actions.py`
+
+Builds the shared Passwords, Folders, and Prompts `CommandGroup` hierarchies
+directly from Active actions and their optional `quick_action_path`. Both the
+launcher and Configure consume this builder, so displayed membership, nesting,
+and **Unsorted** placement cannot diverge. Configure adds presentation-only
+selection records: generated action leaves delegate to the normal action
+editor, while generated groups and levels route to a filtered Actions list.
+The generated hierarchy is never written as a second assignment store.
 
 ### `action_types.py`
 
@@ -325,8 +335,11 @@ preserves the supported minimum window width.
 
 New actions, contexts, and Quick-action groups explicitly choose **My
 configuration** or **Built-in** and default to My configuration. The
-Quick-actions tab is a hierarchical
-editor: groups and menu levels can be added, renamed, deleted, and reordered.
+Quick-actions tab is a hierarchical editor. Persisted groups and menu levels
+can be added, renamed, deleted, and reordered. The same tree also shows the
+generated Passwords, Folders, and Prompts hierarchies with editable action
+leaves; those generated records are reorganized through the owning action's
+`quick_action_path`, not through `command_surface.json`.
 A group chooses direct Quick-action rows or one nested subject-menu launcher.
 Nested groups and their menu levels may each own ordered actions; levels recurse
 to a validated maximum depth of three below the group. Selecting a group or

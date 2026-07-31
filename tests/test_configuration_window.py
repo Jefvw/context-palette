@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.configuration_window import (
     ActionDialog,
+    ActionBoundQuickSelection,
     ButtonDialog,
     ConfigurationWindow,
     ContextDialog,
@@ -32,6 +33,7 @@ from context_palette.configuration_window import (
     _focus_entry,
 )
 from context_palette.action_deletion import ActionDeletionReport
+from context_palette.action_bound_quick_actions import action_bound_quick_groups
 from context_palette.action_picker import ActionPickerField
 from context_palette.actions import Action, ActionError, append_action, load_actions
 from context_palette.command_surface import (
@@ -387,13 +389,16 @@ class FakeActionTree(FakeTree):
     def __init__(self) -> None:
         super().__init__(())
         self.inserted: list[str] = []
+        self.rows: dict[str, tuple[str, dict[str, object]]] = {}
         self.seen: str | None = None
 
     def delete(self, *_items: str) -> None:
         self.inserted.clear()
+        self.rows.clear()
 
-    def insert(self, _parent: str, _position: str, *, iid: str, **_options: object) -> None:
+    def insert(self, parent: str, _position: str, *, iid: str, **options: object) -> None:
         self.inserted.append(iid)
+        self.rows[iid] = (parent, options)
 
     def tag_configure(self, _tag: str, **_options: object) -> None:
         return
@@ -945,6 +950,95 @@ class ConfigurationDialogTests(unittest.TestCase):
             configuration._actions_for_quick_action_storage(project=True),
             [project_action],
         )
+
+    def test_automatic_folder_menu_is_rendered_with_editable_action_leaf(self) -> None:
+        folder = Action(
+            "folder",
+            "Reports folder",
+            "General",
+            "open_folder",
+            ".",
+            quick_action_path=("Work", "Reports"),
+        )
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.actions = [folder]
+        configuration.local_action_ids = {folder.id}
+        configuration.button_tree = FakeActionTree()
+        configuration.action_bound_button_records = {}
+
+        matches = configuration._render_action_bound_button_groups(
+            action_bound_quick_groups(configuration.actions),
+            "folders",
+        )
+
+        rendered_labels = {
+            options["text"]
+            for _parent, options in configuration.button_tree.rows.values()
+        }
+        self.assertEqual(matches, 3)
+        self.assertEqual(
+            rendered_labels,
+            {"Folders", "Work", "Reports", folder.compact_display_text},
+        )
+        action_records = [
+            record
+            for record in configuration.action_bound_button_records.values()
+            if record.action_id
+        ]
+        self.assertEqual(
+            action_records,
+            [
+                ActionBoundQuickSelection(
+                    "Folders",
+                    "open_folder",
+                    ("Work", "Reports"),
+                    "folder",
+                )
+            ],
+        )
+
+    def test_editing_automatic_folder_leaf_opens_its_action_editor(self) -> None:
+        folder = Action("folder", "Reports", "General", "open_folder", ".")
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.actions = [folder]
+        configuration.button_tree = FakeSelectedActionTree("automatic-folder")
+        configuration.action_bound_button_records = {
+            "automatic-folder": ActionBoundQuickSelection(
+                "Folders",
+                "open_folder",
+                ("Work",),
+                folder.id,
+            )
+        }
+        configuration._edit_action_record = Mock()
+
+        configuration._edit_button()
+
+        configuration._edit_action_record.assert_called_once_with(folder)
+
+    def test_editing_automatic_folder_group_opens_filtered_actions(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.actions = []
+        configuration.button_tree = FakeSelectedActionTree("automatic-folders")
+        configuration.action_bound_button_records = {
+            "automatic-folders": ActionBoundQuickSelection(
+                "Folders",
+                "open_folder",
+            )
+        }
+        configuration.notebook = FakeNotebook(selected=3)
+        configuration.action_filter_var = FakeVariable()
+        configuration.action_filter_entry = FakeEntry()
+        configuration.feedback_var = FakeVariable()
+        configuration.feedback_label = Mock()
+
+        configuration._edit_button()
+
+        self.assertEqual(configuration.notebook.selected, 0)
+        self.assertEqual(configuration.action_filter_var.value, "Open a folder")
+        self.assertEqual(configuration.action_filter_entry.focus_calls, 1)
+        self.assertIsNotNone(configuration.action_filter_entry.selection)
+        self.assertIn("Folders action", configuration.feedback_var.value)
 
     def test_project_quick_action_save_rejects_local_action_reference(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)

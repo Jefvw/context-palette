@@ -4,6 +4,10 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Connected the automatic **Passwords**, **Folders**, and **Prompts** menus to
+  Configure -> Quick actions. Their generated nested levels and action leaves
+  are now visible there; editing a leaf opens the owning action, while editing
+  a generated group or level opens the matching Actions list for organization.
 - Replaced the prominent Sheets launcher and four-item Frequent passwords strip
   with consistent action-bound **Passwords**, **Folders**, and **Prompts**
   nested menus beside **Standard**. Active matching actions appear

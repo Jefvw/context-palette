@@ -182,7 +182,7 @@ class LauncherSmokeTests(unittest.TestCase):
                                 "Group / menu level"
                             ].get_children()
                         ),
-                        len(app.command_groups),
+                        len(app.command_groups) + 3,
                     )
                     configure_windows[0].geometry("700x480")
                     root.update()
