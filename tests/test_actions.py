@@ -567,14 +567,14 @@ class ActionTests(unittest.TestCase):
             task="Product lookup",
         )
 
-        self.assertEqual(action.compact_display_text, "↗ selected product")
+        self.assertEqual(action.compact_display_text, "↗ - selected product")
         self.assertIn("browser", action.display_text)
         self.assertEqual(search_actions([action], "browser product lookup"), [action])
 
     def test_compact_display_infers_command_when_title_has_no_verb(self):
         action = Action("settings", "Quick Settings", "Windows", "copy_text", "Win + A")
 
-        self.assertEqual(action.compact_display_text, "⧉ Quick Settings")
+        self.assertEqual(action.compact_display_text, "⧉ - Quick Settings")
         self.assertEqual(
             Action(
                 "list",
@@ -583,7 +583,7 @@ class ActionTests(unittest.TestCase):
                 "transform_list_csv",
                 "csv",
             ).compact_display_text,
-            "⇄ values",
+            "⇄ - values",
         )
 
     def test_every_action_type_has_a_compact_icon(self):
@@ -598,7 +598,7 @@ class ActionTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     action.compact_display_text,
-                    f"{definition.icon} Example action",
+                    f"{definition.icon} - Example action",
                 )
 
     def test_action_description_round_trips_without_affecting_legacy_files(self):

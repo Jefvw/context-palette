@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import ttk
 import unittest
 from unittest.mock import patch
@@ -144,6 +145,32 @@ class LauncherSmokeTests(unittest.TestCase):
                     root.update()
 
                     self.assertEqual(len(app.actions), built_in_action_count)
+                    action_rows = app.results.get(0, tk.END)
+                    self.assertTrue(
+                        any(row.startswith("0. ") for row in action_rows)
+                    )
+                    self.assertTrue(
+                        any(row.strip() == "─" * 28 for row in action_rows)
+                    )
+                    self.assertTrue(
+                        all(
+                            " - " in row
+                            for row in action_rows
+                            if row.strip() and set(row.strip()) != {"─"}
+                        )
+                    )
+                    result_font = tkfont.Font(
+                        root=root,
+                        font=app.results.cget("font"),
+                    )
+                    title_offsets = [
+                        result_font.measure(row[: row.index(" - ") + 3])
+                        for row in action_rows[:5]
+                    ]
+                    self.assertLessEqual(
+                        max(title_offsets) - min(title_offsets),
+                        1,
+                    )
                     self.assertEqual(app.local_action_ids, set())
                     self.assertEqual(
                         [context.name for context in app.context_definitions],

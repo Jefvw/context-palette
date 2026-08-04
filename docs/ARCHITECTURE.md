@@ -123,7 +123,7 @@ changed automatically, and action Find remains global regardless of Focus.
 
 | State | Heading/results | Rail | Primary action |
 | --- | --- | --- | --- |
-| Actions, empty Find | Ordinary actions, including slots 1–9 | Passwords, Work, Types, Tags, Help | Run |
+| Actions, empty Find | Ordinary actions, including slots 1–0 | Passwords, Work, Types, Tags, Help | Run |
 | Focus Actions, empty Find | Flat actions explicitly belonging to the selected Focus | Same action rail | Run |
 | Action Find or filter active | Flat global action matches; changing Focus does not filter them | Same action rail | Run |
 | Find cleared after Focus Actions | Restores the selected Focus's flat membership list | Same action rail | Run |
@@ -301,8 +301,9 @@ includes a concrete example for every type. Every My configuration and Built-in
 action type is editable. Editing a Built-in action requires acknowledging that
 its file is tracked by Git and changes starter defaults; the warning also
 prohibits personal paths, secrets, and private work details. Contexts can assign
-an unlimited action membership plus slots 6–9, and personal Quick actions can
-reference existing actions without exposing technical IDs. Built-in contexts
+an unlimited action membership plus slots 6–0, and personal Quick actions can
+reference an ordered mix of existing actions and discovered Work Items without exposing
+technical IDs. Built-in contexts
 and Quick-action records are editable after the same developer-impact warning.
 Writes use the same atomic JSON
 replacement path as the rest of the application.
@@ -345,10 +346,17 @@ Nested groups and their menu levels may each own ordered actions; levels recurse
 to a validated maximum depth of three below the group. Selecting a group or
 level establishes the parent for **Add menu level**, while stable IDs remain
 unique across the complete group tree. In row presentation, a visible
-top-level item's first action remains its left-click default; its context menu
-can expose its descendants. Built-in Quick actions may reference only Built-in
+top-level item's first available target remains its left-click default; its
+context menu can expose every ordered action and Work Item plus descendants.
+Personal items store mixed targets in one ordered list. Each Work Item target
+uses a stable source/folder reference. Execution resolves those references
+against the current immutable index and delegates to the same
+workbook-first, folder-fallback opening boundary used by Work Items mode.
+Unavailable references remain configured and recover when their source returns.
+Built-in Quick actions may reference only Built-in
 actions so starter configuration cannot depend on ignored machine-local
-records; My configuration Quick actions may reference either storage location.
+records or Work Items; My configuration Quick actions may reference either
+action storage location or a Work Item.
 The configuration checker enforces the same boundary recursively for manually
 edited JSON.
 
@@ -377,7 +385,8 @@ configured action.
 Stores and calculates launcher organization.
 
 - Slots 1–5: persistent global pins.
-- Slots 6–9: top four actions for the focus context.
+- Slots 6–0: top five actions for the focus context; internal slot 10 is
+  displayed and invoked with the physical `0` key.
 - Duplicate actions across both groups are intentional.
 - Unfilled context slots prefer other actions belonging to the active Focus,
   then fall back to remaining globally available actions.
@@ -391,7 +400,11 @@ backward compatibility. A group and each recursive item retain ordered actions;
 items may contain child items to a maximum depth of three. Traversal helpers
 provide stable index/ID paths, recursive counts, and complete action-reference
 enumeration to rendering, Configure, deletion, and validation. Groups reference
-existing action IDs; they do not define a second execution language. Duplicate
+existing action IDs. A personal item may store an ordered `targets` list that
+mixes action IDs with validated Work Item source IDs and direct relative folder
+names. Legacy action-only fields and the initial single `work_item_ref` form
+remain readable. Work Item entries reference the existing constrained opener
+rather than defining a second execution language. Duplicate
 group IDs and duplicate item IDs anywhere within one group are rejected
 case-insensitively.
 
@@ -454,7 +467,7 @@ Native Windows hotkey and selection-copy support using `ctypes`.
 
 Loads and validates standalone Built-in and My configuration context
 definitions. A definition owns an unlimited ordered `action_ids` membership and
-up to four preferred action IDs. `focus_model.py` combines definition-owned
+up to five preferred action IDs. `focus_model.py` combines definition-owned
 membership with legacy action-side memberships for backward compatibility.
 Explicit per-machine choices in `palette.json` override configured defaults.
 
@@ -469,7 +482,8 @@ context-model changes.
 ### `work_items.py`
 
 Owns the pure, UI-independent first phase of Work Items discovery. Immutable
-source and discovered-item models validate stable source identity and absolute
+source, reference, and discovered-item models validate stable source identity
+and absolute
 paths. The scanner enumerates only direct children of one configured
 `workitems` folder, rejects unavailable sources without creating them, skips
 names ending in at least five hyphens before inspecting the child, and never
@@ -880,7 +894,7 @@ newline where applicable.
 
 Numbered action dispatch is enabled only when the Find entry owns focus. All other widgets suppress it, making shortcut mode explicit and preventing accidental execution while navigating or editing. The communication line never wraps; its full untruncated action explanation is retained separately for a dynamic hover tooltip and click-open detail window.
 
-The numbered-slot colour legend and workspace heading are intentionally not rendered. Slot numbers and row colours carry the distinction. Standard editing and transformations are available through the context menu, with a compact `⋮` transform button as the only persistent workspace control.
+The numbered-slot colour legend and workspace heading are intentionally not rendered. Slot numbers and row colours carry the distinction. Action rows measure every icon in the active Tk font, pad narrower symbols to one shared pixel column, and then render `- short name`. A non-action separator row divides slots 1–0 from ordinary results; mouse and keyboard selection skip that separator. Standard editing and transformations are available through the context menu, with a compact `⋮` transform button as the only persistent workspace control.
 
 ## Focus contexts and slots
 
@@ -888,11 +902,11 @@ The application currently implements a focus context rather than a complete mult
 
 ```text
 1–5  global pinned actions
-6–9  focus-context actions
+6–0  focus-context actions
 other rows  ordinary search matches
 ```
 
-Changing the focus context changes slots 6–9 only. Search always remains global.
+Changing the focus context changes slots 6–0 only. Search always remains global.
 
 The **Focus actions** control is a reversible, visibly active presentation
 mode. With Find empty, it shows a flat list of visible actions belonging to the
@@ -904,7 +918,8 @@ Focus Actions only when that mode remains active. Tags do not create folders
 in this view because they are independent filters rather than structural
 ownership.
 
-Configured Quick actions remain action-ID configuration. The launcher first
+Configured Quick actions use action IDs or an ordered personal mix of actions
+and stable Work Item references. The launcher first
 renders **Standard | Passwords**, then **Folders | Prompts**, followed by
 personal configured groups. The last three menus are pure projections over
 Active first-class actions and their optional `quick_action_path`; creating,

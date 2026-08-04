@@ -29,7 +29,7 @@ class PaletteStateTests(unittest.TestCase):
             Action("c", "C", "General", "copy_text", "c"),
         ]
 
-    def test_pins_use_1_to_5_and_context_uses_6_to_9_with_duplicates(self):
+    def test_pins_use_1_to_5_and_context_uses_6_to_10_with_duplicates(self):
         state = PaletteState(("a", "c"), "Mail", {"Mail": ("a", "b")})
 
         slots = action_slots(self.actions, state)
@@ -38,6 +38,19 @@ class PaletteStateTests(unittest.TestCase):
         self.assertEqual(slots[2].id, "c")
         self.assertEqual(slots[6].id, "a")
         self.assertEqual(slots[7].id, "b")
+
+    def test_fifth_context_action_uses_internal_slot_10(self):
+        actions = [
+            Action(str(index), str(index), "Mail", "copy_text", str(index))
+            for index in range(1, 6)
+        ]
+
+        slots = action_slots(actions, PaletteState(focus_context="Mail"))
+
+        self.assertEqual(
+            [slots[number].id for number in (6, 7, 8, 9, 10)],
+            ["1", "2", "3", "4", "5"],
+        )
 
     def test_toggle_pin_limits_pins_to_five(self):
         state = PaletteState(("1", "2", "3", "4", "5"), "General", {})

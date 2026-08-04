@@ -31,6 +31,7 @@ from .action_picker import ActionPickerField, ActionPickerOption
 from .command_surface import (
     CommandGroup,
     CommandItem,
+    CommandTarget,
     CommandSurfaceError,
     GROUP_PRESENTATION_NESTED_MENU,
     GROUP_PRESENTATION_ROWS,
@@ -41,8 +42,11 @@ from .command_surface import (
     command_item_count,
     command_item_id_path,
     command_item_action_ids,
+    command_item_targets,
+    command_item_work_item_references,
     iter_command_items,
     load_combined_command_groups,
+    load_command_groups,
 )
 from .configuration_data import save_command_item, save_context
 from .configuration_data import (
@@ -65,7 +69,14 @@ from .context_deletion import (
 )
 from .diagnostics import render_safe_diagnostics, summarize_diagnostics
 from .harvest_window import HarvestWindow
-from .palette_state import PaletteState, load_palette_state, save_palette_state
+from .palette_state import (
+    CONTEXT_SLOT_NUMBERS,
+    MAX_CONTEXT_SLOT_ACTIONS,
+    PaletteState,
+    load_palette_state,
+    save_palette_state,
+    slot_display_number,
+)
 from .context_membership_field import (
     ContextMembershipField,
     TagSelectionField,
@@ -75,7 +86,7 @@ from .tooltips import WidgetTooltip
 from .window_geometry import configure_standard_window, place_child_window
 from .work_item_configuration import WorkItemsConfigurationPanel
 from .work_item_refresh import WorkItemIndex
-from .work_items import WorkItemSource
+from .work_items import DiscoveredWorkItem, WorkItemReference, WorkItemSource
 from .work_item_storage import WorkItemMetadata
 from .workspace_transforms import WORKSPACE_TRANSFORM_GROUPS, WORKSPACE_TRANSFORMS
 
@@ -192,6 +203,129 @@ def action_reference_labels(
     )
 
 
+def work_item_reference_label(
+    reference: WorkItemReference,
+    work_items: tuple[DiscoveredWorkItem, ...],
+) -> str:
+    """Resolve a stable Work Item reference without discarding unavailable entries."""
+    source_key = reference.source_id.casefold()
+    folder_key = reference.relative_folder.casefold()
+    item = next(
+        (
+            candidate
+            for candidate in work_items
+            if candidate.source_id.casefold() == source_key
+            and candidate.relative_folder.casefold() == folder_key
+        ),
+        None,
+    )
+    if item is None:
+        return (
+            f"Unavailable Work Item: {reference.relative_folder} "
+            f"[{reference.source_id}]"
+        )
+    return f"Work Item: {item.display_name} · {item.source_name}"
+
+
+def _work_item_reference_search_terms(
+    reference: WorkItemReference,
+    work_items: tuple[DiscoveredWorkItem, ...],
+) -> tuple[str, ...]:
+    source_key = reference.source_id.casefold()
+    folder_key = reference.relative_folder.casefold()
+    item = next(
+        (
+            candidate
+            for candidate in work_items
+            if candidate.source_id.casefold() == source_key
+            and candidate.relative_folder.casefold() == folder_key
+        ),
+        None,
+    )
+    if item is None:
+        return (reference.source_id, reference.relative_folder)
+    return (
+        reference.source_id,
+        reference.relative_folder,
+        item.display_name,
+        item.source_name,
+        item.kind_code or "",
+        item.kind_name or "",
+        item.organisation or "",
+        item.subject,
+        *item.project_codes,
+    )
+
+
+def _work_item_choices(
+    work_items: tuple[DiscoveredWorkItem, ...],
+) -> dict[str, WorkItemReference]:
+    return {
+        f"▣ {item.display_name} · {item.source_name} [{item.source_id}]": (
+            WorkItemReference(item.source_id, item.relative_folder)
+        )
+        for item in sorted(
+            work_items,
+            key=lambda candidate: (
+                candidate.display_name.casefold(),
+                candidate.source_name.casefold(),
+            ),
+        )
+    }
+
+
+def _work_item_picker_options(
+    work_items: tuple[DiscoveredWorkItem, ...],
+    choices: dict[str, WorkItemReference],
+) -> tuple[ActionPickerOption, ...]:
+    items_by_reference = {
+        WorkItemReference(item.source_id, item.relative_folder): item
+        for item in work_items
+    }
+    return tuple(
+        ActionPickerOption(
+            action_id=f"{reference.source_id}/{reference.relative_folder}",
+            label=label,
+            search_text=" ".join(
+                (
+                    reference.source_id,
+                    reference.relative_folder,
+                    items_by_reference[reference].source_name,
+                    items_by_reference[reference].display_name,
+                    items_by_reference[reference].kind_code or "",
+                    items_by_reference[reference].kind_name or "",
+                    items_by_reference[reference].organisation or "",
+                    items_by_reference[reference].subject,
+                    *items_by_reference[reference].project_codes,
+                )
+            ),
+        )
+        for label, reference in choices.items()
+    )
+
+
+def quick_action_target_labels(
+    item: CommandItem,
+    actions: list[Action],
+    work_items: tuple[DiscoveredWorkItem, ...],
+) -> tuple[str, ...]:
+    actions_by_id = {action.id: action for action in actions}
+    labels: list[str] = []
+    for target in command_item_targets(item):
+        if target.action_id:
+            action = actions_by_id.get(target.action_id)
+            labels.append(
+                action.title
+                if action is not None
+                else f"Missing action: {target.action_id}"
+            )
+        elif target.work_item_ref is not None:
+            labels.append(
+                work_item_reference_label(target.work_item_ref, work_items)
+            )
+    return tuple(labels)
+
+
 def context_action_summary(
     context: ContextDefinition,
     actions: list[Action],
@@ -247,6 +381,7 @@ def quick_action_matches_filter(
     *,
     actions: list[Action],
     personal: bool,
+    work_items: tuple[DiscoveredWorkItem, ...] = (),
 ) -> bool:
     terms = [term.casefold() for term in query.split() if term.strip()]
     if not terms:
@@ -256,11 +391,24 @@ def quick_action_matches_filter(
         if item is not None
         else action_reference_labels(command_group_action_ids(group), actions)
     )
+    work_item_terms = tuple(
+        term
+        for reference in (
+            command_item_work_item_references(item)
+            if item is not None
+            else ()
+        )
+        for term in (
+            work_item_reference_label(reference, work_items),
+            *_work_item_reference_search_terms(reference, work_items),
+        )
+    )
     searchable = " ".join(
         (
             group.label,
             item.label if item is not None else "",
             *labels,
+            *work_item_terms,
             f"{LOCAL_DESTINATION} local personal"
             if personal
             else f"{PROJECT_DESTINATION} project shared",
@@ -346,6 +494,7 @@ class ConfigurationWindow:
         self.work_item_sources_path = work_item_sources_path
         self.work_item_metadata_path = work_item_metadata_path
         self.work_item_settings_path = work_item_settings_path
+        self.work_item_index = work_item_index
         self.on_change = on_change
         self.focus_context = focus_context
         self.contexts: list[ContextDefinition] = []
@@ -643,8 +792,8 @@ class ConfigurationWindow:
         ttk.Label(
             tab,
             text=(
-                "Choose every action in the context, then up to four preferred "
-                "actions for slots 6–9."
+                f"Choose every action in the context, then up to "
+                f"{MAX_CONTEXT_SLOT_ACTIONS} preferred actions for slots 6–0."
             ),
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(0, 6))
@@ -1096,6 +1245,7 @@ class ConfigurationWindow:
             ActionBoundQuickSelection,
         ] = {}
         query = self.button_filter_var.get()
+        work_items = self._available_work_items()
         action_bound_groups = action_bound_quick_groups(self.actions)
         total_items = (
             sum(command_item_count(group) for group in self.groups)
@@ -1122,6 +1272,7 @@ class ConfigurationWindow:
                     query,
                     actions=self.actions,
                     personal=local,
+                    work_items=work_items,
                 ) or any(
                     item_or_descendant_matches(child)
                     for child in item.items
@@ -1133,6 +1284,7 @@ class ConfigurationWindow:
                 query,
                 actions=self.actions,
                 personal=local,
+                work_items=work_items,
             )
             if (
                 not group_matches
@@ -1182,9 +1334,10 @@ class ConfigurationWindow:
                         + ".".join(str(index) for index in path)
                     )
                     self.button_tree_records[iid] = (group_index, path)
-                    labels = action_reference_labels(
-                        command_item_action_ids(item),
+                    labels = quick_action_target_labels(
+                        item,
                         self.actions,
+                        work_items,
                     )
                     summary = ", ".join(labels)
                     if item.items:
@@ -1798,10 +1951,7 @@ class ConfigurationWindow:
             other_ids = {
                 item.id.casefold()
                 for item in (
-                    load_combined_command_groups(
-                        other_path,
-                        Path("__missing_command_surface__"),
-                    )
+                    load_command_groups(other_path)
                     if other_path.exists()
                     else []
                 )
@@ -1885,6 +2035,13 @@ class ConfigurationWindow:
             if action.id not in self.local_action_ids
         ]
 
+    def _available_work_items(self) -> tuple[DiscoveredWorkItem, ...]:
+        panel = getattr(self, "work_items_panel", None)
+        index = getattr(panel, "index", None)
+        if index is not None:
+            return index.items
+        return getattr(self, "work_item_index", WorkItemIndex()).items
+
     def _add_button(self) -> None:
         action_bound = self._selected_action_bound_button_record()
         if action_bound is not None:
@@ -1934,6 +2091,7 @@ class ConfigurationWindow:
                 parent_item_ids=parent_item_ids,
             ),
             shared=project,
+            work_items=() if project else self._available_work_items(),
         )
 
     def _edit_button(self) -> None:
@@ -1994,6 +2152,7 @@ class ConfigurationWindow:
             self._actions_for_quick_action_storage(project=not local),
             lambda *args: self._save_button(*args, target_path=target_path),
             shared=not local,
+            work_items=() if not local else self._available_work_items(),
         )
 
     def _manage_action_bound_quick_selection(
@@ -2035,6 +2194,14 @@ class ConfigurationWindow:
     ) -> bool:
         destination = target_path or self.local_command_surface_path
         project = destination.resolve() == self.command_surface_path.resolve()
+        if project and command_item_work_item_references(item):
+            messagebox.showerror(
+                "Menu level was not saved",
+                "Work Items are personal and can be assigned only to My "
+                "configuration Quick actions.",
+                parent=self.window,
+            )
+            return False
         local_references = [
             action_id
             for action_id in command_item_action_ids(item)
@@ -2057,10 +2224,7 @@ class ConfigurationWindow:
             other_group_ids = {
                 group.id.casefold()
                 for group in (
-                    load_combined_command_groups(
-                        other_path,
-                        Path("__missing_command_surface__"),
-                    )
+                    load_command_groups(other_path)
                     if other_path.exists()
                     else []
                 )
@@ -2232,9 +2396,10 @@ class ConfigurationWindow:
                 f"{presentation} | {destination}"
             )
             return
-        labels = action_reference_labels(
-            command_item_action_ids(item),
+        labels = quick_action_target_labels(
+            item,
             self.actions,
+            self._available_work_items(),
         )
         menu_path = [group.label]
         current_items = group.items
@@ -2245,13 +2410,13 @@ class ConfigurationWindow:
         if group.presentation == GROUP_PRESENTATION_NESTED_MENU:
             self.button_preview_var.set(
                 f"Nested menu: {' > '.join(menu_path)} | "
-                f"Actions: {', '.join(labels) if labels else 'empty'} | "
+                f"Targets: {', '.join(labels) if labels else 'empty'} | "
                 f"Child levels: {len(item.items)} | "
                 f"{destination}"
             )
         else:
             self.button_preview_var.set(
-                f"Left click: {labels[0] if labels else 'No action'} | "
+                f"Left click: {labels[0] if labels else 'No target'} | "
                 f"Right-click menu: {', '.join(labels) if labels else 'empty'} | "
                 f"{destination}"
             )
@@ -2981,19 +3146,20 @@ class ContextDialog:
                 if index < len(preferred)
                 else EMPTY_PIN_LABEL
             )
-            for index in range(4)
+            for index in range(MAX_CONTEXT_SLOT_ACTIONS)
         ]
         self.slot_choices: list[ActionPickerField] = []
-        ttk.Label(outer, text="Preferred actions for slots 6–9").pack(anchor=tk.W, pady=(9, 2))
-        for slot, variable in enumerate(self.slots, start=6):
+        ttk.Label(outer, text="Preferred actions for slots 6–0").pack(anchor=tk.W, pady=(9, 2))
+        for slot, variable in zip(CONTEXT_SLOT_NUMBERS, self.slots):
+            slot_label = slot_display_number(slot)
             row = ttk.Frame(outer)
             row.pack(fill=tk.X, pady=2)
-            ttk.Label(row, text=f"Slot {slot}", width=8).pack(side=tk.LEFT)
+            ttk.Label(row, text=f"Slot {slot_label}", width=8).pack(side=tk.LEFT)
             chooser = ActionPickerField(
                 row,
                 variable=variable,
                 empty_label=EMPTY_PIN_LABEL,
-                title=f"Choose preferred action for slot {slot}",
+                title=f"Choose preferred action for slot {slot_label}",
             )
             chooser.pack(side=tk.LEFT, fill=tk.X, expand=True)
             self.slot_choices.append(chooser)
@@ -3327,6 +3493,7 @@ class ButtonDialog:
         on_save: Callable[[str, str, CommandItem, str, str], bool],
         *,
         shared: bool = False,
+        work_items: tuple[DiscoveredWorkItem, ...] = (),
     ) -> None:
         self.original_group_id = group.id if group else ""
         self.original_item_id = item.id if item else ""
@@ -3360,7 +3527,7 @@ class ButtonDialog:
             style="Muted.TLabel",
         ).pack(anchor=tk.W)
         item_entry = _entry(outer, "Menu level name", self.item_label)
-        ids = command_item_action_ids(item) if item else ()
+        self.assigned_targets = list(command_item_targets(item)) if item else []
         self.action_choices = _action_choices(actions)
         self.action_picker_options = _action_picker_options(
             actions,
@@ -3368,17 +3535,25 @@ class ButtonDialog:
         )
         labels_by_id = {action_id: label for label, action_id in self.action_choices.items()}
         self.labels_by_id = labels_by_id
-        self.assigned_action_ids = list(ids)
+        self.assigned_action_ids = [
+            target.action_id
+            for target in self.assigned_targets
+            if target.action_id
+        ]
+        self.work_item_choices = _work_item_choices(work_items)
+        self.work_item_labels_by_ref = {
+            reference: label
+            for label, reference in self.work_item_choices.items()
+        }
         ttk.Label(
             outer,
             text=(
                 "Nested-menu actions: shown in this order inside the subject "
-                "submenu. Find by name, type, context, or tag."
+                "submenu. Actions and Work Items can be mixed."
                 if self.nested_menu
                 else
-                "Assigned actions: the first action runs on left-click; "
-                "right-click shows the complete ordered list. Find by name, "
-                "type, context, or tag."
+                "Assigned targets: the first available action or Work Item runs "
+                "on left-click; right-click shows the complete ordered list."
             ),
             wraplength=610,
         ).pack(anchor=tk.W, pady=(9, 2))
@@ -3398,6 +3573,42 @@ class ButtonDialog:
             text="Add",
             command=self._add_assigned_action,
         ).pack(side=tk.LEFT, padx=(6, 0))
+        if not shared:
+            ttk.Label(
+                outer,
+                text="Add a Work Item target",
+            ).pack(anchor=tk.W, pady=(9, 2))
+            work_item_chooser = ttk.Frame(outer)
+            work_item_chooser.pack(fill=tk.X)
+            self.work_item_choice_var = tk.StringVar(
+                value=""
+            )
+            self.work_item_choice = ActionPickerField(
+                work_item_chooser,
+                variable=self.work_item_choice_var,
+                options=_work_item_picker_options(
+                    work_items,
+                    self.work_item_choices,
+                ),
+                title="Choose Work Item for Quick action",
+                item_name="Work Item",
+                item_plural="Work Items",
+                search_help=(
+                    "Searches Work Item name, source, kind, organisation, "
+                    "project code, and stable folder identity. Use Down Arrow, "
+                    "Enter, or double-click."
+                ),
+            )
+            self.work_item_choice.pack(
+                side=tk.LEFT,
+                fill=tk.X,
+                expand=True,
+            )
+            ttk.Button(
+                work_item_chooser,
+                text="Add Work Item",
+                command=self._use_work_item,
+            ).pack(side=tk.LEFT, padx=(6, 0))
         assigned = ttk.Frame(outer)
         assigned.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
         self.assignment_list = tk.Listbox(
@@ -3444,18 +3655,41 @@ class ButtonDialog:
 
     def _add_assigned_action(self) -> None:
         action_id = self.action_choices.get(self.action_choice_var.get())
-        if not action_id or action_id in self.assigned_action_ids:
+        target = CommandTarget(action_id=action_id) if action_id else None
+        if target is None or target in self.assigned_targets:
             return
-        self.assigned_action_ids.append(action_id)
-        self._refresh_assignment_list(select=len(self.assigned_action_ids) - 1)
+        self.assigned_targets.append(target)
+        self._sync_assigned_action_ids()
+        self._refresh_assignment_list(select=len(self.assigned_targets) - 1)
+
+    def _use_work_item(self) -> None:
+        reference = self.work_item_choices.get(self.work_item_choice_var.get())
+        if reference is None:
+            return
+        target = CommandTarget(work_item_ref=reference)
+        if target in self.assigned_targets:
+            return
+        self.assigned_targets.append(target)
+        if not self.item_label.get().strip():
+            self.item_label.set(reference.relative_folder)
+        self._sync_assigned_action_ids()
+        self._refresh_assignment_list(select=len(self.assigned_targets) - 1)
+
+    def _sync_assigned_action_ids(self) -> None:
+        self.assigned_action_ids = [
+            target.action_id
+            for target in self.assigned_targets
+            if target.action_id
+        ]
 
     def _remove_assigned_action(self) -> None:
         selection = self.assignment_list.curselection()
         if not selection:
             return
-        del self.assigned_action_ids[selection[0]]
+        del self.assigned_targets[selection[0]]
+        self._sync_assigned_action_ids()
         self._refresh_assignment_list(
-            select=min(selection[0], len(self.assigned_action_ids) - 1)
+            select=min(selection[0], len(self.assigned_targets) - 1)
         )
 
     def _move_assigned_action(self, offset: int) -> None:
@@ -3464,69 +3698,76 @@ class ButtonDialog:
             return
         index = selection[0]
         target = index + offset
-        if target < 0 or target >= len(self.assigned_action_ids):
+        if target < 0 or target >= len(self.assigned_targets):
             return
-        self.assigned_action_ids[index], self.assigned_action_ids[target] = (
-            self.assigned_action_ids[target],
-            self.assigned_action_ids[index],
+        self.assigned_targets[index], self.assigned_targets[target] = (
+            self.assigned_targets[target],
+            self.assigned_targets[index],
         )
+        self._sync_assigned_action_ids()
         self._refresh_assignment_list(select=target)
 
     def _refresh_assignment_list(self, *, select: int = -1) -> None:
         self.assignment_list.delete(0, tk.END)
-        for index, action_id in enumerate(self.assigned_action_ids):
-            label = self.labels_by_id.get(action_id, f"Missing action: {action_id}")
-            prefix = (
-                f"Menu {index + 1}: "
-                if self.nested_menu
-                else "Default: "
-                if index == 0
-                else f"Menu {index + 1}: "
-            )
+        for index, target in enumerate(self.assigned_targets):
+            if target.action_id:
+                label = self.labels_by_id.get(
+                    target.action_id,
+                    f"Missing action: {target.action_id}",
+                )
+            else:
+                label = self.work_item_labels_by_ref.get(
+                    target.work_item_ref,
+                    work_item_reference_label(target.work_item_ref, ()),
+                )
+            prefix = f"Target {index + 1}: "
             self.assignment_list.insert(tk.END, prefix + label)
-        if 0 <= select < len(self.assigned_action_ids):
+        if 0 <= select < len(self.assigned_targets):
             self.assignment_list.selection_set(select)
             self.assignment_list.see(select)
         self.assignment_preview_var.set(
             (
                 (
-                    f"Nested submenu shows {len(self.assigned_action_ids)} "
-                    "action(s), starting with: "
-                    f"{self.labels_by_id.get(self.assigned_action_ids[0], self.assigned_action_ids[0])}."
+                    f"Nested submenu shows {len(self.assigned_targets)} "
+                    "target(s), starting with the first available target."
                 )
                 if self.nested_menu
                 else
-                f"Left click runs: "
-                f"{self.labels_by_id.get(self.assigned_action_ids[0], self.assigned_action_ids[0])}. "
-                f"Right-click shows {len(self.assigned_action_ids)} action(s)."
+                f"Left click runs the first available target. Right-click shows "
+                f"{len(self.assigned_targets)} target(s)."
             )
-            if self.assigned_action_ids
-            else "Add at least one action."
+            if self.assigned_targets
+            else "Add at least one action or Work Item."
         )
 
     def _save(self) -> None:
-        if hasattr(self, "assigned_action_ids"):
-            ids = tuple(dict.fromkeys(self.assigned_action_ids))
+        if hasattr(self, "assigned_targets"):
+            targets = tuple(dict.fromkeys(self.assigned_targets))
         else:
             # Compatibility for lightweight non-Tk tests.
-            ids = tuple(
-                dict.fromkeys(
+            targets = tuple(
+                CommandTarget(action_id=action_id)
+                for action_id in dict.fromkeys(
                     self.action_choices[value.get()]
                     for value in self.action_ids
                     if value.get() in self.action_choices
                 )
             )
-        if not ids:
+        if not targets:
             messagebox.showerror(
                 "Context Palette",
-                "Assign at least one action, or delete this Quick action.",
+                "Assign at least one action or Work Item, or delete this Quick action.",
                 parent=self.window,
             )
             return
         available_ids = set(getattr(self, "labels_by_id", {}))
         if not available_ids:
             available_ids = set(self.action_choices.values())
-        unavailable_ids = [action_id for action_id in ids if action_id not in available_ids]
+        unavailable_ids = [
+            target.action_id
+            for target in targets
+            if target.action_id and target.action_id not in available_ids
+        ]
         if unavailable_ids:
             messagebox.showerror(
                 "Context Palette",
@@ -3541,13 +3782,21 @@ class ButtonDialog:
             return
         group_id = self.group_id.get().strip() or _stable_id(self.group_label.get())
         item_id = self.item_id.get().strip() or _stable_id(self.item_label.get())
+        action_only_ids = tuple(
+            target.action_id
+            for target in targets
+            if target.action_id
+        )
+        action_only = len(action_only_ids) == len(targets)
         saved = self.on_save(
             group_id,
             self.group_label.get(),
             CommandItem(
                 id=item_id, label=self.item_label.get().strip(),
-                primary_action_id=ids[0] if ids else "", action_ids=ids,
+                primary_action_id=(action_only_ids[0] if action_only_ids and action_only else ""),
+                action_ids=action_only_ids if action_only else (),
                 items=getattr(self, "child_items", ()),
+                targets=() if action_only else targets,
             ),
             self.original_group_id, self.original_item_id,
         )

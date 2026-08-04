@@ -39,10 +39,12 @@ from context_palette.actions import Action, ActionError, append_action, load_act
 from context_palette.command_surface import (
     CommandGroup,
     CommandItem,
+    CommandTarget,
     GROUP_PRESENTATION_NESTED_MENU,
 )
 from context_palette.contexts import ContextDefinition
 from context_palette.palette_state import PaletteState, load_palette_state
+from context_palette.work_items import DiscoveredWorkItem, WorkItemReference
 
 
 class FakeVariable:
@@ -340,6 +342,42 @@ class ConfigurationFilterTests(unittest.TestCase):
                 personal=False,
             )
         )
+
+    def test_quick_action_filter_searches_work_item_identity(self):
+        work_item = DiscoveredWorkItem(
+            "product-work",
+            "Product work",
+            "ISS-ABC-example",
+            ROOT / "ISS-ABC-example",
+            "ISS-ABC-example",
+            "ISS",
+            "Issue",
+            "ABC",
+            "example",
+            ("AB9C",),
+            None,
+        )
+        item = CommandItem(
+            "current",
+            "Current item",
+            work_item_ref=WorkItemReference(
+                work_item.source_id,
+                work_item.relative_folder,
+            ),
+        )
+        group = CommandGroup("work", "Work", (item,))
+
+        for query in ("current item", "product work", "ISS-ABC", "AB9C"):
+            self.assertTrue(
+                quick_action_matches_filter(
+                    group,
+                    item,
+                    query,
+                    actions=[],
+                    personal=True,
+                    work_items=(work_item,),
+                )
+            )
 
 
 class FakeEntry:
@@ -1724,6 +1762,7 @@ class ConfigurationDialogTests(unittest.TestCase):
                     for picker in dialog.slot_choices
                 )
             )
+            self.assertEqual(len(dialog.slot_choices), 5)
             dialog._save()
 
             self.assertEqual(saved[0].action_ids, ("built-in", "local"))
@@ -1853,6 +1892,63 @@ class ConfigurationDialogTests(unittest.TestCase):
                 [child.id for child in captured[0].items],
                 ["child"],
             )
+        finally:
+            for child in root.winfo_children():
+                child.destroy()
+            root.destroy()
+
+    def test_personal_quick_action_dialog_mixes_ordered_action_and_work_item(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        captured: list[CommandItem] = []
+        work_item = DiscoveredWorkItem(
+            "product-work",
+            "Product work",
+            "ISS-ABC-example",
+            ROOT / "ISS-ABC-example",
+            "ISS-ABC-example",
+            "ISS",
+            "Issue",
+            "ABC",
+            "example",
+            (),
+            ROOT / "ISS-ABC-example" / "ISS-ABC-example.xlsx",
+        )
+        action = Action("open-docs", "Open docs", "General", "open_folder", str(ROOT))
+        try:
+            dialog = ButtonDialog(
+                root,
+                CommandGroup("work", "Work"),
+                None,
+                [action],
+                lambda _group_id, _group_label, saved, *_args: (
+                    captured.append(saved) or True
+                ),
+                work_items=(work_item,),
+            )
+            action_label = next(iter(dialog.action_choices))
+            dialog.action_choice_var.set(action_label)
+            dialog._add_assigned_action()
+            selected_label = next(iter(dialog.work_item_choices))
+            dialog.work_item_choice_var.set(selected_label)
+
+            dialog._use_work_item()
+            dialog._save()
+
+            self.assertEqual(
+                captured[0].targets,
+                (
+                    CommandTarget(action_id="open-docs"),
+                    CommandTarget(
+                        work_item_ref=WorkItemReference(
+                            "product-work",
+                            "ISS-ABC-example",
+                        )
+                    ),
+                ),
+            )
+            self.assertEqual(captured[0].action_ids, ())
+            self.assertEqual(captured[0].primary_action_id, "")
         finally:
             for child in root.winfo_children():
                 child.destroy()

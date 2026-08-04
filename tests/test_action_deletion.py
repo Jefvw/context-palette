@@ -17,6 +17,70 @@ from context_palette.action_deletion import (
 
 
 class ActionDeletionTests(unittest.TestCase):
+    def test_deletion_preserves_neighboring_work_item_in_mixed_targets(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            actions = root / "actions.json"
+            contexts = root / "contexts.json"
+            commands = root / "commands.json"
+            palette = root / "palette.json"
+            self._write(
+                actions,
+                {
+                    "actions": [
+                        {
+                            "id": "delete-me",
+                            "title": "Delete",
+                            "type": "copy_text",
+                            "value": "x",
+                        }
+                    ]
+                },
+            )
+            self._write(contexts, {"contexts": []})
+            self._write(palette, {"pinned_action_ids": []})
+            work_item_target = {
+                "type": "work_item",
+                "source_id": "product-work",
+                "relative_folder": "ISS-ABC-example",
+            }
+            self._write(
+                commands,
+                {
+                    "groups": [
+                        {
+                            "id": "work",
+                            "label": "Work",
+                            "items": [
+                                {
+                                    "id": "mixed",
+                                    "label": "Mixed",
+                                    "targets": [
+                                        {"type": "action", "action_id": "delete-me"},
+                                        work_item_target,
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
+
+            report = delete_action_and_references(
+                actions,
+                "delete-me",
+                context_paths=(contexts,),
+                command_surface_paths=(commands,),
+                palette_path=palette,
+            )
+
+            self.assertEqual(report.references_removed, 1)
+            self.assertEqual(report.buttons_removed, 0)
+            self.assertEqual(
+                self._read(commands)["groups"][0]["items"][0]["targets"],
+                [work_item_target],
+            )
+
     def test_deletion_removes_action_and_all_saved_references(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)

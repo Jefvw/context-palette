@@ -6,6 +6,7 @@ import logging
 import queue
 import time
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import messagebox, simpledialog, ttk
 from typing import Callable
 
@@ -27,12 +28,14 @@ from .cheatsheets import CheatSheetError, load_cheatsheets
 from .command_surface import (
     CommandGroup,
     CommandItem,
+    CommandTarget,
     CommandSurfaceError,
     GROUP_PRESENTATION_NESTED_MENU,
     command_configuration_paths,
     command_group_action_ids,
     command_group_launcher_count,
     command_item_action_ids,
+    command_item_targets,
     load_combined_command_groups,
 )
 from .configuration_window import ConfigurationWindow
@@ -64,6 +67,7 @@ from .palette_state import (
     action_slots,
     load_palette_state,
     save_palette_state,
+    slot_display_number,
     toggle_pin,
 )
 from .windows_credentials import (
@@ -95,7 +99,12 @@ from .work_item_storage import (
     load_work_item_sources,
     work_item_metadata_key,
 )
-from .work_items import DiscoveredWorkItem, WorkItemSource, work_item_matches
+from .work_items import (
+    DiscoveredWorkItem,
+    WorkItemReference,
+    WorkItemSource,
+    work_item_matches,
+)
 
 LOGGER = logging.getLogger("context_palette.launcher")
 LOGGER.addHandler(logging.NullHandler())
@@ -216,6 +225,7 @@ class LauncherApp:
         self.filtered_actions: list[Action] = []
         self.displayed_actions: list[Action] = []
         self.displayed_slots: list[int | None] = []
+        self.displayed_action_rows: list[tuple[Action | None, int | None]] = []
         self.slot_actions: dict[int, Action] = {}
         self.palette_state = PaletteState()
         self.show_requests: queue.Queue[dict[str, str]] = queue.Queue()
@@ -418,7 +428,7 @@ class LauncherApp:
         context_panel.pack(fill=tk.X, pady=(0, 8))
         focus_label = ttk.Label(context_panel, text="Focus", style="Heading.TLabel")
         focus_label.pack(side=tk.LEFT)
-        self._tooltip(focus_label, "Choose what you are working on. This changes context slots 6–9.")
+        self._tooltip(focus_label, "Choose what you are working on. This changes context slots 6–0.")
         self.context_picker = ttk.Menubutton(
             context_panel,
             textvariable=self.focus_launcher_var,
@@ -462,7 +472,7 @@ class LauncherApp:
         )
         self._tooltip(
             context_help,
-            "Focus changes slots 6–9. It does not limit global search. Open Help for context configuration.",
+            "Focus changes slots 6–0. It does not limit global search. Open Help for context configuration.",
         )
         self.global_help_button = context_help
         self.configure_button = configure_button
@@ -631,6 +641,8 @@ class LauncherApp:
         self.actions_list_frame = discovery.list_frame
         self.results_scrollbar = discovery.scrollbar
         self.results = discovery.results
+        self._prepare_action_icon_alignment()
+        self.results.bind("<Button-1>", self._guard_action_separator_click, add="+")
         self.results_tooltip = discovery.results_tooltip
         self.focus_tree = discovery.focus_tree
         self.focus_tree_tooltip = discovery.focus_tree_tooltip
@@ -862,6 +874,42 @@ class LauncherApp:
         control.bind("<Return>", on_keyboard, add="+")
         control.bind("<space>", on_keyboard, add="+")
 
+    def _prepare_action_icon_alignment(self) -> None:
+        try:
+            result_font = tkfont.nametofont(
+                str(self.results.cget("font")),
+                root=self.root,
+            )
+        except tk.TclError:
+            result_font = tkfont.Font(
+                root=self.root,
+                font=self.results.cget("font"),
+            )
+        icon_widths = {
+            action_type: result_font.measure(definition.icon)
+            for action_type, definition in ACTION_TYPES.items()
+        }
+        target_width = max(icon_widths.values(), default=0)
+        spacer = "\u200a"
+        spacer_width = result_font.measure(spacer)
+        if spacer_width <= 0:
+            spacer = " "
+            spacer_width = max(1, result_font.measure(spacer))
+        self.action_icon_padding: dict[str, str] = {}
+        for action_type, definition in ACTION_TYPES.items():
+            padding = ""
+            while (
+                result_font.measure(definition.icon + padding + spacer)
+                <= target_width
+            ):
+                padding += spacer
+            self.action_icon_padding[action_type] = padding
+
+    def _aligned_action_display_text(self, action: Action) -> str:
+        icon = ACTION_TYPES[action.type].icon
+        padding = getattr(self, "action_icon_padding", {}).get(action.type, "")
+        return f"{icon}{padding} - {action.compact_title}"
+
     def _result_tooltip_text(self, index: int) -> str:
         if self.work_items_mode:
             if index < 0 or index >= len(self.displayed_work_items):
@@ -880,9 +928,11 @@ class LauncherApp:
                 f"Tags: {', '.join(tags) or '(none)'}\n"
                 f"Workbook: {workbook}"
             )
-        if index < 0 or index >= len(self.displayed_actions):
+        if index < 0 or index >= len(self.displayed_action_rows):
             return ""
-        action = self.displayed_actions[index]
+        action, _slot = self.displayed_action_rows[index]
+        if action is None:
+            return ""
         lines = [
             "Contexts: "
             + (", ".join(action.effective_contexts) or "General only")
@@ -934,7 +984,7 @@ class LauncherApp:
     def _audit_tooltips(self) -> None:
         descriptions = {
             "1–5  PINNED": "Global shortcuts that stay in slots 1–5 in every context.",
-            "6–9  FOCUS CONTEXT": "The four preferred actions for the current Focus context.",
+            "6–0  FOCUS CONTEXT": "The five preferred actions for the current Focus context.",
             "Selection, pasted input, and transformation results": (
                 "This editable text is read by input-aware actions and may contain clipboard or action output."
             ),
@@ -1407,8 +1457,8 @@ class LauncherApp:
             )
             self._command_surface_tooltip(
                 control,
-                "Left-click or Enter runs the primary action. Right-click chooses "
-                "an action. Shift/Ctrl+click edits configuration.",
+                "Left-click or Enter opens the assigned target. Right-click shows "
+                "its target menu. Shift/Ctrl+click edits configuration.",
             )
             self._bind_surface_menu_control(
                 control,
@@ -1485,11 +1535,13 @@ class LauncherApp:
         return self._post_group_menu(group, event.x_root, event.y_root)
 
     def _execute_item_primary(self, item: CommandItem) -> str:
-        action = self._primary_action_for_item(item)
-        if action is None:
-            self.status_var.set(f"{item.label} has no available action. Open Configure to assign one.")
+        target_result = self._execute_first_available_item_target(item)
+        if target_result is not None:
             return "break"
-        self._execute_action(action)
+        self.status_var.set(
+            f"{item.label} has no available action or Work Item. "
+            "Open Configure to assign one."
+        )
         return "break"
 
     def _handle_command_item_left_click(
@@ -1502,13 +1554,12 @@ class LauncherApp:
         if event.state & (0x0001 | 0x0004):
             self._open_command_configuration(group)
             return "break"
-        action = self._primary_action_for_item(item)
-        if action is None:
-            if item.items:
-                return self._show_item_menu(event, item)
-            self.status_var.set(f"No available actions configured for {item.label}.")
+        target_result = self._execute_first_available_item_target(item)
+        if target_result is not None:
             return "break"
-        self._execute_action(action)
+        if item.items:
+            return self._show_item_menu(event, item)
+        self.status_var.set(f"No available actions configured for {item.label}.")
         return "break"
 
     def _activate_item_at_control(
@@ -1516,9 +1567,8 @@ class LauncherApp:
         control: tk.Widget,
         item: CommandItem,
     ) -> str:
-        action = self._primary_action_for_item(item)
-        if action is not None:
-            self._execute_action(action)
+        target_result = self._execute_first_available_item_target(item)
+        if target_result is not None:
             return "break"
         if item.items:
             return self._post_item_menu(
@@ -1527,9 +1577,84 @@ class LauncherApp:
                 control.winfo_rooty() + control.winfo_height(),
             )
         self.status_var.set(
-            f"{item.label} has no available action. Open Configure to assign one."
+            f"{item.label} has no available action or Work Item. "
+            "Open Configure to assign one."
         )
         return "break"
+
+    def _execute_first_available_item_target(
+        self,
+        item: CommandItem,
+    ) -> bool | None:
+        targets = command_item_targets(item)
+        if not targets:
+            return None
+        actions_by_id = {action.id: action for action in self.actions}
+        first_unavailable_work_item: WorkItemReference | None = None
+        for target in targets:
+            if target.action_id:
+                action = actions_by_id.get(target.action_id)
+                if action is not None:
+                    self._execute_action(action)
+                    return True
+                continue
+            reference = target.work_item_ref
+            if reference is None:
+                continue
+            if self._work_item_for_reference(reference) is not None:
+                return self._execute_work_item_reference(item.label, reference)
+            if first_unavailable_work_item is None:
+                first_unavailable_work_item = reference
+        if first_unavailable_work_item is not None:
+            self._execute_work_item_reference(item.label, first_unavailable_work_item)
+        else:
+            self.status_var.set(
+                f"{item.label} has no available action or Work Item."
+            )
+        return False
+
+    def _work_item_for_reference(
+        self,
+        reference: WorkItemReference,
+    ) -> DiscoveredWorkItem | None:
+        source_key = reference.source_id.casefold()
+        folder_key = reference.relative_folder.casefold()
+        return next(
+            (
+                item
+                for item in self.work_item_index.items
+                if item.source_id.casefold() == source_key
+                and item.relative_folder.casefold() == folder_key
+            ),
+            None,
+        )
+
+    def _execute_work_item_reference(
+        self,
+        label: str,
+        reference: WorkItemReference,
+    ) -> bool:
+        item = self._work_item_for_reference(reference)
+        if item is None:
+            self.status_var.set(f"Work Item unavailable: {label}")
+            messagebox.showerror(
+                "Work Item unavailable",
+                f'“{label}” is not in the current Work Item index.\n\n'
+                "Refresh Work Items or check its personal source configuration. "
+                "The Quick action has been kept and will recover when the source returns.",
+                parent=self.root,
+            )
+            return False
+        target = item.default_open_path
+        if not self._open_work_item_target(item, target):
+            return False
+        self.status_var.set(
+            f"Opened workbook: {target.name}"
+            if item.matching_workbook_path is not None
+            and target == item.matching_workbook_path
+            else f"Opened folder: {item.display_name}"
+        )
+        return True
 
     def _primary_action_for_item(self, item: CommandItem) -> Action | None:
         actions_by_id = {action.id: action for action in self.actions}
@@ -1578,7 +1703,7 @@ class LauncherApp:
         submenus: list[tk.Menu] = []
         self._populate_menu_node(
             menu,
-            command_item_action_ids(item),
+            command_item_targets(item),
             item.items,
             submenus,
         )
@@ -1593,29 +1718,49 @@ class LauncherApp:
     def _populate_menu_node(
         self,
         menu: tk.Menu,
-        action_ids: tuple[str, ...],
+        targets: tuple[CommandTarget, ...],
         child_items: tuple[CommandItem, ...],
         submenus: list[tk.Menu],
     ) -> None:
         actions_by_id = {action.id: action for action in self.actions}
-        added_actions = False
-        for action_id in action_ids:
-            action = actions_by_id.get(action_id)
-            if action is None:
+        added_targets = False
+        for target in targets:
+            if target.action_id:
+                action = actions_by_id.get(target.action_id)
+                if action is None:
+                    continue
+                menu.add_command(
+                    label=action.compact_display_text,
+                    command=lambda selected_action=action: self._execute_action(selected_action),
+                )
+                added_targets = True
                 continue
-            menu.add_command(
-                label=action.compact_display_text,
-                command=lambda selected_action=action: self._execute_action(selected_action),
-            )
-            added_actions = True
-        if added_actions and child_items:
+            work_item_ref = target.work_item_ref
+            if work_item_ref is None:
+                continue
+            work_item = self._work_item_for_reference(work_item_ref)
+            if work_item is None:
+                menu.add_command(
+                    label=f"Unavailable Work Item - {work_item_ref.relative_folder}",
+                    state=tk.DISABLED,
+                )
+            else:
+                menu.add_command(
+                    label=f"▣ - {work_item.display_name}",
+                    command=lambda selected_item=work_item: self._execute_work_item_reference(
+                        selected_item.display_name,
+                        WorkItemReference(selected_item.source_id, selected_item.relative_folder),
+                    ),
+                )
+            added_targets = True
+        if added_targets and child_items:
             menu.add_separator()
         for child in child_items:
             submenu = tk.Menu(menu, tearoff=False)
             submenus.append(submenu)
             self._populate_menu_node(
                 submenu,
-                command_item_action_ids(child),
+                command_item_targets(child),
                 child.items,
                 submenus,
             )
@@ -1650,7 +1795,10 @@ class LauncherApp:
         submenus: list[tk.Menu] = []
         self._populate_menu_node(
             menu,
-            command_group_action_ids(group),
+            tuple(
+                CommandTarget(action_id=action_id)
+                for action_id in command_group_action_ids(group)
+            ),
             group.items,
             submenus,
         )
@@ -1822,17 +1970,40 @@ class LauncherApp:
         ]
         self.displayed_actions = [action for _slot, action in slot_rows] + remaining
         self.displayed_slots = [slot for slot, _action in slot_rows] + [None] * len(remaining)
+        self.displayed_action_rows = [
+            (action, slot) for slot, action in slot_rows
+        ]
+        if slot_rows and remaining:
+            self.displayed_action_rows.append((None, None))
+        self.displayed_action_rows.extend((action, None) for action in remaining)
         self.results.delete(0, tk.END)
-        for index, (action, slot) in enumerate(zip(self.displayed_actions, self.displayed_slots)):
-            prefix = f"{slot}. " if slot is not None else "   "
-            self.results.insert(tk.END, f"{prefix}{action.compact_display_text}")
+        for index, (action, slot) in enumerate(self.displayed_action_rows):
+            if action is None:
+                self.results.insert(tk.END, "   " + "─" * 28)
+                self.results.itemconfigure(
+                    index,
+                    background=COLORS["surface"],
+                    foreground=COLORS["muted_text"],
+                    selectbackground=COLORS["surface"],
+                    selectforeground=COLORS["muted_text"],
+                )
+                continue
+            prefix = (
+                f"{slot_display_number(slot)}. "
+                if slot is not None
+                else "   "
+            )
+            self.results.insert(
+                tk.END,
+                f"{prefix}{self._aligned_action_display_text(action)}",
+            )
             if slot is not None and 1 <= slot <= 5:
                 self.results.itemconfigure(
                     index,
                     background=COLORS["row_light"],
                     foreground=COLORS["text"],
                 )
-            elif slot is not None and 6 <= slot <= 9:
+            elif slot is not None and 6 <= slot <= 10:
                 self.results.itemconfigure(
                     index,
                     background=COLORS["row_aqua"],
@@ -1926,7 +2097,7 @@ class LauncherApp:
                 self.status_var.set(f"{count} {label}")
             else:
                 self.status_var.set(
-                    f"{count} matches · slots 1–5 pinned · slots 6–9 {self.palette_state.focus_context}"
+                    f"{count} matches · slots 1–5 pinned · slots 6–0 {self.palette_state.focus_context}"
                 )
         self._update_preview()
         _warn_if_slow(
@@ -1942,6 +2113,7 @@ class LauncherApp:
         self.results.delete(0, tk.END)
         self.displayed_actions = []
         self.displayed_slots = []
+        self.displayed_action_rows = []
         self.displayed_work_items = [
             item
             for item in self.work_item_index.items
@@ -2027,7 +2199,7 @@ class LauncherApp:
                 "",
                 tk.END,
                 iid=item_id,
-                text=action.compact_display_text,
+                text=self._aligned_action_display_text(action),
             )
             self.focus_tree_actions[item_id] = action
         count = len(focused_actions)
@@ -2394,7 +2566,7 @@ class LauncherApp:
     def _execute_slot(self, slot: int, event: tk.Event) -> str | None:
         action = self.slot_actions.get(slot)
         if action is None:
-            self.status_var.set(f"No action in slot {slot}")
+            self.status_var.set(f"No action in slot {slot_display_number(slot)}")
             return "break"
         self._execute_action(action)
         return "break"
@@ -2403,7 +2575,7 @@ class LauncherApp:
         result_count = (
             len(self.displayed_work_items)
             if self.work_items_mode
-            else len(self.displayed_actions)
+            else len(self.displayed_action_rows)
         )
         if not result_count:
             return "break"
@@ -2416,12 +2588,25 @@ class LauncherApp:
         result_count = (
             len(self.displayed_work_items)
             if self.work_items_mode
-            else len(self.displayed_actions)
+            else len(self.displayed_action_rows)
         )
         if not result_count:
             return "break"
 
         bounded_index = max(0, min(index, result_count - 1))
+        if (
+            not self.work_items_mode
+            and self.displayed_action_rows[bounded_index][0] is None
+        ):
+            selected = self.results.curselection()
+            current = selected[0] if selected else 0
+            direction = -1 if index < current else 1
+            candidate = bounded_index + direction
+            if not 0 <= candidate < result_count:
+                candidate = bounded_index - direction
+            if not 0 <= candidate < result_count:
+                return "break"
+            bounded_index = candidate
         self.results.selection_clear(0, tk.END)
         self.results.selection_set(bounded_index)
         self.results.activate(bounded_index)
@@ -2439,9 +2624,10 @@ class LauncherApp:
         if not selected:
             return None
         index = selected[0]
-        if index >= len(self.displayed_actions):
+        if index >= len(self.displayed_action_rows):
             return None
-        return self.displayed_actions[index]
+        action, _slot = self.displayed_action_rows[index]
+        return action
 
     def _selected_work_item(self) -> DiscoveredWorkItem | None:
         if not self.work_items_mode:
@@ -2972,13 +3158,29 @@ class LauncherApp:
             initial_action_id=action.id,
         )
 
+    def _guard_action_separator_click(self, event: tk.Event) -> str | None:
+        if self.work_items_mode or self.results_view != "flat":
+            return None
+        index = self.results.nearest(event.y)
+        bounds = self.results.bbox(index)
+        if (
+            bounds is not None
+            and bounds[1] <= event.y < bounds[1] + bounds[3]
+            and index < len(self.displayed_action_rows)
+            and self.displayed_action_rows[index][0] is None
+        ):
+            self.results.selection_clear(0, tk.END)
+            self._update_preview()
+            return "break"
+        return None
+
     def _configure_flat_action_from_event(self, event: tk.Event) -> str:
         index = self.results.nearest(event.y)
         bounds = self.results.bbox(index)
         result_count = (
             len(self.displayed_work_items)
             if self.work_items_mode
-            else len(self.displayed_actions)
+            else len(self.displayed_action_rows)
         )
         if (
             bounds is None
@@ -2993,7 +3195,10 @@ class LauncherApp:
         if self.work_items_mode:
             self._show_work_item_menu(event, self.displayed_work_items[index])
             return "break"
-        self._show_action_configuration(self.displayed_actions[index])
+        action, _slot = self.displayed_action_rows[index]
+        if action is None:
+            return "break"
+        self._show_action_configuration(action)
         return "break"
 
     def _show_work_item_menu(
@@ -3126,7 +3331,7 @@ class LauncherApp:
             result_count = (
                 len(self.displayed_work_items)
                 if self.work_items_mode
-                else len(self.displayed_actions)
+                else len(self.displayed_action_rows)
             )
             return self._select_index(result_count - 1, event)
 
@@ -3147,15 +3352,17 @@ class LauncherApp:
         # the produced digit first, then the AZERTY key name, then the common
         # Windows virtual-key code. Numpad input remains Find text.
         keycode = int(getattr(event, "keycode", 0) or 0)
-        if 97 <= keycode <= 105:
+        if 96 <= keycode <= 105:
             return None
         keysym = str(getattr(event, "keysym", "")).casefold()
         character = str(getattr(event, "char", ""))
         for candidate in (character, keysym):
             if candidate.isdigit():
-                slot = int(candidate)
-                if 1 <= slot <= 9:
-                    return slot
+                digit = int(candidate)
+                if 1 <= digit <= 9:
+                    return digit
+                if digit == 0:
+                    return 10
         azerty_slots = {
             "ampersand": 1,
             "eacute": 2,
@@ -3166,11 +3373,15 @@ class LauncherApp:
             "egrave": 7,
             "underscore": 8,
             "ccedilla": 9,
+            "agrave": 10,
+            "parenright": 10,
         }
         if keysym in azerty_slots:
             return azerty_slots[keysym]
         if 49 <= keycode <= 57:
             return keycode - 48
+        if keycode == 48:
+            return 10
         return None
 
     def _plain_number_from_text_input(self, event: tk.Event) -> bool:

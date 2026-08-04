@@ -14,6 +14,7 @@ from .command_surface import (
     MAX_COMMAND_MENU_LEVELS,
     command_group_action_ids,
     command_item_action_ids,
+    command_item_targets,
     iter_command_items,
     load_command_groups,
 )
@@ -311,6 +312,15 @@ def _validate_group(group: CommandGroup) -> None:
                     f"Duplicate button ID in this group: {item.id}"
                 )
             item_ids.add(key)
+            if item.targets and (
+                item.primary_action_id
+                or item.action_ids
+                or item.work_item_ref is not None
+            ):
+                raise CommandSurfaceError(
+                    "A Quick action cannot combine targets with legacy target fields."
+                )
+            command_item_targets(item)
             validate_items(item.items, depth + 1)
 
     validate_items(group.items, 1)
@@ -336,21 +346,35 @@ def _command_group_to_data(group: CommandGroup) -> dict[str, object]:
 
 
 def _command_item_to_data(item: CommandItem) -> dict[str, object]:
-    return {
+    data: dict[str, object] = {
         "id": item.id.strip(),
         "label": item.label.strip(),
-        **(
-            {"primary_action_id": item.primary_action_id}
-            if item.primary_action_id
-            else {}
-        ),
-        "action_ids": list(item.action_ids),
-        **(
-            {"items": [_command_item_to_data(child) for child in item.items]}
-            if item.items
-            else {}
-        ),
     }
+    if item.targets:
+        data["targets"] = [
+            (
+                {"type": "action", "action_id": target.action_id}
+                if target.action_id
+                else {
+                    "type": "work_item",
+                    "source_id": target.work_item_ref.source_id,
+                    "relative_folder": target.work_item_ref.relative_folder,
+                }
+            )
+            for target in command_item_targets(item)
+        ]
+    else:
+        if item.primary_action_id:
+            data["primary_action_id"] = item.primary_action_id
+        data["action_ids"] = list(item.action_ids)
+        if item.work_item_ref is not None:
+            data["work_item_ref"] = {
+                "source_id": item.work_item_ref.source_id,
+                "relative_folder": item.work_item_ref.relative_folder,
+            }
+    if item.items:
+        data["items"] = [_command_item_to_data(child) for child in item.items]
+    return data
 
 
 def _replace_command_item(

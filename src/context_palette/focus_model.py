@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from .actions import Action, VISIBLE_STATES
 from .contexts import ContextDefinition
-from .palette_state import PaletteState
+from .palette_state import MAX_CONTEXT_SLOT_ACTIONS, PaletteState
 
 
 @dataclass(frozen=True)
@@ -50,7 +50,7 @@ def resolve_focus_state(
         if definition.name not in configured_slots and default_action_ids:
             configured_slots[definition.name] = tuple(
                 action_id
-                for action_id in default_action_ids[:4]
+                for action_id in default_action_ids[:MAX_CONTEXT_SLOT_ACTIONS]
                 if action_id in known_action_ids
             )
 

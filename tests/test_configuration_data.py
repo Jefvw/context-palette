@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from context_palette.command_surface import (
     CommandGroup,
     CommandItem,
+    CommandTarget,
     GROUP_PRESENTATION_NESTED_MENU,
     load_command_groups,
 )
@@ -29,9 +30,54 @@ from context_palette.configuration_data import (
 from context_palette.contexts import ContextDefinition, load_contexts
 from context_palette.configuration_window import ACTION_TYPE_EXAMPLES, _action_choices, _stable_id
 from context_palette.action_types import ACTION_TYPES
+from context_palette.work_items import WorkItemReference
 
 
 class ConfigurationDataTests(unittest.TestCase):
+    def test_work_item_quick_action_round_trips_without_file_or_folder_action(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_command_surface.json"
+            reference = WorkItemReference(
+                "product-work",
+                "ISS-ABC-example",
+            )
+
+            save_command_item(
+                path,
+                group_id="work",
+                group_label="Work",
+                item=CommandItem(
+                    "current",
+                    "Current item",
+                    targets=(
+                        CommandTarget(action_id="open-docs"),
+                        CommandTarget(work_item_ref=reference),
+                    ),
+                ),
+            )
+
+            saved = load_command_groups(path)[0].items[0]
+            raw = json.loads(path.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            saved.targets,
+            (
+                CommandTarget(action_id="open-docs"),
+                CommandTarget(work_item_ref=reference),
+            ),
+        )
+        self.assertEqual(saved.action_ids, ())
+        self.assertEqual(
+            raw["groups"][0]["items"][0]["targets"],
+            [
+                {"type": "action", "action_id": "open-docs"},
+                {
+                    "type": "work_item",
+                    "source_id": "product-work",
+                    "relative_folder": "ISS-ABC-example",
+                },
+            ],
+        )
     def test_save_context_preserves_explicit_empty_membership(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "contexts.json"

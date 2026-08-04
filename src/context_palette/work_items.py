@@ -25,6 +25,34 @@ class WorkItemDiscoveryError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class WorkItemReference:
+    """Stable identity for a discovered Work Item across path changes."""
+
+    source_id: str
+    relative_folder: str
+
+    def __post_init__(self) -> None:
+        source_id = self.source_id.strip()
+        relative_folder = self.relative_folder.strip()
+        if not SOURCE_ID_PATTERN.fullmatch(source_id):
+            raise WorkItemDiscoveryError(
+                "Work-item reference source ID must contain lowercase letters, "
+                "numbers, and single hyphens only."
+            )
+        if (
+            not relative_folder
+            or "/" in relative_folder
+            or "\\" in relative_folder
+            or relative_folder in {".", ".."}
+        ):
+            raise WorkItemDiscoveryError(
+                "Work-item reference folder must be one direct folder name."
+            )
+        object.__setattr__(self, "source_id", source_id)
+        object.__setattr__(self, "relative_folder", relative_folder)
+
+
+@dataclass(frozen=True, slots=True)
 class WorkItemSource:
     id: str
     name: str

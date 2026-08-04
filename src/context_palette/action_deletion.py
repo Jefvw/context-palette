@@ -181,6 +181,7 @@ def _remove_command_references(
         if (
             group.get("primary_action_id")
             or group.get("action_ids")
+            or group.get("targets")
             or group.get("items")
         ):
             retained_groups.append(group)
@@ -206,6 +207,19 @@ def _clean_command_node(
             if isinstance(node.get("action_ids"), list) and node["action_ids"]
             else ""
         )
+    targets = node.get("targets")
+    if isinstance(targets, list):
+        retained_targets = [
+            target
+            for target in targets
+            if not (
+                isinstance(target, dict)
+                and target.get("type") == "action"
+                and target.get("action_id") == action_id
+            )
+        ]
+        removed_references += len(targets) - len(retained_targets)
+        node["targets"] = retained_targets
     child_items = node.get("items")
     if not isinstance(child_items, list):
         return removed_references, removed_items
@@ -223,6 +237,8 @@ def _clean_command_node(
         if (
             child.get("primary_action_id")
             or child.get("action_ids")
+            or child.get("work_item_ref")
+            or child.get("targets")
             or child.get("items")
         ):
             retained_children.append(child)

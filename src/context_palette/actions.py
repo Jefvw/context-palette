@@ -80,7 +80,7 @@ class Action:
         return " > ".join(dict.fromkeys(parts))
 
     @property
-    def compact_display_text(self) -> str:
+    def compact_title(self) -> str:
         title = self.title.strip()
         commands = ("Open", "Copy", "Convert", "Search", "Arrange", "Restore")
         for command in commands:
@@ -88,7 +88,12 @@ class Action:
             if title.casefold().startswith(prefix.casefold()):
                 title = title[len(prefix):].strip()
                 break
-        return f"{ACTION_TYPES[self.type].icon} {title}"
+        return title
+
+    @property
+    def compact_display_text(self) -> str:
+        title = self.compact_title
+        return f"{ACTION_TYPES[self.type].icon} - {title}"
 
 
 @dataclass(frozen=True)

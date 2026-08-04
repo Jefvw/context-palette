@@ -170,7 +170,25 @@ def _clean_command_references(
                     if isinstance(item.get("action_ids"), list) and item["action_ids"]
                     else ""
                 )
-            if item.get("primary_action_id") or item.get("action_ids"):
+            targets = item.get("targets")
+            if isinstance(targets, list):
+                retained_targets = [
+                    target
+                    for target in targets
+                    if not (
+                        isinstance(target, dict)
+                        and target.get("type") == "action"
+                        and target.get("action_id") in removed_ids
+                    )
+                ]
+                removed += len(targets) - len(retained_targets)
+                item["targets"] = retained_targets
+            if (
+                item.get("primary_action_id")
+                or item.get("action_ids")
+                or item.get("work_item_ref")
+                or item.get("targets")
+            ):
                 retained_items.append(item)
         group["items"] = retained_items
         if retained_items:

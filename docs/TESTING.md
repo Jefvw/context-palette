@@ -220,7 +220,7 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
 7. Activate Focus Actions and verify keyboard focus enters its list. Search for
    an action from another Focus, verify the flat results remain global, change
    Focus while Find is non-empty, then clear Find and verify the new Focus list
-   returns. Confirm only slots 6–9 change and pins 1–5 remain stable.
+   returns. Confirm only slots 6–0 change and pins 1–5 remain stable.
 8. Tab to a Quick action and run its primary action with Enter or Space.
 9. Create disposable actions and contexts in both **My configuration** and
    **Built-in**; reload and confirm each uses the selected file. In a My
@@ -262,6 +262,13 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
     workbook falls back to its folder. Right-click and check workbook, item
     folder, and source-folder routes. Temporarily make one source unavailable
     and verify other sources refresh while its last successful rows remain.
+    Open **Configure**, choose **Quick actions**, add a My configuration level,
+    choose an action and at least two Work Items, reorder them together, and verify the resulting
+    Quick action uses the first available target. Confirm its menu preserves the
+    mixed order, the Work Item opens the exact workbook, and it falls back to the folder when that workbook is
+    absent, and remains configured with a clear unavailable message while its
+    source is disconnected. Confirm a Built-in Quick action does not offer a
+    Work Item assignment.
 13. Trigger a validation error and confirm the message identifies the field without losing the form contents.
 14. Capture an Inbox item, confirm conversion, and verify the resulting Active
     action is immediately editable and persists after restart.

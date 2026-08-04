@@ -1,6 +1,6 @@
 # Context configuration
 
-A Focus context groups actions for a kind of work and gives slots 6–9 a
+A Focus context groups actions for a kind of work and gives slots 6–0 a
 predictable set of preferred actions while search remains global.
 
 ## Recommended: Configure window
@@ -8,7 +8,7 @@ predictable set of preferred actions while search remains global.
 Choose **Manage focuses…** in the Focus selector to open **Contexts** directly,
 or choose **Configure** (or press `Ctrl+,`) and select **Contexts**. Create,
 edit, or delete a context, choose every action that belongs to it, and select up
-to four preferred actions. The form uses action names instead of technical IDs.
+to five preferred actions. The form uses action names instead of technical IDs.
 
 Normal user contexts belong in **My configuration** and stay on this PC. They
 may contain both Built-in actions and My configuration actions without editing
@@ -49,7 +49,7 @@ in Built-in files.
 
 `name` is the stable, case-insensitively unique context identity. `action_ids`
 is the ordered membership list used by **Focus actions**.
-`preferred_action_ids` supplies up to four default actions for slots 6–9 and
+`preferred_action_ids` supplies up to five default actions for slots 6–0 and
 should be a subset of `action_ids`. Explicit per-machine slots in
 `palette.json` override those defaults.
 

@@ -14,10 +14,17 @@ from context_palette.action_bound_quick_actions import action_bound_quick_groups
 from context_palette.command_surface import (
     CommandGroup,
     CommandItem,
+    CommandTarget,
     CommandSurfaceError,
     GROUP_PRESENTATION_NESTED_MENU,
 )
 from context_palette.launcher import LauncherApp
+from context_palette.work_item_refresh import SourceRefreshResult, WorkItemIndex
+from context_palette.work_items import (
+    DiscoveredWorkItem,
+    WorkItemReference,
+    WorkItemSource,
+)
 
 
 class FakeStatusVar:
@@ -157,7 +164,25 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
             ),
         ]
         app.command_groups = []
+        source = WorkItemSource("product-work", "Product work", ROOT)
+        app._test_work_item = DiscoveredWorkItem(
+            source_id=source.id,
+            source_name=source.name,
+            relative_folder="ISS-ABC-example",
+            folder_path=ROOT / "ISS-ABC-example",
+            display_name="ISS-ABC-example",
+            kind_code="ISS",
+            kind_name="Issue",
+            organisation="ABC",
+            subject="example",
+            project_codes=(),
+            matching_workbook_path=ROOT / "ISS-ABC-example" / "ISS-ABC-example.xlsx",
+        )
+        app.work_item_index = WorkItemIndex(
+            (SourceRefreshResult(source, (app._test_work_item,)),)
+        )
         app._execute_action_calls = []
+        app._opened_work_items = []
 
         def _execute_action(action: Action) -> None:
             app._execute_action_calls.append(action.id)
@@ -167,7 +192,148 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
 
         app._execute_action = _execute_action
         app._open_command_configuration = _open_command_configuration
+        app._open_work_item_target = (
+            lambda item, target: app._opened_work_items.append((item, target)) or True
+        )
         return app
+
+    def test_work_item_quick_action_uses_existing_workbook_first_opener(self):
+        app = self._app()
+        item = CommandItem(
+            "current",
+            "Current item",
+            work_item_ref=WorkItemReference(
+                "product-work",
+                "ISS-ABC-example",
+            ),
+        )
+
+        result = app._handle_command_item_left_click(
+            FakeEvent(),
+            CommandGroup("work", "Work"),
+            item,
+        )
+
+        self.assertEqual(result, "break")
+        self.assertEqual(
+            app._opened_work_items,
+            [(app._test_work_item, app._test_work_item.matching_workbook_path)],
+        )
+        self.assertIn("Opened workbook", app.status_var.value)
+        self.assertEqual(app._execute_action_calls, [])
+
+    def test_unavailable_work_item_quick_action_is_kept_and_reports_recovery(self):
+        app = self._app()
+        item = CommandItem(
+            "missing",
+            "Missing item",
+            work_item_ref=WorkItemReference("product-work", "ISS-ABC-missing"),
+        )
+
+        with patch("context_palette.launcher.messagebox.showerror") as error:
+            result = app._execute_item_primary(item)
+
+        self.assertEqual(result, "break")
+        self.assertEqual(app._opened_work_items, [])
+        self.assertIn("unavailable", app.status_var.value.casefold())
+        self.assertIn("has been kept", error.call_args.args[1])
+
+    def test_work_item_quick_action_menu_uses_live_reference(self):
+        app = self._app()
+        item = CommandItem(
+            "current",
+            "Current item",
+            work_item_ref=WorkItemReference(
+                "product-work",
+                "ISS-ABC-example",
+            ),
+        )
+
+        with patch("context_palette.launcher.tk.Menu", FakeMenu):
+            app._show_item_menu(FakeEvent(), item)
+
+        menu = FakeMenu.last_instance
+        self.assertEqual(menu.labels, ["▣ - ISS-ABC-example"])
+        menu.commands[0]()
+        self.assertEqual(len(app._opened_work_items), 1)
+
+    def test_mixed_quick_action_runs_first_available_target(self):
+        app = self._app()
+        item = CommandItem(
+            "mixed",
+            "Mixed",
+            targets=(
+                CommandTarget(
+                    work_item_ref=WorkItemReference(
+                        "product-work",
+                        "ISS-ABC-missing",
+                    )
+                ),
+                CommandTarget(action_id="secondary"),
+            ),
+        )
+
+        app._execute_item_primary(item)
+
+        self.assertEqual(app._execute_action_calls, ["secondary"])
+        self.assertEqual(app._opened_work_items, [])
+
+    def test_mixed_quick_action_can_fall_through_to_second_work_item(self):
+        app = self._app()
+        item = CommandItem(
+            "mixed",
+            "Mixed",
+            targets=(
+                CommandTarget(
+                    work_item_ref=WorkItemReference(
+                        "product-work",
+                        "ISS-ABC-missing",
+                    )
+                ),
+                CommandTarget(
+                    work_item_ref=WorkItemReference(
+                        "product-work",
+                        "ISS-ABC-example",
+                    )
+                ),
+                CommandTarget(action_id="secondary"),
+            ),
+        )
+
+        app._execute_item_primary(item)
+
+        self.assertEqual(len(app._opened_work_items), 1)
+        self.assertEqual(app._opened_work_items[0][0], app._test_work_item)
+        self.assertEqual(app._execute_action_calls, [])
+
+    def test_mixed_quick_action_menu_preserves_target_order(self):
+        app = self._app()
+        item = CommandItem(
+            "mixed",
+            "Mixed",
+            targets=(
+                CommandTarget(action_id="primary"),
+                CommandTarget(
+                    work_item_ref=WorkItemReference(
+                        "product-work",
+                        "ISS-ABC-example",
+                    )
+                ),
+                CommandTarget(action_id="secondary"),
+            ),
+        )
+
+        with patch("context_palette.launcher.tk.Menu", FakeMenu):
+            app._show_item_menu(FakeEvent(), item)
+
+        self.assertEqual(
+            FakeMenu.last_instance.labels,
+            [
+                app.actions[0].compact_display_text,
+                "▣ - ISS-ABC-example",
+                app.actions[1].compact_display_text,
+            ],
+        )
 
     def test_left_click_executes_primary_action(self):
         app = self._app()
@@ -232,7 +398,7 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
         self.assertEqual(menu.popup_calls, [(10, 20)])
         self.assertEqual(menu.grab_release_calls, 1)
         self.assertGreaterEqual(len(menu.commands), 2)
-        self.assertEqual(menu.labels, ["↗ Primary", "↗ Secondary"])
+        self.assertEqual(menu.labels, ["↗ - Primary", "↗ - Secondary"])
         first_callback = menu.commands[0]
         self.assertTrue(callable(first_callback))
         first_callback()
@@ -303,14 +469,14 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
         ) = FakeMenu.instances[first_new_menu:]
         self.assertEqual(
             root_menu.labels,
-            ["↗ Primary", "---", "Lookup", "Missing"],
+            ["↗ - Primary", "---", "Lookup", "Missing"],
         )
         self.assertEqual(root_menu.cascades, [lookup_menu, missing_menu])
         self.assertEqual(root_menu.popup_calls, [(10, 20)])
         self.assertEqual(root_menu.grab_release_calls, 1)
         self.assertEqual(lookup_menu.labels, ["Details"])
         self.assertEqual(details_menu.labels, ["Deep"])
-        self.assertEqual(deep_menu.labels, ["↗ Secondary"])
+        self.assertEqual(deep_menu.labels, ["↗ - Secondary"])
         self.assertEqual(missing_menu.labels, ["No available actions"])
         deep_menu.commands[0]()
         self.assertEqual(app._execute_action_calls, ["secondary"])

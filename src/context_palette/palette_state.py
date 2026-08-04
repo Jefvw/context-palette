@@ -8,6 +8,14 @@ from .actions import Action, ActionError
 from .persistence import atomic_write_json
 
 
+MAX_CONTEXT_SLOT_ACTIONS = 5
+CONTEXT_SLOT_NUMBERS = (6, 7, 8, 9, 10)
+
+
+def slot_display_number(slot: int) -> str:
+    return "0" if slot == 10 else str(slot)
+
+
 @dataclass(frozen=True)
 class PaletteState:
     pinned_action_ids: tuple[str, ...] = ()
@@ -51,8 +59,12 @@ def load_palette_state(path: Path) -> PaletteState:
     for context, ids in slots.items():
         if not isinstance(context, str) or not isinstance(ids, list):
             raise ActionError("Each context slot list must contain action IDs.")
-        if len(ids) > 4 or not all(isinstance(item, str) for item in ids):
-            raise ActionError("Each context can have at most four action IDs.")
+        if len(ids) > MAX_CONTEXT_SLOT_ACTIONS or not all(
+            isinstance(item, str) for item in ids
+        ):
+            raise ActionError(
+                f"Each context can have at most {MAX_CONTEXT_SLOT_ACTIONS} action IDs."
+            )
         parsed_slots[context] = tuple(ids)
     return PaletteState(
         tuple(pinned),
@@ -68,7 +80,8 @@ def save_palette_state(path: Path, state: PaletteState) -> None:
         "pinned_action_ids": list(state.pinned_action_ids[:5]),
         "focus_context": state.focus_context,
         "context_slots": {
-            context: list(ids[:4]) for context, ids in (state.context_slots or {}).items()
+            context: list(ids[:MAX_CONTEXT_SLOT_ACTIONS])
+            for context, ids in (state.context_slots or {}).items()
         },
     }
     if state.context_membership_version:
@@ -92,12 +105,19 @@ def action_slots(actions: list[Action], state: PaletteState) -> dict[int, Action
         if action.id not in used_ids
         and action.belongs_to_context(state.focus_context)
     ]
-    context_actions.extend(context_fallbacks[: 4 - len(context_actions)])
-    if len(context_actions) < 4:
+    context_actions.extend(
+        context_fallbacks[: MAX_CONTEXT_SLOT_ACTIONS - len(context_actions)]
+    )
+    if len(context_actions) < MAX_CONTEXT_SLOT_ACTIONS:
         used_ids = {action.id for action in context_actions}
         fallbacks = [action for action in actions if action.id not in used_ids]
-        context_actions.extend(fallbacks[: 4 - len(context_actions)])
-    for slot, action in enumerate(context_actions[:4], start=6):
+        context_actions.extend(
+            fallbacks[: MAX_CONTEXT_SLOT_ACTIONS - len(context_actions)]
+        )
+    for slot, action in zip(
+        CONTEXT_SLOT_NUMBERS,
+        context_actions[:MAX_CONTEXT_SLOT_ACTIONS],
+    ):
         result[slot] = action
     return result
 

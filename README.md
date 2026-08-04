@@ -29,7 +29,8 @@ confirms creation; Archived actions remain outside normal retrieval. See
 - Searches cheat sheets and promotes entries to permanent actions.
 - Loads stored AI prompt templates into Input / Output from a compact quick-action menu.
 - Finds configured local Work Item folders, filters them by text, project code,
-  and personal tags, and opens an exact matching workbook or folder fallback.
+  and personal tags, opens an exact matching workbook or folder fallback, and
+  reuses those same dynamic targets from personal Quick actions.
 - Creates a Work Item folder and exact-name workbook from one configured local
   generic `.xlsx` template, using an editable suggested name.
 - Sends the current Input / Output text to columns A–D of a selected Work
@@ -113,7 +114,7 @@ After the application starts:
 
 1. Press `F9` to capture selected text and show the palette. Use `Ctrl+Alt+P` as the fallback shortcut.
 2. Type in **Find**, select an action, and press `Enter`.
-3. Choose a **Focus** context to change slots 6–9.
+3. Choose a **Focus** context to change slots 6–0.
 4. Choose **Configure**, or press `Ctrl+,`, to add personal actions, contexts,
    or Quick actions. **Manage focuses…** in the Focus selector opens the
    relevant context tab directly.

@@ -4,6 +4,16 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Personal Quick actions can now mix actions and discovered Work Items in one
+  ordered target list. The first available target is the left-click default and
+  the complete mixed list appears in its menu. Work Items reuse their
+  matching-workbook-first, folder-fallback opener, retain stable source/folder
+  identity when paths move, and stay configured while a source is unavailable.
+  Built-in Quick actions remain free of private Work Item data.
+- Extended Focus shortcuts with a fifth context action: the tenth overall slot
+  is shown as `0` and runs with physical `Shift+0`. Action rows now use
+  a font-measured icon column followed by `- short name`, and a non-selectable
+  divider separates slots 1–0 from ordinary search results.
 - Connected the automatic **Passwords**, **Folders**, and **Prompts** menus to
   Configure -> Quick actions. Their generated nested levels and action leaves
   are now visible there; editing a leaf opens the owning action, while editing

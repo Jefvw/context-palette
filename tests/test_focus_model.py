@@ -143,6 +143,24 @@ class FocusModelTests(unittest.TestCase):
             ("built-in", "local"),
         )
 
+    def test_context_definition_seeds_all_five_preferred_slots(self):
+        actions = [
+            Action(str(index), str(index), "Work", "copy_text", str(index))
+            for index in range(1, 6)
+        ]
+        preferred = tuple(action.id for action in actions)
+
+        resolved = resolve_focus_state(
+            actions,
+            [ContextDefinition("Work", preferred_action_ids=preferred)],
+            PaletteState(focus_context="Work"),
+        )
+
+        self.assertEqual(
+            resolved.palette_state.context_slots["Work"],
+            preferred,
+        )
+
     def test_explicit_context_membership_replaces_legacy_action_classification(self):
         actions = [
             Action("kept", "Kept", "My work", "copy_text", "1"),

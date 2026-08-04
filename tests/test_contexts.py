@@ -70,11 +70,19 @@ class ContextTests(unittest.TestCase):
         self.assertIsNone(legacy.action_ids)
         self.assertEqual(empty.action_ids, ())
 
-    def test_rejects_more_than_four_preferred_actions(self):
+    def test_accepts_five_and_rejects_more_preferred_actions(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "contexts.json"
             path.write_text(
-                json.dumps({"contexts": [{"name": "Too many", "preferred_action_ids": list("12345") }]}),
+                json.dumps({"contexts": [{"name": "Five", "preferred_action_ids": list("12345") }]}),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                load_contexts(path)[0].preferred_action_ids,
+                tuple("12345"),
+            )
+            path.write_text(
+                json.dumps({"contexts": [{"name": "Too many", "preferred_action_ids": list("123456") }]}),
                 encoding="utf-8",
             )
             with self.assertRaises(ContextError):

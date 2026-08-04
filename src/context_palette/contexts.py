@@ -4,6 +4,8 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
+from .palette_state import MAX_CONTEXT_SLOT_ACTIONS
+
 
 class ContextError(Exception):
     """Raised when configured context data is invalid."""
@@ -60,8 +62,11 @@ def _parse_context(item: object, index: int) -> ContextDefinition:
     if not isinstance(preferred, list) or not all(isinstance(value, str) for value in preferred):
         raise ContextError(f"Context #{index} has invalid preferred_action_ids.")
     clean_ids = tuple(value.strip() for value in preferred if value.strip())
-    if len(clean_ids) > 4:
-        raise ContextError(f"Context #{index} may define at most four preferred actions.")
+    if len(clean_ids) > MAX_CONTEXT_SLOT_ACTIONS:
+        raise ContextError(
+            f"Context #{index} may define at most "
+            f"{MAX_CONTEXT_SLOT_ACTIONS} preferred actions."
+        )
     members = item.get("action_ids")
     if members is None:
         clean_members = None

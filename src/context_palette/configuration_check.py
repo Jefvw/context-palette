@@ -11,6 +11,7 @@ from .command_surface import (
     CommandSurfaceError,
     command_group_action_ids,
     command_item_action_ids,
+    command_item_work_item_references,
     iter_command_items,
     load_combined_command_groups,
 )
@@ -22,6 +23,8 @@ from .contexts import (
 )
 from .inbox import InboxError, load_inbox_items
 from .palette_state import PaletteState, load_palette_state
+from .work_item_storage import WorkItemStorageError, load_work_item_sources
+from .work_items import WorkItemSource
 
 
 @dataclass(frozen=True)
@@ -47,6 +50,7 @@ def validate_project_configuration(root: Path) -> ConfigurationReport:
     built_in_context_names: set[str] = set()
     groups: list[CommandGroup] = []
     palette = PaletteState()
+    work_item_sources: tuple[WorkItemSource, ...] = ()
 
     try:
         actions, local_action_ids = load_combined_actions(
@@ -92,6 +96,14 @@ def validate_project_configuration(root: Path) -> ConfigurationReport:
     except (CheatSheetError, OSError) as exc:
         errors.append(f"Cheat sheets: {exc}")
 
+    try:
+        work_item_sources = load_work_item_sources(
+            data / "local_work_item_sources.json"
+        )
+        counts["work_item_sources"] = len(work_item_sources)
+    except (WorkItemStorageError, OSError) as exc:
+        errors.append(f"Work Item sources: {exc}")
+
     if actions:
         _validate_action_references(
             actions,
@@ -105,8 +117,31 @@ def validate_project_configuration(root: Path) -> ConfigurationReport:
         )
     elif contexts or groups or palette.pinned_action_ids or palette.context_slots:
         warnings.append("Action references were not checked because actions could not be loaded.")
+    if groups:
+        _validate_work_item_references(
+            groups,
+            work_item_sources,
+            warnings,
+        )
 
     return ConfigurationReport(tuple(errors), tuple(warnings), counts)
+
+
+def _validate_work_item_references(
+    groups: list[CommandGroup],
+    sources: tuple[WorkItemSource, ...],
+    warnings: list[str],
+) -> None:
+    source_ids = {source.id.casefold() for source in sources}
+    for group in groups:
+        for _path, item in iter_command_items(group):
+            for reference in command_item_work_item_references(item):
+                if reference.source_id.casefold() in source_ids:
+                    continue
+                warnings.append(
+                    f"Quick action '{group.label} / {item.label}' references "
+                    f"unavailable Work Item source: {reference.source_id}"
+                )
 
 
 def _validate_action_references(

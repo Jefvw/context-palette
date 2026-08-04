@@ -200,6 +200,67 @@ class ConfigurationCheckTests(unittest.TestCase):
             )
         )
 
+    def test_personal_quick_action_work_item_reference_is_validated_as_recoverable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            valid_project(root)
+            write_json(
+                root / "data" / "local_command_surface.json",
+                {
+                    "groups": [
+                        {
+                            "id": "personal-work",
+                            "label": "Personal work",
+                            "items": [
+                                {
+                                    "id": "current",
+                                    "label": "Current item",
+                                    "work_item_ref": {
+                                        "source_id": "product-work",
+                                        "relative_folder": "ISS-ABC-example",
+                                    },
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
+
+            report = validate_project_configuration(root)
+
+        self.assertTrue(report.ok)
+        self.assertTrue(
+            any(
+                "unavailable Work Item source: product-work" in warning
+                for warning in report.warnings
+            )
+        )
+
+    def test_built_in_quick_action_cannot_reference_personal_work_item(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            valid_project(root)
+            command_path = root / "data" / "command_surface.json"
+            command_data = json.loads(command_path.read_text(encoding="utf-8"))
+            command_data["groups"][0]["items"][0].pop("primary_action_id")
+            command_data["groups"][0]["items"][0]["action_ids"] = []
+            command_data["groups"][0]["items"][0]["work_item_ref"] = {
+                "source_id": "product-work",
+                "relative_folder": "ISS-ABC-example",
+            }
+            write_json(command_path, command_data)
+
+            report = validate_project_configuration(root)
+
+        self.assertFalse(report.ok)
+        self.assertTrue(
+            any(
+                "Built-in Quick actions cannot reference personal Work Items"
+                in error
+                for error in report.errors
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

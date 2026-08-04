@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from .contexts import ContextDefinition
+from .palette_state import MAX_CONTEXT_SLOT_ACTIONS
 from .persistence import atomic_write_json
 
 
@@ -275,7 +276,7 @@ def _rename_palette_references(
             if isinstance(existing_ids, list) and isinstance(action_ids, list):
                 renamed_slots[output_name] = list(
                     dict.fromkeys((*existing_ids, *action_ids))
-                )[:4]
+                )[:MAX_CONTEXT_SLOT_ACTIONS]
             continue
         renamed_slots[output_name] = action_ids
     if changed:

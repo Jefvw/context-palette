@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from context_palette.command_surface import (
     CommandGroup,
     CommandItem,
+    CommandTarget,
     CommandSurfaceError,
     GROUP_PRESENTATION_NESTED_MENU,
     GROUP_PRESENTATION_ROWS,
@@ -19,13 +20,173 @@ from context_palette.command_surface import (
     command_group_action_ids,
     command_group_launcher_count,
     command_item_action_ids,
+    command_item_targets,
     iter_command_items,
     load_combined_command_groups,
     load_command_groups,
 )
+from context_palette.work_items import WorkItemReference
 
 
 class CommandSurfaceTests(unittest.TestCase):
+    def test_mixed_targets_preserve_action_and_work_item_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "groups": [
+                            {
+                                "id": "work",
+                                "label": "Work",
+                                "items": [
+                                    {
+                                        "id": "mixed",
+                                        "label": "Mixed",
+                                        "targets": [
+                                            {"type": "action", "action_id": "open-docs"},
+                                            {
+                                                "type": "work_item",
+                                                "source_id": "product-work",
+                                                "relative_folder": "ISS-ABC-example",
+                                            },
+                                            {
+                                                "type": "work_item",
+                                                "source_id": "product-work",
+                                                "relative_folder": "PRJ-ABC-roadmap",
+                                            },
+                                            {"type": "action", "action_id": "copy-link"},
+                                        ],
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            item = load_command_groups(path)[0].items[0]
+
+        self.assertEqual(
+            command_item_targets(item),
+            (
+                CommandTarget(action_id="open-docs"),
+                CommandTarget(
+                    work_item_ref=WorkItemReference(
+                        "product-work",
+                        "ISS-ABC-example",
+                    )
+                ),
+                CommandTarget(
+                    work_item_ref=WorkItemReference(
+                        "product-work",
+                        "PRJ-ABC-roadmap",
+                    )
+                ),
+                CommandTarget(action_id="copy-link"),
+            ),
+        )
+        self.assertEqual(command_item_action_ids(item), ("open-docs", "copy-link"))
+
+    def test_local_quick_action_loads_stable_work_item_reference(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "groups": [
+                            {
+                                "id": "work",
+                                "label": "Work",
+                                "items": [
+                                    {
+                                        "id": "current",
+                                        "label": "Current item",
+                                        "work_item_ref": {
+                                            "source_id": "product-work",
+                                            "relative_folder": "ISS-ABC-example",
+                                        },
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            item = load_command_groups(path)[0].items[0]
+
+        self.assertEqual(
+            item.work_item_ref,
+            WorkItemReference("product-work", "ISS-ABC-example"),
+        )
+        self.assertEqual(command_item_action_ids(item), ())
+
+    def test_quick_action_rejects_mixed_action_and_work_item_targets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "mixed.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "groups": [
+                            {
+                                "id": "work",
+                                "label": "Work",
+                                "items": [
+                                    {
+                                        "id": "mixed",
+                                        "label": "Mixed",
+                                        "action_ids": ["open"],
+                                        "work_item_ref": {
+                                            "source_id": "product-work",
+                                            "relative_folder": "ISS-ABC-example",
+                                        },
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(CommandSurfaceError, "both actions and a Work Item"):
+                load_command_groups(path)
+
+    def test_combined_surface_rejects_work_item_reference_in_built_in_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            shared = Path(directory) / "shared.json"
+            local = Path(directory) / "local.json"
+            shared.write_text(
+                json.dumps(
+                    {
+                        "groups": [
+                            {
+                                "id": "work",
+                                "label": "Work",
+                                "items": [
+                                    {
+                                        "id": "private",
+                                        "label": "Private",
+                                        "work_item_ref": {
+                                            "source_id": "product-work",
+                                            "relative_folder": "ISS-ABC-example",
+                                        },
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            local.write_text('{"groups": []}', encoding="utf-8")
+
+            with self.assertRaisesRegex(CommandSurfaceError, "Built-in Quick actions"):
+                load_combined_command_groups(shared, local)
+
     def test_group_launcher_count_follows_presentation(self):
         items = (
             CommandItem("one", "One"),

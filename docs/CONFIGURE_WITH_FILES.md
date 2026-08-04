@@ -69,7 +69,7 @@ Notes:
 
 - `name` must be unique across Built-in and My configuration context files.
 - `action_ids` owns every action shown by Focus Actions for this context.
-- `preferred_action_ids` maps up to 4 defaults to slots `6-9`.
+- `preferred_action_ids` maps up to 5 defaults to slots `6-0`.
 - If `data/palette.json` has explicit slot assignments, those explicit local assignments win.
 
 Full format: `docs/CONTEXT_CONFIGURATION.md`.

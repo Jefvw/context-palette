@@ -388,6 +388,8 @@ class LauncherInteractionTests(unittest.TestCase):
             ("egrave", 7),
             ("underscore", 8),
             ("ccedilla", 9),
+            ("agrave", 10),
+            ("parenright", 10),
         ):
             event = FakeKeyEvent(state=0x0001, keysym=keysym)
             with self.subTest(keysym=keysym):
@@ -406,6 +408,53 @@ class LauncherInteractionTests(unittest.TestCase):
                 self.assertIsNone(app._handle_keypress(event))
 
         app._execute_slot.assert_not_called()
+
+    def test_shift_zero_executes_slot_10_but_numpad_zero_remains_input(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.search_entry = object()
+        app.root = Mock()
+        app.root.focus_get.return_value = app.search_entry
+        app._execute_slot = Mock(return_value="break")
+        top_row = FakeKeyEvent(state=0x0001, keysym="0", keycode=48, char="0")
+        numpad = FakeKeyEvent(state=0x0001, keysym="kp_0", keycode=96, char="0")
+
+        self.assertEqual(app._handle_keypress(top_row), "break")
+        app._execute_slot.assert_called_once_with(10, top_row)
+        app._execute_slot.reset_mock()
+        self.assertIsNone(app._handle_keypress(numpad))
+        app._execute_slot.assert_not_called()
+
+    def test_keyboard_navigation_skips_action_list_separator(self):
+        app = LauncherApp.__new__(LauncherApp)
+        first = Action("first", "First", "General", "copy_text", "1")
+        second = Action("second", "Second", "General", "copy_text", "2")
+        app.work_items_mode = False
+        app.displayed_action_rows = [(first, 6), (None, None), (second, None)]
+        app.results = Mock()
+        app.results.curselection.return_value = (0,)
+        app._update_preview = Mock()
+
+        app._select_index(1, Mock())
+
+        app.results.selection_set.assert_called_once_with(2)
+        app.results.activate.assert_called_once_with(2)
+
+    def test_mouse_click_on_action_list_separator_clears_selection(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.work_items_mode = False
+        app.results_view = "flat"
+        app.displayed_action_rows = [(None, None)]
+        app.results = Mock()
+        app.results.nearest.return_value = 0
+        app.results.bbox.return_value = (0, 10, 100, 20)
+        app._update_preview = Mock()
+        event = Mock(y=15)
+
+        result = app._guard_action_separator_click(event)
+
+        self.assertEqual(result, "break")
+        app.results.selection_clear.assert_called_once()
+        app._update_preview.assert_called_once_with()
 
     def test_control_number_does_not_execute_an_action_slot(self):
         app = LauncherApp.__new__(LauncherApp)

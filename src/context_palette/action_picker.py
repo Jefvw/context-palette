@@ -51,6 +51,9 @@ class ActionPickerField(ttk.Frame):
         button_text: str = "Find…",
         button_width: int | None = None,
         scope_note: str | None = None,
+        item_name: str = "action",
+        item_plural: str | None = None,
+        search_help: str | None = None,
     ) -> None:
         super().__init__(parent)
         self.variable = variable
@@ -58,6 +61,9 @@ class ActionPickerField(ttk.Frame):
         self.empty_label = empty_label
         self.title = title
         self.scope_note = scope_note
+        self.item_name = item_name
+        self.item_plural = item_plural or f"{item_name}s"
+        self.search_help = search_help
 
         entry_options: dict[str, object] = {
             "textvariable": variable,
@@ -99,6 +105,9 @@ class ActionPickerField(ttk.Frame):
             empty_label=self.empty_label,
             title=self.title,
             scope_note=self.scope_note,
+            item_name=self.item_name,
+            item_plural=self.item_plural,
+            search_help=self.search_help,
         )
 
 
@@ -115,12 +124,18 @@ class ActionPickerDialog:
         empty_label: str | None = None,
         title: str = "Choose action",
         scope_note: str | None = None,
+        item_name: str = "action",
+        item_plural: str | None = None,
+        search_help: str | None = None,
     ) -> None:
         self.options = tuple(options)
         self.current_label = current_label
         self.on_select = on_select
         self.empty_label = empty_label
         self.scope_note = scope_note
+        self.item_name = item_name
+        self.item_plural = item_plural or f"{item_name}s"
+        self.search_help = search_help
         self.filtered_options: tuple[ActionPickerOption, ...] = ()
         self.previous_grab = parent.grab_current()
         self.closed = False
@@ -136,7 +151,7 @@ class ActionPickerDialog:
 
         search_row = ttk.Frame(outer)
         search_row.pack(fill=tk.X, pady=(0, 6))
-        ttk.Label(search_row, text="Find action").pack(side=tk.LEFT)
+        ttk.Label(search_row, text=f"Find {self.item_name}").pack(side=tk.LEFT)
         self.search_var = tk.StringVar()
         self.search_entry = ttk.Entry(search_row, textvariable=self.search_var)
         self.search_entry.pack(
@@ -183,7 +198,8 @@ class ActionPickerDialog:
         ttk.Label(
             outer,
             text=(
-                "Searches action name, description, ID, built-in type, context, "
+                self.search_help
+                or "Searches action name, description, ID, built-in type, context, "
                 "tag, state, target, arguments, and working folder. Use Down "
                 "Arrow, Enter, or double-click."
             ),
@@ -248,15 +264,16 @@ class ActionPickerDialog:
             and not self.search_var.get().strip()
             else 0
         )
-        self.count_var.set(f"{count} action{'s' if count != 1 else ''}")
+        noun = self.item_name if count == 1 else self.item_plural
+        self.count_var.set(f"{count} {noun}")
         self.select_button.configure(
             state=tk.NORMAL if display_options else tk.DISABLED
         )
         if not display_options:
             self.empty_result_var.set(
-                "No matching actions in this scope."
+                f"No matching {self.item_plural} in this scope."
                 if self.scope_note
-                else "No matching actions. Try fewer or different words."
+                else f"No matching {self.item_plural}. Try fewer or different words."
             )
             return
         self.empty_result_var.set("")

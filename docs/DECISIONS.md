@@ -1,5 +1,27 @@
 # Decisions
 
+## 2026-08-03 - Let personal Quick actions reference Work Items directly
+
+**Decision:** Allow a My configuration Quick-action item to contain one ordered
+target list mixing action IDs and Work Items identified by stable source ID and
+direct relative folder name. Run the first available target on left-click and
+show the complete ordered list in its menu. Resolve Work Items from the current
+immutable index and delegate to the existing matching-workbook-first,
+folder-fallback opener. Keep unavailable references, and prohibit Work Item
+targets in Built-in Quick actions.
+
+**Reason:** A discovered Work Item is already a reusable open target, but
+converting it to a separate file or folder action duplicates its path and loses
+the dynamic workbook fallback. Stable identity preserves the Work Item model
+and lets the target recover when a source path moves or reconnects.
+
+**Consequences:** Personal Quick-action JSON can contain an ordered `targets`
+list with action and Work Item entries. Configure adds both kinds to one
+reorderable list, runtime menus resolve them live, and validation rejects
+private Work Item targets in tracked starter configuration. Existing
+action-only fields and the initial single-reference form remain readable. Work
+Item folders, workbooks, and the in-memory index remain outside persistence.
+
 ## 2026-07-30 - Consolidate URL builders around copy and open
 
 **Decision:** Keep two current URL-builder action types: one prompts for a
@@ -1689,3 +1711,22 @@ generated model prevents a second source of membership and ordering truth.
 **Consequences:** Automatic menu contents can now be inspected and managed from
 the expected Quick-actions tab. Their structure still follows action type,
 lifecycle, and `quick_action_path`; no duplicate command-surface data is saved.
+
+## 2026-08-03 - Complete the top-row shortcut set and separate ordinary results
+
+**Decision:** Keep pins in slots 1–5 and expand Focus defaults to five actions
+in internal slots 6–10. Present internal slot 10 as `0` and execute it with the
+physical `Shift+0` shortcut; numpad digits remain Find input. Render action
+labels with a font-measured fixed icon column followed by `- short name`, and
+insert a non-action divider between numbered slots and ordinary results
+whenever both sections are present.
+
+**Reason:** The physical number row provides ten memorable positions, while
+stopping at 9 left one key unused and limited the selected Focus to four
+shortcuts. The former icon-plus-space labels made variable-width symbols run
+into their text, and numbered slots blended into unnumbered results.
+
+**Consequences:** Context and palette configuration accept up to five preferred
+action IDs. Existing files with four or fewer remain unchanged and valid. List
+selection, navigation, tooltips, execution, and configuration explicitly skip
+the divider so it cannot behave like an action.

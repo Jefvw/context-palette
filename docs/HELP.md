@@ -127,7 +127,7 @@ This does not execute the highlighted action. Avoid passing secrets or selected 
 Use the compact active-Focus menu to switch context explicitly. Choose
 **Manage focuses…** in that selector to open the existing Context
 configuration area, create or edit any context, choose all actions belonging to
-it, and select up to four preferred actions for slots 6 through 9. **My
+it, and select up to five preferred actions for slots 6 through 0. **My
 configuration** definitions stay on this PC. **Built-in** definitions show a
 developer warning before editing. The only shipped specific context is
 **Developing Context Palette** in `data/contexts.json`; personal or
@@ -141,12 +141,13 @@ interrupted multi-file save may temporarily show both names, but does not leave
 actions assigned to an undefined Focus. Close and reopen Configure, then retry
 the rename if Windows reports a locked or unavailable file.
 
-The Focus context tells Context Palette what kind of work is currently most important. It changes slots 6 through 9 and influences which actions appear first.
+The Focus context tells Context Palette what kind of work is currently most important. It changes slots 6 through 0 and influences which actions appear first.
 
 Focus and Find are compact one-line controls. Hover over or click their `?` buttons for guidance without permanently consuming screen space.
 
 - Slots `1–5` are personal pinned actions and never change with context.
-- Slots `6–9` are the top four actions for the selected focus context.
+- Slots `6–0` are the top five actions for the selected focus context. Slot
+  `0` is the tenth overall slot and follows slot `9`.
 - An action may appear in both groups.
 
 Focus and pin changes are saved before they take effect. If the local palette
@@ -197,13 +198,17 @@ Search matches tags, contexts, short name, description, type, and content.
   Focus Actions, slots, search, and the Contexts tab.
   Built-in actions can also be edited after acknowledging their developer warning.
 - Plain number-row and numpad digits remain ordinary Find text.
-- Shift plus a physical top-row number key executes slots 1 through 9 only
-  while Find has focus. This positional rule works on AZERTY and QWERTY.
+- Shift plus a physical top-row number key executes slots 1 through 0 only
+  while Find has focus. `Shift+0` executes the tenth slot; numpad digits remain
+  Find input. This positional rule works on AZERTY and QWERTY.
 - Selecting an action updates the slim communication line at the bottom.
 
 The Actions heading shows the current match count. When nothing matches, the list explains how to clear Find or create an action instead of presenting a blank pane.
 
-Blue rows are pinned slots 1–5. Green rows are focus-context slots 6–9. Neutral rows are other search results.
+Blue rows are pinned slots 1–5. Green rows are focus-context slots 6–0. A
+separator line divides those ten shortcuts from neutral search results. Action
+labels use a font-measured icon column followed by `- short name`, keeping
+their names aligned even when symbols have different pixel widths.
 
 ## Find and open Work Items
 
@@ -232,6 +237,10 @@ is active.
   and the configured source folder.
 - Right-click a result and choose **Edit personal tags…** to open that exact
   Work Item in Configure.
+- To reuse a Work Item on the permanent Quick-action surface, open
+  **Configure**, choose **Quick actions**, add or edit a My configuration menu level,
+  choose the Work Item, and select **Use Work Item**. Its Quick action retains
+  the same matching-workbook-first and folder-fallback behavior.
 - Unavailable sources keep their last successful in-memory results for the
   current app session. No Work Item index is written to disk.
 
@@ -317,8 +326,9 @@ The wider right side of the action console contains global configurable
 subareas and stays visible when Focus changes. A group can use direct
 Quick-action rows or one compact nested-menu launcher.
 
-- In a Quick-action-row group, left-click a subject to execute its primary
-  action; right-click opens its complete assigned-action menu. A group with one
+- In a Quick-action-row group, left-click a subject to execute its first
+  available action or Work Item; right-click opens its complete ordered target
+  menu. A group with one
   row uses that row as its visible identity instead of repeating a heading;
   groups with multiple rows retain their heading.
 - In a nested-menu group, the one group-labelled launcher replaces a separate
@@ -327,11 +337,14 @@ Quick-action rows or one compact nested-menu launcher.
 - Shift+click or Ctrl+click a configured group to open its technical menu and
   action files. The same gesture on Passwords, Folders, or Prompts opens guided
   action configuration.
-- Every item uses the same selected text, Input / Output, clipboard, and safe action executor as the search list.
+- Action targets use the same selected text, Input / Output, clipboard, and safe
+  executor as the search list. Work Item targets use the same constrained
+  workbook-first opener as Work Items mode.
 - Configure shared groups in `data/command_surface.json` and private groups in `data/local_command_surface.json`.
 - Press `Ctrl+,`, then use **Quick actions** to add or edit personal groups
-  and menu levels without editing JSON. Choose existing actions from lists; stable
-  IDs are generated from the visible names when left blank.
+  and menu levels without editing JSON. Add actions and Work Items from their
+  searchable lists, then reorder them together; stable IDs are generated from the visible names
+  when left blank.
 - **Standard** is the single Built-in group. Its one **Standard** launcher
   distributes all active Built-in actions across direct commands and three
   first-level sections with deeper subject levels, leaving the other editable
@@ -371,15 +384,16 @@ complete guided configuration workspace:
   are not offered for new actions; use the Transform menu for immediate text
   changes or **Transform a text file** for a repeated file workflow.
 - **Contexts:** add, edit, or delete contexts, assign any built-in or personal
-  actions as members, and choose defaults for slots 6–9. My configuration
+  actions as members, and choose defaults for slots 6–0. My configuration
   contexts stay on this PC.
 - **Quick actions:** create, rename, delete, and reorder groups and menu levels.
   Choose **Quick-action rows** or **Nested subject menu** when adding or editing
   a group. Edit the group to assign actions directly below it. Select a group
   and choose **Add menu level** for level 1; select an existing level and use
   the same command to add its child, up to level 3. Edit any level to assign its
-  ordered actions. In row presentation, the first action is the left-click
-  default. The automatic **Passwords**, **Folders**, and **Prompts** groups also
+  ordered mix of actions and Work Items to a My configuration level. In row
+  presentation, the first available target is the left-click default. The
+  automatic **Passwords**, **Folders**, and **Prompts** groups also
   appear in this table. Expand one and choose **Edit selected**, press Enter, or
   double-click an action leaf to edit that action and its **Quick menu** path.
   Editing an automatic group or level opens the matching Actions list. Add,
@@ -390,7 +404,9 @@ complete guided configuration workspace:
   The single Built-in **Standard** group offers only Built-in actions, keeping
   starter buttons usable
   without one PC's private files. My configuration groups may use both
-  built-in and personal actions.
+  built-in and personal actions, or personal Work Items. A temporarily
+  unavailable Work Item remains assigned and reports how to refresh or repair
+  its source.
 - **Diagnostics:** review a safe summary of loaded configuration, recent error
   counts, and automatic-paste outcomes. Use **Refresh** after reproducing a
   problem or **Copy safe summary** when asking for help. Raw log messages,
@@ -415,7 +431,7 @@ form body with its vertical scrollbar or the mouse wheel; moving through fields
 with Tab automatically reveals the focused field.
 
 All fields that choose an existing action use the same **Find…** picker:
-pinned slots 1–5, context membership, preferred slots 6–9, and Quick-action
+pinned slots 1–5, context membership, preferred slots 6–0, and Quick-action
 assignments. Search by any combination of action name, description, built-in
 type, context, tag, state, stable ID, target or saved value, arguments, or
 working folder. The result count and filtered list update while you type. Press

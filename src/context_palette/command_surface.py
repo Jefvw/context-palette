@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from typing import Iterator
 
+from .work_items import WorkItemDiscoveryError, WorkItemReference
+
 
 class CommandSurfaceError(Exception):
     """Raised when command-surface configuration is invalid."""
@@ -20,12 +22,30 @@ MAX_COMMAND_MENU_LEVELS = 3
 
 
 @dataclass(frozen=True)
+class CommandTarget:
+    """One ordered Quick-action target: an action or a Work Item."""
+
+    action_id: str = ""
+    work_item_ref: WorkItemReference | None = None
+
+    def __post_init__(self) -> None:
+        clean_action_id = self.action_id.strip()
+        if bool(clean_action_id) == bool(self.work_item_ref):
+            raise CommandSurfaceError(
+                "A Quick-action target must contain exactly one action or Work Item."
+            )
+        object.__setattr__(self, "action_id", clean_action_id)
+
+
+@dataclass(frozen=True)
 class CommandItem:
     id: str
     label: str
     primary_action_id: str = ""
     action_ids: tuple[str, ...] = ()
     items: tuple["CommandItem", ...] = ()
+    work_item_ref: WorkItemReference | None = None
+    targets: tuple[CommandTarget, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -41,12 +61,40 @@ class CommandGroup:
 
 def command_item_action_ids(item: CommandItem) -> tuple[str, ...]:
     """Return one primary-first, duplicate-free action order for an item."""
+    if item.targets:
+        return tuple(
+            dict.fromkeys(
+                target.action_id
+                for target in item.targets
+                if target.action_id
+            )
+        )
     return tuple(
         dict.fromkeys(
             action_id
             for action_id in (item.primary_action_id, *item.action_ids)
             if action_id
         )
+    )
+
+
+def command_item_targets(item: CommandItem) -> tuple[CommandTarget, ...]:
+    """Return the canonical ordered mixed target list for one item."""
+    if item.targets:
+        return tuple(dict.fromkeys(item.targets))
+    targets = [CommandTarget(action_id=value) for value in command_item_action_ids(item)]
+    if item.work_item_ref is not None:
+        targets.append(CommandTarget(work_item_ref=item.work_item_ref))
+    return tuple(targets)
+
+
+def command_item_work_item_references(
+    item: CommandItem,
+) -> tuple[WorkItemReference, ...]:
+    return tuple(
+        target.work_item_ref
+        for target in command_item_targets(item)
+        if target.work_item_ref is not None
     )
 
 
@@ -136,7 +184,14 @@ def load_command_groups(path: Path) -> list[CommandGroup]:
 
 
 def load_combined_command_groups(shared_path: Path, local_path: Path) -> list[CommandGroup]:
-    groups = load_command_groups(shared_path) + load_command_groups(local_path)
+    shared_groups = load_command_groups(shared_path)
+    for group in shared_groups:
+        for _path, item in iter_command_items(group):
+            if command_item_work_item_references(item):
+                raise CommandSurfaceError(
+                    "Built-in Quick actions cannot reference personal Work Items."
+                )
+    groups = shared_groups + load_command_groups(local_path)
     seen: set[str] = set()
     for group in groups:
         key = group.id.casefold()
@@ -226,6 +281,8 @@ def _parse_item(
     label = item.get("label")
     child_items = item.get("items", [])
     primary_action_id, action_ids = _parse_action_references(item, prefix)
+    work_item_ref = _parse_work_item_reference(item.get("work_item_ref"), prefix)
+    targets = _parse_targets(item.get("targets"), prefix)
     if not isinstance(item_id, str) or not item_id.strip():
         raise CommandSurfaceError(f"{prefix} requires an ID.")
     if not isinstance(label, str) or not label.strip():
@@ -254,13 +311,84 @@ def _parse_item(
         )
         for child_index, value in enumerate(child_items, 1)
     )
+    if targets and (primary_action_id or action_ids or work_item_ref is not None):
+        raise CommandSurfaceError(
+            f"{prefix} cannot combine targets with legacy target fields."
+        )
+    if work_item_ref is not None and (primary_action_id or action_ids):
+        raise CommandSurfaceError(
+            f"{prefix} cannot assign both actions and a Work Item."
+        )
     return CommandItem(
         id=clean_item_id,
         label=label.strip(),
         primary_action_id=primary_action_id,
         action_ids=action_ids,
         items=parsed_children,
+        work_item_ref=work_item_ref,
+        targets=targets,
     )
+
+
+def _parse_targets(value: object, prefix: str) -> tuple[CommandTarget, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise CommandSurfaceError(f"{prefix} has invalid targets.")
+    targets: list[CommandTarget] = []
+    for index, raw_target in enumerate(value, start=1):
+        target_prefix = f"{prefix}, target #{index}"
+        if not isinstance(raw_target, dict):
+            raise CommandSurfaceError(f"{target_prefix} must be an object.")
+        target_type = raw_target.get("type")
+        if target_type == "action":
+            if set(raw_target) != {"type", "action_id"} or not isinstance(
+                raw_target.get("action_id"), str
+            ):
+                raise CommandSurfaceError(f"{target_prefix} has invalid action data.")
+            try:
+                target = CommandTarget(action_id=raw_target["action_id"])
+            except CommandSurfaceError as exc:
+                raise CommandSurfaceError(f"{target_prefix}: {exc}") from exc
+        elif target_type == "work_item":
+            if set(raw_target) != {"type", "source_id", "relative_folder"}:
+                raise CommandSurfaceError(f"{target_prefix} has invalid Work Item data.")
+            reference = _parse_work_item_reference(
+                {
+                    "source_id": raw_target.get("source_id"),
+                    "relative_folder": raw_target.get("relative_folder"),
+                },
+                target_prefix,
+            )
+            target = CommandTarget(work_item_ref=reference)
+        else:
+            raise CommandSurfaceError(f"{target_prefix} has an unknown type.")
+        if target not in targets:
+            targets.append(target)
+    return tuple(targets)
+
+
+def _parse_work_item_reference(
+    value: object,
+    prefix: str,
+) -> WorkItemReference | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != {"source_id", "relative_folder"}:
+        raise CommandSurfaceError(
+            f"{prefix} has an invalid work_item_ref."
+        )
+    if not all(isinstance(value[field], str) for field in value):
+        raise CommandSurfaceError(
+            f"{prefix} has an invalid work_item_ref."
+        )
+    try:
+        return WorkItemReference(
+            value["source_id"],
+            value["relative_folder"],
+        )
+    except WorkItemDiscoveryError as exc:
+        raise CommandSurfaceError(f"{prefix}: {exc}") from exc
 
 
 def _parse_action_references(
