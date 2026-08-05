@@ -1,5 +1,136 @@
 # Decisions
 
+## 2026-08-05 - Restore only through a staged, journalled in-process transaction
+
+**Decision:** Implement Phase 4 as a UI-independent `restore.py` service. Every
+backup is treated as hostile input: ZIP names and local headers, Windows
+destination semantics, entry representations, compression, manifest keys and
+versions, catalog ownership, bounded streamed sizes, CRC, and SHA-256 must all
+agree one-to-one. Inspection never calls ZIP extraction APIs. It constructs an
+ephemeral catalog-controlled overlay, preserves live optional assets omitted by
+format version 1, validates the complete aggregate snapshot, then returns a
+frozen content-free plan with strong archive, manifest, and live-state
+identities.
+
+**Commit boundary:** Inspection is not permission to restore. Commit requires a
+matching immutable confirmation and separate acknowledgement for Built-in
+replacement, holds the process mutation gate, and repeats bounded inspection
+and staging before any live write. Version 1 replaces or creates only
+manifest-listed files; it preserves omitted optional files, unmatched cheat
+sheets, and unknown files because the format has no tombstones. It performs no
+merge, remapping, migration, external-resource probing, or Work Item scan.
+
+**Recovery:** Before the first replacement, publish a collision-safe sensitive
+recovery ZIP outside the application root without requiring the current live
+configuration to validate, then read it back through the same bounded hostile
+archive checks. Atomically write and flush an ignored,
+catalog-excluded versioned journal containing only transaction paths,
+existence, sizes, hashes, and the aggregate prior-state identity. Restore uses
+exact-byte atomic replacement without adjacent `.bak` files and verifies the
+planned aggregate overlay before and after final loading. Normal failures roll
+back every candidate and verify the aggregate prior state; process interruption
+leaves the complete intended-operation journal so startup can idempotently
+restore prior bytes or remove only transaction-created files before migrations
+and loading. A new process notifies an existing launcher before interpreting a
+journal as interrupted; backup and standalone cleanup refuse unresolved
+journals.
+
+**Consequence:** The core is suitable for a future in-process Configure flow,
+but there is intentionally no mutating restore CLI: the current gate cannot
+exclude a separately running launcher. Recovery archives remain unencrypted
+and sensitive. Phase 5 owns UI, launcher reload/restart policy, and manual
+Windows round-trip verification.
+
+## 2026-08-05 - Stage and publish catalogued configuration backups deterministically
+
+**Decision:** Implement backup format version 1 as a standard-library service
+and command-line adapter. Frozen manifest entries record only catalog asset ID,
+normalized `payload/` path, applicable logical schema version, exact byte size,
+and lowercase SHA-256. The manifest adds a fixed format/version, data-model
+version, injected UTC timestamp, complete-configuration scope, and ordered
+entries. It contains no source root, destination, configured path, Action value,
+captured content, credential target, or Work Item folder detail.
+
+Payload eligibility comes only from `DATA_ASSET_CATALOG`. Complete backup
+includes Core and Complete-configuration assets, with Inbox included by default
+but explicitly excludable. Managed text requires explicit inclusion. Excluded
+runtime patterns, unknown files, source/Git files, external targets, Work Item
+content/templates, and credential secrets cannot become payloads. Catalogued
+source links, junctions/reparse points, resolved root escapes, and destinations
+inside the application root are rejected.
+
+**Consistency:** One process-wide `RLock` now serializes application-owned
+configuration writes. The shared JSON persistence boundary participates
+automatically, and existing logical multi-file Action/Context operations hold
+the reentrant gate across their complete write/rollback sequence. External Work
+Item workbook and file operations stay outside it. Backup additionally records
+SHA-256-backed source fingerprints, copies to a private staged root, and repeats
+the inventory with at most three attempts, detecting external editors and
+separate processes that cannot share the in-process gate. Only the staged bytes
+are aggregate-validated and archived.
+
+**Publication:** Version 1 allows at most 256 entries, 16 MiB per entry, and
+64 MiB uncompressed total. These bounds exceed the current 10 MiB managed-text
+limit while preventing arbitrary directory packaging. ZIP entry metadata and
+order are fixed, the manifest is written last, and a flushed temporary archive
+on the destination filesystem is atomically replaced into place. Overwrite is
+explicit; failed publication preserves the previous archive and removes
+temporary state. This phase adds no restore, extraction, migration, recovery
+journal, rollback, path remapping, encryption, or Tkinter behavior.
+
+## 2026-08-04 - Validate complete configuration through an immutable snapshot
+
+**Decision:** Add a pure `configuration_snapshot.py` service that loads every
+structured application asset independently through the existing domain loaders
+and `AppDataPaths`. Its frozen snapshot retains Built-in and personal ownership,
+preserves stored Archived Actions, exposes an Active-only runtime projection,
+and defensively freezes ordered and mapping-like collections. Validation issues
+use stable codes, catalog asset IDs, severity, category, privacy-safe summaries,
+and optional stable subject IDs.
+
+Executable Action references are hard errors unless they resolve to an Active
+Action. Built-in records cannot depend on personal Actions, and Built-in Quick
+actions cannot contain Work Item targets. Missing Work Item sources, historical
+or noncanonical palette Context names, machine-local dependencies, and visible
+legacy representations are warnings because the runtime preserves or can
+degrade safely around them. When a defining asset fails to load, dependent
+checks say they were skipped instead of inventing cascaded failures.
+
+Portability reporting detects Windows drive, UNC, file-URI, working-directory,
+and clearly absolute argument dependencies without probing them. General
+diagnostic summaries omit raw paths, Action values, captured text, credentials,
+and Work Item folder details. Optional managed text is classified by presence
+only; excluded runtime assets are not read. The service performs no migration,
+normalization, write, archive, restore, external-root scan, or credential-store
+inspection. `configuration_check.py` is now a compatible presentation adapter
+over this service. Phase 3 may add staged archive validation around this model,
+but it must not weaken these reference and privacy policies.
+
+## 2026-08-04 - Centralize application data paths and backup policy
+
+**Decision:** Add one UI-independent `data_catalog.py` boundary. A frozen
+`AppDataPaths` derives every known application-data location from one project
+root or data directory. Frozen `DataAssetSpec` records assign stable IDs and
+explicit ownership, required status, sensitivity, backup policy, and logical
+schema versions to the complete live application-state inventory and narrow
+excluded runtime patterns. Catalog patterns may vary only their final path
+component and never imply recursive inclusion.
+
+**Reason:** Backup, restore, configuration checking, launcher startup, and
+future migrations must not maintain independent filename lists or infer
+privacy policy from `local_` prefixes. A declarative boundary makes omissions
+and accidental inclusion of logs, recovery artifacts, environments, or
+external resources testable before archive behavior exists.
+
+**Consequences:** Normal startup and configuration checking now consume
+`AppDataPaths`; the launcher receives the same object and uses it for Work Item
+configuration paths. Its existing constructor and `run()` path arguments remain
+supported through a compatibility adapter for focused tests and direct callers.
+Logical schema version 1 is catalog metadata only: no JSON key, format,
+migration, backup, restore, export/import, or UI behavior changes. Aggregate
+loader and validator binding is implemented separately by the immutable
+configuration snapshot boundary.
+
 ## 2026-08-03 - Let personal Quick actions reference Work Items directly
 
 **Decision:** Allow a My configuration Quick-action item to contain one ordered

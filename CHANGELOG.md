@@ -4,6 +4,11 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Added a deterministic command-line complete-configuration backup service.
+  Archives are catalog-bounded, staged and validated before publication, and
+  contain versioned size/SHA-256 manifests. Inbox inclusion is explicit,
+  managed text is opt-in, runtime/unknown/external resources stay excluded,
+  and restore or backup UI is not yet implemented.
 - Personal Quick actions can now mix actions and discovered Work Items in one
   ordered target list. The first available target is the left-click default and
   the complete mixed list appears in its menu. Work Items reuse their

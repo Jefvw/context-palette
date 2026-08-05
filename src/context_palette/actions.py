@@ -17,6 +17,7 @@ from uuid import uuid4
 import webbrowser
 
 from .persistence import atomic_write_json
+from .configuration_mutation import configuration_mutation_gate
 from .action_types import ACTION_TYPES, SUPPORTED_ACTION_TYPES
 from .workspace_transforms import WORKSPACE_TRANSFORMS
 
@@ -174,7 +175,11 @@ def validate_context_memberships(
     return tuple(canonical_by_key[context.casefold()] for context in contexts)
 
 
-def load_stored_actions(path: Path) -> list[Action]:
+def load_stored_actions(
+    path: Path,
+    *,
+    inspect_external_paths: bool = True,
+) -> list[Action]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
@@ -185,7 +190,14 @@ def load_stored_actions(path: Path) -> list[Action]:
     if not isinstance(raw, dict) or not isinstance(raw.get("actions"), list):
         raise ActionError("Action file must contain an 'actions' list.")
 
-    actions = [_parse_action(item, index) for index, item in enumerate(raw["actions"], start=1)]
+    actions = [
+        _parse_action(
+            item,
+            index,
+            inspect_external_paths=inspect_external_paths,
+        )
+        for index, item in enumerate(raw["actions"], start=1)
+    ]
     _ensure_unique_action_ids(actions, path)
     return actions
 
@@ -804,7 +816,12 @@ def validate_credential_target(value: str) -> None:
         raise ActionError("Windows credential target name cannot contain control characters.")
 
 
-def validate_action_value(action_type: str, value: str) -> None:
+def validate_action_value(
+    action_type: str,
+    value: str,
+    *,
+    inspect_external_paths: bool = True,
+) -> None:
     """Validate the configured value shared by guided creation and JSON loading."""
     clean_value = value.strip()
     if not clean_value:
@@ -813,7 +830,7 @@ def validate_action_value(action_type: str, value: str) -> None:
         validate_http_url(clean_value, label="Action URL")
     elif action_type == "open_windows_target":
         validate_windows_target(clean_value)
-    elif action_type == "transform_file_text":
+    elif action_type == "transform_file_text" and inspect_external_paths:
         validate_text_file_source(clean_value)
     elif action_type == "transform_text":
         if clean_value not in WORKSPACE_TRANSFORMS:
@@ -1065,17 +1082,18 @@ def ensure_default_text_action_file(path: Path) -> Path:
     """Create the machine-local default source file only when it is missing."""
 
     target = path.expanduser()
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("x", encoding="utf-8", newline="") as stream:
-            stream.write("")
-    except FileExistsError:
-        if not target.is_file():
-            raise ActionError(f"Default text file path is not a file: {target}")
-    except OSError as exc:
-        raise ActionError(
-            f"Could not create the default text file: {target}\n\n{exc}"
-        ) from exc
+    with configuration_mutation_gate():
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("x", encoding="utf-8", newline="") as stream:
+                stream.write("")
+        except FileExistsError:
+            if not target.is_file():
+                raise ActionError(f"Default text file path is not a file: {target}")
+        except OSError as exc:
+            raise ActionError(
+                f"Could not create the default text file: {target}\n\n{exc}"
+            ) from exc
     return target
 
 
@@ -1165,6 +1183,20 @@ def _atomic_write_bytes(
     value: bytes,
     *,
     expected_digest: str | None = None,
+) -> None:
+    with configuration_mutation_gate():
+        _atomic_write_bytes_unlocked(
+            path,
+            value,
+            expected_digest=expected_digest,
+        )
+
+
+def _atomic_write_bytes_unlocked(
+    path: Path,
+    value: bytes,
+    *,
+    expected_digest: str | None,
 ) -> None:
     temporary_path: Path | None = None
     try:
@@ -1497,7 +1529,12 @@ def open_action_target(action: Action) -> None:
     raise ActionError(f"Unsupported action type: {action.type}")
 
 
-def _parse_action(item: object, index: int) -> Action:
+def _parse_action(
+    item: object,
+    index: int,
+    *,
+    inspect_external_paths: bool = True,
+) -> Action:
     if not isinstance(item, dict):
         raise ActionError(f"Action #{index} must be an object.")
 
@@ -1510,7 +1547,11 @@ def _parse_action(item: object, index: int) -> Action:
     if action_type not in SUPPORTED_ACTION_TYPES:
         raise ActionError(f"Action #{index} has unsupported type: {action_type}")
     try:
-        validate_action_value(action_type, item["value"])
+        validate_action_value(
+            action_type,
+            item["value"],
+            inspect_external_paths=inspect_external_paths,
+        )
     except ActionError as exc:
         raise ActionError(f"Action #{index}: {exc}") from exc
 

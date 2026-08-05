@@ -13,6 +13,7 @@ from .actions import (
     update_action,
 )
 from .configuration_data import save_contexts
+from .configuration_mutation import gated_configuration_mutation
 from .contexts import ContextDefinition, ContextError, load_contexts
 from .palette_state import PaletteState, load_palette_state, save_palette_state
 
@@ -193,6 +194,7 @@ def prepare_context_membership_update(
     )
 
 
+@gated_configuration_mutation
 def append_actions_with_context_memberships(
     action_path: Path,
     actions: Iterable[Action],
@@ -239,6 +241,7 @@ def append_actions_with_context_memberships(
         raise
 
 
+@gated_configuration_mutation
 def update_action_with_context_memberships(
     action_path: Path,
     action: Action,
@@ -271,6 +274,7 @@ def update_action_with_context_memberships(
         raise
 
 
+@gated_configuration_mutation
 def migrate_legacy_action_contexts(
     *,
     shared_actions_path: Path,
@@ -432,6 +436,7 @@ def _load_optional_contexts(path: Path) -> list[ContextDefinition]:
     return load_contexts(path) if path.exists() else []
 
 
+@gated_configuration_mutation
 def _write_context_sets(
     shared_path: Path,
     local_path: Path,

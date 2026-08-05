@@ -5,6 +5,7 @@ from copy import deepcopy
 import json
 from pathlib import Path
 
+from .configuration_mutation import configuration_mutation_gate
 from .persistence import atomic_write_json
 
 
@@ -55,6 +56,24 @@ def inspect_action_references(
 
 
 def delete_action_and_references(
+    action_path: Path,
+    action_id: str,
+    *,
+    context_paths: tuple[Path, ...],
+    command_surface_paths: tuple[Path, ...],
+    palette_path: Path,
+) -> ActionDeletionReport:
+    with configuration_mutation_gate():
+        return _delete_action_and_references(
+            action_path,
+            action_id,
+            context_paths=context_paths,
+            command_surface_paths=command_surface_paths,
+            palette_path=palette_path,
+        )
+
+
+def _delete_action_and_references(
     action_path: Path,
     action_id: str,
     *,

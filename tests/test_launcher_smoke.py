@@ -34,6 +34,7 @@ from context_palette.configuration_window import (
     LOCAL_DESTINATION,
 )
 from context_palette.contexts import ContextDefinition
+from context_palette.data_catalog import AppDataPaths
 from context_palette.workspace_transforms import WORKSPACE_TRANSFORM_GROUPS
 from context_palette.workspace_panel import WorkspacePanel
 
@@ -179,6 +180,22 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(len(app.command_groups), built_in_group_count)
                     self.assertEqual(app.palette_state.focus_context, "General")
                     self.assertEqual(app.work_item_sources, ())
+                    self.assertEqual(
+                        app.data_paths,
+                        AppDataPaths.from_data_directory(data),
+                    )
+                    self.assertEqual(
+                        app.local_work_item_sources_path,
+                        app.data_paths.work_item_sources_file,
+                    )
+                    self.assertEqual(
+                        app.local_work_item_metadata_path,
+                        app.data_paths.work_item_metadata_file,
+                    )
+                    self.assertEqual(
+                        app.local_work_item_settings_path,
+                        app.data_paths.work_item_settings_file,
+                    )
                     self.assertFalse(any(path.exists() for path in local_paths))
 
                     app._show_configuration()

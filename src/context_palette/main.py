@@ -6,12 +6,14 @@ import os
 import sys
 import zlib
 
+from .data_catalog import AppDataPaths
 from .launcher import run
 from .diagnostics import configure_logging
 from .retired_feature_cleanup import (
     RetirementCleanupError,
     cleanup_retired_local_configuration,
 )
+from .restore import RestoreRecoveryError, recover_interrupted_restore
 from .single_instance import notify_existing_instance
 
 
@@ -55,8 +57,24 @@ def initial_launcher_request(request: dict[str, str]) -> dict[str, str] | None:
 
 def main(arguments: list[str] | None = None) -> None:
     root = project_root()
+    paths = AppDataPaths.from_root(root)
     os.environ.setdefault("PROJECT_ROOT", str(root))
-    logger = configure_logging(root / "data" / "context-palette.log")
+    logger = configure_logging(paths.diagnostic_log_file)
+    port = project_port(root)
+    request = integration_request(sys.argv[1:] if arguments is None else arguments)
+    if notify_existing_instance(port, request):
+        return
+    try:
+        recovery = recover_interrupted_restore(paths)
+        if recovery.recovery_performed:
+            logger.warning(
+                "Completed rollback for an interrupted configuration restore"
+            )
+    except RestoreRecoveryError:
+        logger.exception("Interrupted configuration restore recovery failed")
+        raise SystemExit(
+            "Context Palette could not safely recover an interrupted restore."
+        )
     try:
         cleanup_report = cleanup_retired_local_configuration(root)
         if cleanup_report.files_changed:
@@ -70,23 +88,19 @@ def main(arguments: list[str] | None = None) -> None:
             )
     except RetirementCleanupError:
         logger.exception("Retired local configuration could not be cleaned")
-    port = project_port(root)
-    request = integration_request(sys.argv[1:] if arguments is None else arguments)
-    if notify_existing_instance(port, request):
-        return
-
     run(
-        root / "data" / "actions.json",
-        root / "data" / "local_actions.json",
-        root / "data" / "contexts.json",
-        root / "data" / "local_contexts.json",
-        root / "data" / "command_surface.json",
-        root / "data" / "local_command_surface.json",
-        root / "data" / "palette.json",
-        root / "data" / "inbox.json",
-        root / "data" / "cheatsheets",
+        paths.built_in_actions_file,
+        paths.personal_actions_file,
+        paths.built_in_contexts_file,
+        paths.personal_contexts_file,
+        paths.built_in_command_surface_file,
+        paths.personal_command_surface_file,
+        paths.palette_state_file,
+        paths.inbox_file,
+        paths.cheat_sheets_directory,
         port,
         initial_launcher_request(request),
+        data_paths=paths,
     )
 
 

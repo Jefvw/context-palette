@@ -56,6 +56,7 @@ from .hotkeys import (
 from .help_window import HelpWindow
 from .harvest_window import HarvestWindow
 from .contexts import ContextDefinition, ContextError, load_combined_contexts
+from .data_catalog import AppDataPaths
 from .inbox import InboxError, append_inbox_item, create_clipboard_item, load_inbox_items
 from .inbox_window import ActionCreator, InboxWindow, suggest_url_template
 from .single_instance import SingleInstanceServer
@@ -192,6 +193,8 @@ class LauncherApp:
         cheatsheets_dir: Path,
         instance_port: int,
         initial_request: dict[str, str] | None = None,
+        *,
+        data_paths: AppDataPaths | None = None,
     ) -> None:
         self.root = root
         self.actions_path = actions_path
@@ -207,9 +210,12 @@ class LauncherApp:
         self.palette_path = palette_path
         self.inbox_path = inbox_path
         self.cheatsheets_dir = cheatsheets_dir
-        self.local_work_item_sources_path = actions_path.parent / "local_work_item_sources.json"
-        self.local_work_item_metadata_path = actions_path.parent / "local_work_item_metadata.json"
-        self.local_work_item_settings_path = actions_path.parent / "local_work_item_settings.json"
+        self.data_paths = data_paths or AppDataPaths.from_data_directory(
+            actions_path.parent
+        )
+        self.local_work_item_sources_path = self.data_paths.work_item_sources_file
+        self.local_work_item_metadata_path = self.data_paths.work_item_metadata_file
+        self.local_work_item_settings_path = self.data_paths.work_item_settings_file
         self.work_item_sources: tuple[WorkItemSource, ...] = ()
         self.work_item_metadata: dict[str, WorkItemMetadata] = {}
         self.work_item_index = WorkItemIndex()
@@ -3402,6 +3408,8 @@ def run(
     cheatsheets_dir: Path,
     instance_port: int,
     initial_request: dict[str, str] | None = None,
+    *,
+    data_paths: AppDataPaths | None = None,
 ) -> None:
     root = tk.Tk()
     LauncherApp(
@@ -3417,5 +3425,6 @@ def run(
         cheatsheets_dir,
         instance_port,
         initial_request,
+        data_paths=data_paths,
     )
     root.mainloop()

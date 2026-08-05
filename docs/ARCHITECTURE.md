@@ -59,7 +59,10 @@ Application entry point.
 
 - Resolves the project root.
 - Derives a stable project-specific local port.
-- Notifies an existing instance when one is running.
+- Notifies an existing instance before treating a pending journal as an
+  interrupted transaction.
+- Completes rollback from a pending restore journal before migrations or
+  configuration loading.
 - Starts the Tk launcher with paths to local data.
 
 ### `launcher.py`
@@ -267,18 +270,142 @@ label and the canonical action search document, while callers continue to
 persist stable action IDs. Restricted Built-in pickers display their storage
 scope and an explicit empty-result explanation.
 
-### `persistence.py`
+### `configuration_mutation.py` and `persistence.py`
 
-Owns JSON replacement for application-written data. It serializes to a temporary sibling file, flushes it to disk, preserves the previous destination as `<name>.bak`, and uses `os.replace` so readers see either the previous complete file or the new complete file. Temporary and backup files are ignored by Git because they can contain private runtime data.
+`configuration_mutation.py` owns one process-wide reentrant gate for
+application configuration. Every JSON replacement acquires it automatically;
+logical Action/Context membership changes, deletion/rename operations,
+migrations, and cleanup hold it across their complete multi-file sequence and
+rollback. Reviewed text-file replacement also participates because its target
+may be the catalogued managed text source. Work Item workbooks and external
+file-copy operations remain outside this gate.
+
+`persistence.py` owns JSON replacement for application-written data and exact-
+byte replacement for restore. Both use a temporary sibling, flush and `fsync`,
+and atomic replacement. An ordinary JSON write serializes to a temporary
+sibling file, flushes it to disk, preserves the
+previous destination as `<name>.bak`, and uses `os.replace` so readers see
+either the previous complete file or the new complete file. Temporary and
+backup files are ignored by Git because they can contain private runtime data.
+Restore byte replacement disables adjacent `.bak` creation because its
+independent recovery archive owns aggregate rollback.
 
 Actions, Inbox state, and palette state use this single writer.
+
+### `data_catalog.py`
+
+Defines the UI-independent application-data boundary. Frozen `AppDataPaths`
+derives the known Built-in, personal, machine-local, captured-content, and
+diagnostic locations from one application root or data directory. Frozen
+`DataAssetSpec` records declare stable IDs, constrained relative locations,
+ownership, required status, sensitivity, backup policy, and logical schema
+versions. Patterns may vary only their final path component, so the catalog
+cannot become an unconstrained recursive filesystem scan.
+
+`main.py` and the configuration snapshot service construct this object from the
+project root. `launcher.py` receives that same object in normal startup and retains a
+compatibility adapter that derives it from the existing Actions directory for
+older direct callers; its Work Item configuration paths no longer repeat
+filenames. The catalog performs no loading, external Work Item discovery,
+credential access, backup, or restore work.
+
+The excluded private-runtime inventory includes the versioned
+`data/restore-journal.json` path. It is ignored by Git, excluded from ordinary
+backups and snapshots, and used only to finish an interrupted rollback.
+
+### `configuration_snapshot.py`
+
+Owns complete, read-only loading and aggregate validation for catalogued
+structured application state. Frozen `ConfigurationSnapshot` values retain
+Built-in and personal collections separately, preserve stored Archived Actions,
+expose only Active Actions in the executable projection, and defensively copy
+loader-owned lists and mappings. `SnapshotValidationReport` and its frozen
+issues provide stable codes, catalog asset provenance, severity, category, and
+privacy-safe summaries.
+
+Each asset is loaded independently through its existing domain loader. The
+service validates stable identities, hard Active-Action references,
+Built-in/personal boundaries, palette context classifications, and soft Work
+Item source relationships. It reports machine-local portability and visible
+legacy forms without printing private values, checking external path
+availability, scanning Work Item roots, reading optional managed text content,
+or writing/migrating data. Excluded runtime assets are never loaded.
+
+### `backup.py` and `backup_cli.py`
+
+`backup.py` owns backup format version 1 and the UI-independent complete-
+configuration backup service. Frozen manifest records contain only catalog
+asset IDs, normalized `payload/` paths, applicable logical schema versions,
+exact sizes, and lowercase SHA-256 digests. Frozen results retain the
+destination, included files/assets, explicit privacy exclusions, and structured
+snapshot warnings.
+
+The service acquires the configuration mutation gate, inventories only
+catalog-eligible exact paths and direct cheat-sheet matches, rejects links,
+reparse points, root escapes, and declared size/count excesses, then copies
+bytes to a private temporary staged root. SHA-256-backed fingerprints before,
+during, and after copying detect external-editor or separate-process changes;
+three attempts are allowed. The staged root is validated through
+`configuration_snapshot.py`, and only those staged bytes are packaged.
+
+ZIP entries have fixed metadata and deterministic ordering. `manifest.json` is
+last. A complete temporary ZIP is created beside the chosen destination,
+flushed, and published through an atomic no-clobber operation unless overwrite
+was explicitly requested; explicit replacement uses `os.replace`. Failed
+publication leaves an existing archive untouched and cleans temporary state.
+Default limits are 256 entries, 16 MiB per entry, and 64 MiB total. Inbox is
+included unless explicitly excluded; managed text requires explicit inclusion.
+Diagnostics, recovery and temporary files, environments, unknown files,
+external resources, templates, and credential secrets are never selected.
+
+`backup_cli.py` is a small service-level command adapter for testing and manual
+use. It reports privacy scope, exclusions, counts, and privacy-safe snapshot
+warnings. It is not connected to the launcher or Tkinter.
+
+### `restore.py`
+
+Owns the UI-independent Phase 4 restore core. Inspection treats ZIP input as
+hostile: it validates strict version-1 manifests through the existing frozen
+backup models; rejects unsafe or colliding Windows paths, links/reparse
+representations, directories, unsupported compression, unexpected entries,
+header disagreements, and configured size/count excesses; and streams every
+payload through CRC, size, and SHA-256 verification without using ZIP extract
+APIs.
+
+Inspection overlays only manifest-listed payloads onto a temporary same-volume
+tree. Existing optional catalogued files omitted by version 1, including
+unmatched cheat sheets, are copied into that tree and preserved; required
+omissions are not inferred as deletions. The completed tree is loaded through
+`configuration_snapshot.py`. A frozen `RestorePlan` retains only operational
+hashes, catalog IDs and paths, replacement/creation/preservation categories,
+Built-in and sensitive-content acknowledgements, compatibility state, and
+privacy-safe warnings. It never retains staged content.
+
+Commit requires a matching immutable confirmation, reacquires the mutation
+gate, repeats inspection and staged validation, and rejects changed archive or
+live-state fingerprints. Before any live replacement it publishes a no-clobber
+recovery ZIP outside the application root containing exact current catalogued
+bytes and reads that archive back through the hostile-input validator, then
+atomically writes and flushes the excluded restore journal. Exact
+manifest destinations are replaced without adjacent `.bak` files. Any normal
+failure rolls every candidate back; process interruption leaves the journal so
+`main.py` completes idempotent rollback before cleanup or loading on the next
+startup. Backup and standalone retirement cleanup refuse to run while that
+journal remains unresolved. Commit validates the full expected catalogued
+overlay before and after aggregate reload; rollback verifies the complete
+pre-restore live-state identity. Recovery does not require the pre-restore
+configuration to be valid or required files to exist.
+
+No restore UI, mutating CLI, merge, selective import, path remapping, migration,
+or cross-process exclusion exists. A separate process therefore cannot safely
+apply a restore while the launcher is running.
 
 ### `configuration_check.py`
 
 Provides a read-only project validation report and command-line exit status. It
-reuses the existing action, context, command-surface, Inbox, palette, and
-cheat-sheet loaders, then verifies that context, command-surface, and palette
-action references resolve. `check-context-palette.bat` runs this validation
+is a thin compatibility adapter over `configuration_snapshot.py`: structured
+issues become the existing error and warning tuples and snapshot counts become
+the existing report counts. `check-context-palette.bat` runs this validation
 before source compilation and the complete unit suite.
 
 ### `retired_feature_cleanup.py`
@@ -945,6 +1072,12 @@ The longer-term context model includes identity, knowledge, capabilities, and op
 
 All data is local and inspectable.
 
+The logical entities, stable identities, cross-file references, derived state,
+external-resource boundary, and implemented asset catalog are summarized in
+the [data model](DATA_MODEL.md). Deterministic service-level backup creation and
+the UI-independent recoverable restore core are implemented; user-facing flows
+remain planned in the [backup and restore plan](BACKUP_RESTORE_PLAN.md).
+
 ### `data/actions.json`
 
 Reviewed portable action records shared through Git.
@@ -1115,6 +1248,9 @@ When adding context behavior:
 
 ## Known architectural next steps
 
+- Build the Phase 5 Configure backup/restore UI on the tested service
+  boundaries, with explicit privacy and Built-in replacement confirmation and
+  safe in-process exclusion.
 - Separate Configure dialog families from `configuration_window.py` when a
   material Configure change benefits from the boundary.
 - Add supporting-context composition and weighted ranking.

@@ -37,6 +37,8 @@ confirms creation; Archived actions remain outside normal retrieval. See
   Item workbook's `Inbox` sheet, creating that sheet when necessary.
 - Copies the one exact Windows file path in Input / Output into the selected
   Work Item folder without replacing an existing file.
+- Creates deterministic, validated complete-configuration backup archives from
+  a service-level command, with explicit Inbox and managed-text privacy scope.
 - Stores personal data locally and writes application-managed JSON atomically.
 
 ## Requirements
@@ -62,6 +64,25 @@ From the repository root:
 `develop-context-palette.bat` is the single development entry point. It creates
 or repairs this computer's `.venv`, installs declared dependencies, initializes
 missing personal data from safe examples, and runs the complete project check.
+
+## Command-line backup
+
+Phase 3 provides a service-level backup command without adding restore or
+Tkinter UI:
+
+```powershell
+.\python-context-palette.bat -m context_palette.backup_cli C:\Backups\context-palette.zip
+```
+
+Inbox content is included by default and can be excluded with
+`--exclude-inbox`. The optional managed text source is excluded by default and
+can be included with `--include-managed-content`. Replacing an existing archive
+requires `--overwrite`.
+
+The ZIP is sensitive and is not encrypted. Logs, temporary and recovery files,
+environments, unknown files, external Action targets, Work Item content and
+templates, and credential secrets are never included. Restore is not yet
+implemented.
 
 ## Developing on multiple computers
 
@@ -183,6 +204,8 @@ JSON guides are intended for advanced editing, review, and automation:
 - [Right-side button configuration](docs/COMMAND_SURFACE_CONFIGURATION.md)
 - [Cheat-sheet format](docs/CHEATSHEET_FORMAT.md)
 - [Complete file-based configuration](docs/CONFIGURE_WITH_FILES.md)
+- [Application data model](docs/DATA_MODEL.md)
+- [Backup and restore architecture plan](docs/BACKUP_RESTORE_PLAN.md)
 
 Never publish runtime files without a deliberate privacy review.
 

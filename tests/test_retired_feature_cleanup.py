@@ -10,7 +10,10 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from context_palette.retired_feature_cleanup import cleanup_retired_local_configuration
+from context_palette.retired_feature_cleanup import (
+    RetirementCleanupError,
+    cleanup_retired_local_configuration,
+)
 
 
 def write_json(path: Path, value: object) -> None:
@@ -19,6 +22,23 @@ def write_json(path: Path, value: object) -> None:
 
 
 class RetiredFeatureCleanupTests(unittest.TestCase):
+    def test_refuses_cleanup_when_pending_restore_cannot_be_recovered(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            actions = root / "data" / "local_actions.json"
+            write_json(
+                actions,
+                {"actions": [{"id": "one", "type": "copy_text", "state": "Draft"}]},
+            )
+            (root / "data" / "restore-journal.json").write_text(
+                "not a restore journal", encoding="utf-8"
+            )
+
+            before = actions.read_bytes()
+            with self.assertRaises(RetirementCleanupError):
+                cleanup_retired_local_configuration(root)
+            self.assertEqual(actions.read_bytes(), before)
+
     def test_migrates_legacy_action_and_inbox_states_idempotently(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

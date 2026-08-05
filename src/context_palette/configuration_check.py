@@ -4,27 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 import sys
 
-from .actions import Action, ActionError, load_combined_actions
-from .cheatsheets import CheatSheetError, load_cheatsheets
-from .command_surface import (
-    CommandGroup,
-    CommandSurfaceError,
-    command_group_action_ids,
-    command_item_action_ids,
-    command_item_work_item_references,
-    iter_command_items,
-    load_combined_command_groups,
-)
-from .contexts import (
-    ContextDefinition,
-    ContextError,
-    load_combined_contexts,
-    load_contexts,
-)
-from .inbox import InboxError, load_inbox_items
-from .palette_state import PaletteState, load_palette_state
-from .work_item_storage import WorkItemStorageError, load_work_item_sources
-from .work_items import WorkItemSource
+from .configuration_snapshot import load_configuration_snapshot
+from .data_catalog import AppDataPaths
 
 
 @dataclass(frozen=True)
@@ -39,179 +20,12 @@ class ConfigurationReport:
 
 
 def validate_project_configuration(root: Path) -> ConfigurationReport:
-    data = root / "data"
-    errors: list[str] = []
-    warnings: list[str] = []
-    counts: dict[str, int] = {}
-
-    actions: list[Action] = []
-    local_action_ids: set[str] = set()
-    contexts: list[ContextDefinition] = []
-    built_in_context_names: set[str] = set()
-    groups: list[CommandGroup] = []
-    palette = PaletteState()
-    work_item_sources: tuple[WorkItemSource, ...] = ()
-
-    try:
-        actions, local_action_ids = load_combined_actions(
-            data / "actions.json", data / "local_actions.json"
-        )
-        counts["actions"] = len(actions)
-    except (ActionError, OSError) as exc:
-        errors.append(f"Actions: {exc}")
-
-    try:
-        contexts = load_combined_contexts(
-            data / "contexts.json", data / "local_contexts.json"
-        )
-        built_in_context_names = {
-            context.name.casefold()
-            for context in load_contexts(data / "contexts.json")
-        }
-        counts["contexts"] = len(contexts)
-    except (ContextError, OSError) as exc:
-        errors.append(f"Contexts: {exc}")
-
-    try:
-        groups = load_combined_command_groups(
-            data / "command_surface.json", data / "local_command_surface.json"
-        )
-        counts["command_groups"] = len(groups)
-    except (CommandSurfaceError, OSError) as exc:
-        errors.append(f"Command surface: {exc}")
-
-    try:
-        palette = load_palette_state(data / "palette.json")
-        counts["pinned_actions"] = len(palette.pinned_action_ids)
-    except (ActionError, OSError) as exc:
-        errors.append(f"Palette state: {exc}")
-
-    try:
-        counts["inbox_items"] = len(load_inbox_items(data / "inbox.json"))
-    except (InboxError, OSError) as exc:
-        errors.append(f"Inbox: {exc}")
-
-    try:
-        counts["cheatsheets"] = len(load_cheatsheets(data / "cheatsheets"))
-    except (CheatSheetError, OSError) as exc:
-        errors.append(f"Cheat sheets: {exc}")
-
-    try:
-        work_item_sources = load_work_item_sources(
-            data / "local_work_item_sources.json"
-        )
-        counts["work_item_sources"] = len(work_item_sources)
-    except (WorkItemStorageError, OSError) as exc:
-        errors.append(f"Work Item sources: {exc}")
-
-    if actions:
-        _validate_action_references(
-            actions,
-            contexts,
-            groups,
-            palette,
-            errors,
-            local_action_ids=local_action_ids,
-            built_in_context_names=built_in_context_names,
-            shared_command_surface_path=data / "command_surface.json",
-        )
-    elif contexts or groups or palette.pinned_action_ids or palette.context_slots:
-        warnings.append("Action references were not checked because actions could not be loaded.")
-    if groups:
-        _validate_work_item_references(
-            groups,
-            work_item_sources,
-            warnings,
-        )
-
-    return ConfigurationReport(tuple(errors), tuple(warnings), counts)
-
-
-def _validate_work_item_references(
-    groups: list[CommandGroup],
-    sources: tuple[WorkItemSource, ...],
-    warnings: list[str],
-) -> None:
-    source_ids = {source.id.casefold() for source in sources}
-    for group in groups:
-        for _path, item in iter_command_items(group):
-            for reference in command_item_work_item_references(item):
-                if reference.source_id.casefold() in source_ids:
-                    continue
-                warnings.append(
-                    f"Quick action '{group.label} / {item.label}' references "
-                    f"unavailable Work Item source: {reference.source_id}"
-                )
-
-
-def _validate_action_references(
-    actions: list[Action],
-    contexts: list[ContextDefinition],
-    groups: list[CommandGroup],
-    palette: PaletteState,
-    errors: list[str],
-    *,
-    local_action_ids: set[str],
-    built_in_context_names: set[str],
-    shared_command_surface_path: Path,
-) -> None:
-    action_ids = {action.id for action in actions}
-    for context in contexts:
-        for action_id in dict.fromkeys(
-            (
-                *(context.action_ids or ()),
-                *context.preferred_action_ids,
-            )
-        ):
-            if action_id not in action_ids:
-                errors.append(
-                    f"Context '{context.name}' references missing action: {action_id}"
-                )
-            elif (
-                context.name.casefold() in built_in_context_names
-                and action_id in local_action_ids
-            ):
-                errors.append(
-                    f"Built-in context '{context.name}' references "
-                    f"My configuration action: {action_id}"
-                )
-    for group in groups:
-        menu_nodes = [
-            (group.label, command_group_action_ids(group)),
-            *(
-                (
-                    f"{group.label} / {item.label}",
-                    command_item_action_ids(item),
-                )
-                for _path, item in iter_command_items(group)
-            ),
-        ]
-        for menu_path, referenced_action_ids in menu_nodes:
-            for action_id in referenced_action_ids:
-                if action_id not in action_ids:
-                    errors.append(
-                        f"Command item '{menu_path}' references missing action: "
-                        f"{action_id}"
-                    )
-                elif (
-                    group.source_path is not None
-                    and group.source_path.resolve()
-                    == shared_command_surface_path.resolve()
-                    and action_id in local_action_ids
-                ):
-                    errors.append(
-                        f"Built-in Quick action '{menu_path}' "
-                        f"references local-only action: {action_id}"
-                    )
-    for action_id in palette.pinned_action_ids:
-        if action_id not in action_ids:
-            errors.append(f"Pinned action is missing: {action_id}")
-    for context, action_ids_for_context in (palette.context_slots or {}).items():
-        for action_id in action_ids_for_context:
-            if action_id not in action_ids:
-                errors.append(
-                    f"Palette context '{context}' references missing action: {action_id}"
-                )
+    snapshot_report = load_configuration_snapshot(AppDataPaths.from_root(root))
+    return ConfigurationReport(
+        tuple(issue.summary for issue in snapshot_report.errors),
+        tuple(issue.summary for issue in snapshot_report.warnings),
+        dict(snapshot_report.counts),
+    )
 
 
 def format_configuration_report(report: ConfigurationReport) -> str:

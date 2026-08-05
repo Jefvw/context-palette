@@ -8,7 +8,10 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from context_palette.configuration_check import validate_project_configuration
+from context_palette.configuration_check import (
+    format_configuration_report,
+    validate_project_configuration,
+)
 
 
 def write_json(path: Path, data: object) -> None:
@@ -260,6 +263,49 @@ class ConfigurationCheckTests(unittest.TestCase):
                 for error in report.errors
             )
         )
+
+    def test_adapter_reports_complete_work_item_counts_without_raw_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            valid_project(root)
+            private_source = root / "private-client" / "workitems"
+            private_template = root / "private-client" / "template.xlsx"
+            write_json(
+                root / "data" / "local_work_item_sources.json",
+                {
+                    "sources": [
+                        {
+                            "id": "private-source",
+                            "name": "Private source",
+                            "workitems_path": str(private_source),
+                        }
+                    ]
+                },
+            )
+            write_json(
+                root / "data" / "local_work_item_metadata.json",
+                {
+                    "work_items": {
+                        "private-source/PRIVATE-FOLDER": {"tags": ["private"]}
+                    }
+                },
+            )
+            write_json(
+                root / "data" / "local_work_item_settings.json",
+                {"template_path": str(private_template)},
+            )
+
+            report = validate_project_configuration(root)
+            formatted = format_configuration_report(report)
+
+        self.assertTrue(report.ok)
+        self.assertEqual(report.counts["work_item_sources"], 1)
+        self.assertEqual(report.counts["work_item_metadata"], 1)
+        self.assertEqual(report.counts["work_item_settings"], 1)
+        self.assertNotIn(str(private_source), formatted)
+        self.assertNotIn(str(private_template), formatted)
+        self.assertNotIn("PRIVATE-FOLDER", formatted)
+        self.assertIn("raw paths are omitted", formatted)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import sys
 
+from .configuration_mutation import gated_configuration_mutation
+from .data_catalog import AppDataPaths
 from .persistence import atomic_write_json
 
 
@@ -25,7 +27,13 @@ class RetirementCleanupReport:
     actions_migrated: int = 0
 
 
+@gated_configuration_mutation
 def cleanup_retired_local_configuration(root: Path) -> RetirementCleanupReport:
+    journal = AppDataPaths.from_root(root).restore_journal_file
+    if journal.exists() or journal.is_symlink():
+        raise RetirementCleanupError(
+            "An unfinished restore must be recovered before local cleanup."
+        )
     data = root / "data"
     actions_path = data / "local_actions.json"
     removed_ids = set(RETIRED_ACTION_IDS)

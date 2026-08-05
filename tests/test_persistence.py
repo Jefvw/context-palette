@@ -9,7 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from context_palette.persistence import atomic_write_json
+from context_palette.persistence import atomic_replace_bytes, atomic_write_json
 
 
 class PersistenceTests(unittest.TestCase):
@@ -65,6 +65,18 @@ class PersistenceTests(unittest.TestCase):
                 atomic_write_json(path, {"invalid": object()})
 
             self.assertEqual(path.read_text(encoding="utf-8"), '{"version": 1}')
+            self.assertEqual(list(Path(directory).glob("*.tmp")), [])
+
+    def test_exact_byte_replace_failure_keeps_original_and_cleans_temporary_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "data.bin"
+            path.write_bytes(b"previous bytes")
+
+            with patch("context_palette.persistence.os.replace", side_effect=OSError("blocked")):
+                with self.assertRaises(OSError):
+                    atomic_replace_bytes(path, b"replacement bytes")
+
+            self.assertEqual(path.read_bytes(), b"previous bytes")
             self.assertEqual(list(Path(directory).glob("*.tmp")), [])
 
 

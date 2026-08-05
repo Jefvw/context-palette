@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
+from .configuration_mutation import configuration_mutation_gate
 from .contexts import ContextDefinition
 from .palette_state import MAX_CONTEXT_SLOT_ACTIONS
 from .persistence import atomic_write_json
@@ -29,6 +30,24 @@ class ContextRenameReport:
 
 
 def rename_context_and_references(
+    context_path: Path,
+    original_name: str,
+    replacement: ContextDefinition,
+    *,
+    action_paths: tuple[Path, ...],
+    palette_path: Path,
+) -> ContextRenameReport:
+    with configuration_mutation_gate():
+        return _rename_context_and_references(
+            context_path,
+            original_name,
+            replacement,
+            action_paths=action_paths,
+            palette_path=palette_path,
+        )
+
+
+def _rename_context_and_references(
     context_path: Path,
     original_name: str,
     replacement: ContextDefinition,
@@ -140,6 +159,22 @@ def rename_context_and_references(
 
 
 def delete_context_and_memberships(
+    context_path: Path,
+    context_name: str,
+    *,
+    action_paths: tuple[Path, ...],
+    palette_path: Path,
+) -> ContextDeletionReport:
+    with configuration_mutation_gate():
+        return _delete_context_and_memberships(
+            context_path,
+            context_name,
+            action_paths=action_paths,
+            palette_path=palette_path,
+        )
+
+
+def _delete_context_and_memberships(
     context_path: Path,
     context_name: str,
     *,
