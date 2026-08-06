@@ -415,9 +415,11 @@ complete guided configuration workspace:
 - **Backup and restore:** create a complete-configuration ZIP or inspect one
   before restoring it. Backups include Inbox by default; clear that option to
   omit captured content. Optional managed text remains excluded unless you
-  select it. External Action targets, Work Item folders and workbooks,
-  templates, credential secrets, logs, caches, environments, and unknown files
-  are never copied.
+  select it. Configured Action targets, Work Item source paths, template paths,
+  working directories, and arguments remain in the backed-up configuration.
+  The referenced files, folders, Work Item roots and workbooks, and templates
+  themselves are never copied. Credential secrets, logs, caches, environments,
+  and unknown files are also excluded.
 
   **Create backup...** asks where to save the ZIP and asks again before
   replacing an existing file. Its result lists the archive location, included
@@ -437,13 +439,14 @@ complete guided configuration workspace:
   you to restart so startup recovery can finish.
 
   While backup, inspection, or commit is active, wait for its progress window;
-  Configure cannot be edited or closed and duplicate operations are ignored.
-  Cancelling a file dialog or declining confirmation changes nothing. Restore
-  commit has no Cancel button after final confirmation.
+  Configure cannot be edited or closed, Context Palette will refuse to quit,
+  and duplicate operations are ignored. Cancelling a file dialog or declining
+  confirmation changes nothing. Restore commit has no Cancel button after final
+  confirmation.
 
-  `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, `Alt+D`, and `Alt+B` directly select
-  Actions, Create action, Contexts, Quick actions, Diagnostics, and Backup and
-  restore.
+  `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, `Alt+W`, `Alt+D`, and `Alt+B` directly
+  select Actions, Create action, Contexts, Quick actions, Work Items,
+  Diagnostics, and Backup and restore.
   `Ctrl+Tab` cycles through all Configure tabs. Both paths move focus into the
   selected tab's main content.
 

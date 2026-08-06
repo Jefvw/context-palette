@@ -1067,9 +1067,12 @@ class LauncherApp:
         self.root.withdraw()
 
     def quit_app(self) -> None:
-        active_writes = self._active_work_item_writes()
-        if active_writes:
-            operation_text = " and ".join(active_writes)
+        active_operations = (
+            self._active_work_item_writes()
+            + self._active_configuration_operations()
+        )
+        if active_operations:
+            operation_text = " and ".join(active_operations)
             message = (
                 f"Context Palette cannot quit while {operation_text} is still running.\n\n"
                 "Wait for its success or error message. You may hide the palette "
@@ -1077,7 +1080,7 @@ class LauncherApp:
             )
             self.status_var.set(f"Quit blocked: {operation_text} is still running.")
             messagebox.showwarning(
-                "Work Item operation still running",
+                "Operation still running",
                 message,
                 parent=self.root,
             )
@@ -1094,6 +1097,27 @@ class LauncherApp:
         if self.work_item_inbox.running:
             active.append("an Excel Inbox update")
         return tuple(active)
+
+    def _active_configuration_operations(self) -> tuple[str, ...]:
+        configuration = getattr(self, "configuration_window", None)
+        if configuration is None:
+            return ()
+        try:
+            exists = bool(configuration.window.winfo_exists())
+        except tk.TclError:
+            exists = False
+        panel = getattr(configuration, "backup_restore_panel", None)
+        if exists and panel is not None and panel.busy:
+            return ("a configuration backup or restore",)
+        return ()
+
+    def _quit_for_restore_recovery_when_safe(self) -> bool:
+        if not getattr(self, "_configuration_recovery_required", False):
+            return False
+        if self._active_work_item_writes():
+            return False
+        self.quit_app()
+        return True
 
     def focus_search(self) -> str:
         if self.search_entry is not None:
@@ -1205,6 +1229,7 @@ class LauncherApp:
             self.actions, self.local_action_ids = load_combined_actions(
                 self.actions_path,
                 self.local_actions_path,
+                inspect_external_paths=False,
             )
             available_tags = tuple(
                 sorted(
@@ -1283,6 +1308,8 @@ class LauncherApp:
     def _poll_work_item_inbox(self) -> None:
         try:
             self.work_item_inbox.drain()
+            if self._quit_for_restore_recovery_when_safe():
+                return
             self.root.after(100, self._poll_work_item_inbox)
         except tk.TclError:
             return
@@ -1290,6 +1317,8 @@ class LauncherApp:
     def _poll_work_item_file_copy(self) -> None:
         try:
             self.work_item_file_copy.drain()
+            if self._quit_for_restore_recovery_when_safe():
+                return
             self.root.after(100, self._poll_work_item_file_copy)
         except tk.TclError:
             return

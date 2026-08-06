@@ -265,8 +265,10 @@ class BackupRestorePanel(ttk.Frame):
         ttk.Label(
             backup,
             text=(
-                "External Action targets, Work Item folders/workbooks, templates, "
-                "credentials, logs, caches, environments, and unknown files are not copied."
+                "Configured references and settings are included. Referenced files, "
+                "folders, Work Item roots/workbooks, and templates themselves are not "
+                "copied. Credential secrets, logs, caches, environments, and unknown "
+                "files are also excluded."
             ),
             style="Muted.TLabel",
             wraplength=700,

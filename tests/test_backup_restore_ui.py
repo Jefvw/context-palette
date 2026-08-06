@@ -148,11 +148,16 @@ class BackupRestorePanelTests(unittest.TestCase):
         self.assertTrue(options.include_inbox)
         self.assertFalse(options.include_managed_content)
         self.assertFalse(options.overwrite)
-        self.assertIn("Work Item folders", self._visible_text())
+        self.assertIn(
+            "Configured references and settings are included",
+            self._visible_text(),
+        )
+        self.assertIn("Work Item roots/workbooks", self._visible_text())
         message = info.call_args.args[1]
         self.assertIn(str(destination), message)
         self.assertIn("Included files: 2", message)
         self.assertIn("optional managed text content", message)
+        self.assertIn("configured references are retained", message)
 
     def test_cancelled_dialogs_do_not_call_services(self) -> None:
         with (
@@ -476,6 +481,7 @@ class BackupRestoreFormattingTests(unittest.TestCase):
         restore = format_restore_plan(restore_plan(built_in=True))
 
         self.assertIn("Included files: 2", backup)
+        self.assertIn("configured references are retained", backup)
         self.assertIn("data/actions.json", restore)
         for private in (
             "PRIVATE ACTION VALUE",

@@ -356,7 +356,9 @@ publication leaves an existing archive untouched and cleans temporary state.
 Default limits are 256 entries, 16 MiB per entry, and 64 MiB total. Inbox is
 included unless explicitly excluded; managed text requires explicit inclusion.
 Diagnostics, recovery and temporary files, environments, unknown files,
-external resources, templates, and credential secrets are never selected.
+external resource contents, template contents, and credential secrets are
+never selected. Their configured references remain inside the catalogued JSON
+assets that own them.
 
 `backup_cli.py` is a small service-level command adapter for testing and manual
 use. It reports privacy scope, exclusions, counts, and privacy-safe snapshot
@@ -418,7 +420,9 @@ cancel path after confirmation. Successful restore closes the stale Configure
 workspace and invokes the launcher's complete reload. A completed rollback
 leaves Configure usable; incomplete rollback closes Configure, hides the
 launcher, blocks reopening configuration, and requests process exit so startup
-recovery can run.
+recovery can run. Main-window exit is also refused while the archive worker is
+active; if incomplete recovery waits for an existing Work Item write, the
+launcher exits as soon as that write finishes.
 
 ### `configuration_check.py`
 
@@ -1162,6 +1166,10 @@ Configuration reload is transactional in memory: combined shared/local actions,
 contexts, and quick-action groups replace their active lists only after complete
 validation succeeds. A failed external edit reports the affected file and
 retains the last successfully loaded interface configuration.
+Presentation reload deliberately retains configured external Action references
+without probing their current targets. This matches snapshot/restore
+portability policy; creation, editing, and execution retain their stricter
+target validation.
 Invalid or temporarily unreadable palette state follows the same last-known-good
 rule: active pins, Focus, and context slots remain in memory while the local
 file is corrected or becomes accessible again.

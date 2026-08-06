@@ -91,6 +91,24 @@ class LauncherInteractionTests(unittest.TestCase):
         app.root.withdraw.assert_called_once_with()
         app.quit_app.assert_called_once_with()
 
+    def test_incomplete_restore_exits_after_active_work_item_write_finishes(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app._configuration_recovery_required = True
+        app.work_item_file_copy = Mock(running=False)
+        app.work_item_inbox = Mock(running=True)
+        app.quit_app = Mock()
+
+        def finish_write() -> None:
+            app.work_item_inbox.running = False
+
+        app.work_item_inbox.drain.side_effect = finish_write
+
+        app._poll_work_item_inbox()
+
+        app.quit_app.assert_called_once_with()
+        app.root.after.assert_not_called()
+
     def test_configure_is_blocked_after_incomplete_restore_recovery(self):
         app = LauncherApp.__new__(LauncherApp)
         app.root = Mock()
@@ -208,6 +226,26 @@ class LauncherInteractionTests(unittest.TestCase):
         app.hotkey.stop.assert_called_once_with()
         app.instance_server.stop.assert_called_once_with()
         app.root.destroy.assert_called_once_with()
+
+    def test_quit_is_blocked_while_backup_or_restore_worker_is_running(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.hotkey = Mock()
+        app.instance_server = Mock()
+        app.work_item_file_copy = Mock(running=False)
+        app.work_item_inbox = Mock(running=False)
+        app.status_var = FakeVariable()
+        app._clear_protected_clipboard = Mock()
+        app.configuration_window = Mock()
+        app.configuration_window.window.winfo_exists.return_value = True
+        app.configuration_window.backup_restore_panel.busy = True
+
+        with patch("context_palette.launcher.messagebox.showwarning") as warning:
+            app.quit_app()
+
+        self.assertIn("configuration backup or restore", warning.call_args.args[1])
+        self.assertIn("Quit blocked", app.status_var.value)
+        app.root.destroy.assert_not_called()
 
     def test_workspace_file_copy_starts_for_selected_work_item(self):
         with tempfile.TemporaryDirectory() as directory:

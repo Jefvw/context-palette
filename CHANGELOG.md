@@ -10,11 +10,13 @@ This project has not published a versioned release. Changes are recorded under *
   before confirmation, requires a second acknowledgement for Built-in files,
   retains a recovery archive, and reloads the launcher after a successful
   transaction. Archive work runs off the Tk thread while Configure is blocked
-  from conflicting edits.
+  from conflicting edits or application exit. Restored external Action
+  references remain visible without probing or copying their target contents.
 - Added a deterministic command-line complete-configuration backup service.
   Archives are catalog-bounded, staged and validated before publication, and
   contain versioned size/SHA-256 manifests. Inbox inclusion is explicit,
-  managed text is opt-in, and runtime/unknown/external resources stay excluded.
+  managed text is opt-in, and runtime/unknown/external resource contents stay
+  excluded while their configured references remain in the backup.
 - Personal Quick actions can now mix actions and discovered Work Items in one
   ordered target list. The first available target is the left-click default and
   the complete mixed list appears in its menu. Work Items reuse their

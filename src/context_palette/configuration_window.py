@@ -761,6 +761,7 @@ class ConfigurationWindow:
             self.actions, self.local_action_ids = load_combined_actions(
                 self.shared_actions_path,
                 self.local_actions_path,
+                inspect_external_paths=False,
             )
         except ActionError as exc:
             messagebox.showerror(
@@ -1172,6 +1173,7 @@ class ConfigurationWindow:
             self.actions, self.local_action_ids = load_combined_actions(
                 self.shared_actions_path,
                 self.local_actions_path,
+                inspect_external_paths=False,
             )
             self.palette_state = load_palette_state(self.palette_path)
             self.contexts = load_combined_contexts(self.contexts_path, self.local_contexts_path)
@@ -1945,6 +1947,7 @@ class ConfigurationWindow:
             self.actions, self.local_action_ids = load_combined_actions(
                 self.shared_actions_path,
                 self.local_actions_path,
+                inspect_external_paths=False,
             )
         except ActionError as exc:
             messagebox.showerror(

@@ -202,14 +202,36 @@ def load_stored_actions(
     return actions
 
 
-def load_actions(path: Path) -> list[Action]:
-    actions = load_stored_actions(path)
+def load_actions(
+    path: Path,
+    *,
+    inspect_external_paths: bool = True,
+) -> list[Action]:
+    actions = load_stored_actions(
+        path,
+        inspect_external_paths=inspect_external_paths,
+    )
     return [action for action in actions if action.state in VISIBLE_STATES]
 
 
-def load_combined_actions(shared_path: Path, local_path: Path) -> tuple[list[Action], set[str]]:
-    shared_actions = load_actions(shared_path)
-    local_actions = load_actions(local_path) if local_path.exists() else []
+def load_combined_actions(
+    shared_path: Path,
+    local_path: Path,
+    *,
+    inspect_external_paths: bool = True,
+) -> tuple[list[Action], set[str]]:
+    shared_actions = load_actions(
+        shared_path,
+        inspect_external_paths=inspect_external_paths,
+    )
+    local_actions = (
+        load_actions(
+            local_path,
+            inspect_external_paths=inspect_external_paths,
+        )
+        if local_path.exists()
+        else []
+    )
     shared_ids = {action.id.casefold(): action.id for action in shared_actions}
     local_ids_by_key = {action.id.casefold(): action.id for action in local_actions}
     duplicate_ids = shared_ids.keys() & local_ids_by_key.keys()

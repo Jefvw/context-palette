@@ -92,7 +92,9 @@ class BackupExclusion(str, Enum):
     MANAGED_CONTENT = "optional managed text content"
     RUNTIME_ARTIFACTS = "diagnostic and runtime artifacts"
     UNKNOWN_FILES = "uncatalogued application-directory files"
-    EXTERNAL_RESOURCES = "external Action and Work Item resources"
+    EXTERNAL_RESOURCES = (
+        "external resource contents (configured references are retained)"
+    )
     CREDENTIAL_SECRETS = "Windows credential secrets"
 
 

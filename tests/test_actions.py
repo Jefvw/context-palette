@@ -425,6 +425,36 @@ class ActionTests(unittest.TestCase):
         self.assertEqual([action.id for action in actions], ["shared"])
         self.assertEqual(local_ids, set())
 
+    def test_presentation_reload_can_keep_nonportable_file_reference(self):
+        external = tempfile.TemporaryDirectory()
+        self.addCleanup(external.cleanup)
+        path_collision = Path(external.name) / "source.txt"
+        path_collision.mkdir()
+        shared = self._write_actions(
+            [
+                {
+                    "id": "portable-transform",
+                    "title": "Portable transform",
+                    "context": "General",
+                    "type": "transform_file_text",
+                    "value": str(path_collision),
+                    "arguments": ["uppercase"],
+                }
+            ]
+        )
+
+        with self.assertRaisesRegex(ActionError, "not a file"):
+            load_combined_actions(shared, shared.parent / "missing.json")
+
+        actions, local_ids = load_combined_actions(
+            shared,
+            shared.parent / "missing.json",
+            inspect_external_paths=False,
+        )
+
+        self.assertEqual([action.id for action in actions], ["portable-transform"])
+        self.assertEqual(local_ids, set())
+
     def test_combined_actions_reject_duplicate_ids(self):
         with tempfile.TemporaryDirectory() as directory:
             shared = Path(directory) / "shared.json"
