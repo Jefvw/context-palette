@@ -1,5 +1,38 @@
 # Decisions
 
+## 2026-08-05 - Keep backup and restore UI as in-process service orchestration
+
+**Decision:** Add one **Backup and restore** Configure tab in a dedicated
+`backup_restore_ui.py` module. Pass the launcher's canonical `AppDataPaths`
+through an optional ConfigurationWindow adapter, and delegate all backup,
+inspection, and commit behavior to the Phase 3/4 services. Show only
+catalog-relative operational paths, sensitive-category labels, compatibility
+state, and structured privacy-safe warnings. Inbox is included by default;
+managed text is opt-in; overwriting and Built-in replacement each require
+explicit acknowledgement.
+
+**Concurrency and lifecycle:** Use one bounded non-daemon worker with a Tk
+result queue. A modal progress child prevents all Configure edits, closing, and
+duplicate starts while work is active; no Cancel action is shown after restore
+commit begins. Successful commit destroys the stale Configure workspace before
+running the existing launcher reload across Actions, Contexts, Quick actions,
+palette, Work Item configuration, results, and on-demand Inbox loading. Normal
+rollback remains usable. Incomplete rollback closes Configure, hides and locks
+the launcher, and requests exit so startup recovery runs before another
+configuration mutation.
+
+**Reason:** The core already owns data eligibility, validation, privacy,
+archive safety, confirmation identities, and transaction recovery. Keeping the
+UI thin avoids a second policy surface, while in-process execution lets the
+existing mutation gate exclude Configure writes. A general task system,
+mutating CLI, restart manager, or duplicated restore model is unnecessary.
+
+**Verification status:** Automated UI orchestration, service-core, and launcher
+reload coverage is implemented. The native-dialog, same-machine destructive,
+disconnected-source, alternate-path/computer, keyboard/accessibility, and
+interruption-recovery manual Windows matrix remains required before Phase 5 is
+marked completely verified.
+
 ## 2026-08-05 - Restore only through a staged, journalled in-process transaction
 
 **Decision:** Implement Phase 4 as a UI-independent `restore.py` service. Every

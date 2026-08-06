@@ -1,10 +1,11 @@
 # Backup and restore plan
 
 Status: Phase 1 data foundations and Phase 2 aggregate validation were
-implemented on 2026-08-04. Phase 3 deterministic backup creation and Phase 4
-UI-independent restore core were implemented on 2026-08-05. No Configure UI,
-selective export/import, merge, path remapping, or mutating restore CLI is
-implemented.
+implemented on 2026-08-04. Phase 3 deterministic backup creation, Phase 4
+UI-independent restore core, and the Phase 5 Configure UI implementation were
+completed on 2026-08-05. Phase 5 manual Windows verification remains open, so
+the phase is not yet completely verified. No selective export/import, merge,
+path remapping, or mutating restore CLI is implemented.
 
 The primary goal is reliable disaster recovery for Context Palette
 configuration. Selective, portable export/import is related but remains a
@@ -39,9 +40,9 @@ migration and operational boundary to a lightweight portable application.
 | In-memory reload | Replaces active configuration only after successful loading | Useful model for post-restore reload |
 | Data-file inventory | Immutable central paths and declarative policies are implemented in `data_catalog.py` | Phase 1 complete |
 | Schema evolution | Logical per-asset version 1 is catalogued; JSON files still have no general persisted version field | Later compatibility work remains |
-| Multi-file consistency | Backup and restore use the in-process gate and strong staged fingerprints; restore writes a durable independent recovery archive and journal before replacement | Core implemented; UI must remain in-process |
+| Multi-file consistency | Backup and restore use the in-process gate and strong staged fingerprints; restore writes a durable independent recovery archive and journal before replacement | Core and in-process UI implemented |
 | Portability | Stable IDs help; some records contain absolute paths or external resources | Must be reported, not silently rewritten |
-| Privacy | Catalog policy drives payloads and restore plans report only operational identities, sensitive categories, and safe warnings | Tkinter restore/backup UX remains future work |
+| Privacy | Catalog policy drives payloads; Configure reports only operational identities, sensitive categories, and safe warnings | Implemented; manual UX verification pending |
 
 ## Backup and export are different operations
 
@@ -297,8 +298,8 @@ idempotent startup rollback before cleanup or configuration loading.
 
 ## User experience
 
-Add a **Backup and restore** page under Configure only after the core services
-are tested without Tkinter.
+The implemented **Backup and restore** page under Configure is a thin in-process
+adapter over the core services.
 
 ### Backup
 
@@ -361,14 +362,23 @@ Implemented 2026-08-05:
   paths, conservative omission, legacy classification without migration,
   confirmation, stale plans, normal rollback, and interrupted startup recovery.
 
-### Phase 5 — Configure UI and Windows verification
+### Phase 5 — Configure UI implemented; Windows verification pending
 
-- Add Backup and Restore flows backed only by the tested core services.
-- Block conflicting Configure changes while either operation is active.
-- Verify keyboard access, long-running feedback, cancellation before commit,
-  same-machine round trip, a second path/computer, disconnected Work Item
-  sources, and restart/crash recovery.
-- Update Help, Architecture, Decisions, Changelog, and release notes.
+- UI implementation completed 2026-08-05; manual Windows verification remains.
+- Backup and Restore flows are backed only by the tested core services.
+- One background worker, modal exclusion of conflicting Configure changes,
+  duplicate-start prevention, safe close behavior, two-stage Built-in
+  confirmation, stale-plan handling, incomplete-recovery restart blocking, and
+  stale-workspace close plus full launcher reload are implemented.
+- Automated coverage verifies service mapping, privacy-safe summaries,
+  cancellation, overwrite consent, inspection-before-commit, rollback outcomes,
+  worker/UI thread separation, compatibility, and launcher projections. Phase
+  3/4 tests retain destructive temporary archive/restore/recovery coverage.
+- Still required manually on Windows: native keyboard navigation and dialogs,
+  successful backup, inspect/cancel, same-machine destructive round trip using
+  non-personal data, disconnected Work Item warnings, successful live launcher
+  reload, visible recovery location, editing exclusion during work, alternate
+  path/computer behavior, and interruption/startup recovery.
 
 ### Phase 6 — optional selective export/import
 
@@ -394,8 +404,7 @@ required to protect current configuration.
 
 ## Recommended next implementation slice
 
-Implement Phase 5 only: add Configure backup and restore flows over the tested
-services, keep restore application in the launcher process so the mutation gate
-can exclude Configure writes, and perform the documented Windows round trips
-and interruption recovery checks. Do not add merging, path remapping, selective
-import, or a cross-process mutating CLI.
+Complete and record the remaining Phase 5 manual Windows verification matrix
+using temporary non-personal configuration. Do not begin merging, path
+remapping, selective import, or a cross-process mutating CLI before that phase
+is completely verified.

@@ -396,9 +396,29 @@ overlay before and after aggregate reload; rollback verifies the complete
 pre-restore live-state identity. Recovery does not require the pre-restore
 configuration to be valid or required files to exist.
 
-No restore UI, mutating CLI, merge, selective import, path remapping, migration,
-or cross-process exclusion exists. A separate process therefore cannot safely
-apply a restore while the launcher is running.
+No mutating CLI, merge, selective import, path remapping, migration, or
+cross-process exclusion exists. Restore is therefore exposed only inside the
+running launcher process.
+
+### `backup_restore_ui.py`
+
+Owns the thin Phase 5 Tkinter orchestration boundary used by Configure. It
+receives the launcher's canonical `AppDataPaths`, maps the two user options to
+`BackupOptions`, and calls only `create_configuration_backup`,
+`inspect_restore_archive`, and `commit_restore`. Preview rendering consumes the
+content-free plan's catalog-relative paths, sensitive categories,
+compatibility state, and privacy-safe warnings; it never opens payloads or
+reimplements catalog, validation, hashing, staging, archive, or transaction
+logic.
+
+One bounded non-daemon worker serializes backup, inspection, and commit. A
+modal progress child prevents conflicting Configure edits and duplicate starts;
+the result queue returns every Tk operation to the UI thread. Commit has no
+cancel path after confirmation. Successful restore closes the stale Configure
+workspace and invokes the launcher's complete reload. A completed rollback
+leaves Configure usable; incomplete rollback closes Configure, hides the
+launcher, blocks reopening configuration, and requests process exit so startup
+recovery can run.
 
 ### `configuration_check.py`
 
@@ -434,6 +454,13 @@ technical IDs. Built-in contexts
 and Quick-action records are editable after the same developer-impact warning.
 Writes use the same atomic JSON
 replacement path as the rest of the application.
+
+The launcher passes its canonical `AppDataPaths` through the optional
+ConfigurationWindow integration adapter to the dedicated Backup and restore
+panel. Existing direct constructors remain compatible by deriving the same
+paths from the Built-in Actions location. Window close and Escape are refused
+while archive work is active. Restore success destroys the workspace before
+launcher reload so no editor keeps stale projections.
 
 Action creation and editing refresh every Configure view derived from actions,
 including pins, context and Quick-action summaries, and diagnostics. Action
@@ -1074,9 +1101,9 @@ All data is local and inspectable.
 
 The logical entities, stable identities, cross-file references, derived state,
 external-resource boundary, and implemented asset catalog are summarized in
-the [data model](DATA_MODEL.md). Deterministic service-level backup creation and
-the UI-independent recoverable restore core are implemented; user-facing flows
-remain planned in the [backup and restore plan](BACKUP_RESTORE_PLAN.md).
+the [data model](DATA_MODEL.md). Deterministic backup creation, the
+UI-independent recoverable restore core, and the in-process Configure workflow
+are implemented as described in the [backup and restore plan](BACKUP_RESTORE_PLAN.md).
 
 ### `data/actions.json`
 
@@ -1164,7 +1191,8 @@ The main launcher routes `Ctrl+Shift+D` directly to this tab. Configure enables
 native `Ctrl+Tab` notebook traversal, then moves focus into the selected tab's
 primary interactive or readable control. The Diagnostics summary remains
 read-only but participates in keyboard focus for selection and screen-reader
-access. Configure routes `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, and `Alt+D` through
+access. Configure routes `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, `Alt+D`, and
+`Alt+B` through
 one generic key-event handler instead of Tk's unreliable symbolic Alt bindings.
 This uses semantic letters and remains independent of QWERTY/AZERTY number-row
 differences. The main launcher's global slot handler accepts only unmodified
@@ -1248,9 +1276,8 @@ When adding context behavior:
 
 ## Known architectural next steps
 
-- Build the Phase 5 Configure backup/restore UI on the tested service
-  boundaries, with explicit privacy and Built-in replacement confirmation and
-  safe in-process exclusion.
+- Complete the Phase 5 manual Windows backup/restore verification matrix before
+  treating selective export/import as an eligible next design phase.
 - Separate Configure dialog families from `configuration_window.py` when a
   material Configure change benefits from the boundary.
 - Add supporting-context composition and weighted ranking.

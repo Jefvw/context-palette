@@ -475,7 +475,15 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         configuration.notebook = FakeNotebook()
 
-        for keysym, expected_tab in (("a", 0), ("t", 1), ("c", 2), ("q", 3), ("w", 4), ("d", 5)):
+        for keysym, expected_tab in (
+            ("a", 0),
+            ("t", 1),
+            ("c", 2),
+            ("q", 3),
+            ("w", 4),
+            ("d", 5),
+            ("b", 6),
+        ):
             with self.subTest(keysym=keysym):
                 self.assertEqual(
                     configuration._handle_configure_keypress(
@@ -511,6 +519,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.button_tree = FakeEntry()
         configuration.work_items_panel = FakeEntry()
         configuration.diagnostics_text = FakeEntry()
+        configuration.backup_restore_panel = FakeEntry()
 
         result = configuration._show_diagnostics_tab()
         callback = configuration.window.callbacks.pop()
@@ -529,11 +538,51 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.button_tree = FakeEntry()
         configuration.work_items_panel = FakeEntry()
         configuration.diagnostics_text = FakeEntry()
+        configuration.backup_restore_panel = FakeEntry()
 
         configuration._focus_current_tab()
 
         self.assertEqual(configuration.diagnostics_text.focus_calls, 1)
         self.assertEqual(configuration.action_tree.focus_calls, 0)
+
+    def test_backup_restore_tab_focuses_primary_action(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.notebook = FakeNotebook(selected=6)
+        configuration.action_tree = FakeEntry()
+        configuration.type_list = FakeEntry()
+        configuration.context_tree = FakeEntry()
+        configuration.button_tree = FakeEntry()
+        configuration.work_items_panel = FakeEntry()
+        configuration.diagnostics_text = FakeEntry()
+        configuration.backup_restore_panel = Mock()
+
+        configuration._focus_current_tab()
+
+        configuration.backup_restore_panel.focus_primary.assert_called_once_with()
+
+    def test_configure_waits_for_active_backup_before_closing(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.window = FakeWindow()
+        configuration.backup_restore_panel = Mock(busy=True)
+        configuration._set_feedback = Mock()
+
+        configuration._request_close()
+
+        self.assertEqual(configuration.window.destroy_calls, 0)
+        configuration._set_feedback.assert_called_once()
+        configuration.backup_restore_panel.close.assert_not_called()
+
+    def test_restore_completion_closes_then_calls_launcher_adapter(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.window = FakeWindow()
+        configuration.backup_restore_panel = Mock()
+        configuration._launcher_restore_complete = Mock()
+
+        configuration._restore_completed()
+
+        configuration.backup_restore_panel.close.assert_called_once_with()
+        self.assertEqual(configuration.window.destroy_calls, 1)
+        configuration._launcher_restore_complete.assert_called_once_with()
 
     def test_copy_diagnostics_copies_only_rendered_safe_summary(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)

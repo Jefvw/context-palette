@@ -1233,6 +1233,7 @@ class LauncherSmokeTests(unittest.TestCase):
                         ("c", "Contexts"),
                         ("q", "Quick actions"),
                         ("d", "Diagnostics"),
+                        ("b", "Backup and restore"),
                     ):
                         diagnostic_window.event_generate(
                             "<KeyPress>",
@@ -1332,6 +1333,18 @@ class LauncherSmokeTests(unittest.TestCase):
                             <= diagnostic_button_labels
                         )
                     self.assertIsNotNone(reused_configuration_window)
+                    self.assertIs(
+                        app.configuration_window.data_paths,
+                        app.data_paths,
+                    )
+                    self.assertIs(
+                        app.configuration_window.backup_restore_panel.data_paths,
+                        app.data_paths,
+                    )
+                    self.assertEqual(
+                        app.configuration_window._launcher_restore_complete,
+                        app._reload,
+                    )
                     reused_configuration_window.geometry("700x480")
                     app.configuration_window.notebook.select(4)
                     root.update()

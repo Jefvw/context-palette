@@ -78,6 +78,89 @@ class FakeKeyEvent:
 
 
 class LauncherInteractionTests(unittest.TestCase):
+    def test_incomplete_restore_recovery_hides_launcher_and_requests_exit(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.status_var = FakeVariable()
+        app._active_work_item_writes = Mock(return_value=())
+        app.quit_app = Mock()
+
+        app._require_restore_recovery_restart()
+
+        self.assertTrue(app._configuration_recovery_required)
+        app.root.withdraw.assert_called_once_with()
+        app.quit_app.assert_called_once_with()
+
+    def test_configure_is_blocked_after_incomplete_restore_recovery(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app._configuration_recovery_required = True
+
+        with (
+            patch("context_palette.launcher.ConfigurationWindow") as window,
+            patch("context_palette.launcher.messagebox.showerror") as error,
+        ):
+            app._show_configuration()
+
+        window.assert_not_called()
+        self.assertIn("restart", error.call_args.args[1].casefold())
+
+    def test_restore_reload_refreshes_every_cached_launcher_projection(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.status_var = FakeVariable()
+        app.actions = []
+        app._load_actions = Mock()
+        app._load_command_surface = Mock()
+        app._load_contexts = Mock()
+        app._load_work_item_configuration = Mock()
+        app._load_palette_state = Mock()
+        app._render_command_surface = Mock()
+        app._refresh_results = Mock()
+        app._start_work_item_refresh = Mock()
+        app._configuration_signature = Mock(return_value=(("test", 1, 1),))
+
+        app._reload()
+
+        app._load_actions.assert_called_once_with()
+        app._load_command_surface.assert_called_once_with(render=False)
+        app._load_contexts.assert_called_once_with()
+        app._load_work_item_configuration.assert_called_once_with()
+        app._load_palette_state.assert_called_once_with(render=False)
+        app._render_command_surface.assert_called_once_with()
+        app._refresh_results.assert_called_once_with()
+        app._start_work_item_refresh.assert_called_once_with()
+        self.assertEqual(app.configuration_signature_cache, (("test", 1, 1),))
+
+    def test_inbox_is_loaded_from_storage_each_time_it_is_opened(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.inbox_path = Path("inbox.json")
+        app.actions = []
+        app.palette_state = PaletteState()
+        app.available_context_names = []
+        app.local_actions_path = Path("local_actions.json")
+        app.contexts_path = Path("contexts.json")
+        app.local_contexts_path = Path("local_contexts.json")
+        app._reload_after_external_action_change = Mock()
+        app._show_harvest = Mock()
+
+        first = (Mock(),)
+        restored = (Mock(), Mock())
+        with (
+            patch(
+                "context_palette.launcher.load_inbox_items",
+                side_effect=[first, restored],
+            ) as load,
+            patch("context_palette.launcher.InboxWindow") as window,
+        ):
+            app._show_inbox()
+            app._show_inbox()
+
+        self.assertEqual(load.call_count, 2)
+        self.assertIs(window.call_args_list[0].args[1], first)
+        self.assertIs(window.call_args_list[1].args[1], restored)
+
     def test_quit_is_blocked_while_each_work_item_write_is_running(self):
         for file_copy_running, inbox_running, expected in (
             (True, False, "file copy"),

@@ -28,6 +28,7 @@ from .action_deletion import (
 from .action_types import ACTION_TYPES, CREATABLE_ACTION_TYPES
 from .action_bound_quick_actions import action_bound_quick_groups
 from .action_picker import ActionPickerField, ActionPickerOption
+from .backup_restore_ui import BackupRestorePanel
 from .command_surface import (
     CommandGroup,
     CommandItem,
@@ -57,6 +58,7 @@ from .configuration_data import (
     save_command_group,
 )
 from .contexts import ContextDefinition, ContextError, load_combined_contexts, load_contexts
+from .data_catalog import AppDataPaths
 from .context_membership import (
     actions_with_canonical_contexts,
     append_actions_with_context_memberships,
@@ -131,6 +133,7 @@ CONFIGURATION_TAB_INDEXES = {
     "buttons": 3,
     "work_items": 4,
     "diagnostics": 5,
+    "backup_restore": 6,
 }
 GROUP_PRESENTATION_LABELS = {
     GROUP_PRESENTATION_ROWS: "Quick-action rows",
@@ -480,6 +483,9 @@ class ConfigurationWindow:
         initial_action_id: str | None = None,
         initial_work_item_key: str | None = None,
         start_work_item_creation: bool = False,
+        data_paths: AppDataPaths | None = None,
+        on_restore_complete: Callable[[], None] | None = None,
+        on_restore_recovery_required: Callable[[], None] | None = None,
     ) -> None:
         self.actions = actions
         self.local_action_ids = local_action_ids
@@ -509,10 +515,18 @@ class ConfigurationWindow:
         self.initial_action_id = initial_action_id
         self.initial_work_item_key = initial_work_item_key
         self.start_work_item_creation = start_work_item_creation
+        self.data_paths = data_paths or AppDataPaths.from_data_directory(
+            shared_actions_path.parent
+        )
+        self._launcher_restore_complete = on_restore_complete or on_change
+        self._launcher_recovery_required = (
+            on_restore_recovery_required or (lambda: None)
+        )
 
         self.window = tk.Toplevel(parent)
         self.window.title("Configure Context Palette")
         configure_standard_window(self.window, parent)
+        self.window.protocol("WM_DELETE_WINDOW", self._request_close)
         self.window.bind("<Escape>", self._close_on_plain_escape)
         self.window.bind("<KeyPress>", self._handle_configure_keypress, add="+")
         outer = ttk.Frame(self.window, padding=12)
@@ -528,12 +542,13 @@ class ConfigurationWindow:
             style="Status.TLabel",
         )
         self.feedback_label.pack(side=tk.LEFT)
-        ttk.Button(
+        self.close_button = ttk.Button(
             footer,
             text="Close",
-            command=self.window.destroy,
+            command=self._request_close,
             style="Compact.TButton",
-        ).pack(side=tk.RIGHT)
+        )
+        self.close_button.pack(side=tk.RIGHT)
         ttk.Label(outer, text="Configure Context Palette", style="Title.TLabel").pack(anchor=tk.W)
         ttk.Label(
             outer,
@@ -554,6 +569,7 @@ class ConfigurationWindow:
             work_item_index,
         )
         self._build_diagnostics_tab(self.notebook)
+        self._build_backup_restore_tab(self.notebook)
         self.notebook.select(CONFIGURATION_TAB_INDEXES.get(self.initial_tab, 0))
         self.notebook.bind("<<NotebookTabChanged>>", self._focus_selected_tab)
         self.window.bind("<Control-f>", self._focus_current_filter)
@@ -600,7 +616,7 @@ class ConfigurationWindow:
     def _close_on_plain_escape(self, event: tk.Event) -> str:
         if int(event.state) & 0x0004:
             return "break"
-        self.window.destroy()
+        self._request_close()
         return "break"
 
     def _handle_configure_keypress(self, event: tk.Event) -> str | None:
@@ -614,6 +630,7 @@ class ConfigurationWindow:
             "q": 3,
             "w": 4,
             "d": 5,
+            "b": 6,
         }.get(str(getattr(event, "keysym", "")).casefold())
         if tab_index is None:
             return None
@@ -964,6 +981,39 @@ class ConfigurationWindow:
             command=self._copy_diagnostics,
         ).pack(side=tk.LEFT, padx=(6, 0))
 
+    def _build_backup_restore_tab(self, notebook: ttk.Notebook) -> None:
+        tab = ttk.Frame(notebook, padding=10)
+        notebook.add(tab, text="Backup and restore", underline=0)
+        self.backup_restore_panel = BackupRestorePanel(
+            tab,
+            data_paths=self.data_paths,
+            on_restore_complete=self._restore_completed,
+            on_recovery_required=self._restore_recovery_required,
+        )
+        self.backup_restore_panel.pack(fill=tk.BOTH, expand=True)
+
+    def _request_close(self) -> None:
+        panel = getattr(self, "backup_restore_panel", None)
+        if panel is not None and panel.busy:
+            self._set_feedback(
+                "Wait for the backup or restore operation to finish before closing.",
+                False,
+            )
+            return
+        if panel is not None:
+            panel.close()
+        self.window.destroy()
+
+    def _restore_completed(self) -> None:
+        self.backup_restore_panel.close()
+        self.window.destroy()
+        self._launcher_restore_complete()
+
+    def _restore_recovery_required(self) -> None:
+        self.backup_restore_panel.close()
+        self.window.destroy()
+        self._launcher_recovery_required()
+
     def _build_work_items_tab(
         self,
         notebook: ttk.Notebook,
@@ -1009,9 +1059,12 @@ class ConfigurationWindow:
             self.button_tree,
             self.work_items_panel,
             self.diagnostics_text,
+            self.backup_restore_panel,
         )
         if selected == 4:
             self.work_items_panel.focus()
+        elif selected == 6:
+            self.backup_restore_panel.focus_primary()
         else:
             targets[selected].focus_set()
 

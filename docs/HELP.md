@@ -411,8 +411,39 @@ complete guided configuration workspace:
   counts, and automatic-paste outcomes. Use **Refresh** after reproducing a
   problem or **Copy safe summary** when asking for help. Raw log messages,
   pasted text, credentials, action values, paths, and window titles are not
-  included. `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, and `Alt+D` directly select
-  Actions, Create action, Contexts, Quick actions, and Diagnostics.
+  included.
+- **Backup and restore:** create a complete-configuration ZIP or inspect one
+  before restoring it. Backups include Inbox by default; clear that option to
+  omit captured content. Optional managed text remains excluded unless you
+  select it. External Action targets, Work Item folders and workbooks,
+  templates, credential secrets, logs, caches, environments, and unknown files
+  are never copied.
+
+  **Create backup...** asks where to save the ZIP and asks again before
+  replacing an existing file. Its result lists the archive location, included
+  file count, warnings, and excluded categories. Treat a backup as sensitive:
+  it can contain personal configuration, captured Inbox content, and configured
+  machine paths even though external files and credential secrets are absent.
+
+  **Restore backup...** first inspects the archive without changing live
+  configuration. Review files to replace or create, omitted live files that
+  stay preserved, Built-in impact, sensitive categories, compatibility and
+  legacy status, and privacy-safe portability warnings. **Apply inspected
+  restore...** then asks for confirmation and separately confirms any Built-in
+  replacement. A successful restore reports the retained recovery archive,
+  closes Configure, and reloads the launcher. If rollback completes after a
+  failed restore, the previous configuration remains usable. If recovery is
+  incomplete, Context Palette blocks further configuration changes and asks
+  you to restart so startup recovery can finish.
+
+  While backup, inspection, or commit is active, wait for its progress window;
+  Configure cannot be edited or closed and duplicate operations are ignored.
+  Cancelling a file dialog or declining confirmation changes nothing. Restore
+  commit has no Cancel button after final confirmation.
+
+  `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, `Alt+D`, and `Alt+B` directly select
+  Actions, Create action, Contexts, Quick actions, Diagnostics, and Backup and
+  restore.
   `Ctrl+Tab` cycles through all Configure tabs. Both paths move focus into the
   selected tab's main content.
 

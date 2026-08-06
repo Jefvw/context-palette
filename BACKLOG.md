@@ -4,6 +4,13 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Now
 
+- Complete and record the Phase 5 manual Windows verification matrix from the
+  reviewed [backup and restore plan](docs/BACKUP_RESTORE_PLAN.md). The Configure
+  UI and automated coverage are implemented; native dialogs, keyboard access,
+  same-machine temporary-data round trip, disconnected-source warning, live
+  reload, recovery location, editing exclusion, alternate path/computer, and
+  interruption/startup recovery remain to be checked. Do not begin selective
+  import/export until this is complete.
 - Complete Phase 5 of the approved [Work Items discovery plan](docs/WORK_ITEMS_PLAN.md):
   representative performance measurements and manual Windows checks on another
   computer/path. Phases 1–4 include guided private source/tag configuration.
@@ -25,11 +32,6 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Next
 
-- Implement Phase 5 of the reviewed [backup and restore plan](docs/BACKUP_RESTORE_PLAN.md):
-  add in-process Configure backup/restore flows over the tested core services,
-  then complete same-machine, alternate-path, disconnected-source, keyboard,
-  and interruption-recovery Windows verification. Do not add merging, path
-  remapping, selective import, or a mutating cross-process CLI.
 - Add line-ending normalization and CSV/TSV column operations after real-use
   feedback on the expanded reusable text-operation catalogue.
 - Design supporting-context composition and weighted ranking while preserving explicit Focus and global search.

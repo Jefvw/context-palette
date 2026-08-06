@@ -213,6 +213,7 @@ class LauncherApp:
         self.data_paths = data_paths or AppDataPaths.from_data_directory(
             actions_path.parent
         )
+        self._configuration_recovery_required = False
         self.local_work_item_sources_path = self.data_paths.work_item_sources_file
         self.local_work_item_metadata_path = self.data_paths.work_item_metadata_file
         self.local_work_item_settings_path = self.data_paths.work_item_settings_file
@@ -1035,6 +1036,16 @@ class LauncherApp:
         self.show_requests.put(request)
 
     def show_window(self) -> None:
+        if getattr(self, "_configuration_recovery_required", False):
+            messagebox.showerror(
+                "Restart required for recovery",
+                (
+                    "Context Palette must restart so startup recovery can finish "
+                    "before configuration is used or changed."
+                ),
+                parent=self.root,
+            )
+            return
         self._cancel_scheduled_hide()
         self.root.deiconify()
         self.root.state("normal")
@@ -2930,6 +2941,16 @@ class LauncherApp:
         initial_work_item_key: str | None = None,
         start_work_item_creation: bool = False,
     ) -> None:
+        if getattr(self, "_configuration_recovery_required", False):
+            messagebox.showerror(
+                "Restart required for recovery",
+                (
+                    "Configure is unavailable until Context Palette restarts and "
+                    "startup recovery finishes."
+                ),
+                parent=self.root,
+            )
+            return
         existing = getattr(self, "configuration_window", None)
         if existing is not None:
             try:
@@ -2967,7 +2988,19 @@ class LauncherApp:
             initial_action_id=initial_action_id,
             initial_work_item_key=initial_work_item_key,
             start_work_item_creation=start_work_item_creation,
+            data_paths=self.data_paths,
+            on_restore_complete=self._reload,
+            on_restore_recovery_required=self._require_restore_recovery_restart,
         )
+
+    def _require_restore_recovery_restart(self) -> None:
+        """Block further interaction after an incomplete restore rollback."""
+
+        self._configuration_recovery_required = True
+        self.status_var.set("Restart required so restore recovery can finish.")
+        self.root.withdraw()
+        if not self._active_work_item_writes():
+            self.quit_app()
 
     def _show_work_item_creation(self) -> None:
         self._show_configuration(
