@@ -13,8 +13,8 @@ and retrieve it quickly in a chosen focus context.
 | Capability | Status | Current boundary |
 | --- | --- | --- |
 | Resident launcher and global shortcut | Implemented | `F9` primary, `Ctrl+Alt+P` fallback |
-| Global search and keyboard execution | Implemented | Search stays global; fixed slots use 1–0, with physical `0` as the tenth slot |
-| Global pins and focus-context slots | Implemented | Machine-local pins 1–5 are directly assignable in Configure; context slots 6–0 follow the selected Focus |
+| Global search and keyboard execution | Implemented | All items searches Actions and Work Items together with shared Context/tag filters; explicit kind scopes retain type/project controls; fixed slots use 1–0, with physical `0` as the tenth slot |
+| Global pins and focus-context slots | Implemented | Machine-local Action pins 1–5 are directly assignable in Configure; Context slots 6–0 accept Actions or Work Items and follow the selected Focus |
 | Guided configuration | Implemented | Actions, pinned slots, contexts, and Quick actions use My configuration or Built-in ownership; Standard distributes Built-in actions, Passwords/Folders/Prompts derive automatically from Active actions with optional three-level paths, and personal groups may target actions or discovered Work Items |
 | Confirm → Active → Archived | Implemented | Creation and editing are permanent after confirmation; archiving is represented in data but has limited UI |
 | Explicit action execution | Implemented | Fifteen allow-listed types with standard icons, including two copy-and-open URL builders, user-owned Windows targets, and preview-first text-file transformations |
@@ -23,8 +23,8 @@ and retrieve it quickly in a chosen focus context.
 | Text-file transformations | Implemented | One configured existing local text source; result is reviewed in Input / Output; guarded explicit replace or save-as preserves encoding and refuses stale overwrites |
 | Cheat sheets and promotion | Implemented | Structured local JSON sheets |
 | Attended AI assistance | Partial | Reviewable stored prompt templates and manual clipboard handoff; `copy_text` and `open_url` proposals only |
-| Context model | Partial | General root, per-PC context-owned action membership, tags, explicit focus, preferred actions; Developing Context Palette is the only shipped specific context |
-| Work Items discovery | Implemented | Bounded local discovery, main-window search/opening, guided private source/tag configuration, and stable personal Quick-action references |
+| Context model | Partial | General root, per-PC Context membership for Actions and Work Items, tags, explicit focus, and mixed preferred items; Developing Context Palette is the only shipped specific context |
+| Work Items discovery | Implemented | Bounded local discovery, mixed or Work Item-only main-window search/opening, shared Context/tag filtering, guided private source/tag configuration, and stable personal Quick-action references |
 | Work Item creation | Implemented | Editable suggested name, one local generic `.xlsx` template, collision-safe folder/workbook creation, optional tags |
 | Work Item Inbox | Implemented | Attended append of Input / Output to the selected exact-name `.xlsx`; creates `Inbox` and offers template-based workbook creation when missing |
 | Work Item file copy | Implemented | Copies one exact absolute file path from Input / Output into the selected Work Item folder; background, collision-safe, no overwrite |

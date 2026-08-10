@@ -471,6 +471,57 @@ class ConfigurationDialogTests(unittest.TestCase):
 
         configuration.work_items_panel.create_work_item.assert_called_once_with()
 
+    def test_ctrl_n_starts_quick_action_creation(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration._start_action_creation = Mock()
+
+        self.assertEqual(
+            configuration._handle_configure_keypress(FakeEvent(state=0x0004, keysym="n")),
+            "break",
+        )
+
+        configuration._start_action_creation.assert_called_once_with()
+
+    def test_quick_creation_prefills_the_active_non_general_focus(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.focus_context = "Customer"
+        configuration.local_actions_path = Path("local_actions.json")
+        configuration.window = Mock()
+        configuration.actions = []
+        configuration.contexts = [ContextDefinition("Customer")]
+        configuration._save_action = Mock()
+        configuration.action_creation_dialog = None
+
+        with patch("context_palette.configuration_window.ActionDialog") as dialog:
+            configuration._create_action_for_type("copy_text")
+
+        self.assertEqual(dialog.call_args.kwargs["initial_contexts"], ("Customer",))
+
+    def test_quick_creation_refuses_while_backup_or_restore_is_busy(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.backup_restore_panel = Mock(busy=True)
+        configuration._set_feedback = Mock()
+
+        configuration._start_action_creation()
+
+        configuration._set_feedback.assert_called_once()
+
+    def test_quick_creation_does_not_open_overlapping_type_choosers(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.backup_restore_panel = Mock(busy=False)
+        configuration.action_creation_dialog = None
+        configuration.action_type_picker = None
+        configuration.window = Mock()
+
+        with patch("context_palette.configuration_window.ActionTypePickerDialog") as picker:
+            created = picker.return_value
+            created.window.winfo_exists.return_value = True
+            configuration._start_action_creation()
+            configuration._start_action_creation()
+
+        picker.assert_called_once()
+        created.window.lift.assert_called_once_with()
+
     def test_alt_mnemonics_select_configure_tabs(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         configuration.notebook = FakeNotebook()
@@ -1816,6 +1867,49 @@ class ConfigurationDialogTests(unittest.TestCase):
 
             self.assertEqual(saved[0].action_ids, ("built-in", "local"))
             self.assertEqual(saved[0].preferred_action_ids, ("built-in",))
+        finally:
+            for child in root.winfo_children():
+                child.destroy()
+            root.destroy()
+
+    def test_personal_context_dialog_adds_work_item_and_prefers_it_in_slot(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        saved: list[ContextDefinition] = []
+        work_item = DiscoveredWorkItem(
+            "product-work",
+            "Product work",
+            "ISS-ABC-example",
+            ROOT / "ISS-ABC-example",
+            "ISS-ABC-example",
+            "ISS",
+            "Issue",
+            "ABC",
+            "example",
+            (),
+            ROOT / "ISS-ABC-example" / "ISS-ABC-example.xlsx",
+        )
+        try:
+            dialog = ContextDialog(
+                root,
+                ContextDefinition("Product", action_ids=("open-docs",)),
+                [Action("open-docs", "Open docs", "General", "copy_text", "x")],
+                lambda context, _original: saved.append(context) or True,
+                work_items=(work_item,),
+            )
+            work_item_label = next(iter(dialog.work_item_choices))
+            dialog.member_work_item_var.set(work_item_label)
+            dialog._add_member_work_item()
+            dialog.slots[0].set(work_item_label)
+
+            dialog._save()
+
+            reference = WorkItemReference("product-work", "ISS-ABC-example")
+            self.assertEqual(saved[0].work_item_refs, (reference,))
+            self.assertEqual(
+                saved[0].preferred_items,
+                (CommandTarget(work_item_ref=reference),),
+            )
         finally:
             for child in root.winfo_children():
                 child.destroy()

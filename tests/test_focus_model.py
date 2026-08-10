@@ -10,6 +10,8 @@ from context_palette.actions import Action
 from context_palette.contexts import ContextDefinition
 from context_palette.focus_model import actions_for_context, resolve_focus_state
 from context_palette.palette_state import PaletteState
+from context_palette.palette_items import PaletteItemReference
+from context_palette.work_items import WorkItemReference
 
 
 class FocusModelTests(unittest.TestCase):
@@ -158,6 +160,31 @@ class FocusModelTests(unittest.TestCase):
 
         self.assertEqual(
             resolved.palette_state.context_slots["Work"],
+            preferred,
+        )
+
+    def test_context_definition_seeds_mixed_preferred_item_slots(self):
+        work_item = WorkItemReference("customer-work", "CAS-ACME-Review")
+        preferred = (
+            PaletteItemReference(work_item_ref=work_item),
+            PaletteItemReference(action_id="follow-up"),
+        )
+        resolved = resolve_focus_state(
+            [Action("follow-up", "Follow up", "General", "copy_text", "x")],
+            [
+                ContextDefinition(
+                    "Customer",
+                    preferred_action_ids=("follow-up",),
+                    action_ids=("follow-up",),
+                    work_item_refs=(work_item,),
+                    preferred_item_refs=preferred,
+                )
+            ],
+            PaletteState(focus_context="Customer"),
+        )
+
+        self.assertEqual(
+            resolved.palette_state.context_item_slots["Customer"],
             preferred,
         )
 

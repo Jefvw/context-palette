@@ -3,7 +3,7 @@
 Context Palette is a fast, portable Windows launcher for reusable actions,
 working contexts, captured material, and transformations.
 
-The interface uses a clean neutral surface with Segoe UI typography and a high-contrast dark teal accent. Teal is reserved for primary actions and active selections. Two light teal row shades distinguish pinned and focus-context slots, while slot numbers preserve the same meaning without relying on color alone. Native focus borders make keyboard location visible.
+The interface uses a clean neutral surface with Segoe UI typography and a high-contrast dark teal accent. Teal is reserved for primary actions and active selections. Blue rows identify pinned shortcuts, green rows identify focus-context shortcuts, and neutral rows are ordinary results. Native focus borders make keyboard location visible.
 
 Developers can find the current implementation in
 [Architecture](ARCHITECTURE.md) and its chronological rationale in
@@ -90,9 +90,9 @@ version.
 
 - Start once with `run-context-palette.bat`.
 - The main window opens at a compact `780x600` on an ordinary monitor. By
-  default, the action list ends level with its adjacent action buttons and
-  scrolls longer results; drag the divider above Input / Output if you want a
-  different balance for the current session.
+  default, the command console occupies about 40% of the width and Input /
+  Output occupies about 60%. Drag the vertical divider to adjust that balance
+  for the current session.
 - Press `F9` or `Ctrl+Alt+P` to capture the current text selection and show the resident palette. On laptops in media-key mode, use `Fn+F9` or enable Fn Lock.
 - The palette uses the mouse cursor position at shortcut time as its top-left corner. Near a monitor edge it shifts only as far as needed to keep the complete window visible.
 - Configuration, Help, action editors, pickers, Sheets, AI, Inbox, Harvest, and
@@ -103,10 +103,10 @@ version.
 - Press `Ctrl+L` or `Ctrl+K` to return keyboard focus to Find.
 - Press `Ctrl+I` to capture clipboard text, `Ctrl+,` to open Configure, or `F1` to open Help.
 - Press `Ctrl+Shift+D` to open Configure directly on the safe Diagnostics tab.
-- Click the **⌨** footer button for the authoritative keyboard-shortcut page.
+- Open **More → Keyboard shortcuts** for the authoritative shortcut page.
 - Press `F5` while the main palette is focused to clear transient screen state
-  and return to the startup view. Find, action type/tag filters, Work Item
-  project/tag filters, Focus Actions mode, captured selection, and Input /
+  and return to the startup view. Find, scope, Context/tag filters, Action type,
+  Work Item project filter, Focus items mode, captured selection, and Input /
   Output are cleared. Saved Focus, pins, context slots, actions, and
   configuration are preserved.
 - Choose **Configure** for a visible route to the complete
@@ -126,8 +126,8 @@ This does not execute the highlighted action. Avoid passing secrets or selected 
 
 Use the compact active-Focus menu to switch context explicitly. Choose
 **Manage focuses…** in that selector to open the existing Context
-configuration area, create or edit any context, choose all actions belonging to
-it, and select up to five preferred actions for slots 6 through 0. **My
+configuration area, create or edit any Context, choose its Actions and Work
+Items, and select up to five preferred items for slots 6 through 0. **My
 configuration** definitions stay on this PC. **Built-in** definitions show a
 developer warning before editing. The only shipped specific context is
 **Developing Context Palette** in `data/contexts.json`; personal or
@@ -141,41 +141,64 @@ interrupted multi-file save may temporarily show both names, but does not leave
 actions assigned to an undefined Focus. Close and reopen Configure, then retry
 the rename if Windows reports a locked or unavailable file.
 
-The Focus context tells Context Palette what kind of work is currently most important. It changes slots 6 through 0 and influences which actions appear first.
+The Focus Context tells Context Palette what kind of work is currently most
+important. It changes slots 6 through 0 and controls the mixed **Focus items**
+view while ordinary Find remains global.
 
-Focus and Find are compact one-line controls. Hover over or click their `?` buttons for guidance without permanently consuming screen space.
+Focus is the first control in the command rail beside Find. Hover over or
+keyboard-focus it for guidance without permanently consuming screen space.
 
-- Slots `1–5` are personal pinned actions and never change with context.
-- Slots `6–0` are the top five actions for the selected focus context. Slot
+- Slots `1–5` are personal pinned Actions and never change with Context.
+- Slots `6–0` are the top five Actions or Work Items for the selected Focus. Slot
   `0` is the tenth overall slot and follows slot `9`.
-- An action may appear in both groups.
+- An Action may appear in both groups.
 
 Focus and pin changes are saved before they take effect. If the local palette
 file cannot be written, Context Palette keeps the previous selection and
 explains the problem instead of showing an unsaved change.
 
-Choose **Focus actions** to browse actions explicitly assigned to the active
-Focus. The list stays flat and follows the normal action order. General contains
-every action; a specific Focus contains actions assigned to that context.
-Select an action and use Run, Enter, or double-click as usual. Activating
-**Focus actions** moves keyboard focus directly into the list so arrow-key
-navigation can begin immediately. The button stays highlighted while this mode
-is active; choose it again to return to the normal action list.
+Choose **Focus items** to browse Actions and Work Items assigned to the active
+Focus. The list stays flat. General contains every Action and currently
+discovered Work Item; a specific Focus contains its configured membership,
+including unavailable Work Item references. Select an item and use Run, Enter,
+or double-click as usual. Activating **Focus items** moves keyboard focus
+directly into the list so arrow-key navigation can begin immediately. The button stays highlighted while this mode
+is active; choose it again to return to **All items**.
 
-Find remains global. Typing while Focus Actions is active temporarily shows the
-existing flat global results; it does not limit search to the Focus. Clearing
+Find remains global. Typing while Focus items is active temporarily shows the
+normal mixed global results; it does not limit search to the Focus. Clearing
 Find returns to the Focus list. Changing Focus refreshes the list only while
 that list is visible with Find empty.
 
-## Find and run actions
+## Find and open Palette items
 
-The left side of the action dashboard is one Actions workspace. Find action
-sits directly above the numbered list it filters. Passwords, Types, Run, and
-the action-search Help control form the narrow rail beside that list.
+The left side is one compact command console. Find and the result list share
+the same width; frequent controls remain in the rail beside them, and Quick
+actions appear underneath. Choose **All items** to find Actions and Work Items
+together, **Actions** for Action-specific
+type and Password filters, or **Work Items** for project filters and Work Item
+commands. The selected scope is highlighted and does not change the active
+Focus.
 
-Search matches tags, contexts, short name, description, type, and content.
+Find, **Contexts**, and **Tags** apply to both Actions and Work Items. A
+specific Context returns the Actions and Work Items assigned to that Context;
+**All contexts** restores global discovery. A shared tag can therefore return
+both kinds in one result list.
 
-- Type to filter actions.
+- Type in **Find item** to filter both kinds by their searchable names and
+  metadata.
+- Choose **Contexts** or **Tags** to narrow the mixed list. Active filters are
+  highlighted and marked **✓** until cleared.
+- Select an Action to show **Run**. Select a Work Item to show **Open** and the
+  adjacent folder command. Enter and double-click use the selected kind's
+  normal execution policy.
+- Right-click opens the selected Action in Configure or shows the selected
+  Work Item's workbook, folder, source, Inbox, copy-file, and tag commands.
+- **Pin** remains available only for Actions in slots 1–5. Work Items can be
+  assigned to numbered Focus slots 6–0 through a personal Context.
+
+In the **Actions** scope:
+
 - Click **Passwords** for the protected-credential shortcut, or open **Types**
   to filter by any built-in action type. Choose **All types** to clear the type
   filter.
@@ -195,7 +218,7 @@ Search matches tags, contexts, short name, description, type, and content.
   exact action highlighted. Personal actions can then be edited, including
   short name, description, contexts, tags, type-specific value, and supported
   launch settings. Context changes update the same context definitions used by
-  Focus Actions, slots, search, and the Contexts tab.
+  Focus items, slots, search, and the Contexts tab.
   Built-in actions can also be edited after acknowledging their developer warning.
 - Plain number-row and numpad digits remain ordinary Find text.
 - Shift plus a physical top-row number key executes slots 1 through 0 only
@@ -205,19 +228,22 @@ Search matches tags, contexts, short name, description, type, and content.
 
 The Actions heading shows the current match count. When nothing matches, the list explains how to clear Find or create an action instead of presenting a blank pane.
 
-Blue rows are pinned slots 1–5. Green rows are focus-context slots 6–0. A
-separator line divides those ten shortcuts from neutral search results. Action
-labels use a font-measured icon column followed by `- short name`, keeping
-their names aligned even when symbols have different pixel widths.
+Blue rows map top-to-bottom to pinned slots 1–5. Green rows map top-to-bottom
+to focus-context slots 6–0. The numeric prefixes are hidden to leave more room
+for names; hover a shortcut row to see its exact Shift+number binding. A
+separator line divides shortcut rows from neutral search results in the
+Actions scope. Action and Work Item labels use a font-measured icon column
+followed directly by the short name. Symbols with different pixel widths stay
+aligned without a dash or an unused tree-expansion gutter.
 
-## Find and open Work Items
+## Work Item-specific discovery and commands
 
-Choose **Work** in the Actions rail to use the same result area for configured
+Choose **Work Items** above Find to use the same result area for configured
 local work-item folders. The heading changes to **Work Items**, Find becomes
 **Find Work Item**, action-only **Passwords** is hidden, **Types** becomes
-**Projects**, and **Run** becomes **↗** (Open). Choose **Work** again to return to
-Actions. Existing action filters and Focus slots are preserved while Work Items
-is active.
+**Projects**, and the primary command becomes **Open**. Choose **All items** or
+**Actions** to change scope. The shared Context and tag filters remain active
+across scope changes; the project filter applies only in Work Items.
 
 - **New item** opens the guided Work Item creation flow. If setup is incomplete,
   Configure opens on the missing source or generic Excel template first.
@@ -228,10 +254,11 @@ is active.
 - Find matches the folder name, parsed kind, organisation, subject, source
   name, detected project codes, and personal tags.
 - **Projects** filters by one detected four-character project code.
-- **Tags** filters by one personal Work Item tag.
-- Enter, double-click, or **↗** opens the exact matching
+- **Tags** uses the same exact reusable tag filter as Actions.
+- **Contexts** filters by personal Context membership.
+- Enter, double-click, or **Open** opens the exact matching
   `<folder-name>.xlsx`; when it does not exist, the work-item folder opens.
-- The **📁** button beside **↗**, or Shift+Enter, always opens the work-item
+- The **📁** button beside **Open**, or Shift+Enter, always opens the work-item
   folder directly.
 - Right-click offers the exact workbook when available, the work-item folder,
   and the configured source folder.
@@ -262,7 +289,7 @@ the Source name field automatically.
 
 ### Create a Work Item from the generic Excel template
 
-Choose **Work**, then **New item**. On first use, add at least one source and
+Choose **Work Items**, then **New item**. On first use, add at least one source and
 select an existing `.xlsx` file as the generic template in the Work Items
 Configure page. The creation dialog then lets you select the source and enter a
 kind, organisation, subject, and optional project code. The suggested name is
@@ -277,7 +304,7 @@ only output newly created by that attempt is cleaned up.
 
 ### Send Input / Output to a Work Item Inbox
 
-Choose **Work**, select a Work Item, place the material in **Input / Output**,
+Choose **Work Items**, select a Work Item, place the material in **Input / Output**,
 and choose **To inbox**. Existing matching workbooks are updated immediately
 without confirmation. Context Palette creates an `Inbox` sheet when necessary
 and appends one row:
@@ -303,7 +330,7 @@ blocked.
 
 ### Copy a file into a Work Item
 
-Choose **Work**, select a Work Item, put one exact absolute Windows file path in
+Choose **Work Items**, select a Work Item, put one exact absolute Windows file path in
 **Input / Output**, and choose **Copy file**. Paths copied with Windows
 Explorer's **Copy as path** command may remain inside matching quotation marks.
 
@@ -339,7 +366,7 @@ Quick-action rows or one compact nested-menu launcher.
   action configuration.
 - Action targets use the same selected text, Input / Output, clipboard, and safe
   executor as the search list. Work Item targets use the same constrained
-  workbook-first opener as Work Items mode.
+  workbook-first opener as the Work Items scope.
 - Configure shared groups in `data/command_surface.json` and private groups in `data/local_command_surface.json`.
 - Press `Ctrl+,`, then use **Quick actions** to add or edit personal groups
   and menu levels without editing JSON. Add actions and Work Items from their
@@ -378,14 +405,21 @@ complete guided configuration workspace:
   Empty pin choices are closed automatically when saved. New actions default
   to **My configuration**; choose **Built-in** only when deliberately changing
   shipped starter data.
+- **+ Action:** use the visible launcher or Actions-tab button, or press
+  `Ctrl+N`, to search and choose a type before completing the usual Action
+  form. The chooser supports typing, arrow keys, Enter, and Escape; it does
+  not save anything until the Action form is confirmed. A non-General active
+  Focus is prefilled as a Context. Use **Browse action types…** for the full
+  educational catalogue.
 - **Create action:** inspect what each available action reads and does, see a
   concrete example, then create a validated permanent action. Older
   Input / Output transformation types remain editable for compatibility but
   are not offered for new actions; use the Transform menu for immediate text
   changes or **Transform a text file** for a repeated file workflow.
-- **Contexts:** add, edit, or delete contexts, assign any built-in or personal
-  actions as members, and choose defaults for slots 6–0. My configuration
-  contexts stay on this PC.
+- **Contexts:** add, edit, or delete Contexts; assign built-in Actions, personal
+  Actions, and Work Items as members; and choose mixed defaults for slots 6–0.
+  My configuration Contexts stay on this PC. Built-in Contexts remain
+  Action-only.
 - **Quick actions:** create, rename, delete, and reorder groups and menu levels.
   Choose **Quick-action rows** or **Nested subject menu** when adding or editing
   a group. Edit the group to assign actions directly below it. Select a group
@@ -407,6 +441,8 @@ complete guided configuration workspace:
   built-in and personal actions, or personal Work Items. A temporarily
   unavailable Work Item remains assigned and reports how to refresh or repair
   its source.
+  Quick-action groups are currently global; Context-based visibility or
+  grouping is not applied.
 - **Diagnostics:** review a safe summary of loaded configuration, recent error
   counts, and automatic-paste outcomes. Use **Refresh** after reproducing a
   problem or **Copy safe summary** when asking for help. Raw log messages,
@@ -566,17 +602,16 @@ to selected text or the complete field. The normal workflow is: capture or
 enter text, find and apply an action, inspect or refine the result, then copy
 or reuse it.
 
-The main window opens at a compact screen-aware size. The Actions and Quick
-actions area is initially only tall enough for the visible action-control
-stack, so its list scrolls instead of creating empty height. Input / Output
-receives the remaining space. Drag the horizontal divider to adjust that
-balance; the chosen ratio follows later resizing for the current session. On
-smaller screens the same areas shrink and retain their scrolling. Divider
-movement is bounded so neither side can be accidentally collapsed. A fresh
+The main window opens at a compact screen-aware size. Input / Output receives
+the full right side and nearly all of its usable height. Drag the vertical
+divider to adjust the command-console/workspace balance; the chosen ratio
+follows later resizing for the current session. On smaller screens the same
+areas shrink and retain their scrolling. Divider movement is bounded so
+neither side can be accidentally collapsed. A fresh
 application start leaves the workspace empty. Reopening the resident palette
 can show the current clipboard or captured selection. Actions can read or
-replace it. Its compact heading explains the field without adding a separate
-toolbar.
+replace it. Its compact heading includes the visible **Text tools** menu
+without adding a separate toolbar.
 
 Numbered action triggering is deliberately active only while Find has focus. In every other control—including Clipboard / Input / Output, the result list, context selector, and buttons—`1` through `9` do not execute actions. This makes Find the explicit keyboard command mode. Standard text editing remains available in the workspace.
 
@@ -587,7 +622,7 @@ The bottom communication line always stays one row high. Hover over it for the c
 - Type or edit text directly.
 - The right-click command `Clear` empties it.
 - The right-click menu also provides Undo, Redo, Cut, Copy, Paste, Select all, and Copy all.
-- Open `Transform` through the right-click menu or the compact `⋮` button.
+- Open `Transform` through the right-click menu or choose **Text tools**.
 - A transform changes the selection, or the complete field when nothing is selected.
 - Every transform result is copied to the clipboard automatically and can be reverted with one Undo.
 - Transform groups provide case and naming styles, whitespace cleanup, literal
@@ -601,22 +636,26 @@ The bottom communication line always stays one row high. Hover over it for the c
 
 Example: in the Database context, `Convert lines to SQL string list` turns separate lines into quoted, comma-separated SQL values and copies the result.
 
-## Main buttons
+## Command rail
 
-The bottom row uses compact symbols so the workspace can be larger without
-increasing the screen size. Hover over or keyboard-focus a button to see its
-name first, followed by the complete existing explanation.
+The rail beside the results keeps frequent commands visible without a separate
+top toolbar or bottom command bar. It is optimized for one expert user: Focus,
+Focus items, All/Actions, Work Items, and Run/Open retain text because they
+communicate current state; learned commands use stable compact symbols so the
+result list remains wide. Hover over or keyboard-focus a control to see its
+complete explanation.
 
-| Symbol | Action |
+| Symbol | Command |
 | --- | --- |
-| `+` | Capture |
-| `▣` | Inbox |
-| `✎` | Edit |
-| `⌖` | Pin |
-| `✓` | Trust |
-| `?` | Help |
-| `−` | Hide |
-| `×` | Quit |
+| `C` / `#` | Context and tag filters; a check mark means the filter is active |
+| `+A` / `⌖` | Create an Action / pin the selected Action |
+| `⇩` / `▣` | Capture clipboard text / open Inbox |
+| `✎` / `⚙` | Edit the selected item / open Configure |
+| `?` / `⋯` | Help / keyboard shortcuts, Hide, and Quit |
+
+The Actions scope adds the credential key and Types controls. Work Items adds
+`+W`, `→▣`, `⧉`, and Proj for New item, To inbox, Copy file, and Projects.
+Their positions do not change within a scope.
 
 ### Run
 
@@ -783,8 +822,8 @@ replace accessible explanations.
 
 ### Transform Input / Output
 
-Choose the compact **⋮** button beside Input / Output, or right-click the field
-and choose **Transform**. An operation changes the selected text, or the
+Choose **Text tools** in the Input / Output header, or right-click the field and
+choose **Transform**. An operation changes the selected text, or the
 complete field when nothing is selected. The result remains editable, forms
 one Undo step, and is copied automatically.
 

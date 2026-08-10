@@ -76,6 +76,7 @@ class ValidationIssueCode(str, Enum):
     BUILT_IN_CONTEXT_PERSONAL_ACTION = "built_in_context_personal_action"
     BUILT_IN_COMMAND_PERSONAL_ACTION = "built_in_command_personal_action"
     BUILT_IN_COMMAND_WORK_ITEM = "built_in_command_work_item"
+    BUILT_IN_CONTEXT_WORK_ITEM = "built_in_context_work_item"
     WORK_ITEM_SOURCE_UNAVAILABLE = "work_item_source_unavailable"
     WORK_ITEM_METADATA_SOURCE_UNAVAILABLE = (
         "work_item_metadata_source_unavailable"
@@ -174,6 +175,12 @@ class ConfigurationSnapshot:
                     }
                 ),
                 palette.context_membership_version,
+                MappingProxyType(
+                    {
+                        context: tuple(references)
+                        for context, references in palette.context_item_slots.items()
+                    }
+                ),
             ),
         )
         object.__setattr__(self, "loaded_asset_ids", frozenset(self.loaded_asset_ids))
@@ -695,6 +702,20 @@ def _validate_action_references(
                     (group.id, item.id),
                 )
 
+    for context in snapshot.built_in_contexts:
+        if context.work_item_refs or any(
+            reference.work_item_ref is not None
+            for reference in context.preferred_items
+        ):
+            builder.issue(
+                ValidationSeverity.ERROR,
+                ValidationIssueCode.BUILT_IN_CONTEXT_WORK_ITEM,
+                "built-in-contexts",
+                "Built-in contexts cannot reference personal Work Items.",
+                ValidationCategory.OWNERSHIP,
+                (context.name,),
+            )
+
     action_assets = {"built-in-actions", "personal-actions"}
     if (
         not action_assets.issubset(snapshot.loaded_asset_ids)
@@ -726,7 +747,14 @@ def _validate_action_references(
             continue
         for context in contexts:
             for action_id in dict.fromkeys(
-                (*(context.action_ids or ()), *context.preferred_action_ids)
+                (
+                    *(context.action_ids or ()),
+                    *(
+                        reference.action_id
+                        for reference in context.preferred_items
+                        if reference.action_id
+                    ),
+                )
             ):
                 _report_action_reference(
                     builder,
@@ -767,6 +795,17 @@ def _validate_action_references(
                     stored_ids,
                     f"Palette context '{context_name}'",
                 )
+        for context_name, references in snapshot.palette_state.context_item_slots.items():
+            for reference in references:
+                if reference.action_id:
+                    _report_action_reference(
+                        builder,
+                        "palette-state",
+                        reference.action_id,
+                        active_ids,
+                        stored_ids,
+                        f"Palette context '{context_name}'",
+                    )
 
     for asset_id, groups, built_in in (
         (
@@ -844,9 +883,25 @@ def _validate_work_item_references(
     snapshot: ConfigurationSnapshot,
 ) -> None:
     references_by_asset: dict[str, list[WorkItemReference]] = {
+        "built-in-contexts": [],
+        "personal-contexts": [],
         "built-in-command-surface": [],
         "personal-command-surface": [],
+        "palette-state": [],
     }
+    for asset_id, contexts in (
+        ("built-in-contexts", snapshot.built_in_contexts),
+        ("personal-contexts", snapshot.personal_contexts),
+    ):
+        if asset_id not in snapshot.loaded_asset_ids:
+            continue
+        for context in contexts:
+            references_by_asset[asset_id].extend(context.work_item_refs)
+            references_by_asset[asset_id].extend(
+                reference.work_item_ref
+                for reference in context.preferred_items
+                if reference.work_item_ref is not None
+            )
     for asset_id, groups in (
         ("built-in-command-surface", snapshot.built_in_command_groups),
         ("personal-command-surface", snapshot.personal_command_groups),
@@ -858,6 +913,13 @@ def _validate_work_item_references(
                 references_by_asset[asset_id].extend(
                     command_item_work_item_references(item)
                 )
+    if "palette-state" in snapshot.loaded_asset_ids:
+        for references in snapshot.palette_state.context_item_slots.values():
+            references_by_asset["palette-state"].extend(
+                reference.work_item_ref
+                for reference in references
+                if reference.work_item_ref is not None
+            )
 
     if "work-item-sources" not in snapshot.loaded_asset_ids:
         if any(references_by_asset.values()) or snapshot.work_item_metadata:
@@ -873,7 +935,7 @@ def _validate_work_item_references(
 
     source_ids = {source.id.casefold() for source in snapshot.work_item_sources}
     for asset_id, references in references_by_asset.items():
-        if asset_id == "built-in-command-surface":
+        if asset_id in {"built-in-contexts", "built-in-command-surface"}:
             continue
         for source_id in sorted(
             {
@@ -887,7 +949,7 @@ def _validate_work_item_references(
                 ValidationSeverity.WARNING,
                 ValidationIssueCode.WORK_ITEM_SOURCE_UNAVAILABLE,
                 asset_id,
-                "Quick action references unavailable Work Item source: "
+                "Configuration references unavailable Work Item source: "
                 f"{source_id}",
                 ValidationCategory.REFERENCE,
                 (source_id,),
@@ -965,7 +1027,12 @@ def _classify_palette_contexts(
         )
 
     keys_by_casefold: dict[str, list[str]] = {}
-    for raw_key in snapshot.palette_state.context_slots:
+    for raw_key in dict.fromkeys(
+        (
+            *snapshot.palette_state.context_slots,
+            *snapshot.palette_state.context_item_slots,
+        )
+    ):
         keys_by_casefold.setdefault(raw_key.casefold(), []).append(raw_key)
         canonical = names_by_key.get(raw_key.casefold())
         if canonical is None:

@@ -4,6 +4,40 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Unified normal discovery around **All items**, **Actions**, and **Work Items**.
+  All items shows both kinds in one searchable list; Context and tag filters
+  apply to both, while type and project filters stay kind-specific. Run/Open,
+  preview, editing, and folder commands follow the selected item. Quick-action
+  Context grouping and typed global pins remain out of scope.
+- Replaced the stacked launcher with the approved input-first layout. A compact
+  command console occupies about 40% of the default width, with Find/results
+  beside an ordered two-column command rail and Quick actions underneath. Input
+  / Output occupies the full-height right side, exposes the catalogue-backed
+  **Text tools** menu, and keeps status at its bottom. The vertical divider is
+  bounded and user-adjustable; the redundant top toolbar and bottom command bar
+  are gone. Quick actions use two columns at the standard and supported minimum
+  widths, falling back to one only when genuinely narrower.
+- Widened the expert user's result list by reducing the learned-command rail to
+  a scaling-aware 114–148 pixels. Focus, scopes, Work Items, and Run/Open retain
+  readable state labels; filters and routine commands use fixed mnemonic
+  symbols with complete semantic tooltips. Scope-specific commands keep stable
+  positions, icon buttons use tighter padding, and higher text scaling can
+  widen the rail only within its bound.
+- Removed numeric prefixes from result rows while preserving Shift+number
+  execution. Blue identifies pinned shortcuts 1–5, green identifies Focus
+  shortcuts 6–0, neutral identifies ordinary results, and tooltips expose the
+  exact hidden binding. The flat mixed list no longer reserves a tree-expansion
+  gutter, and font-measured Action/Work Item icon columns align names directly
+  without a dash.
+- Added a keyboard-first **+ Action** route in the launcher and Configure
+  Actions tab. `Ctrl+N` opens a searchable type chooser, then the existing
+  validated Action form and atomic save path; the full **Create action**
+  catalogue remains available for learning.
+- Personal Contexts can now group both Actions and Work Items. The **Focus
+  items** view shows the mixed membership, and preferred slots 6–0 accept and
+  execute either kind through one typed Palette-item reference. Work Item
+  references remain configured while their source is unavailable. Built-in
+  Contexts and global pins 1–5 remain Action-only.
 - Added **Backup and restore** to Configure. Backup uses an explicit ZIP
   destination, includes Inbox by default, keeps optional managed text opt-in,
   and reports catalog exclusions. Restore validates and previews an archive
@@ -66,8 +100,8 @@ This project has not published a versioned release. Changes are recorded under *
   Tkinter. Windows setup tests now distinguish an installed but incompatible
   Python from a usable candidate and ignore inherited machine-local overrides
   when testing the no-Python failure path.
-- Made **Focus actions** a highlighted toggle: the first click opens the active
-  Focus list and the second restores the normal action list. Compact
+- Made the Focus-list control a highlighted toggle: the first click opens the
+  active Focus list and the second restores the normal action list. Compact
   single-launcher Quick-action groups no longer repeat their name in a separate
   heading; configured nested groups use the group name on the launcher,
   one-row groups use that row directly, and **Sheets** and **Prompts**

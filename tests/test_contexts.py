@@ -9,6 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.contexts import ContextError, load_combined_contexts, load_contexts
+from context_palette.palette_items import PaletteItemReference
+from context_palette.work_items import WorkItemReference
 
 
 class ContextTests(unittest.TestCase):
@@ -103,6 +105,81 @@ class ContextTests(unittest.TestCase):
             local.write_text(json.dumps({"contexts": [{"name": "archives"}]}), encoding="utf-8")
             with self.assertRaises(ContextError):
                 load_combined_contexts(shared, local)
+
+    def test_personal_context_loads_work_items_and_mixed_preferred_slots(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "contexts.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "contexts": [
+                            {
+                                "name": "Customer",
+                                "action_ids": ["open-crm"],
+                                "work_item_refs": [
+                                    {
+                                        "source_id": "customer-work",
+                                        "relative_folder": "CAS-ACME-Review",
+                                    }
+                                ],
+                                "preferred_items": [
+                                    {
+                                        "type": "work_item",
+                                        "source_id": "customer-work",
+                                        "relative_folder": "CAS-ACME-Review",
+                                    },
+                                    {"type": "action", "action_id": "open-crm"},
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            context = load_contexts(path)[0]
+
+        reference = WorkItemReference("customer-work", "CAS-ACME-Review")
+        self.assertEqual(context.work_item_refs, (reference,))
+        self.assertEqual(
+            context.preferred_items,
+            (
+                PaletteItemReference(work_item_ref=reference),
+                PaletteItemReference(action_id="open-crm"),
+            ),
+        )
+        self.assertEqual(context.preferred_action_ids, ("open-crm",))
+
+    def test_built_in_context_rejects_work_item_reference(self):
+        with tempfile.TemporaryDirectory() as directory:
+            shared = Path(directory) / "contexts.json"
+            shared.write_text(
+                json.dumps(
+                    {
+                        "contexts": [
+                            {
+                                "name": "Invalid",
+                                "work_item_refs": [
+                                    {
+                                        "source_id": "personal",
+                                        "relative_folder": "PRJ-ACME-Test",
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ContextError,
+                "Built-in contexts cannot reference personal Work Items",
+            ):
+                load_combined_contexts(
+                    shared,
+                    Path(directory) / "local_contexts.json",
+                )
 
 
 if __name__ == "__main__":

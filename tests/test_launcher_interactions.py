@@ -13,20 +13,29 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.actions import Action, ActionError
 from context_palette.action_types import ACTION_TYPES
+from context_palette.action_discovery_panel import (
+    FOCUS_SLOT_ROW_TAG,
+    PINNED_SLOT_ROW_TAG,
+    compact_rail_width,
+    slot_row_tag,
+    visible_result_row_count,
+)
 from context_palette.command_surface import CommandItem
 from context_palette.contexts import ContextDefinition, ContextError
 from context_palette.launcher import (
     LauncherApp,
     bounded_sash_position,
+    quick_action_column_count,
 )
 from context_palette.palette_state import PaletteState
+from context_palette.palette_items import PaletteItemReference
 from context_palette.windows_credentials import CredentialSecret
 from context_palette.work_item_file_copy import (
     WorkItemFileCopyError,
     WorkItemFileCopyResult,
 )
 from context_palette.work_item_inbox import WorkItemInboxError, WorkItemInboxResult
-from context_palette.work_items import DiscoveredWorkItem
+from context_palette.work_items import DiscoveredWorkItem, WorkItemReference
 
 
 class FakeVariable:
@@ -433,6 +442,17 @@ class LauncherInteractionTests(unittest.TestCase):
             start_work_item_creation=True,
         )
 
+    def test_new_action_route_opens_quick_creation_in_configure(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app._show_configuration = Mock()
+
+        self.assertEqual(app._show_action_creation(), "break")
+
+        app._show_configuration.assert_called_once_with(
+            initial_tab="actions",
+            start_action_creation=True,
+        )
+
     def test_markdown_file_action_opens_in_document_viewer(self):
         app = LauncherApp.__new__(LauncherApp)
         app.root = Mock()
@@ -491,6 +511,23 @@ class LauncherInteractionTests(unittest.TestCase):
 
         self.assertEqual(app._handle_keypress(event), "break")
         app._execute_slot.assert_called_once_with(2, event)
+
+    def test_focus_slot_dispatches_work_item_reference(self):
+        app = LauncherApp.__new__(LauncherApp)
+        reference = PaletteItemReference(
+            work_item_ref=WorkItemReference(
+                "product-work",
+                "ISS-ABC-example",
+            )
+        )
+        app.slot_items = {6: reference}
+        app.status_var = FakeVariable()
+        app._execute_palette_item = Mock(return_value=True)
+
+        result = app._execute_slot(6, FakeKeyEvent())
+
+        self.assertEqual(result, "break")
+        app._execute_palette_item.assert_called_once_with(reference)
 
     def test_shift_azerty_key_names_execute_slots_without_assumed_keycodes(self):
         app = LauncherApp.__new__(LauncherApp)
@@ -606,6 +643,41 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertEqual(bounded_sash_position(800, 1.0, 220, 320), 480)
         self.assertEqual(bounded_sash_position(800, 0.33, 220, 320), 264)
 
+    def test_quick_action_grid_uses_one_column_until_both_are_readable(self):
+        self.assertEqual(quick_action_column_count(200), 1)
+        self.assertEqual(quick_action_column_count(249), 1)
+        self.assertEqual(quick_action_column_count(250), 2)
+        self.assertEqual(quick_action_column_count(900), 2)
+
+    def test_visible_result_rows_adapt_to_text_scaling(self):
+        self.assertEqual(visible_result_row_count(1.333), 10)
+        self.assertEqual(visible_result_row_count(1.667), 8)
+        self.assertEqual(visible_result_row_count(2.0), 7)
+
+    def test_compact_expert_rail_expands_only_for_text_scaling(self):
+        self.assertEqual(compact_rail_width(1.333, 200), 114)
+        self.assertEqual(compact_rail_width(1.667, 200), 131)
+        self.assertEqual(compact_rail_width(2.0, 200), 148)
+        self.assertEqual(compact_rail_width(2.0, 130), 130)
+
+    def test_slot_row_tags_distinguish_shortcut_groups_without_number_labels(self):
+        for slot in range(1, 6):
+            self.assertEqual(slot_row_tag(slot), PINNED_SLOT_ROW_TAG)
+        for slot in range(6, 11):
+            self.assertEqual(slot_row_tag(slot), FOCUS_SLOT_ROW_TAG)
+        self.assertIsNone(slot_row_tag(None))
+
+    def test_result_label_uses_measured_icon_column_without_dash(self):
+        app = LauncherApp.__new__(LauncherApp)
+        icon = ACTION_TYPES["copy_text"].icon
+        app.item_icon_padding = {icon: "\u200a\u200a"}
+        action = Action("copy", "Copy title", "General", "copy_text", "value")
+
+        label = app._aligned_action_display_text(action)
+
+        self.assertEqual(label, f"{icon}\u200a\u200a {action.compact_title}")
+        self.assertNotIn(" - ", label)
+
     def test_sash_position_scales_minimums_when_window_is_too_small(self):
         self.assertEqual(bounded_sash_position(200, 0.9, 140, 140), 100)
 
@@ -625,13 +697,13 @@ class LauncherInteractionTests(unittest.TestCase):
             app.action_type_filter_var.value,
             ACTION_TYPES["paste_credential"].display_label,
         )
-        self.assertEqual(app.passwords_button.options["style"], "Accent.TButton")
+        self.assertEqual(app.passwords_button.options["style"], "RailIconAccent.TButton")
 
         app._toggle_password_actions()
 
         self.assertIsNone(app.action_type_filter)
         self.assertEqual(app.action_type_filter_var.value, "All types")
-        self.assertEqual(app.passwords_button.options["style"], "Compact.TButton")
+        self.assertEqual(app.passwords_button.options["style"], "RailIcon.TButton")
         self.assertEqual(refreshes, [True, True])
 
     def test_focus_actions_button_toggles_focus_mode_and_visual_state(self):
@@ -639,21 +711,21 @@ class LauncherInteractionTests(unittest.TestCase):
         app.focus_actions_mode = False
         app.focus_actions_button = FakeButton()
         app.root = Mock()
-        work_item_changes: list[bool] = []
+        scope_changes: list[str] = []
         refreshes: list[bool] = []
-        app._set_work_items_mode = work_item_changes.append
+        app._select_discovery_scope = scope_changes.append
         app._refresh_results = lambda: refreshes.append(True)
 
         app._activate_focus_actions()
 
         self.assertTrue(app.focus_actions_mode)
-        self.assertEqual(app.focus_actions_button.options["style"], "Accent.TButton")
+        self.assertEqual(app.focus_actions_button.options["style"], "RailAccent.TButton")
 
         app._activate_focus_actions()
 
         self.assertFalse(app.focus_actions_mode)
         self.assertEqual(app.focus_actions_button.options["style"], "Compact.TButton")
-        self.assertEqual(work_item_changes, [False, False])
+        self.assertEqual(scope_changes, ["all", "all"])
         self.assertEqual(refreshes, [True, True])
         self.assertEqual(app.root.after_idle.call_count, 2)
 
@@ -672,7 +744,7 @@ class LauncherInteractionTests(unittest.TestCase):
             app.action_type_filter_var.value,
             ACTION_TYPES["open_url"].display_label,
         )
-        self.assertEqual(app.passwords_button.options["style"], "Compact.TButton")
+        self.assertEqual(app.passwords_button.options["style"], "RailIcon.TButton")
         self.assertEqual(refreshes, [True])
 
     def test_f5_reset_clears_transient_state_but_preserves_palette_state(self):
@@ -682,8 +754,12 @@ class LauncherInteractionTests(unittest.TestCase):
         app.action_tag_filter = "database"
         app.work_project_filter = "AB9C"
         app.work_tag_filter = "urgent"
+        app.item_tag_filter = "urgent"
+        app.item_context_filter = "Database"
         app.action_type_filter_var = FakeVariable()
         app.action_tag_filter_var = FakeVariable()
+        app.item_tag_filter_var = FakeVariable()
+        app.item_context_filter_var = FakeVariable()
         app.passwords_button = FakeButton()
         app.captured_selection = "captured"
         app.source_foreground_handle = 123
@@ -708,9 +784,13 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertIsNone(app.action_tag_filter)
         self.assertIsNone(app.work_project_filter)
         self.assertIsNone(app.work_tag_filter)
+        self.assertIsNone(app.item_tag_filter)
+        self.assertIsNone(app.item_context_filter)
         self.assertEqual(app.action_type_filter_var.value, "All types")
         self.assertEqual(app.action_tag_filter_var.value, "All tags")
-        self.assertEqual(app.passwords_button.options["style"], "Compact.TButton")
+        self.assertEqual(app.item_tag_filter_var.value, "All tags")
+        self.assertEqual(app.item_context_filter_var.value, "All contexts")
+        self.assertEqual(app.passwords_button.options["style"], "RailIcon.TButton")
         self.assertIsNone(app.captured_selection)
         self.assertIsNone(app.source_foreground_handle)
         self.assertEqual(app.search_var.value, "")

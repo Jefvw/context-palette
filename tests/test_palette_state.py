@@ -14,9 +14,12 @@ from context_palette.palette_state import (
     PaletteState,
     action_slots,
     load_palette_state,
+    palette_item_slots,
     save_palette_state,
     toggle_pin,
 )
+from context_palette.palette_items import PaletteItemReference
+from context_palette.work_items import WorkItemReference
 from context_palette.focus_model import resolve_focus_state
 from context_palette.contexts import ContextDefinition
 
@@ -65,6 +68,27 @@ class PaletteStateTests(unittest.TestCase):
             save_palette_state(path, state)
             loaded = load_palette_state(path)
         self.assertEqual(loaded, state)
+
+    def test_mixed_context_slots_round_trip_and_resolve_work_item(self):
+        work_item = WorkItemReference("customer-work", "CAS-ACME-Review")
+        state = PaletteState(
+            focus_context="Mail",
+            context_item_slots={
+                "Mail": (
+                    PaletteItemReference(work_item_ref=work_item),
+                    PaletteItemReference(action_id="a"),
+                )
+            },
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "palette.json"
+            save_palette_state(path, state)
+            loaded = load_palette_state(path)
+
+        self.assertEqual(loaded, state)
+        slots = palette_item_slots(self.actions, loaded)
+        self.assertEqual(slots[6], PaletteItemReference(work_item_ref=work_item))
+        self.assertEqual(slots[7], PaletteItemReference(action_id="a"))
 
     def test_read_failure_is_reported_as_an_action_error(self):
         path = Path("palette.json")

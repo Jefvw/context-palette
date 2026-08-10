@@ -15,6 +15,7 @@ from .actions import (
 from .configuration_data import save_contexts
 from .configuration_mutation import gated_configuration_mutation
 from .contexts import ContextDefinition, ContextError, load_contexts
+from .palette_items import PaletteItemReference
 from .palette_state import PaletteState, load_palette_state, save_palette_state
 
 
@@ -71,9 +72,12 @@ def actions_with_canonical_contexts(
                 if action.belongs_to_context(definition.name)
             )
         )
-        for action_id in dict.fromkeys(
-            (*member_ids, *definition.preferred_action_ids)
-        ):
+        preferred_action_ids = tuple(
+            reference.action_id
+            for reference in definition.preferred_items
+            if reference.action_id
+        )
+        for action_id in dict.fromkeys((*member_ids, *preferred_action_ids)):
             if action_id not in action_ids:
                 continue
             contexts_by_action[action_id].append(definition.name)
@@ -167,13 +171,23 @@ def prepare_context_membership_update(
                     or action_id in selected_for_definition
                 )
             ]
-            preferred = tuple(
-                action_id
-                for action_id in definition.preferred_action_ids
+            preferred_items = tuple(
+                reference
+                for reference in definition.preferred_items
                 if (
-                    action_id not in assigned_ids
-                    or action_id in selected_for_definition
+                    not reference.action_id
+                    or reference.action_id not in assigned_ids
+                    or reference.action_id in selected_for_definition
                 )
+            )
+            preferred = tuple(
+                reference.action_id
+                for reference in preferred_items
+                if reference.action_id
+            )
+            store_typed_preferred = bool(
+                definition.preferred_item_refs
+                or any(reference.work_item_ref is not None for reference in preferred_items)
             )
             for action_id in canonical_assignments:
                 if action_id in selected_for_definition:
@@ -182,6 +196,9 @@ def prepare_context_membership_update(
                 definition,
                 preferred_action_ids=preferred,
                 action_ids=tuple(dict.fromkeys(members)),
+                preferred_item_refs=(
+                    preferred_items if store_typed_preferred else ()
+                ),
             )
 
     return ContextMembershipUpdate(

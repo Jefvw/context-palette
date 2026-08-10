@@ -88,6 +88,38 @@ class ConfigurationDataTests(unittest.TestCase):
             self.assertEqual(raw["contexts"][0]["action_ids"], [])
             self.assertEqual(load_contexts(path)[0].action_ids, ())
 
+    def test_personal_context_round_trips_work_item_membership_and_slot_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "contexts.json"
+            reference = WorkItemReference("product-work", "ISS-ABC-example")
+            context = ContextDefinition(
+                "Product",
+                preferred_action_ids=("open-docs",),
+                action_ids=("open-docs",),
+                work_item_refs=(reference,),
+                preferred_item_refs=(
+                    CommandTarget(work_item_ref=reference),
+                    CommandTarget(action_id="open-docs"),
+                ),
+            )
+
+            save_context(path, context)
+            loaded = load_contexts(path)[0]
+            raw = json.loads(path.read_text(encoding="utf-8"))
+
+        self.assertEqual(loaded, context)
+        self.assertEqual(
+            raw["contexts"][0]["preferred_items"],
+            [
+                {
+                    "type": "work_item",
+                    "source_id": "product-work",
+                    "relative_folder": "ISS-ABC-example",
+                },
+                {"type": "action", "action_id": "open-docs"},
+            ],
+        )
+
     def test_every_built_in_action_type_has_an_example(self):
         self.assertEqual(set(ACTION_TYPE_EXAMPLES), set(ACTION_TYPES))
         self.assertTrue(all(value.startswith("Example:") for value in ACTION_TYPE_EXAMPLES.values()))

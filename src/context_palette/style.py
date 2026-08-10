@@ -12,6 +12,8 @@ COLORS = {
     "accent_hover": "#066a65",
     "row_aqua": "#d8eeeb",
     "row_light": "#e8f3f2",
+    "slot_pinned": "#dbeafe",
+    "slot_focus": "#dcfce7",
     "text": "#1f2933",
     "muted_text": "#52616b",
     "white": "#ffffff",
@@ -138,6 +140,46 @@ def configure_theme(root: tk.Misc, style: ttk.Style | None = None) -> ttk.Style:
         bordercolor=[("focus", COLORS["focus"])],
     )
     style.configure(
+        "RailAccent.TButton",
+        background=COLORS["accent"],
+        foreground=COLORS["white"],
+        font=CAPTION_FONT,
+        padding=(6, 3),
+    )
+    style.map(
+        "RailAccent.TButton",
+        background=[("active", COLORS["accent_hover"]), ("pressed", COLORS["focus"])],
+        foreground=[("disabled", COLORS["muted_text"]), ("!disabled", COLORS["white"])],
+        bordercolor=[("focus", COLORS["focus"])],
+    )
+    style.configure(
+        "RailIcon.TButton",
+        background=COLORS["topic_header"],
+        foreground=COLORS["text"],
+        bordercolor=COLORS["border"],
+        font=("Segoe UI Symbol", 11),
+        padding=(2, 1),
+    )
+    style.map(
+        "RailIcon.TButton",
+        background=[("active", COLORS["row_aqua"]), ("pressed", COLORS["accent"])],
+        foreground=[("pressed", COLORS["white"])],
+        bordercolor=[("focus", COLORS["focus"])],
+    )
+    style.configure(
+        "RailIconAccent.TButton",
+        background=COLORS["accent"],
+        foreground=COLORS["white"],
+        font=("Segoe UI Symbol", 11),
+        padding=(2, 1),
+    )
+    style.map(
+        "RailIconAccent.TButton",
+        background=[("active", COLORS["accent_hover"]), ("pressed", COLORS["focus"])],
+        foreground=[("disabled", COLORS["muted_text"]), ("!disabled", COLORS["white"])],
+        bordercolor=[("focus", COLORS["focus"])],
+    )
+    style.configure(
         "TEntry",
         fieldbackground=COLORS["surface"],
         foreground=COLORS["text"],
@@ -242,6 +284,21 @@ def configure_theme(root: tk.Misc, style: ttk.Style | None = None) -> ttk.Style:
         foreground=COLORS["text"],
         rowheight=25,
         bordercolor=COLORS["border"],
+    )
+    style.layout(
+        "Flat.Treeview.Item",
+        [
+            (
+                "Treeitem.padding",
+                {
+                    "sticky": tk.NSEW,
+                    "children": [
+                        ("Treeitem.image", {"side": tk.LEFT, "sticky": ""}),
+                        ("Treeitem.text", {"sticky": tk.NSEW}),
+                    ],
+                },
+            )
+        ],
     )
     style.map(
         "Treeview",

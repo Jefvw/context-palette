@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, replace
+from dataclasses import replace
 import json
 from pathlib import Path
 
@@ -18,21 +18,17 @@ from .command_surface import (
     iter_command_items,
     load_command_groups,
 )
-from .contexts import ContextDefinition, ContextError, load_contexts
+from .contexts import (
+    ContextDefinition,
+    ContextError,
+    context_definition_data,
+    load_contexts,
+)
 from .persistence import atomic_write_json
 
 
 def _context_to_data(context: ContextDefinition) -> dict[str, object]:
-    data = {
-        key: value
-        for key, value in asdict(context).items()
-        if value not in ("", (), None)
-    }
-    if context.preferred_action_ids:
-        data["preferred_action_ids"] = list(context.preferred_action_ids)
-    if context.action_ids is not None:
-        data["action_ids"] = list(context.action_ids)
-    return data
+    return context_definition_data(context)
 
 
 def save_context(

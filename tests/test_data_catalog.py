@@ -37,7 +37,7 @@ EXPECTED_ASSETS = {
         AssetRequirement.REQUIRED,
         AssetSensitivity.CONFIGURATION,
         BackupPolicy.COMPLETE_CONFIGURATION_ADDITION,
-        1,
+        2,
     ),
     "built-in-command-surface": (
         "data/command_surface.json",
@@ -69,7 +69,7 @@ EXPECTED_ASSETS = {
         AssetRequirement.OPTIONAL,
         AssetSensitivity.CONFIGURATION,
         BackupPolicy.CORE_CONFIGURATION,
-        1,
+        2,
     ),
     "personal-command-surface": (
         "data/local_command_surface.json",
@@ -85,7 +85,7 @@ EXPECTED_ASSETS = {
         AssetRequirement.OPTIONAL,
         AssetSensitivity.CONFIGURATION,
         BackupPolicy.CORE_CONFIGURATION,
-        1,
+        2,
     ),
     "work-item-sources": (
         "data/local_work_item_sources.json",

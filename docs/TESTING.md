@@ -125,11 +125,12 @@ path is missing or has incorrect filename casing. It intentionally ignores web
 links, email links, heading-only anchors, inline-code examples, and fenced code
 blocks.
 
-`tests.test_launcher_smoke` exercises the real Tk view transition between
-explicit Focus Actions and flat global search results. Its temporary fixture
-proves that only explicit context members enter the Focus list, search remains
+`tests.test_launcher_smoke` exercises the real Tk view transitions among All
+items, Actions, Work Items, and explicit Focus items. Its temporary fixture
+proves that one Context or tag can return both an Action and a Work Item, that
+only explicit Context members enter a specific Focus list, search remains
 global, a Focus change does not silently filter visible global results, and
-clearing Find restores the list when Focus Actions mode remains active.
+clearing Find restores the list when Focus items remains active.
 The same module also constructs a clean-PC data directory containing only the
 tracked Built-in actions, context, and Quick-action files. It verifies that the
 launcher and Configure window load entirely from those files without creating
@@ -189,13 +190,27 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
 
 1. Start with `run-context-palette.bat`; verify only one resident instance is created.
 2. Press `F9`, then `Ctrl+Alt+P`; verify the palette appears and selected text is captured where the source application permits simulated copy.
-3. Verify `Esc` hides, `Ctrl+L` focuses Find, `Ctrl+,` opens Configure, and `F1` opens Help.
-   On initial display, verify the action list ends level with the bottom of the
-   adjacent action-button stack and longer results scroll. Switch to Work and
-   back, resize the window taller, and verify the compact alignment follows the
-   visible buttons while Input / Output receives the extra height. Drag the
-   divider and verify the manual balance remains adjustable for the session.
-4. Enter Find text, activate type/tag filters and Focus Actions, and put text in
+3. Verify `Esc` hides, `Ctrl+L` focuses Find, `Ctrl+N` opens the Action-type
+   chooser, `Ctrl+,` opens Configure, and `F1` opens Help. In the chooser,
+   verify typing filters types, arrows and Enter choose one, and Escape or
+   Cancel changes nothing. Repeat with **+ Action** and `Ctrl+N` on Configure
+   → Actions; confirm a non-General Focus is offered as the initial Context,
+   an existing Configure workspace is reused, and backup/restore busy state
+   refuses the request.
+   On initial display, verify the command console occupies about 40% of the
+   width, Input / Output occupies about 60% and nearly the full height, Find is
+   no wider than its result list, and about ten result rows are visible. Verify
+   there is no separate top toolbar or bottom command bar. Confirm **All items**
+   contains both Actions and Work Items. Select one of
+   each and verify the primary command changes between Run and Open. Choose one
+   Context and one tag that each belong to both kinds and verify both remain in
+   the mixed results. Switch to Actions, then Work Items, and back; verify
+   Passwords/Types and Projects/Work Item commands appear only in their
+   applicable scopes. Verify Configure remains visible in the rail. Resize to
+   the supported minimum and verify every rail control remains available. Drag
+   the vertical divider and verify both sides remain bounded and the manual
+   balance remains adjustable for the session.
+4. Enter Find text, activate Context/tag filters and Focus items, and put text in
    Input / Output. Press `F5`; verify those transient values clear, Find regains
    focus, and saved Focus, pins, and context slots remain unchanged.
 5. From a disposable text field, open the palette with the hotkey and run a
@@ -211,21 +226,32 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    Inspect the local log for success, no-destination, unavailable-destination,
    and dispatch-error outcomes. Verify sample saved text, credential targets,
    usernames, passwords, and window titles are absent from every event.
-6. Right-click a personal action in ordinary results and in Focus Actions.
+6. Right-click a personal action in ordinary results and in Focus items.
    Verify Configure opens on Actions with the clicked row highlighted and its
    name, contexts, and tags editable. Repeat with a disposable Built-in action,
    verify the Git/private-data warning appears, cancel once, then accept and
    verify the Built-in file receives the reviewed edit. Revert that disposable
    edit afterward.
-7. Activate Focus Actions and verify keyboard focus enters its list. Search for
+7. Activate Focus items and verify keyboard focus enters its list. Search for
    an action from another Focus, verify the flat results remain global, change
    Focus while Find is non-empty, then clear Find and verify the new Focus list
    returns. Confirm only slots 6–0 change and pins 1–5 remain stable.
-8. Tab to a Quick action and run its primary action with Enter or Space.
+8. At the standard `780x600` size and supported minimum, verify Quick actions
+   use two readable columns without clipping beneath discovery. Narrow the
+   command console until one column is genuinely necessary, then verify stable
+   row-major order returns. Tab through the visible rail order, Find/results,
+   Quick actions, **Text tools**, and Input / Output. Run a Quick action with
+   Enter or Space. Open every Text tools group and verify it matches the
+   right-click Transform catalogue. Exercise a text-file preview and verify its
+   provenance, Replace original, Save as, and Dismiss strip remains usable.
 9. Create disposable actions and contexts in both **My configuration** and
    **Built-in**; reload and confirm each uses the selected file. In a My
-   configuration context, assign both a Built-in action and a personal action,
-   then verify both appear in Focus Actions without editing either action. Create
+   configuration Context, assign a Built-in Action, a personal Action, and a
+   disposable Work Item, then verify all three appear in Focus items without
+   editing either Action or the Work Item folder. Put the Work Item in slot 6,
+   verify `Shift+6` opens its workbook/folder, disconnect its source, and verify
+   the unavailable reference remains visible and recoverable. Confirm pins 1–5
+   still offer Actions only. Create
    two Quick-action groups, add more than four ordered actions to one item,
    change its default, move the item and groups, and verify left-click and
    right-click match the preview. Rename and delete an item and group. Delete a
@@ -246,11 +272,22 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    focuses Tags. From each field, verify `Alt+Down` or `F4` opens **Choose…**,
    arrow keys move through the checklist, Space toggles an item, and `Esc`
    closes it without losing typed values.
-11. Open the **⌨** footer button and verify the searchable Keyboard Shortcuts
-    page appears. With Find focused on an AZERTY keyboard, press Shift plus
+11. Verify the compact expert-rail symbols remain fully visible and their
+    tooltips begin with the semantic command names: `C`, `#`, `+A`, `⌖`, `⇩`,
+    `▣`, `✎`, `⚙`, `?`, and `⋯`. Switch scopes and verify the credential key,
+    Types, `+W`, `→▣`, `⧉`, and Proj controls retain their fixed positions.
+    Open `⋯` and verify the searchable Keyboard Shortcuts page appears. With
+    Find focused on an AZERTY keyboard, press Shift plus
     each physical top-row number key and verify the corresponding populated
     slots execute. Verify plain number-row and numpad digits filter Find, and
     Ctrl+number does not execute a slot.
+    Confirm result labels have no numeric prefixes, pinned shortcut rows are
+    blue, Focus shortcut rows are green, ordinary results are neutral, and a
+    shortcut-row tooltip reports its exact Shift+number binding. Confirm the
+    tighter rail still shows every label and symbol without clipping.
+    Confirm row icons share one aligned column, names start at one aligned
+    position without a dash, and no blank tree-expansion gutter remains before
+    the icons in All items or Focus items.
 12. With at least one disposable local Work Item source configured, choose
     **Configure**, then **Work Items**. Add and edit a source using Browse,
     confirm its state and item summary, edit a discovered item's personal tags,

@@ -25,6 +25,10 @@ This file contains actionable future work. Completed user-visible work belongs i
 - Manually verify **Copy file** with a representative network source, a large
   file, a destination collision, and an unavailable Work Item source.
 - Perform and record the manual Windows UI/accessibility smoke test for the guided Configure workflow.
+- Complete the input-first launcher visual matrix on representative 100%, 125%,
+  and 150% display scaling, including the supported minimum size, divider
+  resizing, keyboard-only traversal, every discovery scope, Quick-action menus,
+  file-preview controls, and Action/Work Item execution routes.
 - Extract Configure dialog families from `configuration_window.py`
   mechanically when the next material Configure change needs them.
 - Refine action discovery and effect descriptions using real repeated-work feedback.
@@ -32,6 +36,16 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Next
 
+- If the compact expert rail still leaves insufficient result width in real
+  use, evaluate the preserved alternatives in order: a horizontal command strip
+  below discovery, a collapsible rail, a modest 44/56 outer split, then a single
+  Commands menu. Do not introduce one unless the fixed compact rail proves
+  inadequate.
+- Evaluate typed Work Item support for global pins 1–5 only after the normal
+  mixed-result projection can display those pins consistently.
+- Consider optional Context visibility/grouping for Quick-action groups. The
+  current schema deliberately leaves groups global, while their targets already
+  use the shared Palette-item reference needed by a later design.
 - Add line-ending normalization and CSV/TSV column operations after real-use
   feedback on the expanded reusable text-operation catalogue.
 - Design supporting-context composition and weighted ranking while preserving explicit Focus and global search.

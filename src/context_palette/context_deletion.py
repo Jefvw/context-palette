@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from dataclasses import dataclass
 import json
 from pathlib import Path
 
 from .configuration_mutation import configuration_mutation_gate
-from .contexts import ContextDefinition
+from .contexts import ContextDefinition, context_definition_data
 from .palette_state import MAX_CONTEXT_SLOT_ACTIONS
 from .persistence import atomic_write_json
 
@@ -94,17 +93,7 @@ def _rename_context_and_references(
             f"Another context already uses the name: {replacement.name}"
         )
 
-    replacement_data = {
-        key: value
-        for key, value in asdict(replacement).items()
-        if value not in ("", (), None)
-    }
-    if "preferred_action_ids" in replacement_data:
-        replacement_data["preferred_action_ids"] = list(
-            replacement.preferred_action_ids
-        )
-    if replacement.action_ids is not None:
-        replacement_data["action_ids"] = list(replacement.action_ids)
+    replacement_data = context_definition_data(replacement)
 
     pending_writes: list[tuple[Path, dict[str, object]]] = []
     action_updates = 0
@@ -218,16 +207,17 @@ def _delete_context_and_memberships(
         if isinstance(focus, str) and focus.strip().casefold() == key:
             palette_data["focus_context"] = "General"
             palette_removed += 1
-        slots = palette_data.get("context_slots")
-        if isinstance(slots, dict):
-            matching_names = [
-                name
-                for name in slots
-                if isinstance(name, str) and name.strip().casefold() == key
-            ]
-            for name in matching_names:
-                del slots[name]
-                palette_removed += 1
+        for field in ("context_slots", "context_item_slots"):
+            slots = palette_data.get(field)
+            if isinstance(slots, dict):
+                matching_names = [
+                    name
+                    for name in slots
+                    if isinstance(name, str) and name.strip().casefold() == key
+                ]
+                for name in matching_names:
+                    del slots[name]
+                    palette_removed += 1
         if palette_removed:
             pending_writes.append((palette_path, palette_data))
 
@@ -294,28 +284,30 @@ def _rename_palette_references(
     if isinstance(focus, str) and focus.strip().casefold() == original_key:
         data["focus_context"] = replacement_name
         updated += 1
-    slots = data.get("context_slots")
-    if not isinstance(slots, dict):
-        return updated
-
-    renamed_slots: dict[object, object] = {}
-    changed = False
-    for name, action_ids in slots.items():
-        output_name: object = name
-        if isinstance(name, str) and name.strip().casefold() == original_key:
-            output_name = replacement_name
-            updated += 1
-            changed = True
-        if output_name in renamed_slots:
-            existing_ids = renamed_slots[output_name]
-            if isinstance(existing_ids, list) and isinstance(action_ids, list):
-                renamed_slots[output_name] = list(
-                    dict.fromkeys((*existing_ids, *action_ids))
-                )[:MAX_CONTEXT_SLOT_ACTIONS]
+    for field in ("context_slots", "context_item_slots"):
+        slots = data.get(field)
+        if not isinstance(slots, dict):
             continue
-        renamed_slots[output_name] = action_ids
-    if changed:
-        data["context_slots"] = renamed_slots
+        renamed_slots: dict[object, object] = {}
+        changed = False
+        for name, item_refs in slots.items():
+            output_name: object = name
+            if isinstance(name, str) and name.strip().casefold() == original_key:
+                output_name = replacement_name
+                updated += 1
+                changed = True
+            if output_name in renamed_slots:
+                existing_refs = renamed_slots[output_name]
+                if isinstance(existing_refs, list) and isinstance(item_refs, list):
+                    merged = [*existing_refs]
+                    for reference in item_refs:
+                        if reference not in merged:
+                            merged.append(reference)
+                    renamed_slots[output_name] = merged[:MAX_CONTEXT_SLOT_ACTIONS]
+                continue
+            renamed_slots[output_name] = item_refs
+        if changed:
+            data[field] = renamed_slots
     return updated
 
 

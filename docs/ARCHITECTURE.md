@@ -76,28 +76,34 @@ Presentation and application orchestration.
   route to the Contexts tab. All Configure routes reuse one live editor and
   retarget its tab or selected record; a new editor is created only after the
   previous one closes.
-- Renders numbered slots, global flat search results, or an explicitly activated
-  flat list of actions belonging to the selected Focus.
-- Renders the global JSON-configured Quick-action surface beside search results
+- Renders color-coded shortcut rows, a normal mixed global projection of Actions and Work
+  Items, kind-specific projections, or an explicitly activated flat mixed list
+  belonging to the selected Focus.
+- Renders the global JSON-configured Quick-action surface below discovery
   and the fixed action-bound Passwords, Folders, and Prompts hierarchies.
-- Owns Input / Output, the communication line, systematic widget tooltips, Inbox, sheets, Help, and action editors.
+- Composes a bounded horizontal main split: the command console occupies about
+  40% initially and the full-height Input / Output workspace about 60%.
+- Owns the communication line, systematic widget tooltips, Inbox, sheets, Help,
+  and action editors; `WorkspacePanel` owns the Input / Output presentation.
 - Connects platform-independent action execution to Windows-specific callbacks.
 - Ensures Tk operations stay on the Tk main thread.
 - Resets transient presentation state through the main-window `F5` shortcut
   without changing persisted Focus, pins, slots, actions, or configuration.
-- Switches the existing discovery list into Work Items mode without changing
-  the main-window dimensions. Find, project-code/tag filters, selection,
+- Switches the existing discovery area among explicit **All items**,
+  **Actions**, and **Work Items** scopes without changing the main-window
+  dimensions. Find, shared Context/tag filters, project-code/type filters, selection,
   previews, and constrained open commands consume the immutable in-memory Work
-  Item index; action mode state remains intact. All keyboard, default, and
+  Item index; kind-specific filter state remains intact. All keyboard, default, and
   context-menu targets pass through one constrained Work Item opening boundary.
   The mode-specific **New item** control opens the existing Configure creation
   flow; the launcher does not duplicate template validation or filesystem
   creation. The primary action row becomes a two-part control in Work Items
-  mode: **↗** retains workbook-first Open behavior while its adjacent folder
+  mode: **Open** retains workbook-first behavior while its adjacent folder
   button requests the same constrained boundary with the folder target.
 
-The main-window construction is divided into focused header,
-results/command-surface, shortcut, workspace, and footer builders. Secondary
+The main window has no separate toolbar or footer command bar. Discovery and
+Quick actions form the left command console; Input / Output and the one-line
+status display form the right workspace. Secondary
 Inbox and Inbox-action-creation presentation lives in `inbox_window.py`;
 `launcher.py` retains only the capture command and window orchestration.
 
@@ -119,22 +125,25 @@ The launcher exposes the window from Inbox, while the Actions configuration tab
 is the primary route. No harvested candidate enters persistent data before the
 final confirmation.
 
-### Discovery modes
+### Discovery scopes and Focus view
 
-The shared discovery area has three explicit modes. Focus is never inferred or
-changed automatically, and action Find remains global regardless of Focus.
+The shared discovery area has three explicit scopes plus the reversible Focus
+presentation. Focus is never inferred or changed automatically, and Find
+remains global regardless of Focus.
 
 | State | Heading/results | Rail | Primary action |
 | --- | --- | --- | --- |
-| Actions, empty Find | Ordinary actions, including slots 1–0 | Passwords, Work, Types, Tags, Help | Run |
-| Focus Actions, empty Find | Flat actions explicitly belonging to the selected Focus | Same action rail | Run |
-| Action Find or filter active | Flat global action matches; changing Focus does not filter them | Same action rail | Run |
-| Find cleared after Focus Actions | Restores the selected Focus's flat membership list | Same action rail | Run |
-| Work Items | Indexed Work Item folders, never action records | Work, New item, Projects, Tags, Help; action-only Passwords is hidden | Open |
+| All items | Mixed Actions and discovered Work Items, with color-coded shortcut rows first | Contexts, Tags, Help | Run or Open, selected-kind specific |
+| Actions | Actions only, including Action slots | Passwords, Types, Contexts, Tags, Help | Run |
+| Work Items | Indexed Work Item folders, never Action records | New item, To inbox, Copy file, Projects, Contexts, Tags, Help | Open |
+| Focus items, empty Find | Flat mixed membership of the selected Focus, including soft unavailable Work Item references | All-items rail | Run or Open |
+| Find while Focus items is active | Normal mixed global matches; changing Focus does not filter them | All-items rail | Run or Open |
+| Find cleared after Focus items | Restores the selected Focus's flat mixed membership list | All-items rail | Run or Open |
 
 The heading, count, empty state, selection preview, rail labels, status, and
-primary verb must all describe the active mode. `ActionDiscoveryPanel` owns
-those widgets; `LauncherApp` owns mode policy and the constrained Run/Open
+primary verb must all describe the active scope and selected kind.
+`ActionDiscoveryPanel` owns those widgets; `LauncherApp` owns scope policy,
+typed selection resolution, and the constrained Run/Open
 callbacks. Both `?` controls continue to open the same general Help document.
 
 ### `actions.py`
@@ -176,6 +185,15 @@ selection records: generated action leaves delegate to the normal action
 editor, while generated groups and levels route to a filtered Actions list.
 The generated hierarchy is never written as a second assignment store.
 
+### `palette_items.py`
+
+Defines the immutable typed reference shared by Context membership, preferred
+Focus slots, and mixed Quick-action targets. A reference identifies exactly one
+Action ID or one stable Work Item source/folder identity; it contains no
+execution behavior. Owning services resolve and execute the referenced entity,
+so Work Items retain their discovery lifecycle and Actions retain their
+allow-listed executor.
+
 ### `action_types.py`
 
 Defines the machine-readable catalogue for every supported action type: icon,
@@ -200,8 +218,8 @@ Pure transformation algorithms and validation remain in `actions.py`.
 
 ### `workspace_panel.py`
 
-Owns the complete Input / Output UI component: text widget, edit and Transform
-menus, selection-first replacement, undo boundaries, prefix/suffix prompting,
+Owns the complete Input / Output UI component: text widget, edit menu, visible
+**Text tools** menu, selection-first replacement, undo boundaries, prompting,
 clipboard copy and replacement, transformation feedback, and file-transform
 preview provenance. A file preview exposes explicit replace, save-as, and
 dismiss commands; ordinary workspace replacement clears that provenance. It
@@ -212,8 +230,14 @@ execution and integration flows, but no longer owns workspace widget mechanics.
 ### `action_discovery_panel.py`
 
 Owns construction and event wiring for the left action-discovery presentation:
-heading and count, global Find entry, type and searchable single-tag controls, Run and Help
-controls, flat result list, Focus list, scrollbar, and row tooltips. Search
+heading and count, a Find entry bounded to the result-list width, the two-column
+command rail, scope-specific filters and Work Item commands, Run/Open, flat
+result list, Focus list, scrollbar, and row tooltips. The rail also presents
+the existing Focus selector and the launcher-owned management callbacks without
+duplicating their behavior. State-bearing scope and primary controls keep text;
+routine expert commands use stable compact symbols with semantic tooltips. The
+rail is scaling-aware within a 114–148 pixel width bound so the result list
+receives the recovered width. Search
 policy, action ranking, filtering, Focus membership, selection meaning, and execution remain in
 `launcher.py` and are supplied through narrow callbacks. Compatibility aliases
 allow existing launcher orchestration to migrate incrementally.
@@ -244,7 +268,8 @@ tag picker.
 Owns the single source of truth for action-to-context membership. Context
 definitions supply the canonical ordered `action_ids`; action objects used by
 the launcher and Configure are projected from those definitions so search,
-the Actions table, slots, and Focus Actions all see the same memberships.
+the Actions table, slots, Context filtering, and Focus items all see the same
+memberships.
 Action create/edit flows write the action record and context definitions as
 one recoverable operation, remove context metadata from newly persisted action
 records, and reject a My configuration action reference from a Built-in
@@ -451,8 +476,8 @@ Action creation starts from the executable built-in action catalogue, which
 includes a concrete example for every type. Every My configuration and Built-in
 action type is editable. Editing a Built-in action requires acknowledging that
 its file is tracked by Git and changes starter defaults; the warning also
-prohibits personal paths, secrets, and private work details. Contexts can assign
-an unlimited action membership plus slots 6–0, and personal Quick actions can
+prohibits personal paths, secrets, and private work details. Personal Contexts
+can assign unlimited Action and Work Item membership plus slots 6–0, and personal Quick actions can
 reference an ordered mix of existing actions and discovered Work Items without exposing
 technical IDs. Built-in contexts
 and Quick-action records are editable after the same developer-impact warning.
@@ -466,7 +491,18 @@ paths from the Built-in Actions location. Window close and Escape are refused
 while archive work is active. Restore success destroys the workspace before
 launcher reload so no editor keeps stale projections.
 
-Action creation and editing refresh every Configure view derived from actions,
+Personal Contexts assign an ordered mix of Actions and stable Work Item
+references. Their preferred slots 6–0 use the same typed Palette-item reference
+as mixed Quick-action targets. Built-in Contexts and pins 1–5 remain
+Action-only. Quick-action groups remain global and have no Context visibility
+field; the shared reference boundary permits, but does not imply, that future
+feature.
+
+Action creation starts either from the educational **Create action** catalogue
+or the launcher/Actions-tab **+ Action** searchable type chooser. Both routes
+open the same `ActionDialog` and use the same atomic Action/Context-membership
+persistence operation; the quick chooser is modal and never writes state on
+cancel. Action creation and editing refresh every Configure view derived from actions,
 including pins, context and Quick-action summaries, and diagnostics. Action
 creation routes owned by other launcher windows reload an already-open
 Configure workspace from storage without raising or replacing that window.
@@ -543,7 +579,7 @@ configured action.
 Stores and calculates launcher organization.
 
 - Slots 1–5: persistent global pins.
-- Slots 6–0: top five actions for the focus context; internal slot 10 is
+- Slots 6–0: top five Actions or Work Items for the Focus Context; internal slot 10 is
   displayed and invoked with the physical `0` key.
 - Duplicate actions across both groups are intentional.
 - Unfilled context slots prefer other actions belonging to the active Focus,
@@ -567,6 +603,8 @@ group IDs and duplicate item IDs anywhere within one group are rejected
 case-insensitively.
 
 The module also owns the canonical primary-first, duplicate-free action ordering used by execution, menus, Configure, and configuration validation.
+`CommandTarget` remains a compatibility export of `PaletteItemReference`.
+Command groups do not currently store Context visibility or membership.
 
 ### `tooltips.py`
 
@@ -623,19 +661,21 @@ Native Windows hotkey and selection-copy support using `ctypes`.
 
 ### `contexts.py`
 
-Loads and validates standalone Built-in and My configuration context
-definitions. A definition owns an unlimited ordered `action_ids` membership and
-up to five preferred action IDs. `focus_model.py` combines definition-owned
-membership with legacy action-side memberships for backward compatibility.
-Explicit per-machine choices in `palette.json` override configured defaults.
+Loads and validates standalone Built-in and My configuration Context
+definitions. A definition owns Action membership plus optional stable Work Item
+references and up to five typed preferred Palette items. Built-in definitions
+reject personal Work Items. `focus_model.py` combines definition-owned Action
+membership with legacy Action-side memberships for backward compatibility and
+resolves mixed preferred slots. Explicit per-machine choices in `palette.json`
+override configured defaults.
 
 ### `focus_model.py`
 
 Owns pure runtime Focus policy independently of Tk and persistence. It discovers
-available Focus names, resolves preferred slots and unavailable-Focus fallbacks,
-and selects the flat action membership list for a Focus while preserving
-canonical action order. This is the intended replacement boundary for future
-context-model changes.
+available Focus names, resolves Action-only legacy slots and typed mixed slots,
+handles unavailable-Focus fallbacks, and selects canonical Action membership.
+The launcher adds referenced Work Items to the same **Focus items** projection.
+This remains the replacement boundary for future Context-model changes.
 
 ### `work_items.py`
 
@@ -905,28 +945,30 @@ screen-aware `780x600` default and `700x480` minimum as other full screens.
 Hotkey placement still reduces an oversized user-resized window before
 clamping it into the cursor monitor's work area.
 
-The main content is a user-adjustable vertical split. By default, the action
-area derives its absolute height from the bottom of the visible action-control
-stack, so the scrolling result list ends alongside those buttons and Input /
-Output receives the remaining space. Work Items mode recomputes that compact
-height for its additional controls. After the user moves the divider, their
-chosen ratio is used for later resizing in that session. Sash positions remain
-bounded to keep both panes usable; when a display cannot fit both preferred
-minimums, the available space is divided proportionally. Inside the upper area,
-a responsive horizontal pane starts at approximately 44% for the Actions
-workspace and 56% for the global quick-action surface. The Actions workspace
-owns its heading/count, Find entry, numbered scrolling list, and an 88-pixel
-rail containing Passwords, Work, Types, Tags, Run, and action-Help controls.
-The Quick-action side retains its vertical menu launchers and independent
-scrolling. The horizontal pane retains a user-adjusted ratio during later
-resizing and applies the same bounded-sash behavior. Fixed bottom action and
-status rows remain outside the vertical split, preventing them from being
-displaced. Management buttons use a single compact symbol row with name-first
-tooltips.
+The main content is one user-adjustable horizontal split. It starts at
+approximately 40% for the command console and 60% for Input / Output, while
+guaranteeing at least half of the default width to the workspace. The bounded
+sash keeps both panes usable and preserves a user-adjusted ratio during later
+resizing in the session.
+
+The command console stacks discovery above the independently scrolling Quick
+actions. Discovery shows about ten result rows at the standard size. Find sits
+in the same column as the result list, while a fixed compact rail beside it
+orders Focus, scope, filter, creation, capture, configuration, help, and
+Run/Open controls. Actions exposes Passwords and Types; Work Items substitutes
+New item, To inbox, Copy file, Projects, Open, and Open folder. Quick actions
+use two columns at the standard and supported minimum widths, falling back to
+one only when the console is narrower. Input / Output consumes nearly the full
+right-pane height; its existing communication line sits at the bottom. The
+expert rail uses fixed positions and compact mnemonic symbols for filters,
+creation, capture, editing, configuration, help, and overflow. Focus, discovery
+scopes, Work Items, and Run/Open retain text because their state must remain
+immediately readable.
 Search text can be combined with one shared built-in action-type filter;
 Passwords is a direct shortcut into that same filter state.
 
-Each group renders in stable row-major order within a two-column grid. The
+Each group renders in stable row-major order within a responsive one- or
+two-column grid. The
 tracked command surface contributes one **Standard** group containing every
 active Built-in action exactly once across subject menus. Standard's nested
 presentation renders one **Standard** launcher without a duplicate group
@@ -1052,7 +1094,7 @@ newline where applicable.
 
 Numbered action dispatch is enabled only when the Find entry owns focus. All other widgets suppress it, making shortcut mode explicit and preventing accidental execution while navigating or editing. The communication line never wraps; its full untruncated action explanation is retained separately for a dynamic hover tooltip and click-open detail window.
 
-The numbered-slot colour legend and workspace heading are intentionally not rendered. Slot numbers and row colours carry the distinction. Action rows measure every icon in the active Tk font, pad narrower symbols to one shared pixel column, and then render `- short name`. A non-action separator row divides slots 1–0 from ordinary results; mouse and keyboard selection skip that separator. Standard editing and transformations are available through the context menu, with a compact `⋮` transform button as the only persistent workspace control.
+Shortcut numbers are intentionally omitted from result labels. Blue rows map top-to-bottom to pinned shortcuts 1–5, green rows map top-to-bottom to Focus shortcuts 6–0, and neutral rows are ordinary results; row tooltips expose the exact binding. Action and Work Item rows measure every icon in the active Tk font, pad narrower symbols to one shared pixel column, and render the short name directly without a dash. The flat mixed-result Treeview item layout omits the unused expand/collapse indicator so that its gutter does not survive the removed number column. A non-action separator row divides shortcut rows from ordinary Action-only results; mouse and keyboard selection skip that separator. Standard editing and transformations are available through the context menu and the visible catalogue-backed **Text tools** menu.
 
 ## Focus contexts and slots
 
@@ -1060,21 +1102,22 @@ The application currently implements a focus context rather than a complete mult
 
 ```text
 1–5  global pinned actions
-6–0  focus-context actions
+6–0  focus-context Actions or Work Items
 other rows  ordinary search matches
 ```
 
 Changing the focus context changes slots 6–0 only. Search always remains global.
 
-The **Focus actions** control is a reversible, visibly active presentation
-mode. With Find empty, it shows a flat list of visible actions belonging to the
-active Focus in canonical action order. Choosing the control again returns to
-the normal action list. General contains every action; a specific Focus uses
-the matching context definition's canonical `action_ids` membership. Typing in
-Find swaps this view for the global flat results, and clearing Find restores
-Focus Actions only when that mode remains active. Tags do not create folders
-in this view because they are independent filters rather than structural
-ownership.
+The **Focus items** control is a reversible, visibly active presentation mode.
+With Find empty, it shows a flat mixed list of visible Actions and Work Items
+belonging to the active Focus. General contains every Action and discovered
+Work Item; a specific Focus uses the matching Context definition's canonical
+Action and Work Item membership. Typing in Find swaps this view for global
+mixed results, and clearing Find restores Focus items while that mode remains
+active. Outside Focus view, the normal **All items** projection applies shared
+Context and tag filters to both entity kinds. **Actions** and **Work Items**
+remain explicit scopes for kind-specific filters and commands. Tags remain
+independent filters rather than structural ownership.
 
 Configured Quick actions use action IDs or an ordered personal mix of actions
 and stable Work Item references. The launcher first
@@ -1087,6 +1130,10 @@ workspace/clipboard behavior with templates while retaining a separate type
 identity for future prompt-specific evolution. Cheat sheets remain a
 searchable reference subsystem and are opened as a secondary command from the
 Help window rather than occupying a Quick-action slot.
+
+Quick-action groups currently remain global. Context-based visibility or
+grouping is deliberately out of scope; a later design can reference Contexts
+without changing the typed Action/Work Item target identity.
 
 Focus and pin changes are applied in memory only after the updated palette state
 has been persisted successfully. A write failure keeps the prior state visible
@@ -1123,7 +1170,8 @@ context files own it. General itself is always implicit.
 
 The Built-in file contains only shipped starter contexts; currently that is
 **Developing Context Palette**. The ignored local file contains the user's
-personal or work-specific contexts and owns their action memberships. General
+personal or work-specific Contexts and owns their Action and Work Item
+memberships. General
 is an implicit root rather than a stored definition.
 
 ### `data/command_surface.json` and `data/local_command_surface.json`

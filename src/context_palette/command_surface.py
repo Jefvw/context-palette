@@ -5,6 +5,10 @@ import json
 from pathlib import Path
 from typing import Iterator
 
+from .palette_items import (
+    PaletteItemReference,
+    PaletteItemReferenceError,
+)
 from .work_items import WorkItemDiscoveryError, WorkItemReference
 
 
@@ -21,20 +25,7 @@ GROUP_PRESENTATIONS = {
 MAX_COMMAND_MENU_LEVELS = 3
 
 
-@dataclass(frozen=True)
-class CommandTarget:
-    """One ordered Quick-action target: an action or a Work Item."""
-
-    action_id: str = ""
-    work_item_ref: WorkItemReference | None = None
-
-    def __post_init__(self) -> None:
-        clean_action_id = self.action_id.strip()
-        if bool(clean_action_id) == bool(self.work_item_ref):
-            raise CommandSurfaceError(
-                "A Quick-action target must contain exactly one action or Work Item."
-            )
-        object.__setattr__(self, "action_id", clean_action_id)
+CommandTarget = PaletteItemReference
 
 
 @dataclass(frozen=True)
@@ -348,7 +339,7 @@ def _parse_targets(value: object, prefix: str) -> tuple[CommandTarget, ...]:
                 raise CommandSurfaceError(f"{target_prefix} has invalid action data.")
             try:
                 target = CommandTarget(action_id=raw_target["action_id"])
-            except CommandSurfaceError as exc:
+            except PaletteItemReferenceError as exc:
                 raise CommandSurfaceError(f"{target_prefix}: {exc}") from exc
         elif target_type == "work_item":
             if set(raw_target) != {"type", "source_id", "relative_folder"}:

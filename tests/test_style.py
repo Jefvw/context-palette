@@ -51,6 +51,9 @@ class StyleTests(unittest.TestCase):
         self.assertEqual(COLORS["accent"], "#087f78")
         self.assertEqual(COLORS["focus"], "#005fcc")
         self.assertNotEqual(COLORS["row_aqua"], COLORS["row_light"])
+        self.assertNotEqual(COLORS["slot_pinned"], COLORS["slot_focus"])
+        self.assertNotEqual(COLORS["slot_pinned"], COLORS["surface"])
+        self.assertNotEqual(COLORS["slot_focus"], COLORS["surface"])
 
     def test_configure_theme_centralizes_fonts_colors_and_interaction_states(self):
         root = FakeRoot()
@@ -65,12 +68,32 @@ class StyleTests(unittest.TestCase):
         self.assertEqual(style.configurations["Title.TLabel"]["font"], ("Segoe UI Semibold", 14))
         self.assertEqual(style.configurations["Heading.TLabel"]["font"], ("Segoe UI Semibold", 11))
         self.assertEqual(style.configurations["Accent.TButton"]["background"], COLORS["accent"])
+        self.assertEqual(
+            style.configurations["RailAccent.TButton"]["padding"],
+            (6, 3),
+        )
+        self.assertEqual(
+            style.configurations["RailIcon.TButton"]["font"],
+            ("Segoe UI Symbol", 11),
+        )
+        self.assertEqual(style.configurations["RailIcon.TButton"]["padding"], (2, 1))
+        self.assertEqual(
+            style.configurations["RailIconAccent.TButton"]["background"],
+            COLORS["accent"],
+        )
         self.assertEqual(style.configurations["Surface.TLabel"]["background"], COLORS["surface"])
         self.assertEqual(
             style.configurations["SurfaceMenu.TLabel"]["background"],
             COLORS["surface"],
         )
         self.assertIn("SurfaceMenu.TLabel", style.layouts)
+        self.assertEqual(
+            style.layouts["Flat.Treeview.Item"][0][1]["children"],
+            [
+                ("Treeitem.image", {"side": "left", "sticky": ""}),
+                ("Treeitem.text", {"sticky": "nsew"}),
+            ],
+        )
         self.assertEqual(style.configurations["Treeview"]["rowheight"], 25)
         self.assertIn("background", style.maps["TButton"])
         self.assertIn("bordercolor", style.maps["TEntry"])

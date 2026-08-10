@@ -26,6 +26,7 @@ from .action_deletion import (
     inspect_action_references,
 )
 from .action_types import ACTION_TYPES, CREATABLE_ACTION_TYPES
+from .action_type_picker import ActionTypePickerDialog, ActionTypePickerOption
 from .action_bound_quick_actions import action_bound_quick_groups
 from .action_picker import ActionPickerField, ActionPickerOption
 from .backup_restore_ui import BackupRestorePanel
@@ -169,25 +170,16 @@ def context_membership_count(
     context: ContextDefinition,
     actions: list[Action],
 ) -> int:
-    """Count the actions that will lose membership when a context is deleted."""
+    """Count Palette items that will lose membership when a context is deleted."""
     if context.action_ids is not None:
-        return len(
-            {
-                action_id
-                for action_id in (
-                    *context.action_ids,
-                    *context.preferred_action_ids,
-                )
-                if action_id
-            }
-        )
+        return len(context.member_items)
     member_ids = {
         action.id
         for action in actions
         if action.belongs_to_context(context.name)
     }
     member_ids.update(context.preferred_action_ids)
-    return len(member_ids)
+    return len(member_ids) + len(context.work_item_refs)
 
 
 def action_reference_labels(
@@ -332,8 +324,19 @@ def quick_action_target_labels(
 def context_action_summary(
     context: ContextDefinition,
     actions: list[Action],
+    work_items: tuple[DiscoveredWorkItem, ...] = (),
 ) -> str:
-    preferred = action_reference_labels(context.preferred_action_ids, actions)
+    actions_by_id = {action.id: action for action in actions}
+    preferred = tuple(
+        (
+            actions_by_id[reference.action_id].title
+            if reference.action_id in actions_by_id
+            else f"Missing action: {reference.action_id}"
+        )
+        if reference.action_id
+        else work_item_reference_label(reference.work_item_ref, work_items)
+        for reference in context.preferred_items
+    )
     preferred_text = ", ".join(preferred) if preferred else "automatic"
     return (
         f"{context_membership_count(context, actions)} member(s) | "
@@ -346,6 +349,7 @@ def context_matches_filter(
     query: str,
     *,
     actions: list[Action],
+    work_items: tuple[DiscoveredWorkItem, ...] = (),
     personal: bool,
 ) -> bool:
     terms = [term.casefold() for term in query.split() if term.strip()]
@@ -364,11 +368,16 @@ def context_matches_filter(
         tuple(dict.fromkeys((*member_ids, *context.preferred_action_ids))),
         actions,
     )
+    work_item_labels = tuple(
+        work_item_reference_label(reference, work_items)
+        for reference in context.work_item_refs
+    )
     searchable = " ".join(
         (
             context.name,
             context.description,
             *labels,
+            *work_item_labels,
             f"{LOCAL_DESTINATION} local personal"
             if personal
             else f"{PROJECT_DESTINATION} project shared",
@@ -483,6 +492,7 @@ class ConfigurationWindow:
         initial_action_id: str | None = None,
         initial_work_item_key: str | None = None,
         start_work_item_creation: bool = False,
+        start_action_creation: bool = False,
         data_paths: AppDataPaths | None = None,
         on_restore_complete: Callable[[], None] | None = None,
         on_restore_recovery_required: Callable[[], None] | None = None,
@@ -515,6 +525,9 @@ class ConfigurationWindow:
         self.initial_action_id = initial_action_id
         self.initial_work_item_key = initial_work_item_key
         self.start_work_item_creation = start_work_item_creation
+        self.start_action_creation = start_action_creation
+        self.action_type_picker: ActionTypePickerDialog | None = None
+        self.action_creation_dialog: ActionDialog | None = None
         self.data_paths = data_paths or AppDataPaths.from_data_directory(
             shared_actions_path.parent
         )
@@ -581,6 +594,8 @@ class ConfigurationWindow:
         self.window.after_idle(self._focus_current_tab)
         if self.start_work_item_creation:
             self.window.after_idle(self._start_work_item_creation)
+        if self.start_action_creation:
+            self.window.after_idle(self._start_action_creation)
 
     def show(
         self,
@@ -589,6 +604,7 @@ class ConfigurationWindow:
         initial_action_id: str | None = None,
         initial_work_item_key: str | None = None,
         start_work_item_creation: bool = False,
+        start_action_creation: bool = False,
     ) -> None:
         """Refresh, navigate, and raise an already-open Configure workspace."""
         self.initial_action_id = initial_action_id
@@ -604,6 +620,8 @@ class ConfigurationWindow:
         self.window.after_idle(self._focus_current_tab)
         if start_work_item_creation:
             self.window.after_idle(self._start_work_item_creation)
+        if start_action_creation:
+            self.window.after_idle(self._start_action_creation)
 
     def refresh_from_storage(self) -> None:
         """Refresh an already-open workspace after another window changes data."""
@@ -613,6 +631,49 @@ class ConfigurationWindow:
     def _start_work_item_creation(self) -> None:
         self.work_items_panel.create_work_item()
 
+    def _start_action_creation(self) -> None:
+        """Open one small type chooser before the existing full Action form."""
+        panel = getattr(self, "backup_restore_panel", None)
+        if panel is not None and panel.busy:
+            self._set_feedback(
+                "Wait for the backup or restore operation to finish before creating an Action.",
+                False,
+            )
+            return
+        dialog = self.action_creation_dialog
+        if dialog is not None:
+            try:
+                if dialog.window.winfo_exists():
+                    dialog.window.lift()
+                    dialog.window.focus_force()
+                    return
+            except tk.TclError:
+                pass
+            self.action_creation_dialog = None
+        picker = self.action_type_picker
+        if picker is not None:
+            try:
+                if picker.window.winfo_exists():
+                    picker.window.lift()
+                    picker.window.focus_force()
+                    return
+            except tk.TclError:
+                pass
+        self.action_type_picker = ActionTypePickerDialog(
+            self.window,
+            options=tuple(
+                ActionTypePickerOption(
+                    action_type,
+                    definition.display_label,
+                    definition.family,
+                    definition.description,
+                )
+                for action_type, definition in CREATABLE_ACTION_TYPES.items()
+            ),
+            on_select=self._create_action_for_type,
+            on_close=lambda: setattr(self, "action_type_picker", None),
+        )
+
     def _close_on_plain_escape(self, event: tk.Event) -> str:
         if int(event.state) & 0x0004:
             return "break"
@@ -621,6 +682,9 @@ class ConfigurationWindow:
 
     def _handle_configure_keypress(self, event: tk.Event) -> str | None:
         state = int(getattr(event, "state", 0) or 0)
+        if state & 0x0004 and str(getattr(event, "keysym", "")).casefold() == "n":
+            self._start_action_creation()
+            return "break"
         if not state & 0x20000:
             return None
         tab_index = {
@@ -728,10 +792,15 @@ class ConfigurationWindow:
         )
         ttk.Button(
             controls,
-            text="Create action",
-            command=lambda: notebook.select(1),
+            text="+ Action",
+            command=self._start_action_creation,
             style="Accent.TButton",
         ).pack(side=tk.LEFT)
+        ttk.Button(
+            controls,
+            text="Browse action types…",
+            command=lambda: notebook.select(1),
+        ).pack(side=tk.LEFT, padx=(6, 0))
         ttk.Button(
             controls,
             text="Harvest documents…",
@@ -1089,31 +1158,54 @@ class ConfigurationWindow:
     def _create_action(self) -> None:
         selected = self.type_list.curselection()
         if selected:
-            action_type = self.type_ids[selected[0]]
-            default_text_file_path: Path | None = None
-            if action_type == "transform_file_text":
-                try:
-                    default_text_file_path = ensure_default_text_action_file(
-                        self.local_actions_path.with_name(
-                            DEFAULT_TEXT_ACTION_FILENAME
-                        )
-                    )
-                except ActionError as exc:
-                    messagebox.showerror(
-                        "Could not prepare the default text file",
-                        str(exc),
-                        parent=self.window,
-                    )
-                    return
-            ActionDialog(
-                self.window,
-                action_type,
-                self.actions,
-                self._save_action,
-                context_names=[context.name for context in self.contexts],
-                choose_destination=True,
-                default_text_file_path=default_text_file_path,
-            )
+            self._create_action_for_type(self.type_ids[selected[0]])
+
+    def _create_action_for_type(self, action_type: str) -> None:
+        """Use the one Action form and save path for catalogue and quick creation."""
+        if action_type not in CREATABLE_ACTION_TYPES:
+            return
+        default_text_file_path: Path | None = None
+        if action_type == "transform_file_text":
+            try:
+                default_text_file_path = ensure_default_text_action_file(
+                    self.local_actions_path.with_name(DEFAULT_TEXT_ACTION_FILENAME)
+                )
+            except ActionError as exc:
+                messagebox.showerror(
+                    "Could not prepare the default text file",
+                    str(exc),
+                    parent=self.window,
+                )
+                return
+        initial_contexts = (
+            () if self.focus_context.casefold() == "general" else (self.focus_context,)
+        )
+        dialog = ActionDialog(
+            self.window,
+            action_type,
+            self.actions,
+            self._save_action,
+            context_names=[context.name for context in self.contexts],
+            choose_destination=True,
+            default_text_file_path=default_text_file_path,
+            initial_contexts=initial_contexts,
+        )
+        self.action_creation_dialog = dialog
+        dialog.window.bind(
+            "<Destroy>",
+            lambda event, created=dialog: self._clear_action_creation_dialog(
+                event, created
+            ),
+            add="+",
+        )
+
+    def _clear_action_creation_dialog(
+        self,
+        event: tk.Event,
+        dialog: ActionDialog,
+    ) -> None:
+        if event.widget is dialog.window and self.action_creation_dialog is dialog:
+            self.action_creation_dialog = None
 
     def _save_action(
         self,
@@ -1138,6 +1230,7 @@ class ConfigurationWindow:
             )
             return False
         self.on_change()
+        self.initial_action_id = action.id
         if self.action_filter_var.get():
             self.action_filter_var.set("")
         self._reload()
@@ -1242,6 +1335,7 @@ class ConfigurationWindow:
                 self.palette_state.focus_context,
                 self.palette_state.context_slots,
                 self.palette_state.context_membership_version,
+                self.palette_state.context_item_slots,
             )
             save_palette_state(self.palette_path, updated)
         except (ActionError, OSError) as exc:
@@ -1263,12 +1357,14 @@ class ConfigurationWindow:
         self.context_tree.delete(*self.context_tree.get_children())
         query = self.context_filter_var.get()
         matches = 0
+        work_items = self._available_work_items()
         for index, context in enumerate(self.contexts):
             local = context.name.casefold() in self.local_context_names
             if not context_matches_filter(
                 context,
                 query,
                 actions=self.actions,
+                work_items=work_items,
                 personal=local,
             ):
                 continue
@@ -1277,7 +1373,7 @@ class ConfigurationWindow:
                 "", tk.END, iid=f"context-{index}", text=context.name,
                 values=(
                     LOCAL_DESTINATION if local else PROJECT_DESTINATION,
-                    context_action_summary(context, self.actions),
+                    context_action_summary(context, self.actions, work_items),
                 ),
                 tags=("local",) if local else ("shared",),
             )
@@ -1794,6 +1890,7 @@ class ConfigurationWindow:
                     else self.local_contexts_path
                 ),
             ),
+            work_items=self._available_work_items(),
             choose_destination=True,
         )
 
@@ -1826,6 +1923,7 @@ class ConfigurationWindow:
                 original,
                 target_path=target_path,
             ),
+            work_items=(self._available_work_items() if local else ()),
             shared=not local,
         )
 
@@ -1848,11 +1946,23 @@ class ConfigurationWindow:
             )
             if action_id in getattr(self, "local_action_ids", set())
         ]
-        if built_in and local_references:
+        work_item_references = tuple(
+            dict.fromkeys(
+                (
+                    *context.work_item_refs,
+                    *(
+                        reference.work_item_ref
+                        for reference in context.preferred_items
+                        if reference.work_item_ref is not None
+                    ),
+                )
+            )
+        )
+        if built_in and (local_references or work_item_references):
             messagebox.showerror(
                 "Context was not saved",
-                "Built-in contexts can use only built-in actions. Remove the "
-                "My configuration action assignment and try again.",
+                "Built-in contexts can use only built-in actions. Remove My "
+                "configuration Actions and Work Items, then try again.",
                 parent=self.window,
             )
             return False
@@ -1917,10 +2027,19 @@ class ConfigurationWindow:
         )
         destination = self.local_contexts_path if local else self.contexts_path
         membership_count = context_membership_count(context, self.actions)
+        membership_label = (
+            "Palette item(s)"
+            if context.work_item_refs
+            or any(
+                reference.work_item_ref is not None
+                for reference in context.preferred_items
+            )
+            else "action(s)"
+        )
         if not messagebox.askyesno(
             "Delete context?",
             f'Delete "{context.name}" permanently?\n\n'
-            f"{membership_count} action(s) will be moved to General if they have "
+            f"{membership_count} {membership_label} will be moved to General if they have "
             "no other specific context. Saved Focus slots for this context will "
             "also be removed.\n\n"
             f"Storage: {LOCAL_DESTINATION if local else PROJECT_DESTINATION}",
@@ -1958,7 +2077,7 @@ class ConfigurationWindow:
         self._reload()
         self.feedback_var.set(
             f"Deleted context: {context.name}. Removed its assignment from "
-            f"{membership_count} action(s)."
+            f"{membership_count} {membership_label}."
         )
         self.feedback_label.configure(style="Success.TLabel")
 
@@ -2487,6 +2606,7 @@ class ActionDialog:
         context_names: list[str] | None = None,
         choose_destination: bool = False,
         default_text_file_path: Path | None = None,
+        initial_contexts: tuple[str, ...] = (),
     ) -> None:
         self.action_type = action_type
         self.action = action
@@ -2600,7 +2720,11 @@ class ActionDialog:
             value=action.description if action else ""
         )
         self.contexts_var = tk.StringVar(
-            value=", ".join(action.effective_contexts) if action else ""
+            value=(
+                ", ".join(action.effective_contexts)
+                if action
+                else ", ".join(initial_contexts)
+            )
         )
         self.tags_var = tk.StringVar(
             value=", ".join(action.effective_tags) if action else ""
@@ -3092,6 +3216,7 @@ class ContextDialog:
         self, parent: tk.Toplevel, context: ContextDefinition | None,
         actions: list[Action], on_save: Callable[..., bool],
         *,
+        work_items: tuple[DiscoveredWorkItem, ...] = (),
         shared: bool = False,
         choose_destination: bool = False,
     ) -> None:
@@ -3129,25 +3254,39 @@ class ContextDialog:
         }
         labels_by_id = {action_id: label for label, action_id in self.action_choices.items()}
         self.labels_by_action_id = labels_by_id
-        self.member_action_ids = list(
-            dict.fromkeys(
-                (
-                    *(
-                        context.action_ids
-                        if context and context.action_ids is not None
-                        else (
-                            tuple(
-                                action.id
-                                for action in actions
-                                if context
-                                and action.belongs_to_context(context.name)
-                            )
-                        )
-                    ),
-                    *preferred,
-                )
+        self.work_items = work_items
+        self.work_item_choices = _work_item_choices(work_items)
+        self.work_item_labels_by_ref = {
+            reference: label
+            for label, reference in self.work_item_choices.items()
+        }
+        legacy_members = (
+            context.action_ids
+            if context and context.action_ids is not None
+            else tuple(
+                action.id
+                for action in actions
+                if context and action.belongs_to_context(context.name)
             )
         )
+        member_targets = [
+            CommandTarget(action_id=action_id)
+            for action_id in dict.fromkeys((*legacy_members, *preferred))
+        ]
+        if context:
+            member_targets.extend(
+                CommandTarget(work_item_ref=reference)
+                for reference in context.work_item_refs
+            )
+            for reference in context.preferred_items:
+                if reference not in member_targets:
+                    member_targets.append(reference)
+        self.member_targets = list(dict.fromkeys(member_targets))
+        self.member_action_ids = [
+            reference.action_id
+            for reference in self.member_targets
+            if reference.action_id
+        ]
         ttk.Label(
             outer,
             text=(
@@ -3155,8 +3294,8 @@ class ContextDialog:
                 "available."
                 if shared
                 else
-                "Actions in this context. My configuration contexts may contain "
-                "both built-in actions and your own actions."
+                "Palette items in this context. My configuration contexts may "
+                "contain built-in Actions, your Actions, and Work Items."
             ),
             wraplength=610,
         ).pack(anchor=tk.W, pady=(9, 2))
@@ -3176,6 +3315,35 @@ class ContextDialog:
             text="Add",
             command=self._add_member_action,
         ).pack(side=tk.LEFT, padx=(6, 0))
+        if not shared:
+            work_item_chooser = ttk.Frame(outer)
+            work_item_chooser.pack(fill=tk.X, pady=(5, 0))
+            self.member_work_item_var = tk.StringVar()
+            self.member_work_item_choice = ActionPickerField(
+                work_item_chooser,
+                variable=self.member_work_item_var,
+                options=_work_item_picker_options(
+                    work_items,
+                    self.work_item_choices,
+                ),
+                title="Choose Work Item to add to context",
+                item_name="Work Item",
+                item_plural="Work Items",
+                search_help=(
+                    "Searches Work Item name, source, kind, organisation, "
+                    "project code, and stable folder identity."
+                ),
+            )
+            self.member_work_item_choice.pack(
+                side=tk.LEFT,
+                fill=tk.X,
+                expand=True,
+            )
+            ttk.Button(
+                work_item_chooser,
+                text="Add Work Item",
+                command=self._add_member_work_item,
+            ).pack(side=tk.LEFT, padx=(6, 0))
         member_area = ttk.Frame(outer)
         member_area.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
         self.member_list = tk.Listbox(
@@ -3193,19 +3361,31 @@ class ContextDialog:
         self.member_list.configure(yscrollcommand=member_scrollbar.set)
         ttk.Button(
             outer,
-            text="Remove selected action",
-            command=self._remove_member_action,
+            text="Remove selected item",
+            command=self._remove_member_item,
         ).pack(anchor=tk.W, pady=(5, 0))
-        self.slots = [
-            tk.StringVar(
-                value=labels_by_id.get(preferred[index], EMPTY_PIN_LABEL)
-                if index < len(preferred)
-                else EMPTY_PIN_LABEL
-            )
-            for index in range(MAX_CONTEXT_SLOT_ACTIONS)
-        ]
+        self.item_choices: dict[str, CommandTarget] = {
+            label: CommandTarget(action_id=action_id)
+            for label, action_id in self.action_choices.items()
+        }
+        self.item_choices.update(
+            {
+                label: CommandTarget(work_item_ref=reference)
+                for label, reference in self.work_item_choices.items()
+            }
+        )
+        preferred_items = context.preferred_items if context else ()
+        self.slots = []
+        for index in range(MAX_CONTEXT_SLOT_ACTIONS):
+            label = EMPTY_PIN_LABEL
+            if index < len(preferred_items):
+                label = self._item_label(preferred_items[index])
+            self.slots.append(tk.StringVar(value=label))
         self.slot_choices: list[ActionPickerField] = []
-        ttk.Label(outer, text="Preferred actions for slots 6–0").pack(anchor=tk.W, pady=(9, 2))
+        ttk.Label(
+            outer,
+            text="Preferred Actions or Work Items for slots 6–0",
+        ).pack(anchor=tk.W, pady=(9, 2))
         for slot, variable in zip(CONTEXT_SLOT_NUMBERS, self.slots):
             slot_label = slot_display_number(slot)
             row = ttk.Frame(outer)
@@ -3215,7 +3395,9 @@ class ContextDialog:
                 row,
                 variable=variable,
                 empty_label=EMPTY_PIN_LABEL,
-                title=f"Choose preferred action for slot {slot_label}",
+                title=f"Choose preferred item for slot {slot_label}",
+                item_name="Palette item",
+                item_plural="Palette items",
             )
             chooser.pack(side=tk.LEFT, fill=tk.X, expand=True)
             self.slot_choices.append(chooser)
@@ -3226,42 +3408,65 @@ class ContextDialog:
 
     def _add_member_action(self) -> None:
         action_id = self.action_choices.get(self.member_choice_var.get())
-        if not action_id or action_id in self.member_action_ids:
+        target = CommandTarget(action_id=action_id) if action_id else None
+        if target is None or target in self.member_targets:
             return
+        self.member_targets.append(target)
         self.member_action_ids.append(action_id)
-        self._refresh_member_actions(select=len(self.member_action_ids) - 1)
+        self._refresh_member_actions(select=len(self.member_targets) - 1)
 
-    def _remove_member_action(self) -> None:
+    def _add_member_work_item(self) -> None:
+        reference = self.work_item_choices.get(self.member_work_item_var.get())
+        target = CommandTarget(work_item_ref=reference) if reference else None
+        if target is None or target in self.member_targets:
+            return
+        self.member_targets.append(target)
+        self._refresh_member_actions(select=len(self.member_targets) - 1)
+
+    def _remove_member_item(self) -> None:
         selection = self.member_list.curselection()
         if not selection:
             return
-        removed_id = self.member_action_ids.pop(selection[0])
-        removed_label = self.labels_by_action_id.get(removed_id, "")
+        removed = self.member_targets.pop(selection[0])
+        if removed.action_id and removed.action_id in self.member_action_ids:
+            self.member_action_ids.remove(removed.action_id)
+        removed_label = self._item_label(removed)
         for slot in self.slots:
             if slot.get() == removed_label:
                 slot.set(EMPTY_PIN_LABEL)
         self._refresh_member_actions(
-            select=min(selection[0], len(self.member_action_ids) - 1)
+            select=min(selection[0], len(self.member_targets) - 1)
+        )
+
+    _remove_member_action = _remove_member_item
+
+    def _item_label(self, reference: CommandTarget) -> str:
+        if reference.action_id:
+            return self.labels_by_action_id.get(
+                reference.action_id,
+                f"Unavailable action: {reference.action_id}",
+            )
+        assert reference.work_item_ref is not None
+        return self.work_item_labels_by_ref.get(
+            reference.work_item_ref,
+            work_item_reference_label(reference.work_item_ref, ()),
         )
 
     def _refresh_member_actions(self, *, select: int = -1) -> None:
         self.member_list.delete(0, tk.END)
-        labels = [
-            self.labels_by_action_id.get(
-                action_id,
-                f"Unavailable action: {action_id}",
-            )
-            for action_id in self.member_action_ids
-        ]
+        labels = [self._item_label(reference) for reference in self.member_targets]
         for label in labels:
             self.member_list.insert(tk.END, label)
         if 0 <= select < len(labels):
             self.member_list.selection_set(select)
             self.member_list.see(select)
         options = tuple(
-            self.action_picker_options_by_id[action_id]
-            for action_id in self.member_action_ids
-            if action_id in self.action_picker_options_by_id
+            ActionPickerOption(
+                reference.stable_key,
+                self._item_label(reference),
+                self._item_label(reference),
+            )
+            for reference in self.member_targets
         )
         for chooser in self.slot_choices:
             chooser.set_options(options, empty_label=EMPTY_PIN_LABEL)
@@ -3271,17 +3476,57 @@ class ContextDialog:
         if not name:
             messagebox.showerror("Context Palette", "Context name cannot be empty.", parent=self.window)
             return
+        member_targets = tuple(
+            dict.fromkeys(
+                getattr(
+                    self,
+                    "member_targets",
+                    tuple(
+                        CommandTarget(action_id=action_id)
+                        for action_id in getattr(self, "member_action_ids", ())
+                    ),
+                )
+            )
+        )
+        item_choices = getattr(
+            self,
+            "item_choices",
+            {
+                label: CommandTarget(action_id=action_id)
+                for label, action_id in self.action_choices.items()
+            },
+        )
+        preferred_items = tuple(
+            dict.fromkeys(
+                item_choices[item.get()]
+                for item in self.slots
+                if item.get() in item_choices
+            )
+        )
         context = ContextDefinition(
             name=name, description=self.description.get().strip(),
             preferred_action_ids=tuple(
-                dict.fromkeys(
-                    self.action_choices[item.get()]
-                    for item in self.slots
-                    if item.get() in self.action_choices
-                )
+                reference.action_id
+                for reference in preferred_items
+                if reference.action_id
             ),
             action_ids=tuple(
-                dict.fromkeys(getattr(self, "member_action_ids", ()))
+                reference.action_id
+                for reference in member_targets
+                if reference.action_id
+            ),
+            work_item_refs=tuple(
+                reference.work_item_ref
+                for reference in member_targets
+                if reference.work_item_ref is not None
+            ),
+            preferred_item_refs=(
+                preferred_items
+                if any(
+                    reference.work_item_ref is not None
+                    for reference in preferred_items
+                )
+                else ()
             ),
         )
         saved = (

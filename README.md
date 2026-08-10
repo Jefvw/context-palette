@@ -1,6 +1,9 @@
 # Context Palette
 
-Context Palette is a portable Windows launcher for finding, running, and organizing reusable actions around the work context that matters now. It is built with Python and Tkinter, runs without administrator rights, and keeps configuration in inspectable local files.
+Context Palette is a portable Windows launcher for finding, running, and
+organizing reusable Actions and Work Items around the work Context that matters
+now. It is built with Python and Tkinter, runs without administrator rights,
+and keeps configuration in inspectable local files.
 
 The application is under active development. Captured, harvested, configured,
 and AI-proposed actions become permanent Active actions as soon as the user
@@ -10,8 +13,10 @@ confirms creation; Archived actions remain outside normal retrieval. See
 ## What it does today
 
 - Opens instantly from a resident process with `F9` or `Ctrl+Alt+P`.
-- Searches actions by name, tag, context, type, state, and content.
-- Keeps five global pinned slots and four slots for the selected focus context.
+- Searches Actions and Work Items together by text, tag, and Context, with
+  explicit kind-specific scopes when needed.
+- Keeps five global pinned Action slots and five mixed slots for the selected
+  focus context.
 - Runs the explicit, allow-listed [standard action types](docs/ACTION_TYPES.md).
 - Opens or runs user-configured Windows targets through ShellExecute, including
   registered protocols such as `vscode:`, `shell:` targets, `file:` URIs,
@@ -135,7 +140,7 @@ After the application starts:
 
 1. Press `F9` to capture selected text and show the palette. Use `Ctrl+Alt+P` as the fallback shortcut.
 2. Type in **Find**, select an action, and press `Enter`.
-3. Choose a **Focus** context to change slots 6–0.
+3. Choose a **Focus** Context to change mixed Action/Work Item slots 6–0.
 4. Choose **Configure**, or press `Ctrl+,`, to add personal actions, contexts,
    or Quick actions. **Manage focuses…** in the Focus selector opens the
    relevant context tab directly.

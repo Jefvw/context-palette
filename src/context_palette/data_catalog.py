@@ -227,7 +227,7 @@ DATA_ASSET_CATALOG: tuple[DataAssetSpec, ...] = (
         AssetSensitivity.CONFIGURATION,
         BackupPolicy.COMPLETE_CONFIGURATION_ADDITION,
         relative_path=PurePosixPath("data/contexts.json"),
-        schema_version=1,
+        schema_version=2,
     ),
     DataAssetSpec(
         "built-in-command-surface",
@@ -263,7 +263,7 @@ DATA_ASSET_CATALOG: tuple[DataAssetSpec, ...] = (
         AssetSensitivity.CONFIGURATION,
         BackupPolicy.CORE_CONFIGURATION,
         relative_path=PurePosixPath("data/local_contexts.json"),
-        schema_version=1,
+        schema_version=2,
     ),
     DataAssetSpec(
         "personal-command-surface",
@@ -281,7 +281,7 @@ DATA_ASSET_CATALOG: tuple[DataAssetSpec, ...] = (
         AssetSensitivity.CONFIGURATION,
         BackupPolicy.CORE_CONFIGURATION,
         relative_path=PurePosixPath("data/palette.json"),
-        schema_version=1,
+        schema_version=2,
     ),
     DataAssetSpec(
         "work-item-sources",

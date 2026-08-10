@@ -1,24 +1,25 @@
 # Context configuration
 
-A Focus context groups actions for a kind of work and gives slots 6–0 a
-predictable set of preferred actions while search remains global.
+A Focus Context groups Actions and Work Items for a kind of work and gives slots
+6–0 a predictable set of preferred Palette items while search remains global.
 
 ## Recommended: Configure window
 
 Choose **Manage focuses…** in the Focus selector to open **Contexts** directly,
 or choose **Configure** (or press `Ctrl+,`) and select **Contexts**. Create,
-edit, or delete a context, choose every action that belongs to it, and select up
-to five preferred actions. The form uses action names instead of technical IDs.
+edit, or delete a Context, choose every Action and Work Item that belongs to it,
+and select up to five preferred items. The form uses names instead of technical
+IDs.
 
 Normal user contexts belong in **My configuration** and stay on this PC. They
-may contain both Built-in actions and My configuration actions without editing
-the actions themselves. **Built-in** is developer-owned starter configuration
+may contain Built-in Actions, My configuration Actions, and personal Work Items
+without editing the Actions or external folders themselves. **Built-in** is developer-owned starter configuration
 tracked through Git. General is implicit, and **Developing Context Palette** is
 the only shipped specific context.
 
-Deletion clears saved Focus state and any legacy action-side metadata before
-removing the definition. Removing a context assignment never deletes its
-actions.
+Deletion clears saved Focus state and any legacy Action-side metadata before
+removing the definition. Removing a Context assignment never deletes its
+Actions, Work Item folders, or workbooks.
 
 ## Advanced JSON files
 
@@ -48,10 +49,15 @@ in Built-in files.
 ```
 
 `name` is the stable, case-insensitively unique context identity. `action_ids`
-is the ordered membership list used by **Focus actions**.
+is the ordered Action membership list used by **Focus items**.
 `preferred_action_ids` supplies up to five default actions for slots 6–0 and
 should be a subset of `action_ids`. Explicit per-machine slots in
 `palette.json` override those defaults.
+
+My configuration Contexts may additionally store `work_item_refs`, identified
+by stable source ID and direct relative folder, plus an ordered typed
+`preferred_items` list when slots mix Actions and Work Items. Unavailable Work
+Items remain configured. Built-in Contexts cannot contain Work Items.
 
 Every action belongs to the virtual **General** root. Current context membership
 belongs in the context's `action_ids`, allowing each PC to organize Built-in
@@ -64,7 +70,8 @@ cannot be assigned to a Built-in context because that would put a private ID
 in a Git-tracked file; use a My configuration context instead. Tags remain
 independent discovery terms. Search remains global regardless of Focus.
 
-Do not create a General context definition; it is implied for every action.
+Do not create a General Context definition; it is implied for every Action and
+discovered Work Item.
 Existing personal files using singular `context`, `technology`, and `task`
 remain readable.
 

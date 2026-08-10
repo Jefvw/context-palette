@@ -1,5 +1,134 @@
 # Decisions
 
+## 2026-08-10 - Reclaim the complete result-row prefix
+
+**Decision:** Remove the unused expand/collapse indicator from the flat mixed
+Treeview item layout. Measure Action and Work Item icons together, pad them to
+one shared pixel column, and render the short name directly after that column
+without a dash.
+
+**Reason:** Removing visible slot numbers did not reclaim their apparent space
+because Tk continued reserving a hierarchy gutter. The dash had previously
+made uneven icon widths easier to read, but it became redundant once the icon
+column was measured and aligned.
+
+**Consequences:** Result names begin materially farther left and gain the space
+previously occupied by both the hidden indicator and dash. The mixed lists
+remain flat, color-coded, selectable, and tooltip-enabled; no hierarchy or
+execution behavior is removed.
+
+## 2026-08-10 - Replace visible slot numbers with shortcut-group colors
+
+**Decision:** Remove numeric prefixes from Action and mixed result labels.
+Render pinned shortcuts 1–5 with a clear blue background, Focus shortcuts
+6–0 with a clear green background, and ordinary results on the neutral
+surface. Preserve top-to-bottom slot order, Shift+number execution, exact
+shortcut tooltips, and the Action-only separator. Tighten the expert rail to a
+114–148 pixel scaling-aware bound and reduce icon-button padding.
+
+**Reason:** Repeating a number on every shortcut row consumed scarce name width
+for the sole expert user. The previous pinned and Focus tints were also too
+similar to each other and to the neutral surface to communicate the groups in
+real use.
+
+**Consequences:** More of each short name is visible, while stable ordering,
+three distinct surfaces, Help, and tooltips retain the shortcut model. Keyboard
+behavior and persisted pin/Focus assignments are unchanged. The previously
+recorded alternative layouts remain available if the list still proves too
+narrow.
+
+## 2026-08-10 - Optimize the command rail for one expert user
+
+**Decision:** Keep text on Focus, Focus items, All/Actions, Work Items, and the
+primary Run/Open command. Replace learned filter and management labels with
+stable mnemonic symbols and semantic tooltips. Bound the rail to 122–156
+pixels, allowing only scaling-driven growth inside that range.
+
+**Reason:** In the approved composition, the two-column labelled rail consumed
+more width than the result list. This application serves one expert user, so
+stable position and muscle memory provide more value than repeating familiar
+command names on every button. Mode and execution state remain textual because
+misreading those controls has a higher cost.
+
+**Consequences:** The list receives materially more width without taking space
+from Input / Output. Help documents the symbol vocabulary. Keyboard focus,
+active highlighting, and full tooltips retain discoverability. If real use
+shows that the list still needs more width, the preserved fallback order is a
+horizontal icon strip, a collapsible rail, a modest 44/56 outer split, then a
+single Commands menu.
+
+## 2026-08-09 - Make the launcher input-first with one horizontal split
+
+**Decision:** Replace the stacked launcher with a bounded horizontal split:
+approximately 40% for a left command console and 60% for full-height Input /
+Output. Stack Quick actions below discovery, place the existing Focus, scope,
+filter, management, and Run/Open controls in a two-column rail beside the
+result list, and move the communication line to the bottom of the workspace.
+Expose the existing transformation catalogue through a visible **Text tools**
+menu. Do not build a separate top toolbar or bottom command bar.
+
+**Reason:** The approved input-first workflow needs persistent room for text
+preparation and action output without enlarging the compact window. Keeping
+frequent commands beside the list shortens pointer and keyboard travel, while
+one visible transformation menu makes the workspace understandable without a
+symbol-only control. The existing discovery, command-surface, and workspace
+behavior remains useful and should be recomposed rather than duplicated.
+
+**Consequences:** `LauncherApp` owns the outer split and status placement;
+`ActionDiscoveryPanel` owns the command-rail presentation; `WorkspacePanel`
+owns Text tools and continues to render `WORKSPACE_TRANSFORM_GROUPS`. Find is
+no wider than the result list, about ten result rows remain visible, and Quick
+actions use two columns at supported launcher widths. The sash remains
+session-adjustable and bounded by console/workspace minimum widths.
+
+## 2026-08-09 - Make mixed Palette-item discovery the normal launcher view
+
+**Decision:** Add explicit **All items**, **Actions**, and **Work Items**
+discovery scopes. Make All items the default, apply the same Context and exact
+tag filters to both entity kinds, and resolve Run/Open, preview, editing, and
+folder commands from the selected typed `PaletteItemReference`. Preserve the
+existing Action and Work Item execution services. Keep global pins 1–5
+Action-only while allowing the already typed Focus slots 6–0 to contain Work
+Items.
+
+**Reason:** Actions and Work Items are both user-invoked Palette items. Making
+their ordinary discovery separate contradicted the shared Context, tag, Focus,
+and Quick-action grouping model and forced users to remember a mode switch.
+Explicit scopes retain the useful kind-specific controls without making them
+the underlying membership model.
+
+**Consequences:** `ActionDiscoveryPanel` owns scope presentation and
+selection-specific command labels; `LauncherApp` projects and dispatches typed
+mixed results. Context and tag selections persist when scope changes. Project
+and Action-type filters remain kind-specific. Quick-action groups remain
+global: Context visibility or grouping for those groups is still a separate
+future design. Typed global pins are also deferred until real use justifies
+changing their intentionally stable accelerator semantics.
+
+## 2026-08-06 - Group Actions and Work Items through typed Palette-item references
+
+**Decision:** Treat Actions and Work Items as distinct domain entities sharing
+one immutable `PaletteItemReference` at grouping and execution boundaries.
+Allow My configuration Contexts to contain both kinds and to order either kind
+in Focus slots 6–0. Keep Built-in Contexts and global pins 1–5 Action-only.
+Keep Quick-action groups independent of Context visibility, while migrating
+their existing mixed targets onto the shared reference type.
+
+**Reason:** Both entities are things the user deliberately invokes, and tags,
+Contexts, Focus, and Quick actions are organization mechanisms rather than
+Action-specific behavior. Work Items still have filesystem-owned identity,
+availability, and multiple operations, so converting them into stored Actions
+would duplicate state and create stale records.
+
+**Consequences:** Personal Context JSON may store stable `work_item_refs` and a
+typed `preferred_items` list. Palette state may store typed
+`context_item_slots`; legacy Action-only fields remain readable and writable.
+Unavailable Work Items remain soft references. **Focus items** is the first
+mixed discovery projection; the normal global projection now also mixes both
+kinds, while pins 1–5 remain Action-based. A later Quick-action Context feature
+can reuse the reference but requires an explicit visibility design rather than
+an implied schema field.
+
 ## 2026-08-05 - Keep backup and restore UI as in-process service orchestration
 
 **Decision:** Add one **Backup and restore** Configure tab in a dedicated

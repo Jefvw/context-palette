@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from .actions import Action, VISIBLE_STATES
 from .contexts import ContextDefinition
+from .palette_items import PaletteItemReference
 from .palette_state import MAX_CONTEXT_SLOT_ACTIONS, PaletteState
 
 
@@ -37,6 +38,11 @@ def resolve_focus_state(
         canonical_context = names_by_key.get(context.casefold(), context)
         if canonical_context not in configured_slots or context == canonical_context:
             configured_slots[canonical_context] = action_ids
+    configured_item_slots: dict[str, tuple[PaletteItemReference, ...]] = {}
+    for context, references in palette_state.context_item_slots.items():
+        canonical_context = names_by_key.get(context.casefold(), context)
+        if canonical_context not in configured_item_slots or context == canonical_context:
+            configured_item_slots[canonical_context] = references
     known_action_ids = {action.id for action in actions}
     for definition in definitions:
         default_action_ids = tuple(
@@ -53,6 +59,17 @@ def resolve_focus_state(
                 for action_id in default_action_ids[:MAX_CONTEXT_SLOT_ACTIONS]
                 if action_id in known_action_ids
             )
+        if (
+            definition.name not in configured_item_slots
+            and definition.preferred_item_refs
+        ):
+            preferred_items = definition.preferred_item_refs
+            if preferred_items:
+                configured_item_slots[definition.name] = tuple(
+                    reference
+                    for reference in preferred_items[:MAX_CONTEXT_SLOT_ACTIONS]
+                    if not reference.action_id or reference.action_id in known_action_ids
+                )
 
     focus_context = palette_state.focus_context
     focus_context = names_by_key.get(focus_context.casefold(), "General")
@@ -62,6 +79,7 @@ def resolve_focus_state(
             focus_context,
             configured_slots,
             palette_state.context_membership_version,
+            configured_item_slots,
         ),
         available_names,
     )

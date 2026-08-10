@@ -14,7 +14,8 @@ Context Palette is a portable Windows application that organizes reusable work a
 
 The intended experience has two equally important modes:
 
-- **Use:** choose a focus, find an action, understand its effect, and run it quickly.
+- **Use:** choose a focus, find an Action or Work Item, understand its effect,
+  and invoke it quickly.
 - **Build:** capture useful material during real work, confirm a constrained
   action, and edit it directly whenever the workflow changes.
 
@@ -37,11 +38,12 @@ The long-term context model has four dimensions:
 
 One context is the explicit focus. Supporting contexts may contribute knowledge or ranking in the future, but they must not make action retrieval unpredictable or switch focus silently.
 
-Every action is available through the General root. Specific context membership
-is owned by the user's context definitions, so each PC can organize both
-Built-in and personal actions without editing shipped action records. Free-form
-tags provide quick cross-context discovery without turning classification into
-a fixed hierarchy.
+Every Action and available Work Item is visible through the General root.
+Specific Context membership is owned by the user's Context definitions, so each
+PC can organize Built-in Actions, personal Actions, and personal Work Items
+without editing shipped Action records or external folders. Free-form tags
+provide quick cross-context discovery without turning classification into a
+fixed hierarchy.
 
 ## Explicit effects
 

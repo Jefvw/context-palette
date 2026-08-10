@@ -21,7 +21,16 @@ from .actions import (
     search_actions,
 )
 from .action_bound_quick_actions import action_bound_quick_groups
-from .action_discovery_panel import ActionDiscoveryPanel
+from .action_discovery_panel import (
+    ActionDiscoveryPanel,
+    DISCOVERY_ACTIONS,
+    DISCOVERY_ALL,
+    DISCOVERY_SCOPES,
+    DISCOVERY_WORK_ITEMS,
+    FOCUS_SLOT_ROW_TAG,
+    PINNED_SLOT_ROW_TAG,
+    slot_row_tag,
+)
 from .action_types import ACTION_TYPES
 from .cheat_sheet_window import CheatSheetWindow
 from .cheatsheets import CheatSheetError, load_cheatsheets
@@ -67,10 +76,12 @@ from .palette_state import (
     PaletteState,
     action_slots,
     load_palette_state,
+    palette_item_slots,
     save_palette_state,
     slot_display_number,
     toggle_pin,
 )
+from .palette_items import PaletteItemReference
 from .windows_credentials import (
     CredentialAccessError,
     clear_clipboard_if_unchanged,
@@ -130,10 +141,9 @@ def _log_automatic_paste(
 
 SLOW_RESULT_REFRESH_SECONDS = 0.100
 SLOW_CONFIGURATION_RELOAD_SECONDS = 0.500
-MINIMUM_ACTION_CONSOLE_HEIGHT = 140
-MINIMUM_WORKSPACE_HEIGHT = 140
-MINIMUM_ACTIONS_WIDTH = 300
-MINIMUM_QUICK_ACTIONS_WIDTH = 320
+MINIMUM_COMMAND_CONSOLE_WIDTH = 280
+MINIMUM_WORKSPACE_WIDTH = 350
+TWO_COLUMN_QUICK_ACTIONS_WIDTH = 250
 STANDARD_QUICK_GROUP_ID = "standard"
 
 
@@ -151,6 +161,12 @@ def bounded_sash_position(
         return round(available_size * first_minimum / combined_minimum)
     requested = round(available_size * ratio)
     return max(first_minimum, min(requested, available_size - second_minimum))
+
+
+def quick_action_column_count(available_width: int) -> int:
+    """Use two Quick-action columns only when both remain comfortably readable."""
+
+    return 2 if available_width >= TWO_COLUMN_QUICK_ACTIONS_WIDTH else 1
 
 
 def _warn_if_slow(
@@ -224,6 +240,7 @@ class LauncherApp:
         self.work_item_file_copy = WorkItemFileCopyCoordinator()
         self.work_item_inbox = WorkItemInboxCoordinator()
         self.work_item_refresh_pending = False
+        self.discovery_scope = DISCOVERY_ALL
         self.work_items_mode = False
         self.displayed_work_items: list[DiscoveredWorkItem] = []
         self.work_project_filter: str | None = None
@@ -234,6 +251,7 @@ class LauncherApp:
         self.displayed_slots: list[int | None] = []
         self.displayed_action_rows: list[tuple[Action | None, int | None]] = []
         self.slot_actions: dict[int, Action] = {}
+        self.slot_items: dict[int, PaletteItemReference] = {}
         self.palette_state = PaletteState()
         self.show_requests: queue.Queue[dict[str, str]] = queue.Queue()
         self.instance_server = SingleInstanceServer(self.show_requests.put, instance_port)
@@ -251,12 +269,17 @@ class LauncherApp:
         self.work_items_mode = False
         self.work_project_filter = None
         self.work_tag_filter = None
+        self.item_tag_filter: str | None = None
+        self.item_context_filter: str | None = None
         self.focus_tree_actions: dict[str, Action] = {}
+        self.focus_tree_items: dict[str, PaletteItemReference] = {}
         self.focus_tree_context: str | None = None
         self.results_view = "flat"
         self.passwords_button: ttk.Button | None = None
         self.action_type_filter_var = tk.StringVar(value="All types")
         self.action_tag_filter_var = tk.StringVar(value="All tags")
+        self.item_tag_filter_var = tk.StringVar(value="All tags")
+        self.item_context_filter_var = tk.StringVar(value="All contexts")
         self.work_project_filter_var = tk.StringVar(value="All project codes")
         self.work_tag_filter_var = tk.StringVar(value="All work tags")
         self.configuration_signature_cache: tuple[tuple[str, int, int], ...] = ()
@@ -268,8 +291,11 @@ class LauncherApp:
         self.surface_count_var = tk.StringVar(value="0 buttons")
         self.widget_tooltips: list[WidgetTooltip] = []
         self.command_surface_tooltips: list[WidgetTooltip] = []
+        self.command_surface_columns = 1
         self.configuration_window: ConfigurationWindow | None = None
-        self.action_info_full = "Select an action to see what it reads and what it will do."
+        self.action_info_full = (
+            "Select an Action or Work Item to see what it will do."
+        )
         self.status_var = tk.StringVar(value="Ready")
         self.search_var.trace_add("write", lambda *_args: self._schedule_refresh_results())
 
@@ -343,22 +369,21 @@ class LauncherApp:
         outer = ttk.Frame(self.root, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
 
-        self._build_header(outer)
         self._bind_main_shortcuts()
 
-        content = ttk.Panedwindow(outer, orient=tk.VERTICAL)
-        results_container = ttk.Frame(content)
-        workspace_container = ttk.Frame(content)
-        content.add(results_container, weight=2)
+        content = ttk.Panedwindow(outer, orient=tk.HORIZONTAL)
+        command_console = ttk.Frame(content, padding=(0, 0, 6, 0))
+        workspace_container = ttk.Frame(content, padding=(6, 0, 0, 0))
+        content.add(command_console, weight=2)
         content.add(workspace_container, weight=3)
-        self._build_results_area(results_container)
+        self._build_results_area(command_console)
         self._build_workspace(workspace_container)
-        self._build_footer(outer)
         content.pack(fill=tk.BOTH, expand=True)
         self.main_content = content
-        self.results_container = results_container
+        self.command_console = command_console
+        self.results_container = command_console
         self.workspace_container = workspace_container
-        self.main_split_ratio = 0.52
+        self.main_split_ratio = 0.40
         self.main_split_customized = False
         self.main_content.bind("<Configure>", self._resize_main_split)
         self.main_content.bind("<ButtonRelease-1>", self._remember_main_split)
@@ -366,128 +391,46 @@ class LauncherApp:
 
     def _set_initial_main_split(self) -> None:
         self.root.update_idletasks()
-        available_height = self.main_content.winfo_height()
-        if available_height <= 1:
-            self.root.after(10, self._set_initial_main_split)
+        available_width = self.main_content.winfo_width()
+        if available_width <= 1:
             return
         self.main_split_customized = False
-        self._sync_main_split(available_height)
+        self._sync_main_split(available_width)
 
     def _resize_main_split(self, event: tk.Event) -> None:
-        if event.height > 1:
-            self._sync_main_split(event.height)
+        if event.width > 1:
+            self._sync_main_split(event.width)
 
-    def _sync_main_split(self, available_height: int | None = None) -> None:
-        height = available_height or self.main_content.winfo_height()
-        if height <= 1:
+    def _sync_main_split(self, available_width: int | None = None) -> None:
+        width = available_width or self.main_content.winfo_width()
+        if width <= 1:
             return
-        if self.main_split_customized:
-            ratio = self.main_split_ratio
-        else:
-            ratio = self._compact_action_console_height() / height
         self.main_content.sashpos(
             0,
             bounded_sash_position(
-                height,
-                ratio,
-                MINIMUM_ACTION_CONSOLE_HEIGHT,
-                MINIMUM_WORKSPACE_HEIGHT,
+                width,
+                self.main_split_ratio,
+                MINIMUM_COMMAND_CONSOLE_WIDTH,
+                MINIMUM_WORKSPACE_WIDTH,
             ),
-        )
-
-    def _compact_action_console_height(self) -> int:
-        """Match the result-list body to the visible action-control stack."""
-        body_offset = max(
-            0,
-            self.actions_list_frame.winfo_rooty()
-            - self.results_container.winfo_rooty(),
-        )
-        control_bottom = max(
-            (
-                child.winfo_y()
-                + max(child.winfo_height(), child.winfo_reqheight())
-                for child in self.actions_tool_rail.winfo_children()
-                if child.winfo_manager()
-            ),
-            default=MINIMUM_ACTION_CONSOLE_HEIGHT,
-        )
-        return max(
-            MINIMUM_ACTION_CONSOLE_HEIGHT,
-            body_offset + control_bottom,
         )
 
     def _remember_main_split(self, _event: tk.Event) -> None:
-        available_height = self.main_content.winfo_height()
-        if available_height > 1:
+        available_width = self.main_content.winfo_width()
+        if available_width > 1:
             position = bounded_sash_position(
-                available_height,
-                self.main_content.sashpos(0) / available_height,
-                MINIMUM_ACTION_CONSOLE_HEIGHT,
-                MINIMUM_WORKSPACE_HEIGHT,
+                available_width,
+                self.main_content.sashpos(0) / available_width,
+                MINIMUM_COMMAND_CONSOLE_WIDTH,
+                MINIMUM_WORKSPACE_WIDTH,
             )
             self.main_content.sashpos(0, position)
-            self.main_split_ratio = position / available_height
+            self.main_split_ratio = position / available_width
             self.main_split_customized = True
-
-    def _build_header(self, outer: ttk.Frame) -> None:
-
-        context_panel = ttk.Frame(outer)
-        context_panel.pack(fill=tk.X, pady=(0, 8))
-        focus_label = ttk.Label(context_panel, text="Focus", style="Heading.TLabel")
-        focus_label.pack(side=tk.LEFT)
-        self._tooltip(focus_label, "Choose what you are working on. This changes context slots 6–0.")
-        self.context_picker = ttk.Menubutton(
-            context_panel,
-            textvariable=self.focus_launcher_var,
-            width=18,
-            style="Compact.TButton",
-        )
-        self.context_picker.pack(side=tk.LEFT, padx=(10, 6))
-        self.context_menu = tk.Menu(self.context_picker, tearoff=False)
-        self.context_picker.configure(menu=self.context_menu)
-        focus_actions_button = ttk.Button(
-            context_panel,
-            text="Focus actions",
-            command=self._activate_focus_actions,
-            style="Compact.TButton",
-        )
-        focus_actions_button.pack(side=tk.LEFT, padx=(0, 6))
-        configure_button = ttk.Button(
-            context_panel,
-            text="Configure",
-            command=self._show_configuration,
-            style="Compact.TButton",
-        )
-        configure_button.pack(side=tk.LEFT)
-        context_help = ttk.Button(context_panel, text="?", width=3, command=self._show_help)
-        context_help.pack(side=tk.RIGHT)
-        self._tooltip(
-            self.context_picker,
-            lambda: f"Active Focus: {self.context_var.get()}. Choose a Focus explicitly.",
-        )
-        self._tooltip(
-            focus_actions_button,
-            lambda: (
-                "Return to all actions."
-                if self.focus_actions_mode
-                else "Show actions belonging to the active Focus. General contains every action."
-            ),
-        )
-        self._tooltip(
-            configure_button,
-            "Configure — Manage actions, action types, Focuses, Quick actions, Work Items, and diagnostics.",
-        )
-        self._tooltip(
-            context_help,
-            "Focus changes slots 6–0. It does not limit global search. Open Help for context configuration.",
-        )
-        self.global_help_button = context_help
-        self.configure_button = configure_button
-        self.focus_actions_button = focus_actions_button
 
     def _activate_focus_actions(self) -> None:
         enabled = not self.focus_actions_mode
-        self._set_work_items_mode(False)
+        self._select_discovery_scope(DISCOVERY_ALL)
         self._set_focus_actions_mode(enabled)
         self._refresh_results()
         self.root.after_idle(self._focus_active_results)
@@ -497,19 +440,19 @@ class LauncherApp:
         button = getattr(self, "focus_actions_button", None)
         if button is not None:
             button.configure(
-                style="Accent.TButton" if enabled else "Compact.TButton"
+                style="RailAccent.TButton" if enabled else "Compact.TButton"
             )
 
     def _focus_active_results(self) -> None:
         """Move keyboard users into the result view they explicitly opened."""
-        if self.results_view == "focus" and self.focus_tree.winfo_manager():
+        if self.results_view != "flat" and self.focus_tree.winfo_manager():
             self.focus_tree.focus_force()
-        elif self.work_items_mode:
+        elif self.discovery_scope == DISCOVERY_WORK_ITEMS:
             self.results.focus_force()
 
     def _toggle_password_actions(self) -> None:
-        if getattr(self, "work_items_mode", False):
-            self._set_work_items_mode(False)
+        if getattr(self, "discovery_scope", DISCOVERY_ACTIONS) != DISCOVERY_ACTIONS:
+            self._select_discovery_scope(DISCOVERY_ACTIONS)
         selected = (
             None if self.action_type_filter == "paste_credential" else "paste_credential"
         )
@@ -525,45 +468,64 @@ class LauncherApp:
         if self.passwords_button is not None:
             self.passwords_button.configure(
                 style=(
-                    "Accent.TButton"
+                    "RailIconAccent.TButton"
                     if self.action_type_filter == "paste_credential"
-                    else "Compact.TButton"
+                    else "RailIcon.TButton"
                 )
             )
         self._sync_filter_indicators()
         self._refresh_results()
 
     def _select_tag_filter(self, tag: str | None) -> None:
+        self._select_item_tag_filter(tag)
+
+    def _select_item_tag_filter(self, tag: str | None) -> None:
+        self.item_tag_filter = tag
         self.action_tag_filter = tag
+        self.work_tag_filter = tag
+        self.item_tag_filter_var.set(tag or "All tags")
         self.action_tag_filter_var.set(tag or "All tags")
+        self.work_tag_filter_var.set(tag or "All work tags")
         self._sync_filter_indicators()
         self._refresh_results()
 
     def _toggle_work_items(self) -> None:
-        self._set_work_items_mode(not self.work_items_mode)
+        self._select_discovery_scope(
+            DISCOVERY_ACTIONS
+            if self.discovery_scope == DISCOVERY_WORK_ITEMS
+            else DISCOVERY_WORK_ITEMS
+        )
 
     def _set_work_items_mode(self, enabled: bool) -> None:
-        self.work_items_mode = enabled
-        if enabled:
-            self._set_focus_actions_mode(False)
-            if self.work_item_sources and not self.work_item_refresh.running:
-                self._start_work_item_refresh()
-        action_tags = tuple(
-            sorted(
-                {tag for action in self.actions for tag in action.effective_tags},
-                key=str.casefold,
-            )
+        """Compatibility adapter for callers that still express a boolean mode."""
+
+        self._select_discovery_scope(
+            DISCOVERY_WORK_ITEMS if enabled else DISCOVERY_ACTIONS
         )
-        self.action_discovery_panel.set_work_item_mode(
-            enabled,
+
+    def _select_discovery_scope(self, scope: str) -> None:
+        if scope not in DISCOVERY_SCOPES:
+            raise ValueError(f"Unsupported discovery scope: {scope}")
+        self.discovery_scope = scope
+        self.work_items_mode = scope == DISCOVERY_WORK_ITEMS
+        self._set_focus_actions_mode(False)
+        if scope in {DISCOVERY_ALL, DISCOVERY_WORK_ITEMS}:
+            work_item_sources = getattr(self, "work_item_sources", ())
+            work_item_refresh = getattr(self, "work_item_refresh", None)
+            if (
+                work_item_sources
+                and work_item_refresh is not None
+                and not work_item_refresh.running
+            ):
+                self._start_work_item_refresh()
+        self.action_discovery_panel.set_discovery_scope(
+            scope,
             project_codes=self._available_work_project_codes(),
-            tags=self._available_work_tags() if enabled else action_tags,
+            tags=self._available_item_tags(),
         )
         if not self.main_split_customized:
             self.root.after_idle(self._sync_main_split)
         self._sync_filter_indicators()
-        if not enabled:
-            self.actions_heading_var.set("Actions")
         self._refresh_results()
         self.root.after_idle(self._focus_active_results)
 
@@ -574,8 +536,11 @@ class LauncherApp:
         self._refresh_results()
 
     def _select_work_tag_filter(self, tag: str | None) -> None:
-        self.work_tag_filter = tag
-        self.work_tag_filter_var.set(tag or "All work tags")
+        self._select_item_tag_filter(tag)
+
+    def _select_item_context_filter(self, context: str | None) -> None:
+        self.item_context_filter = context
+        self.item_context_filter_var.set(context or "All contexts")
         self._sync_filter_indicators()
         self._refresh_results()
 
@@ -583,50 +548,56 @@ class LauncherApp:
         panel = getattr(self, "action_discovery_panel", None)
         if panel is None:
             return
-        if self.work_items_mode:
-            panel.set_filter_indicators(
-                work_items=True,
-                primary_value=self.work_project_filter,
-                tag_value=self.work_tag_filter,
-            )
-            return
+        scope = getattr(self, "discovery_scope", DISCOVERY_ACTIONS)
         action_type = self.action_type_filter
         panel.set_filter_indicators(
-            work_items=False,
+            scope=scope,
             primary_value=(
-                ACTION_TYPES[action_type].display_label
-                if action_type is not None
+                self.work_project_filter
+                if scope == DISCOVERY_WORK_ITEMS
+                else ACTION_TYPES[action_type].display_label
+                if scope == DISCOVERY_ACTIONS and action_type is not None
                 else None
             ),
-            tag_value=self.action_tag_filter,
+            context_value=self.item_context_filter,
+            tag_value=self.item_tag_filter,
         )
 
     def _build_results_area(self, outer: ttk.Frame) -> None:
-        results_area = ttk.Panedwindow(outer, orient=tk.HORIZONTAL)
-        results_area.pack(fill=tk.BOTH, expand=True)
         self.action_discovery_panel = ActionDiscoveryPanel(
-            results_area,
+            outer,
             heading_var=self.actions_heading_var,
             count_var=self.results_count_var,
             search_var=self.search_var,
             action_type_filter_var=self.action_type_filter_var,
-            tag_filter_var=self.action_tag_filter_var,
+            tag_filter_var=self.item_tag_filter_var,
             project_filter_var=self.work_project_filter_var,
-            work_tag_filter_var=self.work_tag_filter_var,
+            context_filter_var=self.item_context_filter_var,
+            focus_launcher_var=self.focus_launcher_var,
             tooltip_adder=self._tooltip,
             keypress_handler=self._handle_keypress,
             execute_selected=self._execute_selected,
             update_preview=self._update_preview,
             toggle_password_actions=self._toggle_password_actions,
-            toggle_work_items=self._toggle_work_items,
+            toggle_focus_items=self._activate_focus_actions,
+            select_scope=self._select_discovery_scope,
+            create_action=self._show_action_creation,
             create_work_item=self._show_work_item_creation,
             send_work_item_inbox=self._send_workspace_to_work_item_inbox,
             copy_file_to_work_item=self._copy_workspace_file_to_work_item,
             select_action_type_filter=self._select_action_type_filter,
-            select_tag_filter=self._select_tag_filter,
+            select_tag_filter=self._select_item_tag_filter,
             select_project_filter=self._select_work_project_filter,
-            select_work_tag_filter=self._select_work_tag_filter,
+            select_context_filter=self._select_item_context_filter,
+            toggle_pin=self._toggle_selected_pin,
+            capture=self._capture_clipboard,
+            show_inbox=self._show_inbox,
+            edit_item=self._edit_selected,
+            configure=self._show_configuration,
             show_help=self._show_help,
+            show_shortcuts=self._show_shortcuts,
+            hide_window=self.hide_window,
+            quit_app=self.quit_app,
             result_tooltip_text=self._result_tooltip_text,
             focus_tree_tooltip_text=self._focus_tree_tooltip_text,
             configure_flat_action=self._configure_flat_action_from_event,
@@ -636,15 +607,32 @@ class LauncherApp:
         self.search_entry = discovery.search_entry
         self.actions_tool_rail = discovery.tool_rail
         self.passwords_button = discovery.passwords_button
+        self.all_items_button = discovery.all_items_button
+        self.actions_button = discovery.actions_button
         self.work_items_button = discovery.work_items_button
         self.new_work_item_button = discovery.new_work_item_button
         self.send_work_item_inbox_button = discovery.send_work_item_inbox_button
         self.copy_file_to_work_item_button = discovery.copy_file_to_work_item_button
         self.type_filter = discovery.type_filter
+        self.context_filter = discovery.context_filter
         self.tag_filter = discovery.tag_filter
         self.run_button = discovery.run_button
         self.work_item_folder_button = discovery.work_item_folder_button
         self.action_help_button = discovery.help_button
+        self.context_picker = discovery.context_picker
+        self.context_menu = discovery.focus_menu
+        self.focus_actions_button = discovery.focus_items_button
+        self.new_action_button = discovery.new_action_button
+        self.configure_button = discovery.configure_button
+        self.global_help_button = discovery.help_button
+        self.footer_action_buttons = [
+            discovery.capture_button,
+            discovery.inbox_button,
+            discovery.edit_button,
+            discovery.pin_button,
+        ]
+        self.more_menu = discovery.more_menu
+        self.more_button = discovery.more_button
         self.actions_list_frame = discovery.list_frame
         self.results_scrollbar = discovery.scrollbar
         self.results = discovery.results
@@ -653,9 +641,10 @@ class LauncherApp:
         self.results_tooltip = discovery.results_tooltip
         self.focus_tree = discovery.focus_tree
         self.focus_tree_tooltip = discovery.focus_tree_tooltip
+        discovery.set_discovery_scope(DISCOVERY_ALL)
 
-        self.command_surface_panel = ttk.Frame(results_area, padding=(6, 0, 0, 0))
-        results_area.add(self.command_surface_panel, weight=2)
+        self.command_surface_panel = ttk.Frame(outer, padding=(0, 8, 0, 0))
+        self.command_surface_panel.pack(fill=tk.BOTH, expand=True)
         surface_header = ttk.Frame(self.command_surface_panel)
         surface_header.pack(fill=tk.X, pady=(0, 5))
         ttk.Label(surface_header, text="Quick actions", style="PaneHeader.TLabel").pack(
@@ -690,56 +679,24 @@ class LauncherApp:
         )
         self.command_surface_canvas.bind(
             "<Configure>",
-            lambda event: self.command_surface_canvas.itemconfigure(
-                self.command_tiles_window, width=event.width
-            ),
+            self._resize_command_surface,
         )
-        self.action_console = results_area
+        self.action_console = outer
         self.actions_panel = discovery.frame
-        self.action_console_ratio = 0.44
-        self.action_console.bind("<Configure>", self._resize_action_console)
-        self.action_console.bind("<ButtonRelease-1>", self._remember_action_console_split)
-        self.root.after_idle(self._set_initial_action_console_split)
 
-    def _set_initial_action_console_split(self) -> None:
-        self.root.update_idletasks()
-        available_width = self.action_console.winfo_width()
-        if available_width <= 1:
-            self.root.after(10, self._set_initial_action_console_split)
-            return
-        self.action_console.sashpos(
-            0,
-            bounded_sash_position(
-                available_width,
-                self.action_console_ratio,
-                MINIMUM_ACTIONS_WIDTH,
-                MINIMUM_QUICK_ACTIONS_WIDTH,
-            ),
+    def _resize_command_surface(self, event: tk.Event) -> None:
+        """Fill the canvas and adapt the Quick-action grid without clipping."""
+
+        width = max(1, int(event.width))
+        self.command_surface_canvas.itemconfigure(
+            self.command_tiles_window,
+            width=width,
         )
-
-    def _resize_action_console(self, event: tk.Event) -> None:
-        if event.width > 1:
-            self.action_console.sashpos(
-                0,
-                bounded_sash_position(
-                    event.width,
-                    self.action_console_ratio,
-                    MINIMUM_ACTIONS_WIDTH,
-                    MINIMUM_QUICK_ACTIONS_WIDTH,
-                ),
-            )
-
-    def _remember_action_console_split(self, _event: tk.Event) -> None:
-        available_width = self.action_console.winfo_width()
-        if available_width > 1:
-            position = bounded_sash_position(
-                available_width,
-                self.action_console.sashpos(0) / available_width,
-                MINIMUM_ACTIONS_WIDTH,
-                MINIMUM_QUICK_ACTIONS_WIDTH,
-            )
-            self.action_console.sashpos(0, position)
-            self.action_console_ratio = position / available_width
+        columns = quick_action_column_count(width)
+        if columns == self.command_surface_columns:
+            return
+        self.command_surface_columns = columns
+        self.root.after_idle(self._render_command_surface)
 
     def _bind_main_shortcuts(self) -> None:
 
@@ -748,6 +705,7 @@ class LauncherApp:
         self.root.bind("<Control-l>", lambda _event: self.focus_search())
         self.root.bind("<Control-k>", lambda _event: self.focus_search())
         self.root.bind("<Control-i>", lambda _event: self._capture_clipboard())
+        self.root.bind("<Control-n>", lambda _event: self._show_action_creation())
         self.root.bind("<Control-comma>", lambda _event: self._show_configuration())
         self.root.bind(
             "<Control-Shift-D>",
@@ -763,22 +721,27 @@ class LauncherApp:
         self.action_tag_filter = None
         self.work_project_filter = None
         self.work_tag_filter = None
+        self.item_tag_filter = None
+        self.item_context_filter = None
         self.action_type_filter_var.set("All types")
         self.action_tag_filter_var.set("All tags")
+        if hasattr(self, "item_tag_filter_var"):
+            self.item_tag_filter_var.set("All tags")
+        if hasattr(self, "item_context_filter_var"):
+            self.item_context_filter_var.set("All contexts")
         if hasattr(self, "work_project_filter_var"):
             self.work_project_filter_var.set("All project codes")
         if hasattr(self, "work_tag_filter_var"):
             self.work_tag_filter_var.set("All work tags")
         if self.passwords_button is not None:
-            self.passwords_button.configure(style="Compact.TButton")
+            self.passwords_button.configure(style="RailIcon.TButton")
         if hasattr(self, "action_discovery_panel"):
-            action_tags = tuple(
-                sorted(
-                    {tag for action in self.actions for tag in action.effective_tags},
-                    key=str.casefold,
-                )
+            self.discovery_scope = DISCOVERY_ALL
+            self.work_items_mode = False
+            self.action_discovery_panel.set_discovery_scope(
+                DISCOVERY_ALL,
+                tags=self._available_item_tags(),
             )
-            self.action_discovery_panel.set_work_item_mode(False, tags=action_tags)
             if not self.main_split_customized:
                 self.root.after_idle(self._sync_main_split)
             self._sync_filter_indicators()
@@ -799,6 +762,16 @@ class LauncherApp:
         return "break"
 
     def _build_workspace(self, outer: ttk.Frame) -> None:
+        status_label = ttk.Label(
+            outer,
+            textvariable=self.status_var,
+            style="Status.TLabel",
+            anchor=tk.W,
+        )
+        status_label.pack(side=tk.BOTTOM, fill=tk.X, pady=(4, 0))
+        self._tooltip(status_label, self._status_tooltip_text)
+        status_label.bind("<Button-1>", lambda _event: self._show_action_info_dialog())
+        self.status_label = status_label
         self.workspace_component = WorkspacePanel(
             outer,
             clipboard_getter=self.root.clipboard_get,
@@ -813,49 +786,7 @@ class LauncherApp:
         self.workspace_menu = self.workspace_component.context_menu
         self.workspace_transform_menu = self.workspace_component.transform_menu
         self.workspace_transform_button = self.workspace_component.transform_button
-
-    def _build_footer(self, outer: ttk.Frame) -> None:
-
-        status_label = ttk.Label(
-            outer,
-            textvariable=self.status_var,
-            style="Status.TLabel",
-            anchor=tk.W,
-        )
-        status_label.pack(side=tk.BOTTOM, fill=tk.X, pady=(4, 0), anchor=tk.W)
-        self._tooltip(status_label, self._status_tooltip_text)
-        status_label.bind("<Button-1>", lambda _event: self._show_action_info_dialog())
-
-        controls = ttk.Frame(outer)
-        controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
-        for column in range(8):
-            controls.columnconfigure(column, weight=1, uniform="controls")
-
-        button_specs = (
-            ("+", "Capture — Save current clipboard text to Inbox after asking for a title.", self._capture_clipboard),
-            ("▣", "Inbox — Review captures and convert them into permanent actions.", self._show_inbox),
-            ("✎", "Edit — Configure the selected action, including shared actions.", self._edit_selected),
-            ("⌖", "Pin — Pin or unpin the selected action in stable slots 1–5.", self._toggle_selected_pin),
-            ("?", "Help — Open the complete local Context Palette help document.", self._show_help),
-            ("⌨", "Keyboard shortcuts — Open the complete shortcut reference.", self._show_shortcuts),
-            ("−", "Hide — Hide the palette but keep it resident. Reopen with Ctrl+Alt+P.", self.hide_window),
-            ("×", "Quit — Stop Context Palette completely and release Ctrl+Alt+P.", self.quit_app),
-        )
-        for column, (symbol, tooltip, command) in enumerate(button_specs):
-            control = ttk.Button(
-                controls,
-                text=symbol,
-                width=3,
-                command=command,
-                style="Icon.TButton",
-            )
-            control.grid(
-                row=0,
-                column=column,
-                sticky=tk.EW,
-                padx=(0 if column == 0 else 2, 0 if column == 8 else 2),
-            )
-            self._tooltip(control, tooltip)
+        self.text_tools_button = self.workspace_component.text_tools_button
 
     def _tooltip(self, widget: tk.Widget, text: str | Callable[[], str]) -> None:
         self.widget_tooltips.append(WidgetTooltip(widget, text))
@@ -892,30 +823,31 @@ class LauncherApp:
                 root=self.root,
                 font=self.results.cget("font"),
             )
-        icon_widths = {
-            action_type: result_font.measure(definition.icon)
-            for action_type, definition in ACTION_TYPES.items()
-        }
+        icons = {definition.icon for definition in ACTION_TYPES.values()} | {"▣"}
+        icon_widths = {icon: result_font.measure(icon) for icon in icons}
         target_width = max(icon_widths.values(), default=0)
         spacer = "\u200a"
         spacer_width = result_font.measure(spacer)
         if spacer_width <= 0:
             spacer = " "
             spacer_width = max(1, result_font.measure(spacer))
-        self.action_icon_padding: dict[str, str] = {}
-        for action_type, definition in ACTION_TYPES.items():
+        self.item_icon_padding: dict[str, str] = {}
+        for icon in icons:
             padding = ""
             while (
-                result_font.measure(definition.icon + padding + spacer)
+                result_font.measure(icon + padding + spacer)
                 <= target_width
             ):
                 padding += spacer
-            self.action_icon_padding[action_type] = padding
+            self.item_icon_padding[icon] = padding
+
+    def _aligned_item_display_text(self, icon: str, title: str) -> str:
+        padding = getattr(self, "item_icon_padding", {}).get(icon, "")
+        return f"{icon}{padding} {title}"
 
     def _aligned_action_display_text(self, action: Action) -> str:
         icon = ACTION_TYPES[action.type].icon
-        padding = getattr(self, "action_icon_padding", {}).get(action.type, "")
-        return f"{icon}{padding} - {action.compact_title}"
+        return self._aligned_item_display_text(icon, action.compact_title)
 
     def _result_tooltip_text(self, index: int) -> str:
         if self.work_items_mode:
@@ -937,13 +869,16 @@ class LauncherApp:
             )
         if index < 0 or index >= len(self.displayed_action_rows):
             return ""
-        action, _slot = self.displayed_action_rows[index]
+        action, slot = self.displayed_action_rows[index]
         if action is None:
             return ""
-        lines = [
+        lines = []
+        if slot is not None:
+            lines.append(f"Shortcut: Shift+{slot_display_number(slot)}")
+        lines.append(
             "Contexts: "
             + (", ".join(action.effective_contexts) or "General only")
-        ]
+        )
         if action.effective_tags:
             lines.append(f"Tags: {', '.join(action.effective_tags)}")
         lines.append(f"Action: {action.title}")
@@ -991,7 +926,7 @@ class LauncherApp:
     def _audit_tooltips(self) -> None:
         descriptions = {
             "1–5  PINNED": "Global shortcuts that stay in slots 1–5 in every context.",
-            "6–0  FOCUS CONTEXT": "The five preferred actions for the current Focus context.",
+            "6–0  FOCUS CONTEXT": "The five preferred Actions or Work Items for the current Focus context.",
             "Selection, pasted input, and transformation results": (
                 "This editable text is read by input-aware actions and may contain clipboard or action output."
             ),
@@ -1231,21 +1166,20 @@ class LauncherApp:
                 self.local_actions_path,
                 inspect_external_paths=False,
             )
-            available_tags = tuple(
-                sorted(
-                    {tag for action in self.actions for tag in action.effective_tags},
-                    key=str.casefold,
-                )
-            )
-            if hasattr(self, "action_discovery_panel") and not self.work_items_mode:
-                self.action_discovery_panel.set_tags(available_tags)
+            available_tags = self._available_item_tags()
+            if hasattr(self, "action_discovery_panel"):
+                self.action_discovery_panel.set_tags(self._available_item_tags())
             if (
-                getattr(self, "action_tag_filter", None) is not None
-                and self.action_tag_filter.casefold()
+                getattr(self, "item_tag_filter", None) is not None
+                and self.item_tag_filter.casefold()
                 not in {tag.casefold() for tag in available_tags}
             ):
+                self.item_tag_filter = None
                 self.action_tag_filter = None
+                self.work_tag_filter = None
+                self.item_tag_filter_var.set("All tags")
                 self.action_tag_filter_var.set("All tags")
+                self.work_tag_filter_var.set("All work tags")
             self._sync_filter_indicators()
             self.status_var.set(f"Loaded {len(self.actions)} actions")
         except ActionError as exc:
@@ -1293,7 +1227,7 @@ class LauncherApp:
             self.work_item_index,
             self._accept_work_item_index,
         ):
-            if self.work_items_mode:
+            if self.discovery_scope in {DISCOVERY_ALL, DISCOVERY_WORK_ITEMS}:
                 self.status_var.set("Refreshing Work Items…")
         else:
             self.work_item_refresh_pending = True
@@ -1344,18 +1278,23 @@ class LauncherApp:
         ):
             self.work_project_filter = None
             self.work_project_filter_var.set("All project codes")
+        item_tags = self._available_item_tags()
         if (
-            self.work_tag_filter is not None
-            and self.work_tag_filter.casefold()
-            not in {tag.casefold() for tag in work_tags}
+            self.item_tag_filter is not None
+            and self.item_tag_filter.casefold()
+            not in {tag.casefold() for tag in item_tags}
         ):
+            self.item_tag_filter = None
+            self.action_tag_filter = None
             self.work_tag_filter = None
+            self.item_tag_filter_var.set("All tags")
+            self.action_tag_filter_var.set("All tags")
             self.work_tag_filter_var.set("All work tags")
-        if self.work_items_mode:
-            self.action_discovery_panel.set_work_item_mode(
-                True,
+        if self.discovery_scope in {DISCOVERY_ALL, DISCOVERY_WORK_ITEMS}:
+            self.action_discovery_panel.set_discovery_scope(
+                self.discovery_scope,
                 project_codes=project_codes,
-                tags=work_tags,
+                tags=item_tags,
             )
             self._sync_filter_indicators()
             self._refresh_results()
@@ -1377,16 +1316,26 @@ class LauncherApp:
         )
 
     def _available_work_tags(self) -> tuple[str, ...]:
+        work_item_index = getattr(self, "work_item_index", None)
         return tuple(
             sorted(
                 {
                     tag
-                    for item in self.work_item_index.items
+                    for item in (work_item_index.items if work_item_index else ())
                     for tag in self._work_item_tags(item)
                 },
                 key=str.casefold,
             )
         )
+
+    def _available_item_tags(self) -> tuple[str, ...]:
+        tags = {
+            tag
+            for action in self.actions
+            for tag in action.effective_tags
+        }
+        tags.update(self._available_work_tags())
+        return tuple(sorted(tags, key=str.casefold))
 
     def _load_command_surface(self, *, render: bool = True) -> None:
         try:
@@ -1442,19 +1391,31 @@ class LauncherApp:
         self.surface_count_var.set(
             f"{button_count} button" if button_count == 1 else f"{button_count} buttons"
         )
+        column_count = self.command_surface_columns
         for column in range(2):
-            self.command_tiles_frame.columnconfigure(column, weight=1, uniform="surface")
-        self._render_configured_quick_group(standard_group, row=0, column=0)
-        self._render_action_bound_quick_group(bound_groups[0], row=0, column=1)
-        self._render_action_bound_quick_group(bound_groups[1], row=1, column=0)
-        self._render_action_bound_quick_group(bound_groups[2], row=1, column=1)
-        for index, group in enumerate(configured_groups):
-            row, column = divmod(index, 2)
+            enabled = column < column_count
+            self.command_tiles_frame.columnconfigure(
+                column,
+                weight=1 if enabled else 0,
+                uniform="surface" if enabled else "",
+                minsize=0,
+            )
+        position = 0
+        row, column = divmod(position, column_count)
+        self._render_configured_quick_group(standard_group, row=row, column=column)
+        position += 1
+        for group in bound_groups:
+            row, column = divmod(position, column_count)
+            self._render_action_bound_quick_group(group, row=row, column=column)
+            position += 1
+        for group in configured_groups:
+            row, column = divmod(position, column_count)
             self._render_configured_quick_group(
                 group,
-                row=row + 2,
+                row=row,
                 column=column,
             )
+            position += 1
 
     def _render_configured_quick_group(
         self,
@@ -1902,6 +1863,18 @@ class LauncherApp:
         )
         self.palette_state = resolved.palette_state
         self.available_context_names = list(resolved.available_names)
+        if hasattr(self, "action_discovery_panel"):
+            self.action_discovery_panel.set_contexts(
+                tuple(self.available_context_names)
+            )
+        if (
+            getattr(self, "item_context_filter", None) is not None
+            and self.item_context_filter.casefold()
+            not in {name.casefold() for name in self.available_context_names}
+        ):
+            self.item_context_filter = None
+            if hasattr(self, "item_context_filter_var"):
+                self.item_context_filter_var.set("All contexts")
         self.context_var.set(self.palette_state.focus_context)
         self._refresh_focus_controls()
         if render:
@@ -1933,6 +1906,7 @@ class LauncherApp:
             context,
             self.palette_state.context_slots,
             self.palette_state.context_membership_version,
+            self.palette_state.context_item_slots,
         )
         try:
             save_palette_state(self.palette_path, updated_state)
@@ -1969,14 +1943,16 @@ class LauncherApp:
             self.search_refresh_after_id = None
         self.results_tooltip.hide()
         self.focus_tree_tooltip.hide()
-        if self.work_items_mode:
+        self.slot_items = palette_item_slots(self.actions, self.palette_state)
+        self.slot_actions = action_slots(self.actions, self.palette_state)
+        if self.discovery_scope == DISCOVERY_WORK_ITEMS:
             self._render_work_items()
             return
         if (
             self.focus_actions_mode
             and not self.search_var.get().strip()
-            and self.action_type_filter is None
-            and self.action_tag_filter is None
+            and self.item_context_filter is None
+            and self.item_tag_filter is None
         ):
             self._render_focus_actions()
             _warn_if_slow(
@@ -1986,16 +1962,34 @@ class LauncherApp:
                 action_count=len(self.actions),
             )
             return
+        if self.discovery_scope == DISCOVERY_ALL:
+            self._render_all_items()
+            _warn_if_slow(
+                "result refresh",
+                started_at,
+                SLOW_RESULT_REFRESH_SECONDS,
+                action_count=len(self.actions),
+            )
+            return
         self._show_flat_results()
         self.filtered_actions = search_actions(self.actions, self.search_var.get())
+        if self.item_context_filter is not None:
+            self.filtered_actions = [
+                action
+                for action in self.filtered_actions
+                if self._action_belongs_to_context(
+                    action,
+                    self.item_context_filter,
+                )
+            ]
         if self.action_type_filter is not None:
             self.filtered_actions = [
                 action
                 for action in self.filtered_actions
                 if action.type == self.action_type_filter
             ]
-        if self.action_tag_filter is not None:
-            selected_tag = self.action_tag_filter.casefold()
+        if self.item_tag_filter is not None:
+            selected_tag = self.item_tag_filter.casefold()
             self.filtered_actions = [
                 action
                 for action in self.filtered_actions
@@ -2003,7 +1997,6 @@ class LauncherApp:
                     tag.casefold() for tag in action.effective_tags
                 }
             ]
-        self.slot_actions = action_slots(self.actions, self.palette_state)
         matching_ids = {action.id for action in self.filtered_actions}
         slot_rows = [
             (slot, action)
@@ -2034,25 +2027,21 @@ class LauncherApp:
                     selectforeground=COLORS["muted_text"],
                 )
                 continue
-            prefix = (
-                f"{slot_display_number(slot)}. "
-                if slot is not None
-                else "   "
-            )
             self.results.insert(
                 tk.END,
-                f"{prefix}{self._aligned_action_display_text(action)}",
+                self._aligned_action_display_text(action),
             )
-            if slot is not None and 1 <= slot <= 5:
+            row_tag = slot_row_tag(slot)
+            if row_tag == PINNED_SLOT_ROW_TAG:
                 self.results.itemconfigure(
                     index,
-                    background=COLORS["row_light"],
+                    background=COLORS["slot_pinned"],
                     foreground=COLORS["text"],
                 )
-            elif slot is not None and 6 <= slot <= 10:
+            elif row_tag == FOCUS_SLOT_ROW_TAG:
                 self.results.itemconfigure(
                     index,
-                    background=COLORS["row_aqua"],
+                    background=COLORS["slot_focus"],
                     foreground=COLORS["text"],
                 )
         if self.displayed_actions:
@@ -2064,22 +2053,22 @@ class LauncherApp:
             query = self.search_var.get().strip()
             if (
                 self.action_type_filter is not None
-                and self.action_tag_filter is not None
+                and self.item_tag_filter is not None
             ):
                 type_label = ACTION_TYPES[self.action_type_filter].display_label
                 empty_message = (
-                    f'No {type_label} actions tagged “{self.action_tag_filter}” '
+                    f'No {type_label} actions tagged “{self.item_tag_filter}” '
                     f'match “{query}”.\nClear Find or choose another filter.'
                     if query
                     else f'No {type_label} actions use the tag '
-                    f'“{self.action_tag_filter}”.\nChoose another type or tag.'
+                    f'“{self.item_tag_filter}”.\nChoose another type or tag.'
                 )
-            elif self.action_tag_filter is not None:
+            elif self.item_tag_filter is not None:
                 empty_message = (
-                    f'No actions tagged “{self.action_tag_filter}” match “{query}”.\n'
+                    f'No actions tagged “{self.item_tag_filter}” match “{query}”.\n'
                     "Clear Find or choose another tag."
                     if query
-                    else f'No actions use the tag “{self.action_tag_filter}”.\n'
+                    else f'No actions use the tag “{self.item_tag_filter}”.\n'
                     "Choose another tag or add it in Configure."
                 )
             elif self.action_type_filter is not None:
@@ -2104,16 +2093,16 @@ class LauncherApp:
             )
             if (
                 self.action_type_filter is not None
-                and self.action_tag_filter is not None
+                and self.item_tag_filter is not None
             ):
                 type_label = ACTION_TYPES[self.action_type_filter].display_label
                 self.status_var.set(
                     f"No matching actions · type: {type_label} · "
-                    f"tag: {self.action_tag_filter}"
+                    f"tag: {self.item_tag_filter}"
                 )
-            elif self.action_tag_filter is not None:
+            elif self.item_tag_filter is not None:
                 self.status_var.set(
-                    f"No matching action tagged {self.action_tag_filter}."
+                    f"No matching action tagged {self.item_tag_filter}."
                 )
             elif self.action_type_filter is not None:
                 type_label = ACTION_TYPES[self.action_type_filter].display_label
@@ -2125,17 +2114,17 @@ class LauncherApp:
         else:
             if (
                 self.action_type_filter is not None
-                and self.action_tag_filter is not None
+                and self.item_tag_filter is not None
             ):
                 type_label = ACTION_TYPES[self.action_type_filter].display_label
                 self.status_var.set(
                     f"{count} action{'s' if count != 1 else ''} · "
-                    f"type: {type_label} · tag: {self.action_tag_filter}"
+                    f"type: {type_label} · tag: {self.item_tag_filter}"
                 )
-            elif self.action_tag_filter is not None:
+            elif self.item_tag_filter is not None:
                 self.status_var.set(
                     f"{count} action{'s' if count != 1 else ''} tagged "
-                    f"{self.action_tag_filter}"
+                    f"{self.item_tag_filter}"
                 )
             elif self.action_type_filter is not None:
                 type_label = ACTION_TYPES[self.action_type_filter].display_label
@@ -2153,6 +2142,156 @@ class LauncherApp:
             action_count=len(self.actions),
         )
 
+    def _work_item_belongs_to_context(
+        self,
+        item: DiscoveredWorkItem,
+        context: str | None,
+    ) -> bool:
+        if context is None or context.casefold() == "general":
+            return True
+        reference = WorkItemReference(item.source_id, item.relative_folder)
+        return any(
+            reference in definition.work_item_refs
+            for definition in self.context_definitions
+            if definition.name.casefold() == context.casefold()
+        )
+
+    def _action_belongs_to_context(
+        self,
+        action: Action,
+        context: str | None,
+    ) -> bool:
+        if context is None or context.casefold() == "general":
+            return True
+        if action.belongs_to_context(context):
+            return True
+        reference = PaletteItemReference(action_id=action.id)
+        return any(
+            reference in definition.member_items
+            for definition in self.context_definitions
+            if definition.name.casefold() == context.casefold()
+        )
+
+    def _render_all_items(self) -> None:
+        self._show_mixed_results("all")
+        self.actions_heading_var.set("All items")
+        query = self.search_var.get()
+        actions = search_actions(self.actions, query)
+        if self.item_context_filter is not None:
+            actions = [
+                action
+                for action in actions
+                if self._action_belongs_to_context(
+                    action,
+                    self.item_context_filter,
+                )
+            ]
+        if self.item_tag_filter is not None:
+            selected_tag = self.item_tag_filter.casefold()
+            actions = [
+                action
+                for action in actions
+                if selected_tag in {
+                    tag.casefold() for tag in action.effective_tags
+                }
+            ]
+        work_items = [
+            item
+            for item in self.work_item_index.items
+            if work_item_matches(
+                item,
+                query,
+                tags=self._work_item_tags(item),
+                tag=self.item_tag_filter,
+            )
+            and self._work_item_belongs_to_context(
+                item,
+                self.item_context_filter,
+            )
+        ]
+        self.filtered_actions = actions
+        self.displayed_actions = actions
+        self.displayed_work_items = work_items
+        actions_by_id = {action.id: action for action in actions}
+        work_items_by_reference = {
+            WorkItemReference(item.source_id, item.relative_folder): item
+            for item in work_items
+        }
+        matching_references = {
+            *(PaletteItemReference(action_id=action.id) for action in actions),
+            *(
+                PaletteItemReference(work_item_ref=reference)
+                for reference in work_items_by_reference
+            ),
+        }
+        slotted = [
+            (slot, reference)
+            for slot, reference in sorted(self.slot_items.items())
+            if reference in matching_references
+        ]
+        slotted_references = {reference for _slot, reference in slotted}
+        remaining = [
+            *(PaletteItemReference(action_id=action.id) for action in actions),
+            *(
+                PaletteItemReference(work_item_ref=reference)
+                for reference in work_items_by_reference
+            ),
+        ]
+        remaining = [
+            reference
+            for reference in remaining
+            if reference not in slotted_references
+        ]
+        remaining.sort(
+            key=lambda reference: (
+                actions_by_id[reference.action_id].compact_title.casefold()
+                if reference.action_id
+                else work_items_by_reference[
+                    reference.work_item_ref
+                ].display_name.casefold()
+            )
+        )
+        rows = [*slotted, *((None, reference) for reference in remaining)]
+
+        self.focus_tree.delete(*self.focus_tree.get_children())
+        self.focus_tree_actions.clear()
+        self.focus_tree_items.clear()
+        for index, (slot, reference) in enumerate(rows):
+            if reference.action_id:
+                action = actions_by_id[reference.action_id]
+                label = self._aligned_action_display_text(action)
+                item_id = f"all-action:{index}:{action.id}"
+                self.focus_tree_actions[item_id] = action
+            else:
+                assert reference.work_item_ref is not None
+                item = work_items_by_reference[reference.work_item_ref]
+                label = self._aligned_item_display_text("▣", item.display_name)
+                item_id = f"all-work-item:{index}:{reference.stable_key}"
+            row_tag = slot_row_tag(slot)
+            self.focus_tree.insert(
+                "",
+                tk.END,
+                iid=item_id,
+                text=label,
+                tags=(row_tag,) if row_tag else (),
+            )
+            self.focus_tree_items[item_id] = reference
+
+        match_count = len(actions) + len(work_items)
+        self.results_count_var.set(
+            f"{match_count} item" if match_count == 1 else f"{match_count} items"
+        )
+        if rows:
+            first = self.focus_tree.get_children()[0]
+            self.focus_tree.selection_set(first)
+            self.focus_tree.focus(first)
+            self.status_var.set(
+                f"{len(actions)} Actions · {len(work_items)} Work Items"
+            )
+        else:
+            self.status_var.set("No Actions or Work Items match the current filters.")
+        self._update_preview()
+
     def _render_work_items(self) -> None:
         self._show_flat_results()
         self.actions_heading_var.set("Work Items")
@@ -2168,7 +2307,11 @@ class LauncherApp:
                 self.search_var.get(),
                 tags=self._work_item_tags(item),
                 project_code=self.work_project_filter,
-                tag=self.work_tag_filter,
+                tag=self.item_tag_filter,
+            )
+            and self._work_item_belongs_to_context(
+                item,
+                self.item_context_filter,
             )
         ]
         for item in self.displayed_work_items:
@@ -2203,8 +2346,8 @@ class LauncherApp:
                 details: list[str] = []
                 if self.work_project_filter is not None:
                     details.append(f"project: {self.work_project_filter}")
-                if self.work_tag_filter is not None:
-                    details.append(f"tag: {self.work_tag_filter}")
+                if self.item_tag_filter is not None:
+                    details.append(f"tag: {self.item_tag_filter}")
                 suffix = f" · {' · '.join(details)}" if details else ""
                 status = f"No Work Items match{suffix}."
             self.results.insert(tk.END, message)
@@ -2213,56 +2356,125 @@ class LauncherApp:
         self._update_preview()
 
     def _show_flat_results(self) -> None:
+        self.actions_heading_var.set(
+            "Work Items"
+            if self.discovery_scope == DISCOVERY_WORK_ITEMS
+            else "Actions"
+        )
         if self.results_view == "flat":
             return
         self.focus_tree.pack_forget()
         self.results.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.results_scrollbar.configure(command=self.results.yview)
         self.results_view = "flat"
-        self.actions_heading_var.set("Actions")
 
     def _show_focus_tree(self) -> None:
-        if self.results_view == "focus":
+        self._show_mixed_results("focus")
+
+    def _show_mixed_results(self, view: str) -> None:
+        if self.results_view == view:
             return
         self.results.pack_forget()
         self.focus_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.results_scrollbar.configure(command=self.focus_tree.yview)
         self.focus_tree.configure(yscrollcommand=self.results_scrollbar.set)
-        self.results_view = "focus"
+        self.results_view = view
 
     def _render_focus_actions(self) -> None:
         self._show_focus_tree()
         self.focus_tree.delete(*self.focus_tree.get_children())
         self.focus_tree_actions.clear()
+        self.focus_tree_items.clear()
         focused_actions = actions_for_context(
             self.actions,
             self.palette_state.focus_context,
             self.context_definitions,
         )
-        for index, action in enumerate(focused_actions):
-            item_id = f"action:{index}:{action.id}"
+        action_references = [
+            PaletteItemReference(action_id=action.id)
+            for action in focused_actions
+        ]
+        context_key = self.palette_state.focus_context.casefold()
+        if context_key == "general":
+            work_item_references = [
+                PaletteItemReference(
+                    work_item_ref=WorkItemReference(
+                        item.source_id,
+                        item.relative_folder,
+                    )
+                )
+                for item in self.work_item_index.items
+            ]
+            preferred_references: list[PaletteItemReference] = []
+        else:
+            matching_definitions = [
+                definition
+                for definition in self.context_definitions
+                if definition.name.casefold() == context_key
+            ]
+            work_item_references = [
+                PaletteItemReference(work_item_ref=reference)
+                for definition in matching_definitions
+                for reference in definition.work_item_refs
+            ]
+            preferred_references = [
+                reference
+                for definition in matching_definitions
+                for reference in definition.preferred_items
+            ]
+        references = list(
+            dict.fromkeys(
+                (*preferred_references, *action_references, *work_item_references)
+            )
+        )
+        slot_by_reference = {
+            reference: slot for slot, reference in self.slot_items.items()
+        }
+        actions_by_id = {action.id: action for action in focused_actions}
+        for index, reference in enumerate(references):
+            slot = slot_by_reference.get(reference)
+            row_tag = slot_row_tag(slot)
+            if reference.action_id:
+                action = actions_by_id.get(reference.action_id)
+                if action is None:
+                    continue
+                label = self._aligned_action_display_text(action)
+                item_id = f"action:{index}:{action.id}"
+                self.focus_tree_actions[item_id] = action
+            else:
+                assert reference.work_item_ref is not None
+                work_item = self._work_item_for_reference(reference.work_item_ref)
+                title = (
+                    work_item.display_name
+                    if work_item is not None
+                    else "Unavailable Work Item: "
+                    f"{reference.work_item_ref.relative_folder}"
+                )
+                label = self._aligned_item_display_text("▣", title)
+                item_id = f"work-item:{index}:{reference.stable_key}"
             self.focus_tree.insert(
                 "",
                 tk.END,
                 iid=item_id,
-                text=self._aligned_action_display_text(action),
+                text=label,
+                tags=(row_tag,) if row_tag else (),
             )
-            self.focus_tree_actions[item_id] = action
-        count = len(focused_actions)
+            self.focus_tree_items[item_id] = reference
+        count = len(self.focus_tree_items)
         context = self.palette_state.focus_context
         self.focus_tree_context = context
-        self.actions_heading_var.set(f"Focus actions — {context}")
-        self.results_count_var.set(f"{count} action" if count == 1 else f"{count} actions")
+        self.actions_heading_var.set(f"Focus items — {context}")
+        self.results_count_var.set(f"{count} item" if count == 1 else f"{count} items")
         if count:
             initial_item = self.focus_tree.get_children()[0]
             self.focus_tree.selection_set(initial_item)
             self.focus_tree.focus(initial_item)
             self.status_var.set(
-                f"{count} actions in {context}. Find remains global."
+                f"{count} Palette items in {context}. Find remains global."
             )
         else:
             self.status_var.set(
-                f"No actions belong to {context}. Find searches all actions."
+                f"No Actions or Work Items belong to {context}. Find remains global."
             )
         self._update_preview()
 
@@ -2367,7 +2579,7 @@ class LauncherApp:
     def _toggle_selected_pin(self) -> None:
         action = self._selected_action()
         if action is None:
-            self.status_var.set("No action selected")
+            self.status_var.set("Global pins 1–5 currently accept Actions only.")
             return
         try:
             updated_state = toggle_pin(self.palette_state, action.id)
@@ -2391,6 +2603,16 @@ class LauncherApp:
         self.status_var.set(f"{verb}: {action.display_text}")
 
     def _execute_selected(self, *, open_folder: bool = False) -> None:
+        if self.results_view != "flat":
+            selected = self.focus_tree.selection()
+            reference = (
+                self.focus_tree_items.get(selected[0]) if selected else None
+            )
+            if reference is None:
+                self.status_var.set("No Palette item selected")
+                return
+            self._execute_palette_item(reference, open_folder=open_folder)
+            return
         if self.work_items_mode:
             item = self._selected_work_item()
             if item is None:
@@ -2411,6 +2633,39 @@ class LauncherApp:
             return
 
         self._execute_action(action)
+
+    def _execute_palette_item(
+        self,
+        reference: PaletteItemReference,
+        *,
+        open_folder: bool = False,
+    ) -> bool:
+        if reference.action_id:
+            action = next(
+                (item for item in self.actions if item.id == reference.action_id),
+                None,
+            )
+            if action is None:
+                self.status_var.set(f"Action unavailable: {reference.action_id}")
+                return False
+            self._execute_action(action)
+            return True
+        assert reference.work_item_ref is not None
+        item = self._work_item_for_reference(reference.work_item_ref)
+        if item is None:
+            return self._execute_work_item_reference(
+                reference.work_item_ref.relative_folder,
+                reference.work_item_ref,
+            )
+        if open_folder:
+            if not self._open_work_item_target(item, item.folder_path):
+                return False
+            self.status_var.set(f"Opened folder: {item.display_name}")
+            return True
+        return self._execute_work_item_reference(
+            item.display_name,
+            reference.work_item_ref,
+        )
 
     def _execute_action(self, action: Action) -> None:
         destination = self.source_foreground_handle
@@ -2604,17 +2859,27 @@ class LauncherApp:
 
     def _edit_selected(self) -> None:
         action = self._selected_action()
-        if action is None:
-            self.status_var.set("No action selected")
+        if action is not None:
+            self._show_configuration(initial_action_id=action.id)
             return
-        self._show_configuration(initial_action_id=action.id)
+        item = self._selected_work_item()
+        if item is None:
+            self.status_var.set("No item selected")
+            return
+        self._show_configuration(
+            initial_tab="work_items",
+            initial_work_item_key=work_item_metadata_key(
+                item.source_id,
+                item.relative_folder,
+            ),
+        )
 
     def _execute_slot(self, slot: int, event: tk.Event) -> str | None:
-        action = self.slot_actions.get(slot)
-        if action is None:
-            self.status_var.set(f"No action in slot {slot_display_number(slot)}")
+        reference = self.slot_items.get(slot)
+        if reference is None:
+            self.status_var.set(f"No item in slot {slot_display_number(slot)}")
             return "break"
-        self._execute_action(action)
+        self._execute_palette_item(reference)
         return "break"
 
     def _move_selection(self, offset: int, event: tk.Event) -> str:
@@ -2661,11 +2926,11 @@ class LauncherApp:
         return "break"
 
     def _selected_action(self) -> Action | None:
-        if self.work_items_mode:
-            return None
-        if self.results_view == "focus":
+        if self.results_view != "flat":
             selected = self.focus_tree.selection()
             return self.focus_tree_actions.get(selected[0]) if selected else None
+        if self.work_items_mode:
+            return None
         selected = self.results.curselection()
         if not selected:
             return None
@@ -2675,7 +2940,20 @@ class LauncherApp:
         action, _slot = self.displayed_action_rows[index]
         return action
 
+    def _selected_focus_item(self) -> PaletteItemReference | None:
+        if self.results_view == "flat":
+            return None
+        selected = self.focus_tree.selection()
+        return self.focus_tree_items.get(selected[0]) if selected else None
+
     def _selected_work_item(self) -> DiscoveredWorkItem | None:
+        if self.results_view != "flat":
+            reference = self._selected_focus_item()
+            return (
+                self._work_item_for_reference(reference.work_item_ref)
+                if reference is not None and reference.work_item_ref is not None
+                else None
+            )
         if not self.work_items_mode:
             return None
         selected = self.results.curselection()
@@ -2684,7 +2962,17 @@ class LauncherApp:
         return self.displayed_work_items[selected[0]]
 
     def _update_preview(self) -> None:
-        if self.work_items_mode:
+        selected_reference = self._selected_focus_item()
+        panel = getattr(self, "action_discovery_panel", None)
+        if panel is not None:
+            panel.set_selected_item_kind(
+                work_item=(
+                    selected_reference.work_item_ref is not None
+                    if selected_reference is not None
+                    else None
+                )
+            )
+        if self.work_items_mode and self.results_view == "flat":
             item = self._selected_work_item()
             if item is None:
                 self.action_info_full = "Select a Work Item to see its source and open target."
@@ -2705,10 +2993,37 @@ class LauncherApp:
             self.action_info_full = detail
             self.status_var.set(" · ".join(detail.splitlines()))
             return
+        focus_reference = self._selected_focus_item()
+        if focus_reference is not None and focus_reference.work_item_ref is not None:
+            item = self._work_item_for_reference(focus_reference.work_item_ref)
+            if item is None:
+                self.action_info_full = (
+                    "Unavailable Work Item: "
+                    f"{focus_reference.work_item_ref.relative_folder}\n"
+                    "Refresh Work Items or repair its personal source configuration."
+                )
+                self.status_var.set(self.action_info_full.replace("\n", " · "))
+                return
+            tags = self._work_item_tags(item)
+            default = (
+                f"Workbook: {item.matching_workbook_path.name}"
+                if item.matching_workbook_path is not None
+                else "Default: Open work-item folder"
+            )
+            self.action_info_full = (
+                f"{item.display_name}\n"
+                f"{item.kind_name or 'Work item'} · "
+                f"{item.organisation or 'Unparsed'} · {item.source_name}\n"
+                f"Tags: {', '.join(tags) or '(none)'}\n{default}"
+            )
+            self.status_var.set(" · ".join(self.action_info_full.splitlines()))
+            return
         action = self._selected_action()
         if action is None:
-            self.action_info_full = "Select an action to see what it reads and what it will do."
-            self.status_var.set("Select an action to see what it reads and what it will do.")
+            self.action_info_full = (
+                "Select an Action or Work Item to see what it will do."
+            )
+            self.status_var.set(self.action_info_full)
             return
         detail = self._preview_text(action)
         lines = detail.splitlines()
@@ -2729,11 +3044,40 @@ class LauncherApp:
         self.status_var.set(message[:217].rstrip() + "…" if len(message) > 220 else message)
 
     def _focus_tree_tooltip_text(self, item_id: str) -> str:
+        reference = self.focus_tree_items.get(item_id)
+        slot = next(
+            (
+                number
+                for number, candidate in self.slot_items.items()
+                if candidate == reference
+            ),
+            None,
+        )
+        shortcut = (
+            f"Shortcut: Shift+{slot_display_number(slot)}\n"
+            if slot is not None
+            else ""
+        )
         action = self.focus_tree_actions.get(item_id)
         if action is None:
-            return ""
+            if reference is None or reference.work_item_ref is None:
+                return ""
+            item = self._work_item_for_reference(reference.work_item_ref)
+            if item is None:
+                return (
+                    f"Unavailable Work Item: {reference.work_item_ref.relative_folder}\n"
+                    f"{shortcut}Source: {reference.work_item_ref.source_id}"
+                )
+            return (
+                f"{item.display_name}\n"
+                f"{shortcut}"
+                f"Source: {item.source_name}\n"
+                f"Tags: {', '.join(self._work_item_tags(item)) or '(none)'}\n"
+                "Type: Work Item"
+            )
         return (
             f"{action.title}\n"
+            f"{shortcut}"
             + (
                 f"Description: {action.description}\n"
                 if action.description
@@ -2969,6 +3313,7 @@ class LauncherApp:
         initial_action_id: str | None = None,
         initial_work_item_key: str | None = None,
         start_work_item_creation: bool = False,
+        start_action_creation: bool = False,
     ) -> None:
         if getattr(self, "_configuration_recovery_required", False):
             messagebox.showerror(
@@ -2992,6 +3337,7 @@ class LauncherApp:
                     initial_action_id=initial_action_id,
                     initial_work_item_key=initial_work_item_key,
                     start_work_item_creation=start_work_item_creation,
+                    start_action_creation=start_action_creation,
                 )
                 return
         self.configuration_window = ConfigurationWindow(
@@ -3017,6 +3363,7 @@ class LauncherApp:
             initial_action_id=initial_action_id,
             initial_work_item_key=initial_work_item_key,
             start_work_item_creation=start_work_item_creation,
+            start_action_creation=start_action_creation,
             data_paths=self.data_paths,
             on_restore_complete=self._reload,
             on_restore_recovery_required=self._require_restore_recovery_restart,
@@ -3036,6 +3383,13 @@ class LauncherApp:
             initial_tab="work_items",
             start_work_item_creation=True,
         )
+
+    def _show_action_creation(self) -> str:
+        self._show_configuration(
+            initial_tab="actions",
+            start_action_creation=True,
+        )
+        return "break"
 
     def _send_workspace_to_work_item_inbox(
         self,
@@ -3349,12 +3703,27 @@ class LauncherApp:
     def _configure_focus_action_from_event(self, event: tk.Event) -> str:
         item_id = self.focus_tree.identify_row(event.y)
         action = self.focus_tree_actions.get(item_id)
-        if action is None:
+        reference = self.focus_tree_items.get(item_id)
+        if action is None and (reference is None or reference.work_item_ref is None):
             return "break"
         self.focus_tree.selection_set(item_id)
         self.focus_tree.focus(item_id)
         self._update_preview()
-        self._show_action_configuration(action)
+        if action is not None:
+            self._show_action_configuration(action)
+        else:
+            assert reference is not None and reference.work_item_ref is not None
+            item = self._work_item_for_reference(reference.work_item_ref)
+            if item is not None:
+                self._show_work_item_menu(event, item)
+            else:
+                self._show_configuration(
+                    initial_tab="work_items",
+                    initial_work_item_key=work_item_metadata_key(
+                        reference.work_item_ref.source_id,
+                        reference.work_item_ref.relative_folder,
+                    ),
+                )
         return "break"
 
     def _show_focus_configuration(self) -> None:
@@ -3386,15 +3755,15 @@ class LauncherApp:
             "Next": 5,
         }
         if keysym in navigation:
-            if self.results_view == "focus" and event.widget == self.focus_tree:
+            if self.results_view != "flat" and event.widget == self.focus_tree:
                 return None
             return self._move_selection(navigation[keysym], event)
         if keysym == "Home":
-            if self.results_view == "focus" and event.widget == self.focus_tree:
+            if self.results_view != "flat" and event.widget == self.focus_tree:
                 return None
             return self._select_index(0, event)
         if keysym == "End":
-            if self.results_view == "focus" and event.widget == self.focus_tree:
+            if self.results_view != "flat" and event.widget == self.focus_tree:
                 return None
             result_count = (
                 len(self.displayed_work_items)

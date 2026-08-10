@@ -13,8 +13,9 @@ The application works with three kinds of data:
 1. **Persisted application data** — actions, contexts, Quick actions, palette
    choices, captured Inbox items, Work Item configuration, and cheat sheets.
 2. **Runtime projections** — combined Built-in/My configuration lists, resolved
-   Focus slots, generated Quick-action menus, and the discovered Work Item
-   index. These can be rebuilt from persisted data and the local environment.
+   Focus slots, the mixed All-items discovery view, generated Quick-action
+   menus, and the discovered Work Item index. These can be rebuilt from
+   persisted data and the local environment.
 3. **External resources** — files, folders, applications, URLs, Windows
    Credential Manager entries, Work Item folders/workbooks, and Excel
    templates. Context Palette stores references to these resources, not their
@@ -24,27 +25,30 @@ That boundary is essential for backup: a configuration backup can preserve the
 application's records and references, but it is not automatically a backup of
 every referenced file or secret.
 
+**All items**, **Actions**, and **Work Items** are projections, not new stored
+entities or ownership boundaries. The mixed projection joins current Actions
+and discovered Work Items through `PaletteItemReference`, then applies shared
+Context/tag filters. It does not convert a Work Item into an Action or persist
+the discovery rows.
+
 ## Concept map
 
 ```mermaid
 erDiagram
-    ACTION ||--o{ CONTEXT_ACTION_MEMBERSHIP : "is assigned to"
-    CONTEXT ||--o{ CONTEXT_ACTION_MEMBERSHIP : "owns membership"
-    CONTEXT ||--o{ CONTEXT_PREFERRED_ACTION : "orders defaults"
-    ACTION ||--o{ CONTEXT_PREFERRED_ACTION : "is preferred"
+    CONTEXT ||--o{ PALETTE_ITEM_REFERENCE : "groups and prefers"
+    PALETTE_ITEM_REFERENCE }o--o| ACTION : "Action target"
+    PALETTE_ITEM_REFERENCE }o--o| WORK_ITEM_IDENTITY : "Work Item target"
 
     PALETTE_STATE ||--o{ PINNED_ACTION : "orders slots 1-5"
     ACTION ||--o{ PINNED_ACTION : "fills"
     PALETTE_STATE }o--|| CONTEXT : "selects Focus"
     PALETTE_STATE ||--o{ CONTEXT_SLOT_OVERRIDE : "stores per-context slots"
     CONTEXT ||--o{ CONTEXT_SLOT_OVERRIDE : "identifies context"
-    ACTION ||--o{ CONTEXT_SLOT_OVERRIDE : "fills slots 6-0"
+    PALETTE_ITEM_REFERENCE ||--o{ CONTEXT_SLOT_OVERRIDE : "fills slots 6-0"
 
     COMMAND_GROUP ||--o{ COMMAND_ITEM : contains
     COMMAND_ITEM ||--o{ COMMAND_ITEM : "contains recursively"
-    COMMAND_ITEM ||--o{ COMMAND_TARGET : "orders"
-    COMMAND_TARGET }o--o| ACTION : "action target"
-    COMMAND_TARGET }o--o| WORK_ITEM_IDENTITY : "Work Item target"
+    COMMAND_ITEM ||--o{ PALETTE_ITEM_REFERENCE : "orders targets"
 
     WORK_ITEM_SOURCE ||--o{ WORK_ITEM_IDENTITY : discovers
     WORK_ITEM_IDENTITY ||--o| WORK_ITEM_METADATA : "has local tags"
@@ -96,10 +100,13 @@ a definition.
 | `name`, `description` | Stable visible identity and purpose |
 | `action_ids` | Canonical ordered membership of Actions in this context |
 | `preferred_action_ids` | Up to five preferred Actions for slots 6–0 |
+| `work_item_refs` | Stable personal Work Item membership by source and folder identity |
+| `preferred_items` | Up to five ordered typed Action or Work Item references for mixed slots 6–0 |
 | `technology`, `task` | Readable legacy classification metadata |
 
-Context definitions own current membership. Action-side context fields remain
-readable only for compatibility and migration.
+Context definitions own current membership. Built-in Contexts remain
+Action-only; My configuration Contexts may group both entity types. Action-side
+context fields remain readable only for compatibility and migration.
 
 ### Palette state
 
@@ -110,6 +117,7 @@ There is one machine-local `PaletteState` aggregate.
 | `pinned_action_ids` | Up to five ordered Action references for slots 1–5 |
 | `focus_context` | Current Context name, or implicit `General` |
 | `context_slots` | Context-name to ordered Action-reference overrides for slots 6–0 |
+| `context_item_slots` | Context-name to ordered typed Action/Work Item overrides for slots 6–0 |
 | `context_membership_version` | Marker for the completed membership migration, not a general file schema version |
 
 ### Quick-action command surface
@@ -127,6 +135,9 @@ exactly one of:
 Legacy action-only fields and the initial single-Work-Item field remain
 readable. New mixed records use `targets`. Built-in groups may reference only
 Built-in Actions; Work Item targets are permitted only in My configuration.
+`CommandTarget` is a compatibility name for the shared immutable
+`PaletteItemReference`; Quick-action groups themselves currently have no
+Context visibility or grouping rule.
 
 Password, Folder, and Prompt menus are different: they are runtime projections
 generated from active Actions of matching types and their `quick_action_path`.
@@ -170,17 +181,20 @@ Action, but the resulting Action is independent.
 | Reference | Policy |
 | --- | --- |
 | Context membership/preference → Action | Hard; the Action must exist |
-| Palette pin/context slot → Action | Hard; the Action must exist |
+| Personal Context membership/preference → Work Item | Soft; retained while its source/item is unavailable |
+| Palette pin → Action | Hard; pins 1–5 remain Action-only |
+| Palette Context slot → Action or Work Item | Action is hard; Work Item is soft |
 | Palette Focus/context-slot key → Context | Canonicalized case-insensitively; unknown historical slot keys are currently preserved |
 | Quick-action Action target → Action | Hard; the Action must exist |
-| Built-in Context/Quick action → personal Action | Forbidden |
+| Built-in Context/Quick action → personal Action or Work Item | Forbidden |
 | Quick-action Work Item target → Work Item source/item | Soft; it remains configured while unavailable |
 | Work Item metadata → source/item | Soft; retained across disconnection or temporary disappearance |
 | Action → file/folder/app/URL/credential target | External reference; availability is checked according to Action type and execution boundary |
 | Work Item settings → Excel template | External machine-local reference |
 
 Actions and Contexts form a practical reference cycle: Contexts own Action
-membership, while action views are projected back through those Contexts.
+membership, while Action views are projected back through those Contexts.
+Personal Contexts additionally own soft Work Item references.
 Consequently, restore must validate a complete staged snapshot rather than
 attempt to prove safety one file at a time.
 
@@ -224,7 +238,7 @@ external resources.
 The launcher builds and keeps last-known-good versions of:
 
 - the combined Built-in and My configuration Action list;
-- the combined Context list and context-owned Action membership projection;
+- the combined Context list and context-owned Action/Work Item membership projection;
 - the combined persisted command surface plus generated action-bound menus;
 - resolved pins, Focus slots, filters, and visible rows;
 - an immutable Work Item index refreshed from configured sources.

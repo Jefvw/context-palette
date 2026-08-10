@@ -77,6 +77,12 @@ class WorkspacePanel:
         self.frame.pack(fill=tk.BOTH, expand=True)
         header = ttk.Frame(self.frame)
         header.pack(fill=tk.X, pady=(0, 4))
+        self.text_tools_button = ttk.Menubutton(
+            header,
+            text="Text tools ▾",
+            style="Compact.TButton",
+        )
+        self.text_tools_button.pack(side=tk.RIGHT)
         ttk.Label(
             header,
             text="Input / Output",
@@ -134,16 +140,12 @@ class WorkspacePanel:
 
         self.context_menu = tk.Menu(self.text, tearoff=False)
         self._build_context_menu()
-        self.transform_button = ttk.Button(
-            body,
-            text="⋮",
-            width=3,
-            command=self.show_transform_menu,
-            style="Compact.TButton",
-        )
-        self.transform_button.pack(side=tk.RIGHT, anchor=tk.N, padx=(5, 0))
+        self.text_tools_button.configure(menu=self.transform_menu)
+        # Compatibility alias for launcher integrations that used the former
+        # symbol-only transform control.
+        self.transform_button = self.text_tools_button
         tooltip_adder(
-            self.transform_button,
+            self.text_tools_button,
             "Transform selected text, or the complete field when nothing is selected. Results are copied.",
         )
 

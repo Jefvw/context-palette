@@ -173,6 +173,19 @@ def _remove_context_references(
             retained = [value for value in references if value != action_id]
             removed += len(references) - len(retained)
             context[field] = retained
+        preferred_items = context.get("preferred_items")
+        if isinstance(preferred_items, list):
+            retained_items = [
+                value
+                for value in preferred_items
+                if not (
+                    isinstance(value, dict)
+                    and value.get("type") == "action"
+                    and value.get("action_id") == action_id
+                )
+            ]
+            removed += len(preferred_items) - len(retained_items)
+            context["preferred_items"] = retained_items
     return removed
 
 
@@ -282,4 +295,20 @@ def _remove_palette_references(data: dict[str, object], action_id: str) -> int:
             retained = [value for value in action_ids if value != action_id]
             removed += len(action_ids) - len(retained)
             slots[context] = retained
+    item_slots = data.get("context_item_slots")
+    if isinstance(item_slots, dict):
+        for context, references in item_slots.items():
+            if not isinstance(references, list):
+                continue
+            retained_references = [
+                reference
+                for reference in references
+                if not (
+                    isinstance(reference, dict)
+                    and reference.get("type") == "action"
+                    and reference.get("action_id") == action_id
+                )
+            ]
+            removed += len(references) - len(retained_references)
+            item_slots[context] = retained_references
     return removed
