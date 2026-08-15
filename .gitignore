@@ -18,6 +18,7 @@ __pycache__/
 /data/layouts/snapshots/
 
 # Local environment overrides and logs.
+.devhome.json
 .env
 *.log
 *.lnk
