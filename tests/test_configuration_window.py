@@ -32,7 +32,8 @@ from context_palette.configuration_window import (
     select_first_tree_item,
     _focus_entry,
 )
-from context_palette.action_deletion import ActionDeletionReport
+from context_palette.action_deletion import ActionDeletionError, ActionDeletionReport
+from context_palette.action_suggestions import ActionCreationSuggestion
 from context_palette.action_bound_quick_actions import action_bound_quick_groups
 from context_palette.action_picker import ActionPickerField
 from context_palette.actions import Action, ActionError, append_action, load_actions
@@ -88,9 +89,18 @@ class FakeWindow:
 class FakeFocusWindow:
     def __init__(self) -> None:
         self.callbacks: list[object] = []
+        self.bindings: list[object] = []
+        self.cancelled: list[str] = []
 
-    def after_idle(self, callback: object) -> None:
+    def after_idle(self, callback: object) -> str:
         self.callbacks.append(callback)
+        return "after#focus"
+
+    def after_cancel(self, callback_id: str) -> None:
+        self.cancelled.append(callback_id)
+
+    def bind(self, _sequence: str, callback: object, *, add: str) -> None:
+        self.bindings.append(callback)
 
 
 class FakeNotebook:
@@ -463,6 +473,167 @@ class FakeSelectedConfigTree(FakeSelectedActionTree):
 
 
 class ConfigurationDialogTests(unittest.TestCase):
+    def test_reused_configuration_opens_requested_active_action_editor_directly(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        action = Action("edit-me", "Edit me", "General", "copy_text", "one")
+        configuration.actions = [action]
+        configuration.stored_actions = [action]
+        configuration.initial_action_id = None
+        configuration.action_filter_var = FakeVariable("hidden query")
+        configuration.action_state_filter_var = FakeVariable("Archived")
+        configuration.notebook = Mock()
+        configuration.work_items_panel = Mock()
+        configuration.window = Mock()
+        configuration._reload = Mock()
+        configuration._focus_current_tab = Mock()
+        configuration._edit_action_record = Mock()
+        configuration._pending_action_edit_id = None
+        configuration._pending_action_edit_after_id = None
+        callbacks: list[object] = []
+        configuration.window.after_idle.side_effect = (
+            lambda callback: callbacks.append(callback) or f"after#{len(callbacks)}"
+        )
+
+        configuration.show(
+            initial_tab="actions",
+            initial_action_id="EDIT-ME",
+            start_action_edit=True,
+        )
+        for callback in callbacks:
+            callback()
+
+        self.assertEqual(configuration.action_filter_var.value, "")
+        self.assertEqual(configuration.action_state_filter_var.value, "Active")
+        configuration._reload.assert_called_once_with()
+        configuration.notebook.select.assert_called_once_with(1)
+        configuration._edit_action_record.assert_called_once_with(action)
+        configuration.window.deiconify.assert_called_once_with()
+        configuration.window.lift.assert_called_once_with()
+
+    def test_direct_action_edit_fails_safely_when_active_action_disappeared(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.actions = []
+        configuration.stored_actions = [
+            Action(
+                "archived",
+                "Archived",
+                "General",
+                "copy_text",
+                "one",
+                state="Archived",
+            )
+        ]
+        configuration.feedback_var = FakeVariable()
+        configuration.feedback_label = Mock()
+        configuration._edit_action_record = Mock()
+
+        configuration._edit_action_by_id("archived")
+
+        configuration._edit_action_record.assert_not_called()
+        self.assertIn("no longer available", configuration.feedback_var.value)
+        configuration.feedback_label.configure.assert_called_once_with(
+            style="Error.TLabel"
+        )
+
+    def test_repeated_direct_edit_requests_coalesce_to_the_latest_action(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.window = Mock()
+        configuration._pending_action_edit_id = None
+        configuration._pending_action_edit_after_id = None
+        configuration._edit_action_by_id = Mock()
+        callbacks: list[object] = []
+        configuration.window.after_idle.side_effect = (
+            lambda callback: callbacks.append(callback) or "after#edit"
+        )
+
+        configuration._schedule_action_edit("first")
+        configuration._schedule_action_edit("second")
+
+        self.assertEqual(len(callbacks), 1)
+        callbacks[0]()
+        configuration._edit_action_by_id.assert_called_once_with("second")
+        self.assertIsNone(configuration._pending_action_edit_after_id)
+
+    def test_closing_configuration_cancels_pending_direct_edit(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.window = Mock()
+        configuration.backup_restore_panel = None
+        configuration._pending_action_edit_id = "edit-me"
+        configuration._pending_action_edit_after_id = "after#edit"
+
+        configuration._request_close()
+
+        configuration.window.after_cancel.assert_called_once_with("after#edit")
+        configuration.window.destroy.assert_called_once_with()
+        self.assertIsNone(configuration._pending_action_edit_id)
+        self.assertIsNone(configuration._pending_action_edit_after_id)
+
+    def test_existing_action_editor_is_raised_instead_of_duplicated(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        existing_dialog = Mock()
+        existing_dialog.window.winfo_exists.return_value = True
+        configuration.action_edit_dialog = existing_dialog
+        action = Action("edit-me", "Edit me", "General", "copy_text", "one")
+
+        with patch("context_palette.configuration_window.ActionDialog") as dialog:
+            configuration._edit_action_record(action)
+
+        dialog.assert_not_called()
+        existing_dialog.window.lift.assert_called_once_with()
+        existing_dialog.window.focus_force.assert_called_once_with()
+
+    def test_reload_keeps_stored_actions_separate_from_active_picker_projection(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        active = Action("active", "Active", "General", "copy_text", "one")
+        archived = Action(
+            "archived",
+            "Archived",
+            "General",
+            "copy_text",
+            "two",
+            state="Archived",
+        )
+        configuration.window = Mock()
+        configuration.feedback_var = FakeVariable()
+        configuration.feedback_label = Mock()
+        configuration.shared_actions_path = Path("shared-actions.json")
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.palette_path = Path("palette.json")
+        configuration.contexts_path = Path("contexts.json")
+        configuration.local_contexts_path = Path("missing-local-contexts.json")
+        configuration.command_surface_path = Path("commands.json")
+        configuration.local_command_surface_path = Path("local-commands.json")
+        configuration._refresh_action_views = Mock()
+
+        with (
+            patch(
+                "context_palette.configuration_window.load_combined_actions",
+                return_value=([active], {"active"}),
+            ),
+            patch(
+                "context_palette.configuration_window.load_combined_stored_actions",
+                return_value=([active, archived], {"active", "archived"}),
+            ),
+            patch(
+                "context_palette.configuration_window.load_palette_state",
+                return_value=PaletteState(),
+            ),
+            patch(
+                "context_palette.configuration_window.load_combined_contexts",
+                return_value=[],
+            ),
+            patch(
+                "context_palette.configuration_window.load_combined_command_groups",
+                return_value=[],
+            ),
+        ):
+            configuration._reload()
+
+        self.assertEqual(configuration.actions, [active])
+        self.assertEqual(configuration.stored_actions, [active, archived])
+        self.assertEqual(configuration.local_action_ids, {"active", "archived"})
+        configuration._refresh_action_views.assert_called_once_with()
+
     def test_requested_work_item_creation_uses_work_items_panel(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         configuration.work_items_panel = Mock()
@@ -497,6 +668,60 @@ class ConfigurationDialogTests(unittest.TestCase):
 
         self.assertEqual(dialog.call_args.kwargs["initial_contexts"], ("Customer",))
 
+    def test_workspace_suggestion_prefills_the_existing_creation_dialog(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.focus_context = "Customer"
+        configuration.local_actions_path = Path("local_actions.json")
+        configuration.window = Mock()
+        configuration.actions = []
+        configuration.contexts = [ContextDefinition("Customer")]
+        configuration._save_action = Mock()
+        configuration.action_creation_dialog = None
+        suggestion = ActionCreationSuggestion(
+            "open_file",
+            "Open report.pdf",
+            r"W:\Reports\report.pdf",
+        )
+
+        with patch("context_palette.configuration_window.ActionDialog") as dialog:
+            configuration._create_action_for_type(
+                "open_file",
+                suggestion=suggestion,
+            )
+
+        self.assertEqual(dialog.call_args.kwargs["initial_title"], "Open report.pdf")
+        self.assertEqual(
+            dialog.call_args.kwargs["initial_value"],
+            r"W:\Reports\report.pdf",
+        )
+        self.assertTrue(dialog.call_args.kwargs["suggested_from_workspace"])
+        self.assertEqual(dialog.call_args.kwargs["initial_contexts"], ("Customer",))
+
+    def test_repeated_workspace_suggestions_coalesce_and_close_cancels_pending(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.window = Mock()
+        configuration.backup_restore_panel = None
+        configuration._pending_action_edit_id = None
+        configuration._pending_action_edit_after_id = None
+        configuration._pending_action_suggestion = None
+        configuration._pending_action_suggestion_after_id = None
+        configuration._start_action_suggestion = Mock()
+        callbacks: list[object] = []
+        configuration.window.after_idle.side_effect = (
+            lambda callback: callbacks.append(callback) or "after#suggestion"
+        )
+        first = ActionCreationSuggestion("open_url", "First", "https://first.example")
+        second = ActionCreationSuggestion("open_url", "Second", "https://second.example")
+
+        configuration._schedule_action_suggestion(first)
+        configuration._schedule_action_suggestion(second)
+
+        self.assertEqual(len(callbacks), 1)
+        configuration._request_close()
+        configuration.window.after_cancel.assert_called_once_with("after#suggestion")
+        self.assertIsNone(configuration._pending_action_suggestion)
+        self.assertIsNone(configuration._pending_action_suggestion_after_id)
+
     def test_quick_creation_refuses_while_backup_or_restore_is_busy(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         configuration.backup_restore_panel = Mock(busy=True)
@@ -527,13 +752,13 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.notebook = FakeNotebook()
 
         for keysym, expected_tab in (
-            ("a", 0),
-            ("t", 1),
-            ("c", 2),
-            ("q", 3),
-            ("w", 4),
-            ("d", 5),
-            ("b", 6),
+            ("a", 1),
+            ("t", 2),
+            ("c", 3),
+            ("q", 4),
+            ("w", 5),
+            ("d", 6),
+            ("b", 7),
         ):
             with self.subTest(keysym=keysym):
                 self.assertEqual(
@@ -577,12 +802,12 @@ class ConfigurationDialogTests(unittest.TestCase):
         callback()
 
         self.assertEqual(result, "break")
-        self.assertEqual(configuration.notebook.selected, 5)
+        self.assertEqual(configuration.notebook.selected, 6)
         self.assertEqual(configuration.diagnostics_text.focus_calls, 1)
 
     def test_diagnostics_tab_change_moves_focus_into_read_only_summary(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
-        configuration.notebook = FakeNotebook(selected=5)
+        configuration.notebook = FakeNotebook(selected=6)
         configuration.action_tree = FakeEntry()
         configuration.type_list = FakeEntry()
         configuration.context_tree = FakeEntry()
@@ -598,7 +823,7 @@ class ConfigurationDialogTests(unittest.TestCase):
 
     def test_backup_restore_tab_focuses_primary_action(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
-        configuration.notebook = FakeNotebook(selected=6)
+        configuration.notebook = FakeNotebook(selected=7)
         configuration.action_tree = FakeEntry()
         configuration.type_list = FakeEntry()
         configuration.context_tree = FakeEntry()
@@ -701,7 +926,7 @@ class ConfigurationDialogTests(unittest.TestCase):
 
     def test_find_shortcut_focuses_filter_for_current_tab(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
-        configuration.notebook = FakeNotebook(selected=2)
+        configuration.notebook = FakeNotebook(selected=3)
         configuration.action_filter_entry = FakeEntry()
         configuration.context_filter_entry = FakeEntry()
         configuration.button_filter_entry = FakeEntry()
@@ -752,6 +977,158 @@ class ConfigurationDialogTests(unittest.TestCase):
         self.assertEqual(configuration.action_tree.selected, "action-1")
         self.assertEqual(configuration.action_tree.focused, "action-1")
         self.assertEqual(configuration.action_tree.seen, "action-1")
+
+    def test_action_state_filter_shows_archived_records_without_exposing_them_as_active(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        active = Action("active", "Active", "General", "copy_text", "one")
+        archived = Action(
+            "archived",
+            "Archived",
+            "General",
+            "copy_text",
+            "two",
+            state="Archived",
+        )
+        configuration.actions = [active]
+        configuration.stored_actions = [active, archived]
+        configuration.local_action_ids = {"active", "archived"}
+        configuration.initial_action_id = None
+        configuration.action_filter_var = FakeVariable()
+        configuration.action_state_filter_var = FakeVariable("Archived")
+        configuration.action_filter_count_var = FakeVariable()
+        configuration.action_tree = FakeActionTree()
+
+        configuration._render_actions()
+
+        self.assertEqual(configuration.action_tree.inserted, ["action-1"])
+        self.assertEqual(configuration.action_filter_count_var.value, "1 archived")
+        self.assertEqual(configuration.actions, [active])
+
+    def test_archive_confirmation_reports_impact_and_runs_lifecycle_service(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        action = Action("local", "Local action", "General", "copy_text", "one")
+        configuration.actions = [action]
+        configuration.stored_actions = [action]
+        configuration.local_action_ids = {"local"}
+        configuration.action_tree = FakeSelectedActionTree("action-0")
+        configuration.shared_actions_path = Path("shared-actions.json")
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.contexts_path = Path("contexts.json")
+        configuration.local_contexts_path = Path("local-contexts.json")
+        configuration.command_surface_path = Path("commands.json")
+        configuration.local_command_surface_path = Path("local-commands.json")
+        configuration.palette_path = Path("palette.json")
+        configuration.window = FakeWindow()
+        configuration.initial_action_id = action.id
+        configuration.feedback_var = FakeVariable()
+        configuration.feedback_label = Mock()
+        configuration.on_change = Mock()
+        configuration._reload = Mock()
+
+        with (
+            patch(
+                "context_palette.configuration_window.inspect_action_references",
+                return_value=ActionDeletionReport(3, 1, 2),
+            ),
+            patch(
+                "context_palette.configuration_window.messagebox.askyesno",
+                return_value=True,
+            ) as confirmation,
+            patch(
+                "context_palette.configuration_window.archive_action_and_references",
+                return_value=ActionDeletionReport(3, 1, 3),
+            ) as archive,
+        ):
+            configuration._change_action_state()
+
+        self.assertIn("3 saved reference(s)", confirmation.call_args.args[1])
+        self.assertIn("does not recreate", confirmation.call_args.args[1])
+        archive.assert_called_once()
+        configuration.on_change.assert_called_once_with()
+        configuration._reload.assert_called_once_with()
+        self.assertIn("Archived action", configuration.feedback_var.value)
+
+    def test_restore_switches_to_active_and_does_not_claim_assignments_return(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        action = Action(
+            "shared",
+            "Shared action",
+            "General",
+            "copy_text",
+            "one",
+            state="Archived",
+        )
+        configuration.actions = []
+        configuration.stored_actions = [action]
+        configuration.local_action_ids = set()
+        configuration.action_tree = FakeSelectedActionTree("action-0")
+        configuration.shared_actions_path = Path("shared-actions.json")
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.window = FakeWindow()
+        configuration.action_state_filter_var = FakeVariable("Archived")
+        configuration.feedback_var = FakeVariable()
+        configuration.feedback_label = Mock()
+        configuration.on_change = Mock()
+        configuration._reload = Mock()
+
+        with (
+            patch(
+                "context_palette.configuration_window.messagebox.askyesno",
+                return_value=True,
+            ) as confirmation,
+            patch("context_palette.configuration_window.restore_action") as restore,
+        ):
+            configuration._change_action_state()
+
+        self.assertIn("will not be recreated", confirmation.call_args.args[1])
+        self.assertIn("tracked through Git", confirmation.call_args.args[1])
+        restore.assert_called_once_with(Path("shared-actions.json"), "shared")
+        self.assertEqual(configuration.action_state_filter_var.value, "Active")
+        self.assertEqual(configuration.initial_action_id, "shared")
+        self.assertIn("Reassign saved placements", configuration.feedback_var.value)
+
+    def test_archive_failure_reloads_views_that_may_have_lost_placements(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        action = Action("local", "Local action", "General", "copy_text", "one")
+        configuration.actions = [action]
+        configuration.stored_actions = [action]
+        configuration.local_action_ids = {"local"}
+        configuration.action_tree = FakeSelectedActionTree("action-0")
+        configuration.shared_actions_path = Path("shared-actions.json")
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.contexts_path = Path("contexts.json")
+        configuration.local_contexts_path = Path("local-contexts.json")
+        configuration.command_surface_path = Path("commands.json")
+        configuration.local_command_surface_path = Path("local-commands.json")
+        configuration.palette_path = Path("palette.json")
+        configuration.window = FakeWindow()
+        configuration.on_change = Mock()
+        configuration._reload = Mock()
+
+        with (
+            patch(
+                "context_palette.configuration_window.inspect_action_references",
+                return_value=ActionDeletionReport(1, 0, 1),
+            ),
+            patch(
+                "context_palette.configuration_window.messagebox.askyesno",
+                return_value=True,
+            ),
+            patch(
+                "context_palette.configuration_window.archive_action_and_references",
+                side_effect=ActionDeletionError(
+                    "The Action remains Active; placements may have changed."
+                ),
+            ),
+            patch(
+                "context_palette.configuration_window.messagebox.showerror"
+            ) as error,
+        ):
+            configuration._change_action_state()
+
+        configuration.on_change.assert_called_once_with()
+        configuration._reload.assert_called_once_with()
+        self.assertIn("remains Active", error.call_args.args[1])
 
     def test_editing_shared_action_warns_and_saves_to_shared_file(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
@@ -827,6 +1204,45 @@ class ConfigurationDialogTests(unittest.TestCase):
             )
             configuration.on_change.assert_called_once_with()
             configuration._reload.assert_called_once_with()
+
+    def test_archived_action_edit_requires_restore_before_context_assignment(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        archived = Action(
+            "archived",
+            "Archived",
+            "General",
+            "copy_text",
+            "one",
+            state="Archived",
+        )
+        edited = Action(
+            "archived",
+            "Archived",
+            "Work",
+            "copy_text",
+            "one",
+            state="Archived",
+            contexts=("Work",),
+        )
+        configuration.actions = []
+        configuration.stored_actions = [archived]
+        configuration.window = FakeWindow()
+
+        with (
+            patch(
+                "context_palette.configuration_window.messagebox.showerror"
+            ) as error,
+            patch(
+                "context_palette.configuration_window.update_action_with_context_memberships"
+            ) as update,
+        ):
+            saved = configuration._save_edited_action(
+                edited, Path("local-actions.json")
+            )
+
+        self.assertFalse(saved)
+        self.assertIn("Restore it first", error.call_args.args[1])
+        update.assert_not_called()
 
     def test_action_edit_write_failure_preserves_file_and_open_editor_state(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1164,7 +1580,7 @@ class ConfigurationDialogTests(unittest.TestCase):
                 "open_folder",
             )
         }
-        configuration.notebook = FakeNotebook(selected=3)
+        configuration.notebook = FakeNotebook(selected=4)
         configuration.action_filter_var = FakeVariable()
         configuration.action_filter_entry = FakeEntry()
         configuration.feedback_var = FakeVariable()
@@ -1172,7 +1588,7 @@ class ConfigurationDialogTests(unittest.TestCase):
 
         configuration._edit_button()
 
-        self.assertEqual(configuration.notebook.selected, 0)
+        self.assertEqual(configuration.notebook.selected, 1)
         self.assertEqual(configuration.action_filter_var.value, "Open a folder")
         self.assertEqual(configuration.action_filter_entry.focus_calls, 1)
         self.assertIsNotNone(configuration.action_filter_entry.selection)
@@ -1347,8 +1763,16 @@ class ConfigurationDialogTests(unittest.TestCase):
     def test_cancelling_shared_action_deletion_preserves_action(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         configuration.actions = [
-            Action("shared", "Shared", "General", "copy_text", "one")
+            Action(
+                "shared",
+                "Shared",
+                "General",
+                "copy_text",
+                "one",
+                state="Archived",
+            )
         ]
+        configuration.stored_actions = list(configuration.actions)
         configuration.local_action_ids = set()
         configuration.action_tree = FakeSelectedActionTree("action-0")
         configuration.contexts_path = Path("contexts.json")
@@ -1390,6 +1814,18 @@ class ConfigurationDialogTests(unittest.TestCase):
         callback()
         self.assertEqual(entry.focus_calls, 1)
         self.assertEqual(entry.selection, (0, "end"))
+
+    def test_focus_entry_cancels_pending_focus_when_window_is_destroyed(self) -> None:
+        window = FakeFocusWindow()
+        entry = FakeEntry()
+
+        _focus_entry(window, entry)
+        self.assertEqual(len(window.bindings), 1)
+
+        window.bindings[0](Mock(widget=window))
+
+        self.assertEqual(window.cancelled, ["after#focus"])
+        self.assertEqual(entry.focus_calls, 0)
 
     def test_action_dialog_stays_open_when_save_callback_fails(self) -> None:
         dialog = ActionDialog.__new__(ActionDialog)
@@ -1561,6 +1997,36 @@ class ConfigurationDialogTests(unittest.TestCase):
                 saved[0].description,
                 "Professional opening for a customer reply",
             )
+        finally:
+            for child in root.winfo_children():
+                child.destroy()
+            root.destroy()
+
+    def test_action_dialog_shows_reviewed_workspace_prefill(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            dialog = ActionDialog(
+                root,
+                "open_url",
+                [],
+                lambda _action: True,
+                context_names=["General"],
+                initial_title="Open example.com",
+                initial_value="https://example.com/report",
+                suggested_from_workspace=True,
+            )
+            root.update_idletasks()
+
+            self.assertEqual(dialog.title_var.get(), "Open example.com")
+            assert dialog.value is not None
+            self.assertEqual(
+                dialog.value.get("1.0", "end-1c"),
+                "https://example.com/report",
+            )
+            self.assertIsNotNone(dialog.suggestion_notice)
+            assert dialog.suggestion_notice is not None
+            self.assertIn("review", dialog.suggestion_notice.cget("text"))
         finally:
             for child in root.winfo_children():
                 child.destroy()

@@ -129,11 +129,6 @@ WORKSPACE_TRANSFORM_GROUPS = (
                 (", ",),
             ),
             WorkspaceTransform(
-                "Format as SQL value list",
-                "sql_values",
-                "Formatted SQL value list",
-            ),
-            WorkspaceTransform(
                 "Remove consecutive duplicate lines",
                 "remove_consecutive_duplicate_lines",
                 "Removed consecutive duplicate lines",
@@ -142,6 +137,31 @@ WORKSPACE_TRANSFORM_GROUPS = (
                 "Remove duplicate lines",
                 "remove_duplicate_lines",
                 "Removed duplicate lines",
+            ),
+        ),
+    ),
+    WorkspaceTransformGroup(
+        "Lists",
+        (
+            WorkspaceTransform(
+                "Comma list: no quotes",
+                "comma_list_plain",
+                "Created comma list without quotes",
+            ),
+            WorkspaceTransform(
+                "Comma list: single-quoted text",
+                "comma_list_single_quotes",
+                "Created comma list with single-quoted text",
+            ),
+            WorkspaceTransform(
+                "Comma list: double-quoted text",
+                "comma_list_double_quotes",
+                "Created comma list with double-quoted text",
+            ),
+            WorkspaceTransform(
+                "Parenthesized SQL value list",
+                "sql_values",
+                "Formatted SQL value list",
             ),
         ),
     ),

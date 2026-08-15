@@ -10,7 +10,7 @@ from .persistence import atomic_write_json
 
 
 class ActionDeletionError(Exception):
-    """Raised when an action and its references cannot be removed safely."""
+    """Raised when an action lifecycle mutation cannot complete safely."""
 
 
 @dataclass(frozen=True)
@@ -73,6 +73,62 @@ def delete_action_and_references(
         )
 
 
+def archive_action_and_references(
+    action_path: Path,
+    action_id: str,
+    *,
+    context_paths: tuple[Path, ...],
+    command_surface_paths: tuple[Path, ...],
+    palette_path: Path,
+) -> ActionDeletionReport:
+    """Archive an action after detaching every active-only saved reference."""
+
+    with configuration_mutation_gate():
+        action_data = _read_object(action_path)
+        action = _find_action_record(action_data, action_path, action_id)
+        if action.get("state", "Active") == "Archived":
+            raise ActionDeletionError(f"Action is already archived: {action_id}")
+
+        pending_writes, references_removed, buttons_removed = (
+            _prepare_reference_removals(
+                action_id,
+                context_paths=context_paths,
+                command_surface_paths=command_surface_paths,
+                palette_path=palette_path,
+            )
+        )
+        # References must disappear before the state changes. If the final write
+        # fails, an unassigned Active action remains a valid, recoverable state.
+        try:
+            for path, data in pending_writes:
+                atomic_write_json(path, data)
+            action["state"] = "Archived"
+            atomic_write_json(action_path, action_data)
+        except OSError as exc:
+            raise ActionDeletionError(
+                "The Action was not archived and remains Active, but some saved "
+                "placements may already have been removed. Reload Context Palette "
+                "before trying again."
+            ) from exc
+        return ActionDeletionReport(
+            references_removed,
+            buttons_removed,
+            len(pending_writes) + 1,
+        )
+
+
+def restore_action(action_path: Path, action_id: str) -> None:
+    """Restore an Archived action without recreating its former assignments."""
+
+    with configuration_mutation_gate():
+        action_data = _read_object(action_path)
+        action = _find_action_record(action_data, action_path, action_id)
+        if action.get("state", "Active") != "Archived":
+            raise ActionDeletionError(f"Action is not archived: {action_id}")
+        action["state"] = "Active"
+        atomic_write_json(action_path, action_data)
+
+
 def _delete_action_and_references(
     action_path: Path,
     action_id: str,
@@ -93,6 +149,47 @@ def _delete_action_and_references(
     if len(retained_actions) == len(actions):
         raise ActionDeletionError(f"Action was not found: {action_id}")
 
+    pending_writes, references_removed, buttons_removed = _prepare_reference_removals(
+        action_id,
+        context_paths=context_paths,
+        command_surface_paths=command_surface_paths,
+        palette_path=palette_path,
+    )
+
+    # Remove references first. If a later write fails, an unused action is safer
+    # than configuration that points at an action that no longer exists.
+    for path, data in pending_writes:
+        atomic_write_json(path, data)
+    action_data["actions"] = retained_actions
+    atomic_write_json(action_path, action_data)
+    return ActionDeletionReport(
+        references_removed,
+        buttons_removed,
+        len(pending_writes) + 1,
+    )
+
+
+def _find_action_record(
+    action_data: dict[str, object],
+    action_path: Path,
+    action_id: str,
+) -> dict[str, object]:
+    actions = action_data.get("actions")
+    if not isinstance(actions, list):
+        raise ActionDeletionError(f"{action_path.name} must contain an 'actions' list.")
+    for action in actions:
+        if isinstance(action, dict) and action.get("id") == action_id:
+            return action
+    raise ActionDeletionError(f"Action was not found: {action_id}")
+
+
+def _prepare_reference_removals(
+    action_id: str,
+    *,
+    context_paths: tuple[Path, ...],
+    command_surface_paths: tuple[Path, ...],
+    palette_path: Path,
+) -> tuple[list[tuple[Path, dict[str, object]]], int, int]:
     pending_writes: list[tuple[Path, dict[str, object]]] = []
     references_removed = 0
     buttons_removed = 0
@@ -122,17 +219,7 @@ def _delete_action_and_references(
         if removed:
             pending_writes.append((palette_path, palette_data))
 
-    # Remove references first. If a later write fails, an unused action is safer
-    # than configuration that points at an action that no longer exists.
-    for path, data in pending_writes:
-        atomic_write_json(path, data)
-    action_data["actions"] = retained_actions
-    atomic_write_json(action_path, action_data)
-    return ActionDeletionReport(
-        references_removed,
-        buttons_removed,
-        len(pending_writes) + 1,
-    )
+    return pending_writes, references_removed, buttons_removed
 
 
 def _read_object(path: Path) -> dict[str, object]:

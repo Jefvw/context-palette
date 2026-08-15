@@ -18,14 +18,18 @@ from .actions import (
     edited_configured_action,
     ensure_default_text_action_file,
     load_combined_actions,
+    load_combined_stored_actions,
     validate_context_memberships,
 )
 from .action_deletion import (
     ActionDeletionError,
+    archive_action_and_references,
     delete_action_and_references,
     inspect_action_references,
+    restore_action,
 )
 from .action_types import ACTION_TYPES, CREATABLE_ACTION_TYPES
+from .action_suggestions import ActionCreationSuggestion
 from .action_type_picker import ActionTypePickerDialog, ActionTypePickerOption
 from .action_bound_quick_actions import action_bound_quick_groups
 from .action_picker import ActionPickerField, ActionPickerOption
@@ -128,13 +132,14 @@ BUILT_IN_ACTION_SCOPE_NOTE = (
     "Quick-action group."
 )
 CONFIGURATION_TAB_INDEXES = {
-    "actions": 0,
-    "types": 1,
-    "contexts": 2,
-    "buttons": 3,
-    "work_items": 4,
-    "diagnostics": 5,
-    "backup_restore": 6,
+    "start": 0,
+    "actions": 1,
+    "types": 2,
+    "contexts": 3,
+    "buttons": 4,
+    "work_items": 5,
+    "diagnostics": 6,
+    "backup_restore": 7,
 }
 GROUP_PRESENTATION_LABELS = {
     GROUP_PRESENTATION_ROWS: "Quick-action rows",
@@ -488,16 +493,19 @@ class ConfigurationWindow:
         work_item_index: WorkItemIndex,
         on_change: Callable[[], None],
         focus_context: str = "General",
-        initial_tab: str = "actions",
+        initial_tab: str = "start",
         initial_action_id: str | None = None,
         initial_work_item_key: str | None = None,
         start_work_item_creation: bool = False,
         start_action_creation: bool = False,
+        initial_action_suggestion: ActionCreationSuggestion | None = None,
+        start_action_edit: bool = False,
         data_paths: AppDataPaths | None = None,
         on_restore_complete: Callable[[], None] | None = None,
         on_restore_recovery_required: Callable[[], None] | None = None,
     ) -> None:
         self.actions = actions
+        self.stored_actions = list(actions)
         self.local_action_ids = local_action_ids
         self.shared_actions_path = shared_actions_path
         self.local_actions_path = local_actions_path
@@ -517,6 +525,8 @@ class ConfigurationWindow:
         self.groups: list[CommandGroup] = []
         self.action_filter_var = tk.StringVar()
         self.action_filter_count_var = tk.StringVar()
+        self.action_state_filter_var = tk.StringVar(value="Active")
+        self.action_state_help_var = tk.StringVar()
         self.context_filter_var = tk.StringVar()
         self.context_filter_count_var = tk.StringVar()
         self.button_filter_var = tk.StringVar()
@@ -526,8 +536,14 @@ class ConfigurationWindow:
         self.initial_work_item_key = initial_work_item_key
         self.start_work_item_creation = start_work_item_creation
         self.start_action_creation = start_action_creation
+        self.initial_action_suggestion = initial_action_suggestion
         self.action_type_picker: ActionTypePickerDialog | None = None
         self.action_creation_dialog: ActionDialog | None = None
+        self.action_edit_dialog: ActionDialog | None = None
+        self._pending_action_edit_id: str | None = None
+        self._pending_action_edit_after_id: str | None = None
+        self._pending_action_suggestion: ActionCreationSuggestion | None = None
+        self._pending_action_suggestion_after_id: str | None = None
         self.data_paths = data_paths or AppDataPaths.from_data_directory(
             shared_actions_path.parent
         )
@@ -565,12 +581,13 @@ class ConfigurationWindow:
         ttk.Label(outer, text="Configure Context Palette", style="Title.TLabel").pack(anchor=tk.W)
         ttk.Label(
             outer,
-            text="Create repeated actions, organize them by context, then place them in slots or quick-action buttons.",
+            text="Choose a task, then make the change in its focused editor.",
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(2, 10))
         self.notebook = ttk.Notebook(outer)
         self.notebook.pack(fill=tk.BOTH, expand=True)
         self.notebook.enable_traversal()
+        self._build_start_tab(self.notebook)
         self._build_actions_tab(self.notebook)
         self._build_types_tab(self.notebook)
         self._build_contexts_tab(self.notebook)
@@ -596,21 +613,29 @@ class ConfigurationWindow:
             self.window.after_idle(self._start_work_item_creation)
         if self.start_action_creation:
             self.window.after_idle(self._start_action_creation)
+        if self.initial_action_suggestion is not None:
+            self._schedule_action_suggestion(self.initial_action_suggestion)
+        if start_action_edit and self.initial_action_id:
+            self._schedule_action_edit(self.initial_action_id)
 
     def show(
         self,
         *,
-        initial_tab: str = "actions",
+        initial_tab: str = "start",
         initial_action_id: str | None = None,
         initial_work_item_key: str | None = None,
         start_work_item_creation: bool = False,
         start_action_creation: bool = False,
+        initial_action_suggestion: ActionCreationSuggestion | None = None,
+        start_action_edit: bool = False,
     ) -> None:
         """Refresh, navigate, and raise an already-open Configure workspace."""
         self.initial_action_id = initial_action_id
-        self._reload()
         if initial_action_id and self.action_filter_var.get():
             self.action_filter_var.set("")
+        if initial_action_id and self.action_state_filter_var.get() != "Active":
+            self.action_state_filter_var.set("Active")
+        self._reload()
         self.notebook.select(CONFIGURATION_TAB_INDEXES.get(initial_tab, 0))
         if initial_work_item_key:
             self.work_items_panel.select_item(initial_work_item_key)
@@ -622,6 +647,10 @@ class ConfigurationWindow:
             self.window.after_idle(self._start_work_item_creation)
         if start_action_creation:
             self.window.after_idle(self._start_action_creation)
+        if initial_action_suggestion is not None:
+            self._schedule_action_suggestion(initial_action_suggestion)
+        if start_action_edit and initial_action_id:
+            self._schedule_action_edit(initial_action_id)
 
     def refresh_from_storage(self) -> None:
         """Refresh an already-open workspace after another window changes data."""
@@ -640,16 +669,8 @@ class ConfigurationWindow:
                 False,
             )
             return
-        dialog = self.action_creation_dialog
-        if dialog is not None:
-            try:
-                if dialog.window.winfo_exists():
-                    dialog.window.lift()
-                    dialog.window.focus_force()
-                    return
-            except tk.TclError:
-                pass
-            self.action_creation_dialog = None
+        if self._raise_existing_action_creation_dialog():
+            return
         picker = self.action_type_picker
         if picker is not None:
             try:
@@ -674,6 +695,79 @@ class ConfigurationWindow:
             on_close=lambda: setattr(self, "action_type_picker", None),
         )
 
+    def _raise_existing_action_creation_dialog(self) -> bool:
+        dialog = self.action_creation_dialog
+        if dialog is not None:
+            try:
+                if dialog.window.winfo_exists():
+                    dialog.window.lift()
+                    dialog.window.focus_force()
+                    return True
+            except tk.TclError:
+                pass
+            self.action_creation_dialog = None
+        return False
+
+    def _start_action_suggestion(
+        self,
+        suggestion: ActionCreationSuggestion,
+    ) -> None:
+        panel = getattr(self, "backup_restore_panel", None)
+        if panel is not None and panel.busy:
+            self._set_feedback(
+                "Wait for the backup or restore operation to finish before creating an Action.",
+                False,
+            )
+            return
+        if self._raise_existing_action_creation_dialog():
+            return
+        picker = self.action_type_picker
+        if picker is not None:
+            try:
+                if picker.window.winfo_exists():
+                    picker.window.lift()
+                    picker.window.focus_force()
+                    self._set_feedback(
+                        "Finish or close the open Action type chooser, then try Create Action again.",
+                        False,
+                    )
+                    return
+            except tk.TclError:
+                pass
+            self.action_type_picker = None
+        self._create_action_for_type(
+            suggestion.action_type,
+            suggestion=suggestion,
+        )
+
+    def _schedule_action_suggestion(
+        self,
+        suggestion: ActionCreationSuggestion,
+    ) -> None:
+        self._pending_action_suggestion = suggestion
+        if self._pending_action_suggestion_after_id is not None:
+            return
+        self._pending_action_suggestion_after_id = self.window.after_idle(
+            self._open_pending_action_suggestion
+        )
+
+    def _open_pending_action_suggestion(self) -> None:
+        self._pending_action_suggestion_after_id = None
+        suggestion = self._pending_action_suggestion
+        self._pending_action_suggestion = None
+        if suggestion is not None:
+            self._start_action_suggestion(suggestion)
+
+    def _cancel_pending_action_suggestion(self) -> None:
+        after_id = getattr(self, "_pending_action_suggestion_after_id", None)
+        if after_id is not None:
+            try:
+                self.window.after_cancel(after_id)
+            except tk.TclError:
+                pass
+        self._pending_action_suggestion_after_id = None
+        self._pending_action_suggestion = None
+
     def _close_on_plain_escape(self, event: tk.Event) -> str:
         if int(event.state) & 0x0004:
             return "break"
@@ -688,18 +782,109 @@ class ConfigurationWindow:
         if not state & 0x20000:
             return None
         tab_index = {
-            "a": 0,
-            "t": 1,
-            "c": 2,
-            "q": 3,
-            "w": 4,
-            "d": 5,
-            "b": 6,
+            "a": CONFIGURATION_TAB_INDEXES["actions"],
+            "t": CONFIGURATION_TAB_INDEXES["types"],
+            "c": CONFIGURATION_TAB_INDEXES["contexts"],
+            "q": CONFIGURATION_TAB_INDEXES["buttons"],
+            "w": CONFIGURATION_TAB_INDEXES["work_items"],
+            "d": CONFIGURATION_TAB_INDEXES["diagnostics"],
+            "b": CONFIGURATION_TAB_INDEXES["backup_restore"],
         }.get(str(getattr(event, "keysym", "")).casefold())
         if tab_index is None:
             return None
         self.notebook.select(tab_index)
         return "break"
+
+    def _build_start_tab(self, notebook: ttk.Notebook) -> None:
+        tab = ttk.Frame(notebook, padding=14)
+        notebook.add(tab, text="Start", underline=0)
+        ttk.Label(
+            tab,
+            text="What do you want to change?",
+            style="Heading.TLabel",
+        ).grid(row=0, column=0, columnspan=2, sticky=tk.W)
+        ttk.Label(
+            tab,
+            text=(
+                "Choose a task. Context Palette will take you to the existing "
+                "editor where the change is made."
+            ),
+            style="Muted.TLabel",
+            wraplength=620,
+        ).grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(3, 12))
+        tasks = (
+            (
+                "Create an Action...",
+                "Choose a reusable effect, then review and create the Action.",
+                self._start_action_creation,
+            ),
+            (
+                "Find or edit Actions",
+                "Manage saved Actions, pinned slots, and Active or Archived state.",
+                lambda: self._show_config_named_tab("actions"),
+            ),
+            (
+                "Organize Focuses",
+                "Create Contexts, choose their members, and arrange Focus slots.",
+                lambda: self._show_config_named_tab("contexts"),
+            ),
+            (
+                "Arrange Quick actions",
+                "Change the buttons and menus shown in the main palette.",
+                lambda: self._show_config_named_tab("buttons"),
+            ),
+            (
+                "Set up Work Items",
+                "Manage folders, templates, personal tags, and discovered work.",
+                lambda: self._show_config_named_tab("work_items"),
+            ),
+            (
+                "Back up or restore",
+                "Protect this configuration or review a backup before restoring it.",
+                lambda: self._show_config_named_tab("backup_restore"),
+            ),
+        )
+        for index, (label, description, command) in enumerate(tasks):
+            row = 2 + index // 2
+            column = index % 2
+            card = ttk.Frame(tab, padding=(0, 0, 12, 10))
+            card.grid(row=row, column=column, sticky=tk.NSEW)
+            button = ttk.Button(
+                card,
+                text=label,
+                command=command,
+                style="Accent.TButton" if index == 0 else "TButton",
+            )
+            button.pack(fill=tk.X)
+            ttk.Label(
+                card,
+                text=description,
+                style="Muted.TLabel",
+                wraplength=270,
+                justify=tk.LEFT,
+            ).pack(anchor=tk.W, pady=(4, 0))
+            if index == 0:
+                self.start_primary_button = button
+        advanced = ttk.Frame(tab)
+        advanced.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
+        ttk.Label(advanced, text="More:", style="Muted.TLabel").pack(side=tk.LEFT)
+        ttk.Button(
+            advanced,
+            text="Browse Action types",
+            command=lambda: self._show_config_named_tab("types"),
+            style="Compact.TButton",
+        ).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(
+            advanced,
+            text="View diagnostics",
+            command=lambda: self._show_config_named_tab("diagnostics"),
+            style="Compact.TButton",
+        ).pack(side=tk.LEFT, padx=(6, 0))
+        tab.columnconfigure(0, weight=1, uniform="tasks")
+        tab.columnconfigure(1, weight=1, uniform="tasks")
+
+    def _show_config_named_tab(self, name: str) -> str:
+        return self._show_config_tab(CONFIGURATION_TAB_INDEXES[name])
 
     def _build_actions_tab(self, notebook: ttk.Notebook) -> None:
         tab = ttk.Frame(notebook, padding=10)
@@ -756,11 +941,25 @@ class ConfigurationWindow:
             textvariable=self.action_filter_var,
         )
         self.action_filter_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(6, 8))
+        ttk.Label(filter_row, text="Show").pack(side=tk.LEFT)
+        self.action_state_filter = ttk.Combobox(
+            filter_row,
+            textvariable=self.action_state_filter_var,
+            values=("Active", "Archived", "All"),
+            state="readonly",
+            width=10,
+        )
+        self.action_state_filter.pack(side=tk.LEFT, padx=(6, 8))
         ttk.Label(
             filter_row,
             textvariable=self.action_filter_count_var,
             style="Muted.TLabel",
         ).pack(side=tk.RIGHT)
+        ttk.Label(
+            tab,
+            textvariable=self.action_state_help_var,
+            style="Muted.TLabel",
+        ).pack(anchor=tk.W, pady=(0, 5))
         self.action_tree_frame, self.action_tree = scrollable_tree(
             tab,
             ("type", "contexts", "tags", "source", "state"),
@@ -782,7 +981,13 @@ class ConfigurationWindow:
         self.action_tree_frame.pack(fill=tk.BOTH, expand=True)
         self.action_tree.bind("<Double-1>", lambda _event: self._edit_action())
         self.action_tree.bind("<Return>", lambda _event: self._edit_action())
+        self.action_tree.bind(
+            "<<TreeviewSelect>>", lambda _event: self._update_action_controls()
+        )
         self.action_filter_var.trace_add("write", lambda *_args: self._render_actions())
+        self.action_state_filter_var.trace_add(
+            "write", lambda *_args: self._render_actions()
+        )
         controls = ttk.Frame(tab)
         controls.pack(
             side=tk.BOTTOM,
@@ -799,7 +1004,7 @@ class ConfigurationWindow:
         ttk.Button(
             controls,
             text="Browse action types…",
-            command=lambda: notebook.select(1),
+            command=lambda: self._show_config_named_tab("types"),
         ).pack(side=tk.LEFT, padx=(6, 0))
         ttk.Button(
             controls,
@@ -809,9 +1014,18 @@ class ConfigurationWindow:
         ttk.Button(controls, text="Edit selected", command=self._edit_action).pack(
             side=tk.LEFT, padx=(6, 0)
         )
-        ttk.Button(controls, text="Delete selected", command=self._delete_action).pack(
-            side=tk.LEFT, padx=(6, 0)
+        self.action_lifecycle_button = ttk.Button(
+            controls,
+            text="Archive selected...",
+            command=self._change_action_state,
         )
+        self.action_lifecycle_button.pack(side=tk.LEFT, padx=(6, 0))
+        self.delete_action_button = ttk.Button(
+            controls,
+            text="Delete permanently...",
+            command=self._delete_action,
+        )
+        self.delete_action_button.pack(side=tk.LEFT, padx=(6, 0))
 
     def _show_harvest(self) -> None:
         HarvestWindow(
@@ -1072,15 +1286,21 @@ class ConfigurationWindow:
             return
         if panel is not None:
             panel.close()
+        self._cancel_pending_action_edit()
+        self._cancel_pending_action_suggestion()
         self.window.destroy()
 
     def _restore_completed(self) -> None:
         self.backup_restore_panel.close()
+        self._cancel_pending_action_edit()
+        self._cancel_pending_action_suggestion()
         self.window.destroy()
         self._launcher_restore_complete()
 
     def _restore_recovery_required(self) -> None:
         self.backup_restore_panel.close()
+        self._cancel_pending_action_edit()
+        self._cancel_pending_action_suggestion()
         self.window.destroy()
         self._launcher_recovery_required()
 
@@ -1110,7 +1330,7 @@ class ConfigurationWindow:
         self.feedback_label.configure(style="Success.TLabel" if success else "Error.TLabel")
 
     def _show_diagnostics_tab(self, _event: tk.Event | None = None) -> str:
-        return self._show_config_tab(5)
+        return self._show_config_named_tab("diagnostics")
 
     def _show_config_tab(self, tab_index: int) -> str:
         self.notebook.select(tab_index)
@@ -1122,21 +1342,20 @@ class ConfigurationWindow:
 
     def _focus_current_tab(self) -> None:
         selected = self.notebook.index(self.notebook.select())
-        targets = (
-            self.action_tree,
-            self.type_list,
-            self.context_tree,
-            self.button_tree,
-            self.work_items_panel,
-            self.diagnostics_text,
-            self.backup_restore_panel,
-        )
-        if selected == 4:
+        if selected == CONFIGURATION_TAB_INDEXES["start"]:
+            self.start_primary_button.focus_set()
+        elif selected == CONFIGURATION_TAB_INDEXES["work_items"]:
             self.work_items_panel.focus()
-        elif selected == 6:
+        elif selected == CONFIGURATION_TAB_INDEXES["backup_restore"]:
             self.backup_restore_panel.focus_primary()
         else:
-            targets[selected].focus_set()
+            {
+                CONFIGURATION_TAB_INDEXES["actions"]: self.action_tree,
+                CONFIGURATION_TAB_INDEXES["types"]: self.type_list,
+                CONFIGURATION_TAB_INDEXES["contexts"]: self.context_tree,
+                CONFIGURATION_TAB_INDEXES["buttons"]: self.button_tree,
+                CONFIGURATION_TAB_INDEXES["diagnostics"]: self.diagnostics_text,
+            }[selected].focus_set()
 
     def _show_type(self) -> None:
         selected = self.type_list.curselection()
@@ -1160,7 +1379,12 @@ class ConfigurationWindow:
         if selected:
             self._create_action_for_type(self.type_ids[selected[0]])
 
-    def _create_action_for_type(self, action_type: str) -> None:
+    def _create_action_for_type(
+        self,
+        action_type: str,
+        *,
+        suggestion: ActionCreationSuggestion | None = None,
+    ) -> None:
         """Use the one Action form and save path for catalogue and quick creation."""
         if action_type not in CREATABLE_ACTION_TYPES:
             return
@@ -1189,6 +1413,9 @@ class ConfigurationWindow:
             choose_destination=True,
             default_text_file_path=default_text_file_path,
             initial_contexts=initial_contexts,
+            initial_title=suggestion.title if suggestion is not None else "",
+            initial_value=suggestion.value if suggestion is not None else "",
+            suggested_from_workspace=suggestion is not None,
         )
         self.action_creation_dialog = dialog
         dialog.window.bind(
@@ -1248,12 +1475,12 @@ class ConfigurationWindow:
     def _focus_current_filter(self, _event: tk.Event | None = None) -> str:
         selected = self.notebook.index(self.notebook.select())
         entry = {
-            0: self.action_filter_entry,
-            2: self.context_filter_entry,
-            3: self.button_filter_entry,
+            CONFIGURATION_TAB_INDEXES["actions"]: self.action_filter_entry,
+            CONFIGURATION_TAB_INDEXES["contexts"]: self.context_filter_entry,
+            CONFIGURATION_TAB_INDEXES["buttons"]: self.button_filter_entry,
         }.get(selected)
         if entry is None:
-            self.notebook.select(0)
+            self.notebook.select(CONFIGURATION_TAB_INDEXES["actions"])
             entry = self.action_filter_entry
         entry.focus_set()
         entry.selection_range(0, tk.END)
@@ -1268,10 +1495,20 @@ class ConfigurationWindow:
                 self.local_actions_path,
                 inspect_external_paths=False,
             )
+            self.stored_actions, stored_local_ids = load_combined_stored_actions(
+                self.shared_actions_path,
+                self.local_actions_path,
+                inspect_external_paths=False,
+            )
+            self.local_action_ids = stored_local_ids
             self.palette_state = load_palette_state(self.palette_path)
             self.contexts = load_combined_contexts(self.contexts_path, self.local_contexts_path)
             self.actions = actions_with_canonical_contexts(
                 self.actions,
+                self.contexts,
+            )
+            self.stored_actions = actions_with_canonical_contexts(
+                self.stored_actions,
                 self.contexts,
             )
             self.groups = load_combined_command_groups(
@@ -1692,10 +1929,20 @@ class ConfigurationWindow:
     def _render_actions(self) -> None:
         self.action_tree.delete(*self.action_tree.get_children())
         query = self.action_filter_var.get()
+        state_filter_var = getattr(self, "action_state_filter_var", None)
+        state_filter = state_filter_var.get() if state_filter_var is not None else "Active"
+        stored_actions = getattr(self, "stored_actions", self.actions)
+        state_actions = [
+            action
+            for action in stored_actions
+            if state_filter == "All" or action.state == state_filter
+        ]
         matching_iids: list[str] = []
         requested_iid: str | None = None
-        for index, action in enumerate(self.actions):
+        for index, action in enumerate(stored_actions):
             local = action.id in self.local_action_ids
+            if action not in state_actions:
+                continue
             if not action_matches_filter(action, query, personal=local):
                 continue
             iid = f"action-{index}"
@@ -1711,7 +1958,12 @@ class ConfigurationWindow:
                     LOCAL_DESTINATION if local else PROJECT_DESTINATION,
                     action.state,
                 ),
-                tags=("local",) if local else ("shared",),
+                tags=(
+                    "archived",
+                    "local" if local else "shared",
+                )
+                if action.state == "Archived"
+                else (("local",) if local else ("shared",)),
             )
             matching_iids.append(iid)
             if (
@@ -1720,25 +1972,124 @@ class ConfigurationWindow:
             ):
                 requested_iid = iid
         self.action_tree.tag_configure("shared", foreground="#666666")
+        self.action_tree.tag_configure("archived", foreground="#777777")
         self.action_filter_count_var.set(
-            f"{len(matching_iids)} of {len(self.actions)}"
+            f"{len(matching_iids)} of {len(state_actions)}"
             if query.strip()
-            else f"{len(self.actions)} actions"
+            else (
+                f"{len(state_actions)} {state_filter.lower()}"
+                if state_filter != "All"
+                else f"{len(state_actions)} actions"
+            )
         )
+        if hasattr(self, "action_state_help_var"):
+            guidance = {
+                "Active": "Active actions appear in the launcher and can be run.",
+                "Archived": (
+                    "Archived actions are kept for review or restore and do not "
+                    "appear in the launcher."
+                ),
+                "All": "Archived actions are kept but cannot run until restored.",
+            }[state_filter]
+            if not state_actions:
+                guidance = (
+                    "No Archived actions. Archive an Action when you may want it later."
+                    if state_filter == "Archived"
+                    else "No Active actions. Switch Show to Archived to restore one."
+                    if state_filter == "Active"
+                    else "No actions have been configured yet."
+                )
+            self.action_state_help_var.set(guidance)
         if matching_iids:
             selected_iid = requested_iid or matching_iids[0]
             self.action_tree.selection_set(selected_iid)
             self.action_tree.focus(selected_iid)
             self.action_tree.see(selected_iid)
+        self._update_action_controls()
 
-    def _edit_action(self) -> None:
+    def _selected_stored_action(self) -> Action | None:
         selection = self.action_tree.selection()
         if not selection:
+            return None
+        stored_actions = getattr(self, "stored_actions", self.actions)
+        return stored_actions[int(selection[0].split("-")[1])]
+
+    def _update_action_controls(self) -> None:
+        if not hasattr(self, "action_lifecycle_button"):
             return
-        action = self.actions[int(selection[0].split("-")[1])]
+        action = self._selected_stored_action()
+        if action is None:
+            self.action_lifecycle_button.configure(state=tk.DISABLED)
+            self.delete_action_button.configure(state=tk.DISABLED)
+            return
+        archived = action.state == "Archived"
+        self.action_lifecycle_button.configure(
+            text="Restore selected" if archived else "Archive selected...",
+            state=tk.NORMAL,
+        )
+        self.delete_action_button.configure(
+            state=tk.NORMAL if archived else tk.DISABLED
+        )
+
+    def _edit_action(self) -> None:
+        action = self._selected_stored_action()
+        if action is None:
+            return
         self._edit_action_record(action)
 
+    def _edit_action_by_id(self, action_id: str) -> None:
+        action = next(
+            (
+                candidate
+                for candidate in self.actions
+                if candidate.id.casefold() == action_id.casefold()
+            ),
+            None,
+        )
+        if action is None:
+            self.feedback_var.set(
+                "That Action is no longer available. Configure was refreshed."
+            )
+            self.feedback_label.configure(style="Error.TLabel")
+            return
+        self._edit_action_record(action)
+
+    def _schedule_action_edit(self, action_id: str) -> None:
+        self._pending_action_edit_id = action_id
+        if self._pending_action_edit_after_id is not None:
+            return
+        self._pending_action_edit_after_id = self.window.after_idle(
+            self._open_pending_action_edit
+        )
+
+    def _open_pending_action_edit(self) -> None:
+        self._pending_action_edit_after_id = None
+        action_id = self._pending_action_edit_id
+        self._pending_action_edit_id = None
+        if action_id is not None:
+            self._edit_action_by_id(action_id)
+
+    def _cancel_pending_action_edit(self) -> None:
+        after_id = getattr(self, "_pending_action_edit_after_id", None)
+        if after_id is not None:
+            try:
+                self.window.after_cancel(after_id)
+            except tk.TclError:
+                pass
+        self._pending_action_edit_after_id = None
+        self._pending_action_edit_id = None
+
     def _edit_action_record(self, action: Action) -> None:
+        existing_dialog = getattr(self, "action_edit_dialog", None)
+        if existing_dialog is not None:
+            try:
+                if existing_dialog.window.winfo_exists():
+                    existing_dialog.window.lift()
+                    existing_dialog.window.focus_force()
+                    return
+            except tk.TclError:
+                pass
+            self.action_edit_dialog = None
         local = action.id in self.local_action_ids
         if not local and not messagebox.askokcancel(
                 "Edit built-in action?",
@@ -1751,10 +2102,10 @@ class ConfigurationWindow:
             ):
             return
         target_path = self.local_actions_path if local else self.shared_actions_path
-        ActionDialog(
+        dialog = ActionDialog(
             self.window,
             action.type,
-            self.actions,
+            getattr(self, "stored_actions", self.actions),
             lambda edited: self._save_edited_action(edited, target_path),
             action=action,
             context_names=[context.name for context in self.contexts],
@@ -1764,10 +2115,38 @@ class ConfigurationWindow:
                 else None
             ),
         )
+        self.action_edit_dialog = dialog
+        dialog.window.bind(
+            "<Destroy>",
+            lambda event, opened=dialog: self._clear_action_edit_dialog(
+                event, opened
+            ),
+            add="+",
+        )
+
+    def _clear_action_edit_dialog(
+        self,
+        event: tk.Event,
+        dialog: ActionDialog,
+    ) -> None:
+        if event.widget is dialog.window and self.action_edit_dialog is dialog:
+            self.action_edit_dialog = None
 
     def _save_edited_action(self, action: Action, target_path: Path) -> bool:
+        if action.state == "Archived" and action.effective_contexts:
+            messagebox.showerror(
+                "Action was not saved",
+                "An Archived Action cannot be assigned to a Context. Restore it "
+                "first, then add the wanted Context membership.",
+                parent=self.window,
+            )
+            return False
         previous_action = next(
-            (existing for existing in self.actions if existing.id == action.id),
+            (
+                existing
+                for existing in getattr(self, "stored_actions", self.actions)
+                if existing.id == action.id
+            ),
             None,
         )
         if previous_action is None:
@@ -1805,11 +2184,112 @@ class ConfigurationWindow:
         self.feedback_label.configure(style="Success.TLabel")
         return True
 
-    def _delete_action(self) -> None:
-        selection = self.action_tree.selection()
-        if not selection:
+    def _change_action_state(self) -> None:
+        action = self._selected_stored_action()
+        if action is None:
             return
-        action = self.actions[int(selection[0].split("-")[1])]
+        local = action.id in self.local_action_ids
+        action_path = self.local_actions_path if local else self.shared_actions_path
+        shared_warning = ""
+        if not local:
+            shared_warning = (
+                "\n\nThis changes Built-in starter configuration tracked through "
+                "Git and can affect other computers after commit, push, and pull."
+            )
+
+        if action.state == "Archived":
+            if not messagebox.askyesno(
+                "Restore action?",
+                f'Restore "{action.title}" as Active?\n\nIt will return to normal '
+                "launcher search. Previous pins, Context membership, Focus slots, "
+                f"and configured Quick actions will not be recreated.{shared_warning}",
+                parent=self.window,
+            ):
+                return
+            try:
+                restore_action(action_path, action.id)
+            except (ActionDeletionError, OSError) as exc:
+                messagebox.showerror(
+                    "Action was not restored", str(exc), parent=self.window
+                )
+                return
+            self.action_state_filter_var.set("Active")
+            self.initial_action_id = action.id
+            self.on_change()
+            self._reload()
+            owner = LOCAL_DESTINATION.lower() if local else "built-in"
+            self.feedback_var.set(
+                f"Restored {owner} action: {action.title}. "
+                "Reassign saved placements as needed."
+            )
+            self.feedback_label.configure(style="Success.TLabel")
+            return
+
+        try:
+            usage = inspect_action_references(
+                action.id,
+                context_paths=(self.contexts_path, self.local_contexts_path),
+                command_surface_paths=(
+                    self.command_surface_path,
+                    self.local_command_surface_path,
+                ),
+                palette_path=self.palette_path,
+            )
+        except (ActionDeletionError, OSError) as exc:
+            messagebox.showerror("Action was not archived", str(exc), parent=self.window)
+            return
+        impact = (
+            f"{usage.references_removed} saved reference(s) will be removed."
+            if usage.references_removed
+            else "It has no saved pins, Focus slots, Contexts, or Quick actions."
+        )
+        if usage.buttons_removed:
+            impact += (
+                f"\n{usage.buttons_removed} empty Quick-action button(s) will also "
+                "be removed."
+            )
+        if not messagebox.askyesno(
+            "Archive action?",
+            f'Archive "{action.title}"?\n\nIt will disappear from normal '
+            f"discovery and saved placements. {impact}\n\nThe Action remains "
+            "editable under Show: Archived and can be restored later. Restoring "
+            f"does not recreate removed assignments.{shared_warning}",
+            icon=messagebox.WARNING,
+            parent=self.window,
+        ):
+            return
+        try:
+            report = archive_action_and_references(
+                action_path,
+                action.id,
+                context_paths=(self.contexts_path, self.local_contexts_path),
+                command_surface_paths=(
+                    self.command_surface_path,
+                    self.local_command_surface_path,
+                ),
+                palette_path=self.palette_path,
+            )
+        except (ActionDeletionError, OSError) as exc:
+            # Reference cleanup intentionally precedes the state write. A
+            # failure can therefore leave a valid Active action with fewer
+            # placements; reload every view before explaining that outcome.
+            self.on_change()
+            self._reload()
+            messagebox.showerror("Action was not archived", str(exc), parent=self.window)
+            return
+        self.initial_action_id = None
+        self.on_change()
+        self._reload()
+        self.feedback_var.set(
+            f"Archived action: {action.title}. Removed "
+            f"{report.references_removed} saved reference(s)."
+        )
+        self.feedback_label.configure(style="Success.TLabel")
+
+    def _delete_action(self) -> None:
+        action = self._selected_stored_action()
+        if action is None or action.state != "Archived":
+            return
         local = action.id in self.local_action_ids
         try:
             usage = inspect_action_references(
@@ -1842,7 +2322,7 @@ class ConfigurationWindow:
                 "alter the starter configuration tracked through Git."
             )
         if not messagebox.askyesno(
-            "Delete action?",
+            "Delete archived action permanently?",
             f'Delete “{action.title}”?\n\n{impact}{shared_warning}\n\n'
             "This cannot be undone inside Context Palette.",
             icon=messagebox.WARNING,
@@ -1865,7 +2345,9 @@ class ConfigurationWindow:
         except (ActionDeletionError, OSError) as exc:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
             return
-        self.actions[:] = [existing for existing in self.actions if existing.id != action.id]
+        self.stored_actions[:] = [
+            existing for existing in self.stored_actions if existing.id != action.id
+        ]
         self.local_action_ids.discard(action.id)
         self.initial_action_id = None
         self.on_change()
@@ -2607,6 +3089,9 @@ class ActionDialog:
         choose_destination: bool = False,
         default_text_file_path: Path | None = None,
         initial_contexts: tuple[str, ...] = (),
+        initial_title: str = "",
+        initial_value: str = "",
+        suggested_from_workspace: bool = False,
     ) -> None:
         self.action_type = action_type
         self.action = action
@@ -2702,6 +3187,18 @@ class ActionDialog:
             action_help,
             "Show what this action reads, changes, and an example.",
         )
+        self.suggestion_notice: ttk.Label | None = None
+        if suggested_from_workspace and action is None:
+            self.suggestion_notice = ttk.Label(
+                form,
+                text=(
+                    "Prefilled from Input / Output - review the name, target, "
+                    "and effect before creating this Action."
+                ),
+                style="Status.TLabel",
+                wraplength=610,
+            )
+            self.suggestion_notice.pack(fill=tk.X, pady=(2, 5))
         self.destination_var = tk.StringVar(value=LOCAL_DESTINATION)
         if choose_destination:
             self.destination_field = self._compact_combobox(
@@ -2715,7 +3212,9 @@ class ActionDialog:
                     "for developers."
                 ),
             )
-        self.title_var = tk.StringVar(value=action.title if action else "")
+        self.title_var = tk.StringVar(
+            value=action.title if action else initial_title
+        )
         self.description_var = tk.StringVar(
             value=action.description if action else ""
         )
@@ -2839,6 +3338,8 @@ class ActionDialog:
             )
             if action:
                 self.value.insert("1.0", action.value)
+            elif initial_value:
+                self.value.insert("1.0", initial_value)
             elif action_type == "transform_list_csv":
                 self.value.insert("1.0", "csv")
             elif action_type == "transform_slashes":
@@ -4132,11 +4633,26 @@ def _destination_field(parent: ttk.Frame, variable: tk.StringVar) -> None:
 
 
 def _focus_entry(window: tk.Toplevel, entry: ttk.Entry) -> None:
+    after_id: str | None = None
+
     def apply_focus() -> None:
+        nonlocal after_id
+        after_id = None
         entry.focus_set()
         entry.selection_range(0, tk.END)
 
-    window.after_idle(apply_focus)
+    def cancel_focus(event: tk.Event) -> None:
+        nonlocal after_id
+        if event.widget is not window or after_id is None:
+            return
+        try:
+            window.after_cancel(after_id)
+        except tk.TclError:
+            pass
+        after_id = None
+
+    after_id = window.after_idle(apply_focus)
+    window.bind("<Destroy>", cancel_focus, add="+")
 
 
 def _stable_id(label: str) -> str:

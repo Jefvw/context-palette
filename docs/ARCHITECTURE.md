@@ -72,13 +72,14 @@ Presentation and application orchestration.
 - Builds the Tkinter interface.
 - Maintains the explicitly selected focus context through a compact menu launcher.
 - Exposes the complete configuration workspace through one direct
-  **Configure** button. The Focus selector retains a direct **Manage focuses…**
-  route to the Contexts tab. All Configure routes reuse one live editor and
-  retarget its tab or selected record; a new editor is created only after the
-  previous one closes.
-- Renders color-coded shortcut rows, a normal mixed global projection of Actions and Work
-  Items, kind-specific projections, or an explicitly activated flat mixed list
-  belonging to the selected Focus.
+  **Configure** button. Its ordinary route opens a task-oriented Start page;
+  the Focus selector retains a direct **Manage focuses…** route to the Contexts
+  tab. All Configure routes reuse one live editor and retarget its tab or
+  selected record; a new editor is created only after the previous one closes.
+- Renders color-coded shortcut rows, a normal mixed global projection of Actions
+  and Work Items with selected-Focus members grouped first, kind-specific
+  projections, or an explicitly activated flat mixed list belonging to the
+  selected Focus.
 - Renders the global JSON-configured Quick-action surface below discovery
   and the fixed action-bound Passwords, Folders, and Prompts hierarchies.
 - Composes a bounded horizontal main split: the command console occupies about
@@ -133,7 +134,7 @@ remains global regardless of Focus.
 
 | State | Heading/results | Rail | Primary action |
 | --- | --- | --- | --- |
-| All items | Mixed Actions and discovered Work Items, with color-coded shortcut rows first | Contexts, Tags, Help | Run or Open, selected-kind specific |
+| All items | Mixed Actions and discovered Work Items: color-coded shortcut rows first, then matching members of a selected specific Focus, a non-action divider when needed, and remaining global matches | Contexts, Tags, Help | Run or Open, selected-kind specific |
 | Actions | Actions only, including Action slots | Passwords, Types, Contexts, Tags, Help | Run |
 | Work Items | Indexed Work Item folders, never Action records | New item, To inbox, Copy file, Projects, Contexts, Tags, Help | Open |
 | Focus items, empty Find | Flat mixed membership of the selected Focus, including soft unavailable Work Item references | All-items rail | Run or Open |
@@ -145,6 +146,13 @@ primary verb must all describe the active scope and selected kind.
 `ActionDiscoveryPanel` owns those widgets; `LauncherApp` owns scope policy,
 typed selection resolution, and the constrained Run/Open
 callbacks. Both `?` controls continue to open the same general Help document.
+
+Focus-first grouping is applied after Find and tag candidate filtering, so the
+candidate set and count remain global. It is suppressed for General and for an
+explicit Context filter, where grouping would be redundant or misleading.
+Actions-only, Work-Items-only, and Focus-items projections keep their existing
+ordering policy. The divider has no typed item reference and pointer, keyboard
+navigation, preview, and execution paths must treat it as presentation only.
 
 ### `actions.py`
 
@@ -206,6 +214,17 @@ prompt generation consumes the same definitions.
 
 The catalogue renders `docs/ACTION_TYPES.md`; an automated test requires the user-readable overview to remain identical to the executable definitions.
 
+### `action_preview.py`
+
+Builds the side-effect-free, structured explanation shown before Action
+execution. It combines the selected Action with the canonical action-type
+catalogue and only boolean runtime availability supplied by the launcher; it
+does not read the clipboard, expand templates, validate targets, or execute an
+effect. Every supported type produces a bounded **Input → Effect** summary plus
+full labelled details for Type, configured values, arguments, working folder,
+and recovery or limitations. Current workspace, captured-selection, and fresh
+destination availability refine the summary without exposing their contents.
+
 ### `workspace_transforms.py`
 
 Defines the ordered, user-facing catalogue for Input / Output transformations:
@@ -219,13 +238,24 @@ Pure transformation algorithms and validation remain in `actions.py`.
 ### `workspace_panel.py`
 
 Owns the complete Input / Output UI component: text widget, edit menu, visible
-**Text tools** menu, selection-first replacement, undo boundaries, prompting,
+**Create Action...** and **Text tools** controls, selection-first source choice
+and replacement, undo boundaries, prompting,
 clipboard copy and replacement, transformation feedback, and file-transform
 preview provenance. A file preview exposes explicit replace, save-as, and
 dismiss commands; ordinary workspace replacement clears that provenance. It
-depends on small injected callbacks for clipboard access, status messages, and
-tooltip registration. `launcher.py` retains compatibility delegates for action
-execution and integration flows, but no longer owns workspace widget mechanics.
+depends on small injected callbacks for Action suggestion orchestration,
+clipboard access, status messages, and tooltip registration. `launcher.py`
+retains compatibility delegates for action execution and integration flows,
+but no longer owns workspace widget mechanics.
+
+### `action_suggestions.py`
+
+Defines the pure, typed inference boundary for creating an Action from Input /
+Output. It accepts only one complete HTTP/HTTPS URL or one clear absolute
+Windows/file-URI target that can be identified lexically as a file, folder, or
+`.exe`. Script-like suffixes are not inferred as ordinary files. It does no
+filesystem probing, clipboard access, persistence, network retrieval, or
+execution and returns no suggestion for mixed or ambiguous content.
 
 ### `action_discovery_panel.py`
 
@@ -248,6 +278,13 @@ workspace. `configuration_window.py` highlights that action after rendering;
 My configuration actions persist to the ignored local action file. Built-in
 actions may also be edited after an explicit developer-impact warning and
 persist to the Git-tracked starter action file.
+
+The main discovery rail's explicit **Edit** command adds a one-shot direct-edit
+request to that same stable-ID route. Configure reloads and raises its existing
+workspace, clears conflicting Action filters, resolves the ID only against the
+current Active projection, and opens the existing `ActionDialog` path after the
+window becomes idle. Right-click remains selection-only navigation. A missing
+or concurrently Archived Action leaves Configure usable and opens no editor.
 
 ### `context_membership_field.py`
 
@@ -498,8 +535,12 @@ Action-only. Quick-action groups remain global and have no Context visibility
 field; the shared reference boundary permits, but does not imply, that future
 feature.
 
-Action creation starts either from the educational **Create action** catalogue
-or the launcher/Actions-tab **+ Action** searchable type chooser. Both routes
+Action creation starts from the educational **Create action** catalogue, the
+launcher/Actions-tab **+ Action** searchable type chooser, or a conservative
+**Create Action...** suggestion beside Input / Output. The suggestion route uses
+selected text first, requires one clear supported target, and prepopulates
+the existing form with a visible review notice. It does not change the general
+type chooser or bypass confirmation. All routes
 open the same `ActionDialog` and use the same atomic Action/Context-membership
 persistence operation; the quick chooser is modal and never writes state on
 cancel. Action creation and editing refresh every Configure view derived from actions,
@@ -516,6 +557,13 @@ tracks the canvas width, recomputes its scroll region when operation-specific
 fields change, handles mouse-wheel input without stealing scrolling from
 multiline text widgets or comboboxes, and brings a newly focused field into
 view for keyboard traversal.
+
+Configure's first tab is a navigation-only **Start** page. It owns no domain
+state and performs no persistence: its six primary task buttons either invoke
+the existing Action chooser or select Actions, Contexts, Quick actions, Work
+Items, or Backup and restore. Secondary buttons select the Action-type
+catalogue and Diagnostics. Explicit launcher routes bypass Start and retain
+their exact tab, selected-record, focus, singleton-window, and save behavior.
 
 Configure list tables use the shared `treeview_utils.py` scrollable-tree
 builder. Actions, contexts, Quick actions, Work Item sources, and discovered
@@ -565,14 +613,24 @@ write preserves the true pre-rename definition as the context file's backup.
 
 ### `action_deletion.py`
 
-Owns dependency-aware action removal. It validates and inventories context,
-quick-button, pin, and Focus-slot references before the UI asks for
-confirmation. On acceptance it removes those references before deleting the
-action, so an interrupted multi-file update is more likely to leave an unused
-action than a broken reference. Every changed file still uses atomic
-replacement and its local backup behavior. A quick button with no remaining
-action is removed; a deleted primary action falls back to the button's next
-configured action.
+Owns dependency-aware Action lifecycle mutations. It validates and inventories
+Context, Quick-action, pin, and Focus-slot references before the UI asks for
+confirmation. Archive removes those active-only references before changing the
+retained record to Archived; restore changes that same record back to Active
+without recreating former assignments. Permanent deletion uses the same
+reference-cleanup boundary before removing the record. This ordering makes an
+interrupted multi-file update more likely to leave an unused Active Action than
+an invalid reference to an Archived or missing Action. Every changed file still
+uses atomic replacement and its local backup behavior. A Quick-action button
+with no remaining target is removed; a removed primary Action falls back to
+the button's next configured Action.
+
+`actions.py` exposes separate combined projections for this boundary: stored
+loading includes Active and Archived records with cross-owner duplicate-ID
+validation, while ordinary combined loading remains Active-only. Configure
+uses the stored projection only for its Actions table and lifecycle controls;
+all runtime discovery and assignment pickers continue to consume Active
+Actions.
 
 ### `palette_state.py`
 
@@ -673,8 +731,9 @@ override configured defaults.
 
 Owns pure runtime Focus policy independently of Tk and persistence. It discovers
 available Focus names, resolves Action-only legacy slots and typed mixed slots,
-handles unavailable-Focus fallbacks, and selects canonical Action membership.
-The launcher adds referenced Work Items to the same **Focus items** projection.
+handles unavailable-Focus fallbacks, and selects canonical visible Action plus
+configured Work Item membership. The launcher uses that same membership for
+**Focus items** and deterministic Focus-first grouping in **All items**.
 This remains the replacement boundary for future Context-model changes.
 
 ### `work_items.py`
@@ -1067,7 +1126,7 @@ credential targets, usernames, passwords, or window titles. Successful and
 clipboard-only outcomes use informational logging, unavailable destinations use
 warning logging, and dispatch failures retain their exception at error level.
 
-Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `workspace_panel.py` owns selection ranges, one-step Undo grouping, clipboard updates, and menus. The launcher injects clipboard and status callbacks and retains orchestration delegates. Action explanations and application status share a slim bottom communication line.
+Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `workspace_panel.py` owns selection ranges, one-step Undo grouping, clipboard updates, and menus. The launcher injects clipboard, status, and content-change callbacks and retains orchestration delegates. A selected item places its current-state **Input → Effect** summary in the slim bottom communication line; progress, success, and errors temporarily replace it. Hovering or clicking that line exposes the full structured explanation and current operational message.
 
 The legacy generic `transform_text` action persists one catalogue operation key
 and only that operation's ordered parameters. It remains loadable and editable
@@ -1089,10 +1148,16 @@ Invalid JSON, delimiters, paths, file URIs, and parameter counts fail before
 replacing the workspace or source file.
 
 The transformation menu groups deterministic operations into Case, Whitespace,
-and Lines. Line operations preserve the detected line-ending style and final
-newline where applicable.
+Find and filter, Paths, Lines, Lists, Naming style, Data and encoding, and File
+addresses. Line operations preserve the detected line-ending style and final
+newline where applicable. List operations share one quote-aware tokenizer for
+line, comma, tab, and semicolon input. Explicit plain, single-quoted-text, and
+double-quoted-text comma formats leave detected numbers and `NULL` unquoted;
+the SQL variant also wraps the result in parentheses. The compatibility
+`transform_list_csv` Action retains its historical plain/all-values-as-strings
+behavior.
 
-Numbered action dispatch is enabled only when the Find entry owns focus. All other widgets suppress it, making shortcut mode explicit and preventing accidental execution while navigating or editing. The communication line never wraps; its full untruncated action explanation is retained separately for a dynamic hover tooltip and click-open detail window.
+Numbered action dispatch is enabled only when the Find entry owns focus. All other widgets suppress it, making shortcut mode explicit and preventing accidental execution while navigating or editing. The communication line never wraps; its stable **Input → Effect** summary is bounded to 220 characters. Full structured Type, Input, Effect, configured-value, and recovery information is retained separately for a dynamic hover tooltip and click-open detail window. Editing Input / Output refreshes the current preview without changing Action execution semantics or treating a highlighted text range as Action input.
 
 Shortcut numbers are intentionally omitted from result labels. Blue rows map top-to-bottom to pinned shortcuts 1–5, green rows map top-to-bottom to Focus shortcuts 6–0, and neutral rows are ordinary results; row tooltips expose the exact binding. Action and Work Item rows measure every icon in the active Tk font, pad narrower symbols to one shared pixel column, and render the short name directly without a dash. The flat mixed-result Treeview item layout omits the unused expand/collapse indicator so that its gutter does not survive the removed number column. A non-action separator row divides shortcut rows from ordinary Action-only results; mouse and keyboard selection skip that separator. Standard editing and transformations are available through the context menu and the visible catalogue-backed **Text tools** menu.
 
@@ -1207,6 +1272,12 @@ Tkinter widgets are only accessed from the main thread.
 - The single-instance listener also signals through a queue.
 - The Tk main loop polls requests every 100 ms.
 - No database, network service, web frontend, or heavy UI framework is initialized.
+
+Application shutdown cancels every pending callback registered in the shared
+Tk interpreter only after active Work Item and backup/restore operations have
+cleared their quit guard. Short-lived child windows cancel their own delayed
+focus callbacks when destroyed, so closing a dialog cannot leave an orphaned
+Tcl timer behind.
 
 Configuration reloads are skipped when active file existence, modification time, and size are unchanged. Typed search changes are coalesced over 40 ms before recalculating slots and rows.
 

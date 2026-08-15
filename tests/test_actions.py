@@ -29,8 +29,10 @@ from context_palette.actions import (
     expand_template,
     load_actions,
     list_to_comma_separated,
+    list_to_comma_values,
     list_to_sql_values,
     load_combined_actions,
+    load_combined_stored_actions,
     open_action_target,
     replace_text_file_from_preview,
     save_text_file_preview_as,
@@ -281,28 +283,6 @@ class ActionTests(unittest.TestCase):
         expected = {
             "colruyt-open-product": "https://www.colruyt.be/nl/producten/5331",
             "product-lookup-bioplanet": "https://www.bioplanet.be/nl/producten/5331",
-            "product-lookup-productinfoscreen": (
-                "https://productinfoscreen.colruyt.int/productinfoscreen/consultArticle.xhtml"
-                "?technicalArticleNumber=5331"
-            ),
-            "product-lookup-fic": "https://fic.colruytgroup.com/productinfo/nl/algc/5331",
-            "product-lookup-rti": "https://rti.colruytgroup.com/nl/product-info/5331",
-            "product-lookup-solucious": "https://www.solucious.be/5331",
-            "product-lookup-myproduct-retail-article": (
-                "https://myproduct.colruyt.int/#/product-entities/RETAILARTICLE/5331"
-            ),
-            "product-lookup-myproduct-base-product": (
-                "https://myproduct.colruyt.int/#/product-entities/RETAILBASEPRODUCT/5331"
-            ),
-            "product-lookup-myproduct-gtin": (
-                "https://myproduct.colruyt.int/#/product-entities/RETAILTRADEITEM/5331"
-            ),
-            "product-lookup-myproduct-pss": (
-                "https://myproduct.colruyt.int/#/product-entities/PRODUCTSPECIFICATIONSHEET/5331"
-            ),
-            "product-lookup-myproduct-any-id": (
-                "https://myproduct.colruyt.int/#/product-entities?productId=5331"
-            ),
         }
 
         self.assertTrue(expected.keys() <= actions.keys())
@@ -424,6 +404,50 @@ class ActionTests(unittest.TestCase):
 
         self.assertEqual([action.id for action in actions], ["shared"])
         self.assertEqual(local_ids, set())
+
+    def test_combined_stored_actions_keeps_archived_records(self):
+        shared = self._write_actions(
+            [
+                {
+                    "id": "archived",
+                    "title": "Archived",
+                    "type": "copy_text",
+                    "value": "old",
+                    "state": "Archived",
+                }
+            ]
+        )
+
+        stored, local_ids = load_combined_stored_actions(
+            shared, shared.parent / "missing.json"
+        )
+        active, _ = load_combined_actions(shared, shared.parent / "missing.json")
+
+        self.assertEqual([(item.id, item.state) for item in stored], [("archived", "Archived")])
+        self.assertEqual(active, [])
+        self.assertEqual(local_ids, set())
+
+    def test_combined_stored_actions_rejects_archived_cross_owner_duplicate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            shared = Path(directory) / "shared.json"
+            local = Path(directory) / "local.json"
+            payload = {
+                "actions": [
+                    {
+                        "id": "Same",
+                        "title": "Archived",
+                        "type": "copy_text",
+                        "value": "old",
+                        "state": "Archived",
+                    }
+                ]
+            }
+            shared.write_text(json.dumps(payload), encoding="utf-8")
+            payload["actions"][0]["id"] = "same"
+            local.write_text(json.dumps(payload), encoding="utf-8")
+
+            with self.assertRaisesRegex(ActionError, "duplicate shared actions"):
+                load_combined_stored_actions(shared, local)
 
     def test_presentation_reload_can_keep_nonportable_file_reference(self):
         external = tempfile.TemporaryDirectory()
@@ -1073,11 +1097,39 @@ class ActionTests(unittest.TestCase):
             list_to_comma_separated("one\nO'Brien", sql_strings=True),
             "'one', 'O''Brien'",
         )
+        self.assertEqual(
+            list_to_comma_separated("001\nname", sql_strings=True),
+            "'001', 'name'",
+        )
+
+    def test_comma_value_lists_offer_plain_single_and_double_quote_modes(self):
+        source = "alpha\n42\n-3.5\nO'Brien"
+
+        self.assertEqual(
+            list_to_comma_values(source),
+            "alpha, 42, -3.5, O'Brien",
+        )
+        self.assertEqual(
+            list_to_comma_values(source, text_quote="'"),
+            "'alpha', 42, -3.5, 'O''Brien'",
+        )
+        self.assertEqual(
+            list_to_comma_values('alpha\n42\nHe said "yes"', text_quote='"'),
+            '"alpha", 42, "He said ""yes"""',
+        )
+
+    def test_comma_value_list_parser_preserves_quoted_separators(self):
+        self.assertEqual(
+            list_to_comma_values('one,"two, too";3\tfour', text_quote='"'),
+            '"one", "two, too", 3, "four"',
+        )
+        with self.assertRaisesRegex(ActionError, "unmatched double quote"):
+            list_to_comma_values('one,"two')
 
     def test_sql_value_list_keeps_numbers_and_quotes_strings(self):
         self.assertEqual(
-            list_to_sql_values("001\n.5\n+4\nname"),
-            "(001, .5, +4, 'name')",
+            list_to_sql_values("001\n.5\n+4\nname\nnull"),
+            "(001, .5, +4, 'name', NULL)",
         )
 
     def test_execute_list_transform_updates_output_and_clipboard(self):

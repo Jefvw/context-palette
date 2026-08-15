@@ -31,7 +31,8 @@ This file contains actionable future work. Completed user-visible work belongs i
   file-preview controls, and Action/Work Item execution routes.
 - Extract Configure dialog families from `configuration_window.py`
   mechanically when the next material Configure change needs them.
-- Refine action discovery and effect descriptions using real repeated-work feedback.
+- Validate the new Input → Effect summaries through real repeated-work feedback,
+  especially long configured targets and empty/fallback states.
 - Add focused tests for configuration-window keyboard order and validation recovery where Tk permits reliable automation.
 
 ## Next

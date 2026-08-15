@@ -121,3 +121,26 @@ def actions_for_context(
         )
         and action.state in VISIBLE_STATES
     ]
+
+
+def palette_items_for_context(
+    actions: list[Action],
+    focus_context: str,
+    definitions: list[ContextDefinition] | tuple[ContextDefinition, ...] = (),
+) -> tuple[PaletteItemReference, ...]:
+    """Return canonical visible Action and configured Work Item membership."""
+
+    references = [
+        PaletteItemReference(action_id=action.id)
+        for action in actions_for_context(actions, focus_context, definitions)
+    ]
+    context_key = focus_context.casefold()
+    for definition in definitions:
+        if definition.name.casefold() != context_key:
+            continue
+        references.extend(
+            reference
+            for reference in definition.member_items
+            if reference.work_item_ref is not None
+        )
+    return tuple(dict.fromkeys(references))

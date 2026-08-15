@@ -8,7 +8,7 @@ import time
 import tkinter as tk
 from tkinter import ttk
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +21,7 @@ from context_palette.launcher import (
 )
 from context_palette.actions import Action, transform_text_file
 from context_palette.action_discovery_panel import (
+    FOCUS_GROUP_ROW_TAG,
     FOCUS_SLOT_ROW_TAG,
     PINNED_SLOT_ROW_TAG,
 )
@@ -36,6 +37,7 @@ from context_palette.configuration_window import (
 )
 from context_palette.contexts import ContextDefinition
 from context_palette.data_catalog import AppDataPaths
+from context_palette.focus_model import palette_items_for_context
 from context_palette.palette_state import PaletteState
 from context_palette.workspace_transforms import WORKSPACE_TRANSFORM_GROUPS
 from context_palette.workspace_panel import WorkspacePanel
@@ -43,6 +45,42 @@ from context_palette.workspace_panel import WorkspacePanel
 
 @unittest.skipUnless(sys.platform == "win32", "The launcher smoke test requires Windows Tk.")
 class LauncherSmokeTests(unittest.TestCase):
+    def test_workspace_create_action_uses_selection_then_full_text_without_clipboard(self):
+        root = tk.Tk()
+        root.withdraw()
+        host = ttk.Frame(root)
+        host.pack(fill=tk.BOTH, expand=True)
+        sources: list[str] = []
+        clipboard_getter = Mock(side_effect=AssertionError("clipboard must not be read"))
+        panel = WorkspacePanel(
+            host,
+            clipboard_getter=clipboard_getter,
+            clipboard_setter=lambda _value: None,
+            status_setter=lambda _value: None,
+            tooltip_adder=lambda _widget, _text: None,
+            create_action=sources.append,
+        )
+        try:
+            self.assertEqual(str(panel.create_action_button.cget("state")), "disabled")
+            panel.set_text("Notes before https://example.com/report after")
+            root.update()
+            start = panel.text.search("https://", "1.0")
+            end = panel.text.index(f"{start}+26c")
+            panel.text.tag_add(tk.SEL, start, end)
+
+            panel.create_action_button.invoke()
+            self.assertEqual(sources, ["https://example.com/report"])
+
+            panel.text.tag_remove(tk.SEL, "1.0", tk.END)
+            panel.create_action_button.invoke()
+            self.assertEqual(
+                sources[-1],
+                "Notes before https://example.com/report after",
+            )
+            clipboard_getter.assert_not_called()
+        finally:
+            root.destroy()
+
     def test_file_transform_preview_exposes_guarded_replace_and_clears_on_new_input(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             source = Path(temporary_directory) / "source.txt"
@@ -236,9 +274,9 @@ class LauncherSmokeTests(unittest.TestCase):
                         if isinstance(child, ttk.Notebook)
                     )
                     for tab_index, heading, last_column in (
-                        (0, "Action", "state"),
-                        (2, "Context", "actions"),
-                        (3, "Group / menu level", "actions"),
+                        (1, "Action", "state"),
+                        (3, "Context", "actions"),
+                        (4, "Group / menu level", "actions"),
                     ):
                         configure_notebook.select(tab_index)
                         root.update()
@@ -262,10 +300,6 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertFalse(any(path.exists() for path in local_paths))
 
                     configure_windows[0].destroy()
-                    for callback_id in root.tk.splitlist(
-                        root.tk.call("after", "info")
-                    ):
-                        root.after_cancel(callback_id)
                     app.quit_app()
                     root_destroyed = True
             finally:
@@ -342,6 +376,7 @@ class LauncherSmokeTests(unittest.TestCase):
                         work_item_metadata=app.work_item_metadata,
                         work_item_index=app.work_item_index,
                         on_change=app._reload,
+                        initial_tab="actions",
                     )
                     personal_action = Action(
                         "personal-first",
@@ -410,10 +445,6 @@ class LauncherSmokeTests(unittest.TestCase):
                     error.assert_not_called()
 
                     configuration.window.destroy()
-                    for callback_id in root.tk.splitlist(
-                        root.tk.call("after", "info")
-                    ):
-                        root.after_cancel(callback_id)
                     app.quit_app()
                     first_root_destroyed = True
             finally:
@@ -479,10 +510,6 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     restart_error.assert_not_called()
 
-                    for callback_id in restarted_root.tk.splitlist(
-                        restarted_root.tk.call("after", "info")
-                    ):
-                        restarted_root.after_cancel(callback_id)
                     restarted.quit_app()
                     restarted_root_destroyed = True
             finally:
@@ -543,6 +570,16 @@ class LauncherSmokeTests(unittest.TestCase):
                                     "relative_folder": (
                                         "ISS-CAP40-AB9C-age-verification"
                                     ),
+                                }
+                            ],
+                        },
+                        {
+                            "name": "Database",
+                            "action_ids": ["database-only"],
+                            "work_item_refs": [
+                                {
+                                    "source_id": "cap40",
+                                    "relative_folder": "QST-CAP40-question",
                                 }
                             ],
                         }
@@ -734,6 +771,140 @@ class LauncherSmokeTests(unittest.TestCase):
                         ),
                         2,
                     )
+                    app.palette_state = PaletteState(focus_context="Database")
+                    database_work_item = next(
+                        item
+                        for item in app.work_item_index.items
+                        if item.relative_folder == "QST-CAP40-question"
+                    )
+                    self.assertTrue(
+                        app._work_item_belongs_to_context(
+                            database_work_item,
+                            "Database",
+                        )
+                    )
+                    focus_members = palette_items_for_context(
+                        app.actions,
+                        "Database",
+                        app.context_definitions,
+                    )
+                    self.assertEqual(
+                        [
+                            reference.action_id
+                            or reference.work_item_ref.relative_folder
+                            for reference in focus_members
+                        ],
+                        ["database-only", "QST-CAP40-question"],
+                    )
+                    app._refresh_results()
+                    grouped_rows = list(app.focus_tree.get_children())
+                    divider_row = next(
+                        item_id
+                        for item_id in grouped_rows
+                        if FOCUS_GROUP_ROW_TAG
+                        in app.focus_tree.item(item_id, "tags")
+                    )
+                    divider_index = grouped_rows.index(divider_row)
+                    self.assertEqual(app.actions_heading_var.get(), "All items · Focus first")
+                    self.assertEqual(app.results_count_var.get(), "5 items")
+                    self.assertNotIn(divider_row, app.focus_tree_items)
+                    self.assertEqual(divider_index, 4)
+                    self.assertEqual(
+                        [
+                            reference.action_id
+                            or reference.work_item_ref.relative_folder
+                            for reference in app.focus_tree_items.values()
+                        ][:4],
+                        [
+                            "database-only",
+                            "general-first",
+                            "general-second",
+                            "QST-CAP40-question",
+                        ],
+                    )
+
+                    last_focus_row = grouped_rows[divider_index - 1]
+                    first_other_row = grouped_rows[divider_index + 1]
+                    app.focus_tree.selection_set(last_focus_row)
+                    app.focus_tree.focus(last_focus_row)
+                    app.focus_tree.focus_force()
+                    app.focus_tree.event_generate("<Down>")
+                    root.update()
+                    self.assertEqual(app.focus_tree.selection(), (first_other_row,))
+
+                    app.focus_tree.selection_set(first_other_row)
+                    app.focus_tree.focus(first_other_row)
+                    divider_bounds = app.focus_tree.bbox(divider_row)
+                    self.assertTrue(divider_bounds)
+                    app.focus_tree.event_generate(
+                        "<Button-1>",
+                        x=divider_bounds[0] + 3,
+                        y=divider_bounds[1] + 3,
+                    )
+                    root.update()
+                    self.assertEqual(app.focus_tree.selection(), (first_other_row,))
+                    with patch.object(app, "_execute_palette_item") as execute_item:
+                        app.focus_tree.selection_set(divider_row)
+                        app.focus_tree.focus(divider_row)
+                        app.focus_tree.event_generate("<Return>")
+                        root.update()
+                        app._activate_mixed_tree_from_event(
+                            type(
+                                "PointerEvent",
+                                (),
+                                {
+                                    "keysym": "",
+                                    "y": divider_bounds[1] + 3,
+                                },
+                            )()
+                        )
+                    execute_item.assert_not_called()
+
+                    app.search_var.set("question")
+                    self._wait_for_search_refresh(root)
+                    self.assertEqual(app.results_count_var.get(), "1 item")
+                    self.assertEqual(
+                        app.actions_heading_var.get(),
+                        "All items · Focus first",
+                    )
+                    self.assertFalse(
+                        any(
+                            FOCUS_GROUP_ROW_TAG
+                            in app.focus_tree.item(item_id, "tags")
+                            for item_id in app.focus_tree.get_children()
+                        )
+                    )
+
+                    app.search_var.set("age verification")
+                    self._wait_for_search_refresh(root)
+                    self.assertEqual(app.results_count_var.get(), "1 item")
+                    self.assertEqual(app.actions_heading_var.get(), "All items")
+                    self.assertEqual(
+                        [
+                            reference.work_item_ref.relative_folder
+                            for reference in app.focus_tree_items.values()
+                            if reference.work_item_ref is not None
+                        ],
+                        ["ISS-CAP40-AB9C-age-verification"],
+                    )
+
+                    app.search_var.set("")
+                    self._wait_for_search_refresh(root)
+                    app._select_item_context_filter("Review")
+                    self.assertEqual(app.actions_heading_var.get(), "All items")
+                    self.assertFalse(
+                        any(
+                            FOCUS_GROUP_ROW_TAG
+                            in app.focus_tree.item(item_id, "tags")
+                            for item_id in app.focus_tree.get_children()
+                        )
+                    )
+                    app._select_item_context_filter(None)
+                    self.assertEqual(
+                        app.actions_heading_var.get(),
+                        "All items · Focus first",
+                    )
+
                     app.palette_state = PaletteState(
                         ("general-first",),
                         "General",
@@ -781,6 +952,23 @@ class LauncherSmokeTests(unittest.TestCase):
                     app._update_preview()
                     self.assertEqual(app.run_button.cget("text"), "Open")
                     self.assertTrue(app.work_item_folder_button.winfo_manager())
+                    self.assertTrue(app.status_var.get().startswith("Input: none → Effect: open "))
+                    self.assertIn("\n\nInput\nNo runtime input.", app.action_info_full)
+                    self.assertIn("\n\nEffect\nOpen ", app.action_info_full)
+                    folder_only_row = next(
+                        item_id
+                        for item_id, reference in app.focus_tree_items.items()
+                        if reference.work_item_ref is not None
+                        and reference.work_item_ref.relative_folder
+                        == "QST-CAP40-question"
+                    )
+                    app.focus_tree.selection_set(folder_only_row)
+                    app.focus_tree.focus(folder_only_row)
+                    app._update_preview()
+                    self.assertEqual(
+                        app.status_var.get(),
+                        "Input: none → Effect: open the Work Item folder",
+                    )
                     action_row = next(
                         item_id
                         for item_id, reference in app.focus_tree_items.items()
@@ -791,6 +979,19 @@ class LauncherSmokeTests(unittest.TestCase):
                     app._update_preview()
                     self.assertEqual(app.run_button.cget("text"), "Run")
                     self.assertFalse(app.work_item_folder_button.winfo_manager())
+                    self.assertEqual(
+                        app.status_var.get(),
+                        "Input: saved text → Effect: copy to the clipboard for manual paste",
+                    )
+                    self.assertIn("\n\nType\n⧉ Paste saved text", app.action_info_full)
+                    self.assertIn("\n\nEffect\n", app.action_info_full)
+                    app.status_var.set("Completed an unrelated operation.")
+                    app._update_preview()
+                    self.assertTrue(app.status_var.get().startswith("Input: saved text → Effect:"))
+                    app.status_var.set("Completed an unrelated operation.")
+                    app._set_workspace_text("Current working text")
+                    root.update()
+                    self.assertTrue(app.status_var.get().startswith("Input: saved text → Effect:"))
 
                     app._select_item_context_filter("Review")
                     self.assertEqual(app.results_count_var.get(), "2 items")
@@ -1215,21 +1416,33 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app._workspace_text(), "Hello World")
                     self.assertEqual(copied, ["Hello World"])
 
-                    lines_menu = root.nametowidget(
+                    lists_menu = root.nametowidget(
                         app.workspace_transform_menu.entrycget(
-                            transform_groups.index("Lines"),
+                            transform_groups.index("Lists"),
                             "menu",
                         )
                     )
+                    self.assertEqual(
+                        [
+                            lists_menu.entrycget(index, "label")
+                            for index in range(lists_menu.index(tk.END) + 1)
+                        ],
+                        [
+                            "Comma list: no quotes",
+                            "Comma list: single-quoted text",
+                            "Comma list: double-quoted text",
+                            "Parenthesized SQL value list",
+                        ],
+                    )
                     sql_index = next(
                         index
-                        for index in range(lines_menu.index(tk.END) + 1)
-                        if lines_menu.entrycget(index, "label")
-                        == "Format as SQL value list"
+                        for index in range(lists_menu.index(tk.END) + 1)
+                        if lists_menu.entrycget(index, "label")
+                        == "Parenthesized SQL value list"
                     )
                     app._set_workspace_text("1\nO'Brien")
                     with patch.object(app, "_set_clipboard", copied.append):
-                        lines_menu.invoke(sql_index)
+                        lists_menu.invoke(sql_index)
                     self.assertEqual(app._workspace_text(), "(1, 'O''Brien')")
                     self.assertEqual(copied[-1], "(1, 'O''Brien')")
 
@@ -1387,7 +1600,7 @@ class LauncherSmokeTests(unittest.TestCase):
                             diagnostic_notebook.select(),
                             "text",
                         ),
-                        "Actions",
+                        "Start",
                     )
 
                     diagnostic_window.destroy()
@@ -1400,7 +1613,7 @@ class LauncherSmokeTests(unittest.TestCase):
                             ),
                             "Contexts",
                         ),
-                        (app.configure_button.invoke, "Actions"),
+                        (app.configure_button.invoke, "Start"),
                     )
                     reused_configuration_window = None
                     for open_configuration, expected_tab in configuration_routes:
@@ -1433,7 +1646,34 @@ class LauncherSmokeTests(unittest.TestCase):
                             notebook.tab(tab_id, "text")
                             for tab_id in notebook.tabs()
                         ]
+                        self.assertEqual(tab_names[0], "Start")
                         self.assertIn("Diagnostics", tab_names)
+                        start_tab = notebook.nametowidget(notebook.tabs()[0])
+                        start_buttons = {
+                            child.cget("text"): child
+                            for child in self._descendants(start_tab)
+                            if isinstance(child, ttk.Button)
+                        }
+                        self.assertTrue(
+                            {
+                                "Create an Action...",
+                                "Find or edit Actions",
+                                "Organize Focuses",
+                                "Arrange Quick actions",
+                                "Set up Work Items",
+                                "Back up or restore",
+                            }
+                            <= set(start_buttons)
+                        )
+                        if expected_tab == "Start":
+                            start_buttons["Arrange Quick actions"].invoke()
+                            root.update()
+                            self.assertEqual(
+                                notebook.tab(notebook.select(), "text"),
+                                "Quick actions",
+                            )
+                            notebook.select(0)
+                            root.update()
                         diagnostics_tab_id = notebook.tabs()[
                             tab_names.index("Diagnostics")
                         ]
@@ -1476,7 +1716,7 @@ class LauncherSmokeTests(unittest.TestCase):
                         app._reload,
                     )
                     reused_configuration_window.geometry("700x480")
-                    app.configuration_window.notebook.select(4)
+                    app.configuration_window.notebook.select(5)
                     root.update()
                     work_item_trees = {
                         tree.heading("#0", "text"): tree
@@ -1587,7 +1827,14 @@ class LauncherSmokeTests(unittest.TestCase):
                     shortcut_windows[0].destroy()
                     root.update()
 
+                    callbacks_before_sheet = set(
+                        root.tk.splitlist(root.tk.call("after", "info"))
+                    )
                     app._show_cheatsheets()
+                    sheet_callback_ids = set(
+                        root.tk.splitlist(root.tk.call("after", "info"))
+                    ) - callbacks_before_sheet
+                    self.assertTrue(sheet_callback_ids)
                     root.update()
                     sheet_windows = [
                         child
@@ -1598,6 +1845,12 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(len(sheet_windows), 1)
                     sheet_windows[0].destroy()
                     root.update()
+                    remaining_callback_ids = set(
+                        root.tk.splitlist(root.tk.call("after", "info"))
+                    )
+                    self.assertTrue(
+                        sheet_callback_ids.isdisjoint(remaining_callback_ids)
+                    )
 
                     app.quit_app()
                     root_destroyed = True

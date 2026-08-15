@@ -40,13 +40,16 @@ class CheatSheetWindow:
         self.selected_sheet_index = 0
         self.selected_item_index = 0
         self.search_entry: ttk.Entry | None = None
+        self.focus_after_id: str | None = None
         self.status_var = tk.StringVar(value="")
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *_args: self._refresh_items())
         self.window = tk.Toplevel(parent)
         self.window.title("Context Palette Cheat Sheets")
         configure_standard_window(self.window, parent)
-        self.window.bind("<Escape>", lambda _event: self.window.destroy())
+        self.window.protocol("WM_DELETE_WINDOW", self._close)
+        self.window.bind("<Escape>", lambda _event: self._close())
+        self.window.bind("<Destroy>", self._cancel_scheduled_focus, add="+")
 
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
@@ -57,7 +60,7 @@ class CheatSheetWindow:
         ttk.Button(
             controls,
             text="Close",
-            command=self.window.destroy,
+            command=self._close,
             style="Compact.TButton",
         ).pack(side=tk.RIGHT)
 
@@ -79,7 +82,7 @@ class CheatSheetWindow:
         search = ttk.Entry(search_row, textvariable=self.search_var)
         self.search_entry = search
         search.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        search.bind("<Escape>", lambda _event: self.window.destroy())
+        search.bind("<Escape>", lambda _event: self._close())
         ttk.Button(search_row, text="Create action", command=self._promote_selected).pack(
             side=tk.LEFT, padx=(8, 0)
         )
@@ -95,7 +98,22 @@ class CheatSheetWindow:
         self._load_sheets()
         self.window.transient(parent)
         self.window.lift()
-        self.window.after(80, self.focus_search)
+        self.focus_after_id = self.window.after(80, self.focus_search)
+
+    def _cancel_scheduled_focus(self, event: tk.Event | None = None) -> None:
+        if event is not None and event.widget is not self.window:
+            return
+        if self.focus_after_id is None:
+            return
+        try:
+            self.window.after_cancel(self.focus_after_id)
+        except tk.TclError:
+            pass
+        self.focus_after_id = None
+
+    def _close(self) -> None:
+        self._cancel_scheduled_focus()
+        self.window.destroy()
 
     def _load_sheets(self) -> None:
         for sheet in self.sheets:
@@ -226,6 +244,7 @@ class CheatSheetWindow:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
 
     def focus_search(self) -> None:
+        self.focus_after_id = None
         if self.search_entry is not None:
             self.search_entry.focus_force()
             self.search_entry.selection_range(0, tk.END)

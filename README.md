@@ -7,7 +7,8 @@ and keeps configuration in inspectable local files.
 
 The application is under active development. Captured, harvested, configured,
 and AI-proposed actions become permanent Active actions as soon as the user
-confirms creation; Archived actions remain outside normal retrieval. See
+confirms creation. Configure can archive and restore retained actions; Archived
+actions remain editable there but stay outside normal retrieval. See
 [MVP](docs/MVP.md) for the exact implementation boundary.
 
 ## What it does today
@@ -27,6 +28,9 @@ confirms creation; Archived actions remain outside normal retrieval. See
   items, and local pinned slots 1–5 through a guided window without exposing
   technical IDs.
 - Captures clipboard material into an Inbox and converts it into permanent actions.
+- Turns one clear website or absolute file, folder, or application path in
+  Input / Output into a prefilled, review-before-save Action without probing a
+  mapped drive or changing the general Action type chooser.
 - Transforms Input / Output through reusable operations for filtering,
   delimiters, naming styles, JSON, URL encoding, SQL escaping, file URIs, and
   path separators; every result is copied automatically.
@@ -72,8 +76,8 @@ missing personal data from safe examples, and runs the complete project check.
 
 ## Command-line backup
 
-Phase 3 provides a service-level backup command without adding restore or
-Tkinter UI:
+The service-level backup command can create the same complete-configuration
+archive without opening the application:
 
 ```powershell
 .\python-context-palette.bat -m context_palette.backup_cli C:\Backups\context-palette.zip
@@ -86,8 +90,9 @@ requires `--overwrite`.
 
 The ZIP is sensitive and is not encrypted. Logs, temporary and recovery files,
 environments, unknown files, external Action targets, Work Item content and
-templates, and credential secrets are never included. Restore is not yet
-implemented.
+templates, and credential secrets are never included. Restore is available
+through **Configure → Backup and restore**; there is no command-line restore
+command.
 
 ## Developing on multiple computers
 

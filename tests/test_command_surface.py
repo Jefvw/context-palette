@@ -272,21 +272,18 @@ class CommandSurfaceTests(unittest.TestCase):
             command_group_action_ids(groups[0]),
             ("general-open-python-docs",),
         )
+        product_systems = groups[0].items[0]
+        self.assertEqual(product_systems.primary_action_id, "")
+        self.assertEqual(product_systems.action_ids, ())
+        self.assertEqual([item.id for item in product_systems.items], ["shopping"])
+        shopping = product_systems.items[0]
+        self.assertEqual(shopping.primary_action_id, "colruyt-open-product")
         self.assertEqual(
-            groups[0].items[0].primary_action_id,
-            "product-lookup-myproduct-any-id",
+            shopping.action_ids,
+            ("colruyt-open-product", "product-lookup-bioplanet"),
         )
         levels = {len(path) for path, _item in iter_command_items(groups[0])}
         self.assertEqual(levels, {1, 2, 3})
-        technical_articles = next(
-            item
-            for _path, item in iter_command_items(groups[0])
-            if item.id == "technical-articles"
-        )
-        self.assertIn(
-            "product-lookup-rti",
-            technical_articles.action_ids,
-        )
 
     def test_shared_surface_distributes_every_active_builtin_action_once(self):
         groups = load_command_groups(ROOT / "data" / "command_surface.json")

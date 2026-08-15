@@ -5,18 +5,241 @@ from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.action_deletion import (
+    ActionDeletionError,
+    archive_action_and_references,
     delete_action_and_references,
     inspect_action_references,
+    restore_action,
 )
+from context_palette.persistence import atomic_write_json as real_atomic_write_json
 
 
 class ActionDeletionTests(unittest.TestCase):
+    def test_archive_reference_write_failure_keeps_action_active_and_stops_in_order(self) -> None:
+        for failure_index in (0, 1):
+            with self.subTest(failure_index=failure_index), TemporaryDirectory() as directory:
+                root = Path(directory)
+                actions = root / "actions.json"
+                context_paths = (root / "first.json", root / "second.json")
+                palette = root / "palette.json"
+                self._write(
+                    actions,
+                    {"actions": [{"id": "keep-me", "state": "Active"}]},
+                )
+                for path in context_paths:
+                    self._write(
+                        path,
+                        {"contexts": [{"name": path.stem, "action_ids": ["keep-me"]}]},
+                    )
+                self._write(palette, {"pinned_action_ids": []})
+                failing_path = context_paths[failure_index]
+
+                def fail_selected_write(path: Path, data: object) -> None:
+                    if path == failing_path:
+                        raise OSError("locked")
+                    real_atomic_write_json(path, data)
+
+                with (
+                    patch(
+                        "context_palette.action_deletion.atomic_write_json",
+                        side_effect=fail_selected_write,
+                    ),
+                    self.assertRaises(ActionDeletionError),
+                ):
+                    archive_action_and_references(
+                        actions,
+                        "keep-me",
+                        context_paths=context_paths,
+                        command_surface_paths=(),
+                        palette_path=palette,
+                    )
+
+                self.assertEqual(
+                    self._read(actions)["actions"][0]["state"],
+                    "Active",
+                )
+                self.assertEqual(
+                    self._read(context_paths[0])["contexts"][0]["action_ids"],
+                    ["keep-me"] if failure_index == 0 else [],
+                )
+                self.assertEqual(
+                    self._read(context_paths[1])["contexts"][0]["action_ids"],
+                    ["keep-me"],
+                )
+
+    def test_lifecycle_rejects_invalid_state_transitions(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            active = root / "active.json"
+            archived = root / "archived.json"
+            palette = root / "palette.json"
+            self._write(active, {"actions": [{"id": "active", "state": "Active"}]})
+            self._write(
+                archived,
+                {"actions": [{"id": "archived", "state": "Archived"}]},
+            )
+            self._write(palette, {"pinned_action_ids": []})
+
+            with self.assertRaisesRegex(ActionDeletionError, "already archived"):
+                archive_action_and_references(
+                    archived,
+                    "archived",
+                    context_paths=(),
+                    command_surface_paths=(),
+                    palette_path=palette,
+                )
+            with self.assertRaisesRegex(ActionDeletionError, "not archived"):
+                restore_action(active, "active")
+
+    def test_restore_write_failure_preserves_archived_record(self) -> None:
+        with TemporaryDirectory() as directory:
+            actions = Path(directory) / "actions.json"
+            self._write(
+                actions,
+                {"actions": [{"id": "archived", "state": "Archived"}]},
+            )
+
+            with (
+                patch(
+                    "context_palette.action_deletion.atomic_write_json",
+                    side_effect=OSError("locked"),
+                ),
+                self.assertRaises(OSError),
+            ):
+                restore_action(actions, "archived")
+
+            self.assertEqual(
+                self._read(actions)["actions"][0]["state"],
+                "Archived",
+            )
+
+    def test_archive_write_failure_explains_valid_active_fallback(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            actions = root / "actions.json"
+            contexts = root / "contexts.json"
+            palette = root / "palette.json"
+            self._write(
+                actions,
+                {"actions": [{"id": "keep-me", "state": "Active"}]},
+            )
+            self._write(
+                contexts,
+                {"contexts": [{"name": "Work", "action_ids": ["keep-me"]}]},
+            )
+            self._write(palette, {"pinned_action_ids": []})
+
+            def fail_action_write(path: Path, data: object) -> None:
+                if path == actions:
+                    raise OSError("locked")
+                real_atomic_write_json(path, data)
+
+            with (
+                patch(
+                    "context_palette.action_deletion.atomic_write_json",
+                    side_effect=fail_action_write,
+                ),
+                self.assertRaisesRegex(
+                    ActionDeletionError,
+                    "remains Active.*placements may already have been removed",
+                ),
+            ):
+                archive_action_and_references(
+                    actions,
+                    "keep-me",
+                    context_paths=(contexts,),
+                    command_surface_paths=(),
+                    palette_path=palette,
+                )
+
+            self.assertEqual(
+                self._read(actions)["actions"][0]["state"],
+                "Active",
+            )
+            self.assertEqual(
+                self._read(contexts)["contexts"][0]["action_ids"],
+                [],
+            )
+
+    def test_archive_retains_record_removes_references_and_restore_is_unassigned(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            actions = root / "actions.json"
+            contexts = root / "contexts.json"
+            commands = root / "commands.json"
+            palette = root / "palette.json"
+            original = {
+                "id": "keep-me",
+                "title": "Keep",
+                "type": "copy_text",
+                "value": "unchanged",
+                "state": "Active",
+                "description": "Retained metadata",
+            }
+            self._write(actions, {"actions": [original]})
+            self._write(
+                contexts,
+                {"contexts": [{"name": "Work", "action_ids": ["keep-me"]}]},
+            )
+            self._write(
+                commands,
+                {
+                    "groups": [
+                        {
+                            "id": "tools",
+                            "label": "Tools",
+                            "items": [
+                                {
+                                    "id": "only",
+                                    "label": "Only",
+                                    "targets": [
+                                        {"type": "action", "action_id": "keep-me"}
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
+            self._write(
+                palette,
+                {
+                    "pinned_action_ids": ["keep-me"],
+                    "context_slots": {"Work": ["keep-me"]},
+                },
+            )
+
+            report = archive_action_and_references(
+                actions,
+                "keep-me",
+                context_paths=(contexts,),
+                command_surface_paths=(commands,),
+                palette_path=palette,
+            )
+
+            archived = self._read(actions)["actions"][0]
+            self.assertEqual(archived, {**original, "state": "Archived"})
+            self.assertEqual(report.references_removed, 4)
+            self.assertEqual(report.buttons_removed, 1)
+            self.assertEqual(self._read(contexts)["contexts"][0]["action_ids"], [])
+            self.assertEqual(self._read(commands)["groups"], [])
+            self.assertEqual(self._read(palette)["pinned_action_ids"], [])
+            self.assertEqual(self._read(palette)["context_slots"], {"Work": []})
+
+            restore_action(actions, "keep-me")
+
+            self.assertEqual(self._read(actions)["actions"][0], original)
+            self.assertEqual(self._read(contexts)["contexts"][0]["action_ids"], [])
+            self.assertEqual(self._read(commands)["groups"], [])
+            self.assertEqual(self._read(palette)["pinned_action_ids"], [])
+
     def test_deletion_preserves_neighboring_work_item_in_mixed_targets(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)

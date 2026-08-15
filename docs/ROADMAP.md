@@ -8,7 +8,8 @@ The roadmap describes ordered product outcomes, not commitments or implemented b
   actions, context deletion, and reordered multi-entry Quick-action menus.
 - Complete Work Items Phase 5: representative manual Windows checks on another
   computer/path and record the result.
-- Improve discoverability of actions and action effects without exposing technical IDs.
+- Validate the new Input → Effect previews through repeated use without exposing
+  technical IDs or captured content.
 - Complete manual Windows accessibility and responsive-layout checks.
 - Continue reducing `launcher.py` responsibilities through behavior-preserving extraction.
 

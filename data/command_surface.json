@@ -12,10 +12,8 @@
         {
           "id": "product-systems",
           "label": "Product systems",
-          "primary_action_id": "product-lookup-myproduct-any-id",
-          "action_ids": [
-            "product-lookup-myproduct-any-id"
-          ],
+          "primary_action_id": "",
+          "action_ids": [],
           "items": [
             {
               "id": "shopping",
@@ -24,28 +22,6 @@
               "action_ids": [
                 "colruyt-open-product",
                 "product-lookup-bioplanet"
-              ]
-            },
-            {
-              "id": "technical-articles",
-              "label": "Technical articles",
-              "primary_action_id": "product-lookup-productinfoscreen",
-              "action_ids": [
-                "product-lookup-productinfoscreen",
-                "product-lookup-fic",
-                "product-lookup-rti",
-                "product-lookup-solucious"
-              ]
-            },
-            {
-              "id": "myproduct",
-              "label": "MyProduct",
-              "primary_action_id": "product-lookup-myproduct-retail-article",
-              "action_ids": [
-                "product-lookup-myproduct-retail-article",
-                "product-lookup-myproduct-base-product",
-                "product-lookup-myproduct-gtin",
-                "product-lookup-myproduct-pss"
               ]
             }
           ]
@@ -80,9 +56,8 @@
                 {
                   "id": "time-registration",
                   "label": "Time registration",
-                  "primary_action_id": "time-registration-open-outlook",
+                  "primary_action_id": "time-registration-open-dummy-app",
                   "action_ids": [
-                    "time-registration-open-outlook",
                     "time-registration-open-dummy-app",
                     "time-registration-copy-record-template"
                   ]

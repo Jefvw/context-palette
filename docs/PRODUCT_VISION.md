@@ -45,6 +45,12 @@ without editing shipped Action records or external folders. Free-form tags
 provide quick cross-context discovery without turning classification into a
 fixed hierarchy.
 
+When the user explicitly selects a specific Focus, ordinary global discovery
+groups matching Focus members before other matches. It does not remove global
+results, silently infer a different Focus, or use an unexplained relevance
+score. This deterministic ordering makes Focus useful during normal retrieval
+while preserving the General root as the complete collection.
+
 ## Explicit effects
 
 An action should make its inputs and effects understandable:
@@ -54,6 +60,11 @@ An action should make its inputs and effects understandable:
 - which URL, file, folder, application, or layout it opens;
 - whether it changes window placement;
 - what remains recoverable after failure.
+
+The selected item should express that contract before invocation in a stable
+**Input → Effect** summary. Current input availability and safe fallback or
+stop behavior belong in the immediate summary; configured values, recovery,
+and limitations remain available as structured details.
 
 This principle is more important than matching the command language of an older automation tool.
 

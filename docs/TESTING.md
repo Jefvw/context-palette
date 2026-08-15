@@ -128,9 +128,19 @@ blocks.
 `tests.test_launcher_smoke` exercises the real Tk view transitions among All
 items, Actions, Work Items, and explicit Focus items. Its temporary fixture
 proves that one Context or tag can return both an Action and a Work Item, that
-only explicit Context members enter a specific Focus list, search remains
-global, a Focus change does not silently filter visible global results, and
-clearing Find restores the list when Focus items remains active.
+only explicit Context members enter a specific Focus list, and that normal All
+items groups canonical Focus members before other global matches without
+changing the count. It also verifies the presentation divider is skipped by
+keyboard navigation and cannot execute, an outside-Focus Find match remains
+reachable, explicit Context filtering suppresses redundant grouping, a Focus
+change does not silently filter visible global results, and clearing Find
+restores the list when Focus items remains active.
+`tests.test_action_preview` requires every supported Action type to produce a
+bounded, readable **Input → Effect** summary and structured details without
+technical type IDs. It protects current-input, captured-selection, destination,
+credential, AI, file-recovery, and Windows-target safety wording. The launcher
+smoke test verifies real Action and Work Item selections, workbook/folder
+fallback, content-change refresh, and restoration after an operational message.
 The same module also constructs a clean-PC data directory containing only the
 tracked Built-in actions, context, and Quick-action files. It verifies that the
 launcher and Configure window load entirely from those files without creating
@@ -191,12 +201,27 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
 1. Start with `run-context-palette.bat`; verify only one resident instance is created.
 2. Press `F9`, then `Ctrl+Alt+P`; verify the palette appears and selected text is captured where the source application permits simulated copy.
 3. Verify `Esc` hides, `Ctrl+L` focuses Find, `Ctrl+N` opens the Action-type
-   chooser, `Ctrl+,` opens Configure, and `F1` opens Help. In the chooser,
+   chooser, `Ctrl+,` opens Configure on **Start**, and `F1` opens Help. On
+   Start, verify all six primary tasks are visible without scrolling. Open each
+   destination and confirm it reuses the same Configure window. Verify
+   **Create an Action...** opens the existing type chooser, while direct Edit,
+   Manage focuses, Work Item, and Diagnostics routes bypass Start. In the chooser,
    verify typing filters types, arrows and Enter choose one, and Escape or
    Cancel changes nothing. Repeat with **+ Action** and `Ctrl+N` on Configure
    → Actions; confirm a non-General Focus is offered as the initial Context,
    an existing Configure workspace is reused, and backup/restore busy state
    refuses the request.
+   Put one absolute file path in Input / Output, including a quoted path with
+   spaces, and choose **Create Action...** beside **Text tools**. Verify **Open a
+   file** opens directly with an editable suggested name and the complete path
+   prefilled, even when it wraps visually. Repeat with an existing folder,
+   `.exe`, and complete HTTP/HTTPS address. Select just the address inside a
+   longer note and verify the selection wins. Try prose, multiple targets, a
+   genuine multi-line value, a relative path, and a script-like path; verify
+   none is guessed. Try an unavailable absolute document path and verify the
+   review form appears immediately without waiting for the drive.
+   Cancel each form and confirm nothing is created or run. Finally verify the
+   existing **+ Action** control still opens its normal unprefilled type chooser.
    On initial display, verify the command console occupies about 40% of the
    width, Input / Output occupies about 60% and nearly the full height, Find is
    no wider than its result list, and about ten result rows are visible. Verify
@@ -210,6 +235,15 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    the supported minimum and verify every rail control remains available. Drag
    the vertical divider and verify both sides remain bounded and the manual
    balance remains adjustable for the session.
+   While moving through representative Actions and Work Items, verify the
+   bottom line consistently reads **Input → Effect** before Run/Open. Include an
+   empty and populated Input / Output transform, a saved-text action opened
+   with and without a fresh hotkey destination, an AI prompt, a protected
+   credential, a Windows target, a text-file transform, and Work Items with and
+   without matching workbooks. Confirm risk, non-submission, cleanup, unchanged
+   source, and folder fallback remain visible. Hover and click the line to
+   verify structured details, then run an item and confirm its operational
+   result temporarily replaces the preview. Select again to restore it.
 4. Enter Find text, activate Context/tag filters and Focus items, and put text in
    Input / Output. Press `F5`; verify those transient values clear, Find regains
    focus, and saved Focus, pins, and context slots remain unchanged.
@@ -228,14 +262,29 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    usernames, passwords, and window titles are absent from every event.
 6. Right-click a personal action in ordinary results and in Focus items.
    Verify Configure opens on Actions with the clicked row highlighted and its
-   name, contexts, and tags editable. Repeat with a disposable Built-in action,
+   name, contexts, and tags editable after choosing **Edit selected**. From the
+   main palette, select the same Action and choose **Edit**; verify its editor
+   opens directly in the reused Configure workspace. Repeat with a disposable Built-in action,
    verify the Git/private-data warning appears, cancel once, then accept and
    verify the Built-in file receives the reviewed edit. Revert that disposable
-   edit afterward.
-7. Activate Focus items and verify keyboard focus enters its list. Search for
-   an action from another Focus, verify the flat results remain global, change
-   Focus while Find is non-empty, then clear Find and verify the new Focus list
-   returns. Confirm only slots 6–0 change and pins 1–5 remain stable.
+   edit afterward. In Configure -> Actions, archive a disposable personal
+   Action assigned to a pin, Context, Focus slot, and configured Quick action.
+   Verify the confirmation reports the impact, the Action disappears from
+   every runtime placement, and **Show: Archived** retains it. Restore it and
+   verify it returns to normal search without recreating former assignments.
+   Archive and permanently delete it. Repeat archive cancellation with a
+   disposable Built-in Action and verify the Git/multi-computer warning.
+7. Select a specific Focus while **All items** is active. Verify matching
+   shortcut rows remain first, remaining Focus members follow, and **All other
+   matches** separates the remaining global results. Arrow, Page, Home, and End
+   across the divider; click and double-click it; confirm it is never selected,
+   previewed, or run. Search for one item inside and one item outside the Focus
+   and verify both remain reachable with the expected heading. Confirm General
+   and an explicit Context filter remove the grouping. Then activate Focus
+   items and verify keyboard focus enters its list. Search for an action from
+   another Focus, verify the flat results remain global, change Focus while Find
+   is non-empty, then clear Find and verify the new Focus list returns. Confirm
+   only slots 6–0 change and pins 1–5 remain stable.
 8. At the standard `780x600` size and supported minimum, verify Quick actions
    use two readable columns without clipping beneath discovery. Narrow the
    command console until one column is genuinely necessary, then verify stable
@@ -244,6 +293,11 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    Enter or Space. Open every Text tools group and verify it matches the
    right-click Transform catalogue. Exercise a text-file preview and verify its
    provenance, Replace original, Save as, and Dismiss strip remains usable.
+   In **Lists**, transform separate `alpha`, `42`, and `O'Brien` values with
+   the no-quote, single-quoted-text, and double-quoted-text commands. Verify the
+   outputs match Help, numbers remain unquoted, embedded quotes are doubled,
+   and a quoted value containing a comma remains one value. Verify the SQL
+   command adds parentheses and keeps `NULL` unquoted.
 9. Create disposable actions and contexts in both **My configuration** and
    **Built-in**; reload and confirm each uses the selected file. In a My
    configuration Context, assign a Built-in Action, a personal Action, and a
@@ -318,7 +372,7 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
     titles are absent. Open it directly with `Ctrl+Shift+D` from the focused
     main palette and cycle with `Ctrl+Tab`; verify focus enters the Diagnostics
     summary and each other tab's primary control. On QWERTY and AZERTY, verify
-    `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, and `Alt+D` directly select the five
+    `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, and `Alt+D` directly select their
     corresponding tabs—including **Quick actions** for `Alt+Q`—without closing Configure. With the main palette focused,
     verify `Ctrl+2` and `Ctrl+3` neither close/hide it nor execute action slots;
     plain `2` and `3` must retain their existing slot behavior.

@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.actions import Action, ActionError
+from context_palette.action_suggestions import ActionCreationSuggestion
 from context_palette.action_types import ACTION_TYPES
 from context_palette.action_discovery_panel import (
     FOCUS_SLOT_ROW_TAG,
@@ -228,13 +229,34 @@ class LauncherInteractionTests(unittest.TestCase):
         app.work_item_inbox = Mock(running=False)
         app.status_var = FakeVariable()
         app._clear_protected_clipboard = Mock()
+        app._cancel_pending_tk_callbacks = Mock()
 
         app.quit_app()
 
         app._clear_protected_clipboard.assert_called_once_with()
         app.hotkey.stop.assert_called_once_with()
         app.instance_server.stop.assert_called_once_with()
+        app._cancel_pending_tk_callbacks.assert_called_once_with()
         app.root.destroy.assert_called_once_with()
+
+    def test_cancel_pending_tk_callbacks_cancels_every_interpreter_callback(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.root.tk.call.return_value = ("after#1", "after#2", "after#3")
+        app.root.tk.splitlist.return_value = ("after#1", "after#2", "after#3")
+
+        app._cancel_pending_tk_callbacks()
+
+        self.assertEqual(
+            app.root.tk.call.call_args_list,
+            [
+                unittest.mock.call("after", "info"),
+                unittest.mock.call("after", "cancel", "after#1"),
+                unittest.mock.call("after", "cancel", "after#2"),
+                unittest.mock.call("after", "cancel", "after#3"),
+            ],
+        )
+        app.root.after_cancel.assert_not_called()
 
     def test_quit_is_blocked_while_backup_or_restore_worker_is_running(self):
         app = LauncherApp.__new__(LauncherApp)
@@ -245,6 +267,7 @@ class LauncherInteractionTests(unittest.TestCase):
         app.work_item_inbox = Mock(running=False)
         app.status_var = FakeVariable()
         app._clear_protected_clipboard = Mock()
+        app._cancel_pending_tk_callbacks = Mock()
         app.configuration_window = Mock()
         app.configuration_window.window.winfo_exists.return_value = True
         app.configuration_window.backup_restore_panel.busy = True
@@ -254,6 +277,7 @@ class LauncherInteractionTests(unittest.TestCase):
 
         self.assertIn("configuration backup or restore", warning.call_args.args[1])
         self.assertIn("Quit blocked", app.status_var.value)
+        app._cancel_pending_tk_callbacks.assert_not_called()
         app.root.destroy.assert_not_called()
 
     def test_workspace_file_copy_starts_for_selected_work_item(self):
@@ -451,6 +475,62 @@ class LauncherInteractionTests(unittest.TestCase):
         app._show_configuration.assert_called_once_with(
             initial_tab="actions",
             start_action_creation=True,
+        )
+
+    def test_workspace_url_opens_prefilled_existing_action_flow(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app._show_configuration = Mock()
+
+        app._create_action_from_workspace("https://example.com/report")
+
+        app._show_configuration.assert_called_once_with(
+            initial_tab="actions",
+            initial_action_suggestion=ActionCreationSuggestion(
+                "open_url",
+                "Open example.com",
+                "https://example.com/report",
+            ),
+        )
+
+    def test_ambiguous_workspace_text_explains_without_opening_configure(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app._show_configuration = Mock()
+
+        with patch("context_palette.launcher.messagebox.showinfo") as showinfo:
+            app._create_action_from_workspace(
+                "See https://example.com and https://openai.com"
+            )
+
+        app._show_configuration.assert_not_called()
+        self.assertIn("could not confidently identify", showinfo.call_args.args[1])
+
+    def test_edit_selected_action_requests_its_editor_directly(self):
+        app = LauncherApp.__new__(LauncherApp)
+        action = Action("edit-me", "Edit me", "General", "copy_text", "one")
+        app._selected_action = Mock(return_value=action)
+        app._selected_work_item = Mock()
+        app._show_configuration = Mock()
+
+        app._edit_selected()
+
+        app._show_configuration.assert_called_once_with(
+            initial_action_id="edit-me",
+            start_action_edit=True,
+        )
+        app._selected_work_item.assert_not_called()
+
+    def test_action_row_navigation_keeps_configure_selection_without_direct_edit(self):
+        app = LauncherApp.__new__(LauncherApp)
+        action = Action("show-me", "Show me", "General", "copy_text", "one")
+        app._show_configuration = Mock()
+
+        app._show_action_configuration(action)
+
+        app._show_configuration.assert_called_once_with(
+            initial_tab="actions",
+            initial_action_id="show-me",
         )
 
     def test_markdown_file_action_opens_in_document_viewer(self):

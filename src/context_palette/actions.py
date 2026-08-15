@@ -243,6 +243,37 @@ def load_combined_actions(
     return shared_actions + local_actions, {action.id for action in local_actions}
 
 
+def load_combined_stored_actions(
+    shared_path: Path,
+    local_path: Path,
+    *,
+    inspect_external_paths: bool = True,
+) -> tuple[list[Action], set[str]]:
+    """Load Active and Archived actions without changing runtime visibility."""
+
+    shared_actions = load_stored_actions(
+        shared_path,
+        inspect_external_paths=inspect_external_paths,
+    )
+    local_actions = (
+        load_stored_actions(
+            local_path,
+            inspect_external_paths=inspect_external_paths,
+        )
+        if local_path.exists()
+        else []
+    )
+    shared_ids = {action.id.casefold(): action.id for action in shared_actions}
+    local_ids_by_key = {action.id.casefold(): action.id for action in local_actions}
+    duplicate_ids = shared_ids.keys() & local_ids_by_key.keys()
+    if duplicate_ids:
+        raise ActionError(
+            "Local action IDs duplicate shared actions: "
+            + ", ".join(sorted(local_ids_by_key[key] for key in duplicate_ids))
+        )
+    return shared_actions + local_actions, {action.id for action in local_actions}
+
+
 def append_action(path: Path, action: Action) -> None:
     append_actions(path, [action])
 
@@ -872,37 +903,99 @@ def validate_action_value(
         )
 
 
-def list_to_comma_separated(value: str, *, sql_strings: bool = False) -> str:
-    items = [line.strip() for line in value.splitlines() if line.strip()]
+_NUMERIC_LIST_ITEM_PATTERN = re.compile(
+    r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\Z"
+)
+
+
+def _separated_list_items(value: str, *, empty_message: str) -> list[str]:
+    """Split common pasted-list formats while respecting quoted separators."""
+
+    items: list[str] = []
+    current: list[str] = []
+    quote_character: str | None = None
+    index = 0
+    while index < len(value):
+        character = value[index]
+        if quote_character is not None:
+            if character == quote_character:
+                if index + 1 < len(value) and value[index + 1] == quote_character:
+                    current.append(character)
+                    index += 2
+                    continue
+                quote_character = None
+            else:
+                current.append(character)
+            index += 1
+            continue
+        if character in {"'", '"'} and not "".join(current).strip():
+            current.clear()
+            quote_character = character
+        elif character in {",", ";", "\t", "\r", "\n"}:
+            item = "".join(current).strip()
+            if item:
+                items.append(item)
+            current.clear()
+        else:
+            current.append(character)
+        index += 1
+    if quote_character is not None:
+        quote_name = "single" if quote_character == "'" else "double"
+        raise ActionError(f"The list contains an unmatched {quote_name} quote.")
+    item = "".join(current).strip()
+    if item:
+        items.append(item)
     if not items:
-        raise ActionError("The Input / Output field does not contain a list.")
-    if sql_strings:
-        items = [f"'{item.replace(chr(39), chr(39) * 2)}'" for item in items]
-    return ", ".join(items)
+        raise ActionError(empty_message)
+    return items
+
+
+def list_to_comma_values(
+    value: str,
+    *,
+    text_quote: str | None = None,
+    quote_numbers: bool = False,
+    parenthesized: bool = False,
+    empty_message: str = "The Input / Output field does not contain a list.",
+) -> str:
+    """Format pasted values as a comma list with explicit text quoting."""
+
+    if text_quote not in {None, "'", '"'}:
+        raise ValueError("text_quote must be None, a single quote, or a double quote")
+    items = _separated_list_items(value, empty_message=empty_message)
+    formatted: list[str] = []
+    for item in items:
+        if text_quote is None:
+            formatted.append(item)
+        elif not quote_numbers and _NUMERIC_LIST_ITEM_PATTERN.fullmatch(item):
+            formatted.append(item)
+        elif not quote_numbers and item.casefold() == "null":
+            formatted.append("NULL")
+        else:
+            escaped = item.replace(text_quote, text_quote * 2)
+            formatted.append(f"{text_quote}{escaped}{text_quote}")
+    result = ", ".join(formatted)
+    return f"({result})" if parenthesized else result
+
+
+def list_to_comma_separated(value: str, *, sql_strings: bool = False) -> str:
+    """Retain the compatibility Action's plain/all-strings behavior."""
+
+    return list_to_comma_values(
+        value,
+        text_quote="'" if sql_strings else None,
+        quote_numbers=sql_strings,
+    )
 
 
 def list_to_sql_values(value: str) -> str:
     """Format separated values as a parenthesized SQL value list."""
-    items = [
-        item.strip()
-        for item in re.split(r"[\r\n\t,;]+", value)
-        if item.strip()
-    ]
-    if not items:
-        raise ActionError("The Input / Output field does not contain SQL values.")
-
-    numeric_pattern = re.compile(
-        r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\Z"
+    return list_to_comma_values(
+        value,
+        text_quote="'",
+        parenthesized=True,
+        empty_message="The Input / Output field does not contain SQL values.",
     )
-    formatted: list[str] = []
-    for item in items:
-        if numeric_pattern.fullmatch(item):
-            formatted.append(item)
-        elif item.casefold() == "null":
-            formatted.append("NULL")
-        else:
-            formatted.append(f"'{item.replace(chr(39), chr(39) * 2)}'")
-    return f"({', '.join(formatted)})"
 
 
 def transform_text(
@@ -971,6 +1064,12 @@ def transform_text(
     if operation == "join_delimiter":
         validate_text_transform(operation, arguments)
         return _decoded_delimiter(arguments[0]).join(value.splitlines())
+    if operation == "comma_list_plain":
+        return list_to_comma_values(value)
+    if operation == "comma_list_single_quotes":
+        return list_to_comma_values(value, text_quote="'")
+    if operation == "comma_list_double_quotes":
+        return list_to_comma_values(value, text_quote='"')
     if operation == "sql_values":
         return list_to_sql_values(value)
     if operation == "remove_consecutive_duplicate_lines":

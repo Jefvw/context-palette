@@ -29,17 +29,15 @@ Shared and local group IDs must be unique case-insensitively. Button IDs must be
 
 ```json
 {
-  "id": "product-systems",
-  "label": "Product systems",
+  "id": "reference-sites",
+  "label": "Reference sites",
   "items": [
     {
-      "id": "technical-article",
-      "label": "Technical article",
-      "primary_action_id": "product-lookup-productinfoscreen",
+      "id": "python-documentation",
+      "label": "Python documentation",
+      "primary_action_id": "general-open-python-docs",
       "action_ids": [
-        "product-lookup-productinfoscreen",
-        "product-lookup-fic",
-        "product-lookup-rti"
+        "general-open-python-docs"
       ]
     }
   ]

@@ -8,7 +8,11 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.actions import Action
 from context_palette.contexts import ContextDefinition
-from context_palette.focus_model import actions_for_context, resolve_focus_state
+from context_palette.focus_model import (
+    actions_for_context,
+    palette_items_for_context,
+    resolve_focus_state,
+)
 from context_palette.palette_state import PaletteState
 from context_palette.palette_items import PaletteItemReference
 from context_palette.work_items import WorkItemReference
@@ -201,6 +205,46 @@ class FocusModelTests(unittest.TestCase):
         )
 
         self.assertEqual([action.id for action in focused], ["kept"])
+
+    def test_palette_items_for_context_uses_canonical_mixed_membership(self):
+        primary_work_item = WorkItemReference("work", "ISS-primary")
+        preferred_work_item = PaletteItemReference(
+            work_item_ref=WorkItemReference("work", "ISS-preferred")
+        )
+        actions = [
+            Action("kept", "Kept", "My work", "copy_text", "1"),
+            Action("legacy-only", "Legacy", "My work", "copy_text", "2"),
+            Action(
+                "archived",
+                "Archived",
+                "My work",
+                "copy_text",
+                "3",
+                state="Archived",
+            ),
+        ]
+        definitions = [
+            ContextDefinition(
+                "My work",
+                action_ids=("kept", "archived"),
+                work_item_refs=(primary_work_item,),
+                preferred_item_refs=(
+                    PaletteItemReference(action_id="kept"),
+                    preferred_work_item,
+                ),
+            )
+        ]
+
+        references = palette_items_for_context(actions, "My work", definitions)
+
+        self.assertEqual(
+            references,
+            (
+                PaletteItemReference(action_id="kept"),
+                PaletteItemReference(work_item_ref=primary_work_item),
+                preferred_work_item,
+            ),
+        )
 
 
 if __name__ == "__main__":

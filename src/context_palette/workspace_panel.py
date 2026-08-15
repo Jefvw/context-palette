@@ -68,10 +68,14 @@ class WorkspacePanel:
         clipboard_setter: Callable[[str], None],
         status_setter: Callable[[str], None],
         tooltip_adder: Callable[[tk.Widget, str], None],
+        create_action: Callable[[str], None] | None = None,
+        text_change_callback: Callable[[], None] | None = None,
     ) -> None:
         self.clipboard_getter = clipboard_getter
         self.clipboard_setter = clipboard_setter
         self.status_setter = status_setter
+        self.create_action = create_action
+        self.text_change_callback = text_change_callback
 
         self.frame = ttk.Frame(parent)
         self.frame.pack(fill=tk.BOTH, expand=True)
@@ -83,6 +87,13 @@ class WorkspacePanel:
             style="Compact.TButton",
         )
         self.text_tools_button.pack(side=tk.RIGHT)
+        self.create_action_button = ttk.Button(
+            header,
+            text="Create Action...",
+            command=self._create_action,
+            state=tk.DISABLED,
+        )
+        self.create_action_button.pack(side=tk.RIGHT, padx=(0, 6))
         ttk.Label(
             header,
             text="Input / Output",
@@ -137,6 +148,8 @@ class WorkspacePanel:
         self.text.bind("<Control-a>", self.select_all)
         self.text.bind("<Control-A>", self.select_all)
         self.text.bind("<Button-3>", self.show_context_menu)
+        self.text.bind("<<Modified>>", self._on_text_modified, add="+")
+        self.text.edit_modified(False)
 
         self.context_menu = tk.Menu(self.text, tearoff=False)
         self._build_context_menu()
@@ -148,6 +161,43 @@ class WorkspacePanel:
             self.text_tools_button,
             "Transform selected text, or the complete field when nothing is selected. Results are copied.",
         )
+        tooltip_adder(
+            self.create_action_button,
+            (
+                "Create a reviewed Action from one clear website, file, folder, "
+                "or application in Input / Output."
+            ),
+        )
+
+    def _on_text_modified(self, _event: tk.Event) -> None:
+        if not self.text.edit_modified():
+            return
+        self.text.edit_modified(False)
+        self._sync_create_action_state()
+        if self.text_change_callback is not None:
+            self.text_change_callback()
+
+    def _sync_create_action_state(self) -> None:
+        self.create_action_button.configure(
+            state=(
+                tk.NORMAL
+                if self.create_action is not None and self.raw_text().strip()
+                else tk.DISABLED
+            )
+        )
+
+    def selected_or_full_text(self) -> str:
+        """Return a non-blank selection first, otherwise the complete field."""
+
+        try:
+            selected = self.text.get(tk.SEL_FIRST, tk.SEL_LAST)
+        except tk.TclError:
+            selected = ""
+        return selected if selected.strip() else self.raw_text()
+
+    def _create_action(self) -> None:
+        if self.create_action is not None:
+            self.create_action(self.selected_or_full_text())
 
     def _build_context_menu(self) -> None:
         for label, event_name in (
@@ -209,6 +259,7 @@ class WorkspacePanel:
     def _replace_text(self, value: str) -> None:
         self.text.delete("1.0", tk.END)
         self.text.insert("1.0", value)
+        self._sync_create_action_state()
 
     def show_file_preview(self, preview: TextFileTransformPreview) -> None:
         self.file_preview = preview

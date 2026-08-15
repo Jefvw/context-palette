@@ -143,7 +143,8 @@ the rename if Windows reports a locked or unavailable file.
 
 The Focus Context tells Context Palette what kind of work is currently most
 important. It changes slots 6 through 0 and controls the mixed **Focus items**
-view while ordinary Find remains global.
+view. In ordinary **All items**, matching Focus members appear before other
+matches while Find remains global.
 
 Focus is the first control in the command rail beside Find. Hover over or
 keyboard-focus it for guidance without permanently consuming screen space.
@@ -152,6 +153,14 @@ keyboard-focus it for guidance without permanently consuming screen space.
 - Slots `6–0` are the top five Actions or Work Items for the selected Focus. Slot
   `0` is the tenth overall slot and follows slot `9`.
 - An Action may appear in both groups.
+
+With a specific Focus selected, **All items** keeps matching shortcut rows at
+the top, then shows remaining members of that Focus alphabetically. When both
+Focus and non-Focus matches exist, **All other matches** separates the remaining
+global results. The divider cannot be selected or run. General uses ordinary
+global ordering. Choosing an explicit Context filter also uses ordinary
+ordering because the result set is already limited to that Context. Actions,
+Work Items, and **Focus items** keep their own scope-specific ordering.
 
 Focus and pin changes are saved before they take effect. If the local palette
 file cannot be written, Context Palette keeps the previous selection and
@@ -399,6 +408,12 @@ Choose **Manage focuses…** in the Focus selector for direct Focus
 configuration. Choose **Configure**, or use the shortcut (`Ctrl+,`), for the
 complete guided configuration workspace:
 
+- **Start:** ordinary Configure opens with task choices instead of assuming
+  which configuration category you need. Choose **Create an Action...**,
+  **Find or edit Actions**, **Organize Focuses**, **Arrange Quick actions**,
+  **Set up Work Items**, or **Back up or restore**. **Browse Action types** and
+  **View diagnostics** remain available as secondary choices. Each choice
+  opens the existing editor; it does not create a second configuration window.
 - **Actions:** assign the five machine-local pinned slots directly, then edit
   every kind of My configuration or Built-in action, including URLs, files,
   folders, applications, credentials, URL builders, and transformations.
@@ -491,9 +506,11 @@ Manage focuses, right-clicking an action, or opening Work Item configuration
 raises that same window and moves it to the requested tab or record. Close it
 when finished; the next request creates a fresh Configure window.
 
-Configure opens with keyboard focus on the action list. Action, context, and
-button dialogs focus and select their first editable field, so typing can begin
-immediately. Action create/edit forms keep **Create/Save action** and **Cancel**
+Ordinary Configure opens on Start with focus on **Create an Action...**. Direct
+routes such as Edit, Manage focuses, Work Item setup, and Diagnostics open and
+focus their requested editor instead. Action, context, and button dialogs focus
+and select their first editable field, so typing can begin immediately. Action
+create/edit forms keep **Create/Save action** and **Cancel**
 visible at the bottom. Their compact rows place labels beside fields; hover over
 or move keyboard focus to a field for its explanation, or use the action
 type's **?** button for complete input, effect, and example guidance. Scroll the
@@ -564,11 +581,23 @@ selectors, context summaries, Quick-action summaries, and diagnostics. Actions
 created from Inbox, Harvest, or Cheat Sheets also refresh an already-open
 Configure workspace.
 
-Use **Delete selected** to remove an action. The confirmation identifies how
-many saved references will also be removed. Pins, Focus slots, context
-preferences, and quick-button assignments are cleaned automatically. A quick
-button is removed when it has no action left. Deleting a Built-in action adds a
-warning because it changes starter configuration tracked by Git.
+Use **Show** to switch the Actions table between **Active**, **Archived**, and
+**All** stored actions. **Archive selected...** is the normal way to remove an
+Active Action from use without destroying its record. The confirmation reports
+how many saved pins, Focus slots, Context memberships, and configured Quick
+actions will be removed; empty Quick-action buttons are cleaned automatically.
+The Archived Action remains searchable and editable in Configure. Restore it
+before assigning a Context because Archived Actions cannot own active saved
+placements.
+
+Select an Archived Action and choose **Restore selected** to make the same
+record Active again. Restore does not recreate its former saved placements, so
+reassign any wanted pins, Context membership, Focus slots, or configured Quick
+actions. Generated Passwords, Folders, or Prompts placement can return
+automatically when the Action type and retained **Quick menu** path apply.
+**Delete permanently...** is available for Archived Actions and cannot be
+undone inside Context Palette. Built-in lifecycle changes add a warning because
+they alter starter configuration tracked by Git.
 
 The Actions, Contexts, and Quick actions tables select their first useful row
 automatically. Use the arrow keys to move, then press Enter to edit the selected
@@ -610,8 +639,8 @@ areas shrink and retain their scrolling. Divider movement is bounded so
 neither side can be accidentally collapsed. A fresh
 application start leaves the workspace empty. Reopening the resident palette
 can show the current clipboard or captured selection. Actions can read or
-replace it. Its compact heading includes the visible **Text tools** menu
-without adding a separate toolbar.
+replace it. Its compact heading includes **Create Action...** and the visible
+**Text tools** menu without adding a separate toolbar.
 
 Numbered action triggering is deliberately active only while Find has focus. In every other control—including Clipboard / Input / Output, the result list, context selector, and buttons—`1` through `9` do not execute actions. This makes Find the explicit keyboard command mode. Standard text editing remains available in the workspace.
 
@@ -623,18 +652,46 @@ The bottom communication line always stays one row high. Hover over it for the c
 - The right-click command `Clear` empties it.
 - The right-click menu also provides Undo, Redo, Cut, Copy, Paste, Select all, and Copy all.
 - Open `Transform` through the right-click menu or choose **Text tools**.
+- Choose **Create Action...** to turn one clear target into a reusable Action.
+  A non-blank selection is used first; otherwise Context Palette checks the
+  complete Input / Output field. One complete HTTP/HTTPS address, clear
+  absolute file path, folder path, or `.exe` path opens the ordinary Action form
+  with its type, editable name, and exact target prefilled. Quoted Explorer
+  paths are accepted. A long path that only wraps visually remains one target.
+- **Create Action...** never rereads the clipboard, saves, opens, runs, or waits
+  for a drive lookup. Review the prefilled name, target, effect, Contexts,
+  tags, and storage, then choose **Create action** normally. Multiple targets, prose around a
+  target, unsupported addresses, line-broken content, relative paths, and
+  script-like targets are explained instead of guessed. An unavailable absolute
+  path can still be reviewed for portable or temporarily disconnected use. Use
+  the unchanged **+ Action** command to choose a type yourself.
 - A transform changes the selection, or the complete field when nothing is selected.
 - Every transform result is copied to the clipboard automatically and can be reverted with one Undo.
 - Transform groups provide case and naming styles, whitespace cleanup, literal
   replacement, line filtering, custom split/join delimiters, sorting,
-  duplicate removal, JSON formatting, URL encoding, SQL escaping and value
-  lists, Windows path/file-URI conversion, and path-slash conversion. SQL value
-  formatting accepts lines, commas, tabs, or semicolons; numbers and `NULL`
-  remain unquoted, while text is quoted and apostrophes are escaped.
+  duplicate removal, explicit comma-list formats, JSON formatting, URL
+  encoding, SQL escaping and value lists, Windows path/file-URI conversion,
+  and path-slash conversion.
+- The **Lists** group accepts values separated by lines, commas, tabs, or
+  semicolons. Separators inside matching single or double quotes remain part of
+  the value. Choose **Comma list: no quotes**, **single-quoted text**, or
+  **double-quoted text**. In the quoted modes, signed numbers, decimals,
+  scientific notation, and `NULL` remain unquoted; text uses the selected quote
+  and doubles that character when it occurs inside the value.
+- **Parenthesized SQL value list** uses the same parsing and number detection,
+  single-quotes text, escapes apostrophes, preserves `NULL`, and adds
+  parentheses.
 - Transform actions read it and place their result back in it.
 - URL-builder actions use it as selected input when it is not empty.
 
 Example: in the Database context, `Convert lines to SQL string list` turns separate lines into quoted, comma-separated SQL values and copies the result.
+
+For Input / Output containing `alpha`, `42`, and `O'Brien` on separate lines,
+the three comma-list choices produce:
+
+- `alpha, 42, O'Brien`
+- `'alpha', 42, 'O''Brien'`
+- `"alpha", 42, "O'Brien"`
 
 ## Command rail
 
@@ -659,7 +716,26 @@ Their positions do not change within a scope.
 
 ### Run
 
-Executes the highlighted action. The exact effect appears in the bottom communication line when selected.
+Executes the highlighted Action or opens the selected Work Item. Before Run or
+Open, the bottom communication line uses one stable form:
+
+```text
+Input: what will be read → Effect: what will happen
+```
+
+It reflects useful current state, such as an empty Input / Output field, a
+captured destination, clipboard fallback, a matching Work Item workbook, or
+folder fallback. Safety-critical consequences remain visible: Windows targets
+say they may execute code, AI prompts say nothing is submitted, protected
+credentials describe confirmation and cleanup, and text-file transforms say
+the source remains unchanged until explicit replacement.
+
+Progress, success, and errors temporarily replace the preview. Select an item
+again—or change Input / Output—to restore its current Input → Effect summary.
+Hover over the line for the complete explanation, or click it to open
+structured Type, Input, Effect, configured-value, and recovery details. The
+compact line never includes captured input content, passwords, or technical
+action-type IDs.
 
 For **Paste saved text**, Run directly pastes into the application from which
 the palette was opened by hotkey. Every action attempt consumes that captured
@@ -749,9 +825,10 @@ and is never written to diagnostics by the AI menu.
 
 ### Edit
 
-Opens the selected action in Configure. Every supported personal or Built-in
-action type can be edited; Built-in actions first show a developer-impact
-warning.
+Opens the selected Action editor directly, reusing the existing Configure
+workspace when it is already open. Every supported personal or Built-in Action
+type can be edited; Built-in Actions first show a developer-impact warning.
+Cancelling that warning leaves Configure open with the Action selected.
 
 ### Pin
 
@@ -977,8 +1054,9 @@ software already running as the same Windows user.
 If you create or retain a `Product lookup` context in My configuration, select
 or copy an identifier, then run a destination action. The action URL-encodes the
 identifier, copies the complete URL, and opens it in the default browser.
-Built-in actions are available for Colruyt, Bio-Planet, ProductInfoScreen, FIC,
-RTI, Solucious, and the supported MyProduct entity types.
+Built-in actions are available for the public Colruyt and Bio-Planet shopping
+sites. Add personal destination actions for other product systems through
+Configure.
 
 The `Company Reference Prefixes` sheet documents known Archive and ServiceNow prefixes. Archive references can already be opened with `Open selected archive item`. ServiceNow is reference-only until its complete URL template is configured.
 
@@ -986,7 +1064,13 @@ The `Company Reference Prefixes` sheet documents known Archive and ServiceNow pr
 
 - Inbox: captured but not yet structured.
 - Active: permanent, editable, and visible in normal action discovery.
-- Archived: hidden from normal launcher results.
+- Archived: retained and editable by opening **Configure**, choosing
+  **Actions**, and setting **Show** to **Archived**, but hidden from the
+  launcher and active assignment pickers.
+
+Archiving removes saved placements so the configuration never points at an
+inactive Action. Restoring returns the same Action to Active but intentionally
+does not recreate those assignments.
 
 ## Local data
 

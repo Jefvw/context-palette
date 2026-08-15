@@ -1,5 +1,93 @@
 # Decisions
 
+## 2026-08-15 - Make Active/Archived a guided recoverable lifecycle
+
+**Decision:** Configure keeps separate stored and Active Action projections.
+Its Actions table can show Active, Archived, or all records; only Active Actions
+remain eligible for launcher discovery and assignment pickers. Archiving first
+removes saved Context, pin, Focus-slot, and configured Quick-action references,
+then changes the retained Action record to Archived. Restore changes that same
+record back to Active without rebuilding former assignments. Permanent deletion
+is offered only for Archived Actions in the guided UI.
+
+**Reason:** Active/Archived was already the permanent lifecycle and aggregate
+validation already rejected references to Archived Actions, but Configure could
+load only Active records and offered permanent deletion as its sole removal
+path. Merely changing state would create invalid configuration; preserving old
+placements in a second hidden store would introduce stale restoration policy.
+
+**Consequences:** Users can declutter recoverably and inspect, edit, restore, or
+permanently delete Archived Actions without editing JSON. Archive confirmation
+reports placement impact and Built-in Git scope. Restore preserves stable ID,
+type, content, metadata, ownership, and generated Quick-menu path, but explicit
+placements must be reassigned. Reference writes precede the state write so an
+interruption favors a valid unassigned Active Action over an Archived Action
+with live references.
+
+## 2026-08-15 - Show current Input → Effect before Run or Open
+
+**Decision:** Replace selection-time free-form status prose with a bounded,
+single-line **Input: … → Effect: …** contract for every Action and Work Item.
+Derive Action details through a pure preview model using the existing type
+catalogue and boolean runtime availability; never read clipboard contents or
+expand templates merely to preview. Keep progress, success, and errors as
+temporary overrides. Preserve the click/hover detail route with structured
+Type, Input, Effect, configured-value, and recovery sections.
+
+**Reason:** Understanding an effect before invocation is part of the core
+find–understand–run journey, but the previous line could lead with long saved
+content, show Work Item metadata instead of an effect, or expose a technical
+type ID. An on-demand-only explanation is too easy to miss, while another
+persistent card would consume the compact Input / Output workspace.
+
+**Consequences:** The `780x600` composition and one-row status channel remain
+unchanged. Current Input / Output, captured-selection, and fresh-destination
+availability refine the wording without exposing their contents. Missing input
+and safe stop behavior become visible before Run. Execution, validation,
+confirmation, persistence, and fallback behavior are unchanged.
+
+## 2026-08-15 - Group selected-Focus members first in normal discovery
+
+**Decision:** In **All items**, after applying Find and tag filtering, keep
+matching shortcut rows in numeric order, then show remaining canonical members
+of a selected specific Focus alphabetically, followed by a neutral non-action
+**All other matches** divider and the remaining global matches alphabetically.
+Show the divider only when both ordinary groups exist. Suppress this grouping
+for General and explicit Context filters; leave Actions, Work Items, and
+**Focus items** unchanged.
+
+**Reason:** Focus previously changed shortcuts and an opt-in list but did not
+help the default retrieval journey. Deterministic grouping makes the user's
+explicit choice visible and useful without introducing hidden scoring or
+making global Find behave like a filter.
+
+**Consequences:** The candidate set and count remain unchanged, including for a
+non-empty Find. Canonical Context definitions determine Action and Work Item
+membership; shortcut assignment alone does not. The presentation divider owns
+no item reference and is skipped by pointer selection, keyboard navigation,
+preview, and execution.
+
+## 2026-08-10 - Make comma-list quoting explicit and type-aware
+
+**Decision:** Add a dedicated **Lists** transformation group with unquoted,
+single-quoted-text, double-quoted-text, and parenthesized SQL outputs. Parse
+lines, commas, tabs, and semicolons through one quote-aware tokenizer. In typed
+quoted modes, preserve signed/decimal/scientific numbers and `NULL` without
+quotes; quote text and escape an embedded selected quote by doubling it.
+
+**Reason:** The generic Join command technically produced an unquoted comma
+list but hid the common operation behind a prompt. The SQL formatter provided
+only one quoted presentation, and its regular-expression splitting broke a
+quoted string containing a comma. Separate visible choices are faster and less
+error-prone for the sole expert user, while one parser prevents the variants
+from drifting.
+
+**Consequences:** The same list input can be reformatted predictably for plain
+text, SQL-like single quotes, or double-quoted consumers. The compatibility-only
+`transform_list_csv` Action keeps its historical behavior, including quoting
+numeric-looking values when explicitly configured as strings. No dependency or
+persisted-data migration is introduced.
+
 ## 2026-08-10 - Reclaim the complete result-row prefix
 
 **Decision:** Remove the unused expand/collapse indicator from the flat mixed
@@ -2023,3 +2111,47 @@ into their text, and numbered slots blended into unnumbered results.
 action IDs. Existing files with four or fewer remain unchanged and valid. List
 selection, navigation, tooltips, execution, and configuration explicitly skip
 the divider so it cannot behave like an action.
+
+## 2026-08-16 - Suggest only obvious Actions from Working text
+
+**Decision:** Add **Create Action...** beside Input / Output's **Text tools**
+control while leaving the general **+ Action** chooser unchanged. Use a
+non-blank workspace selection first, otherwise the complete field. Suggest only
+one complete HTTP/HTTPS address or one clear absolute target that can be
+identified lexically as a file, folder, or `.exe`; route it into the ordinary
+Action form with editable name and target fields plus a review notice. Do not reread the
+clipboard, persist, open, or run anything from this inference step.
+
+**Reason:** Working text often already contains the exact target for the Action
+the user intends to create. Requiring a second type choice and manual re-entry
+adds friction and caused obvious paths to be lost between the workspace and
+form. Restricting inference to one clear value keeps the shortcut predictable
+and preserves confirmation as the trust boundary. Avoiding target probing also
+keeps mapped and temporarily disconnected drives from blocking the main UI.
+
+**Consequences:** Soft visual wrapping does not affect a path, quoted Explorer
+paths are normalized, and selection can isolate a target from surrounding
+notes. Mixed, multiline, unsupported, relative, or script-like content is
+explained rather than guessed. Unavailable absolute paths remain reviewable for
+portable or temporarily disconnected configurations. All validation, Context
+defaults, storage choice, save behavior, and Active lifecycle remain owned by
+the existing Action dialog and persistence path.
+
+## 2026-08-16 - Start Configure from user tasks
+
+**Decision:** Add a navigation-only **Start** tab and make it the ordinary
+Configure destination. Present direct tasks for creating or editing Actions,
+organizing Focuses, arranging Quick actions, setting up Work Items, and backup
+or restore, with Action-type browsing and Diagnostics as secondary choices.
+Keep all explicit launcher routes pointed at their existing tab, record, or
+creation flow and continue reusing one Configure window.
+
+**Reason:** The previous default opened the Actions table and required the user
+to translate an intended task into one of seven configuration categories. A
+small task page makes the next step visible without duplicating editors or
+persistence. The existing category tabs remain useful once the task is known.
+
+**Consequences:** `Ctrl+,` and the main Configure button open Start. Edit,
+Manage focuses, Work Item creation/configuration, Diagnostics, **+ Action**, and
+Input / Output Action suggestions retain their direct routes. The new page owns
+no saved state and introduces no alternative save path.

@@ -14,11 +14,15 @@ from .actions import (
     Action,
     ActionError,
     execute_action,
-    expanded_action,
     load_combined_actions,
     load_actions,
     open_action_target,
     search_actions,
+)
+from .action_preview import (
+    build_action_preview,
+    compact_preview_value,
+    format_preview_summary,
 )
 from .action_bound_quick_actions import action_bound_quick_groups
 from .action_discovery_panel import (
@@ -27,11 +31,16 @@ from .action_discovery_panel import (
     DISCOVERY_ALL,
     DISCOVERY_SCOPES,
     DISCOVERY_WORK_ITEMS,
+    FOCUS_GROUP_ROW_TAG,
     FOCUS_SLOT_ROW_TAG,
     PINNED_SLOT_ROW_TAG,
     slot_row_tag,
 )
 from .action_types import ACTION_TYPES
+from .action_suggestions import (
+    ActionCreationSuggestion,
+    suggest_action_from_text,
+)
 from .cheat_sheet_window import CheatSheetWindow
 from .cheatsheets import CheatSheetError, load_cheatsheets
 from .command_surface import (
@@ -52,7 +61,11 @@ from .context_membership import (
     actions_with_canonical_contexts,
     migrate_legacy_action_contexts,
 )
-from .focus_model import actions_for_context, resolve_focus_state
+from .focus_model import (
+    actions_for_context,
+    palette_items_for_context,
+    resolve_focus_state,
+)
 from .hotkeys import (
     GlobalHotkey,
     cursor_location,
@@ -89,7 +102,6 @@ from .windows_credentials import (
     set_protected_clipboard_text,
 )
 from .workspace_panel import WorkspacePanel
-from .workspace_transforms import WORKSPACE_TRANSFORMS
 from .work_item_refresh import WorkItemIndex, WorkItemRefreshCoordinator
 from .work_item_file_copy import (
     WorkItemFileCopyCoordinator,
@@ -640,6 +652,24 @@ class LauncherApp:
         self.results.bind("<Button-1>", self._guard_action_separator_click, add="+")
         self.results_tooltip = discovery.results_tooltip
         self.focus_tree = discovery.focus_tree
+        self.focus_tree.bind(
+            "<Button-1>",
+            self._guard_mixed_group_click,
+            add="+",
+        )
+        self.focus_tree.bind(
+            "<Double-Button-1>",
+            self._activate_mixed_tree_from_event,
+        )
+        self.focus_tree.bind(
+            "<Return>",
+            self._activate_mixed_tree_from_event,
+        )
+        self.focus_tree.bind(
+            "<KeyPress>",
+            self._navigate_mixed_tree_groups,
+            add="+",
+        )
         self.focus_tree_tooltip = discovery.focus_tree_tooltip
         discovery.set_discovery_scope(DISCOVERY_ALL)
 
@@ -778,6 +808,8 @@ class LauncherApp:
             clipboard_setter=lambda value: self._set_clipboard(value),
             status_setter=self.status_var.set,
             tooltip_adder=self._tooltip,
+            create_action=self._create_action_from_workspace,
+            text_change_callback=self._update_preview,
         )
         # Compatibility aliases keep launcher orchestration and integrations
         # independent while callers migrate to the focused component.
@@ -787,6 +819,7 @@ class LauncherApp:
         self.workspace_transform_menu = self.workspace_component.transform_menu
         self.workspace_transform_button = self.workspace_component.transform_button
         self.text_tools_button = self.workspace_component.text_tools_button
+        self.create_action_button = self.workspace_component.create_action_button
 
     def _tooltip(self, widget: tk.Widget, text: str | Callable[[], str]) -> None:
         self.widget_tooltips.append(WidgetTooltip(widget, text))
@@ -1023,7 +1056,26 @@ class LauncherApp:
         self._clear_protected_clipboard()
         self.hotkey.stop()
         self.instance_server.stop()
+        self._cancel_pending_tk_callbacks()
         self.root.destroy()
+
+    def _cancel_pending_tk_callbacks(self) -> None:
+        """Cancel interpreter callbacks before destroying the Tk application."""
+
+        try:
+            callback_ids = self.root.tk.splitlist(
+                self.root.tk.call("after", "info")
+            )
+        except (AttributeError, tk.TclError):
+            return
+        for callback_id in callback_ids:
+            try:
+                # Cancel the Tcl timer without asking a possibly different
+                # widget to delete its registered Python command. Widget
+                # destruction retains ownership of that command bookkeeping.
+                self.root.tk.call("after", "cancel", callback_id)
+            except tk.TclError:
+                pass
 
     def _active_work_item_writes(self) -> tuple[str, ...]:
         active: list[str] = []
@@ -2242,21 +2294,60 @@ class LauncherApp:
             for reference in remaining
             if reference not in slotted_references
         ]
-        remaining.sort(
-            key=lambda reference: (
+        def display_key(reference: PaletteItemReference) -> tuple[str, str]:
+            return (
                 actions_by_id[reference.action_id].compact_title.casefold()
                 if reference.action_id
                 else work_items_by_reference[
                     reference.work_item_ref
-                ].display_name.casefold()
+                ].display_name.casefold(),
+                reference.stable_key,
             )
+
+        focus_references: set[PaletteItemReference] = set()
+        focus_context = self.palette_state.focus_context
+        if (
+            self.item_context_filter is None
+            and focus_context.casefold() != "general"
+        ):
+            focus_references = set(
+                palette_items_for_context(
+                    self.actions,
+                    focus_context,
+                    self.context_definitions,
+                )
+            )
+        focus_remaining = sorted(
+            (reference for reference in remaining if reference in focus_references),
+            key=display_key,
         )
-        rows = [*slotted, *((None, reference) for reference in remaining)]
+        other_remaining = sorted(
+            (reference for reference in remaining if reference not in focus_references),
+            key=display_key,
+        )
+        rows: list[tuple[int | None, PaletteItemReference | None]] = [
+            *slotted,
+            *((None, reference) for reference in focus_remaining),
+        ]
+        if focus_remaining and other_remaining:
+            rows.append((None, None))
+        rows.extend((None, reference) for reference in other_remaining)
+        if focus_remaining:
+            self.actions_heading_var.set("All items · Focus first")
 
         self.focus_tree.delete(*self.focus_tree.get_children())
         self.focus_tree_actions.clear()
         self.focus_tree_items.clear()
         for index, (slot, reference) in enumerate(rows):
+            if reference is None:
+                self.focus_tree.insert(
+                    "",
+                    tk.END,
+                    iid="all-divider:other",
+                    text="──────── All other matches ────────",
+                    tags=(FOCUS_GROUP_ROW_TAG,),
+                )
+                continue
             if reference.action_id:
                 action = actions_by_id[reference.action_id]
                 label = self._aligned_action_display_text(action)
@@ -2282,7 +2373,11 @@ class LauncherApp:
             f"{match_count} item" if match_count == 1 else f"{match_count} items"
         )
         if rows:
-            first = self.focus_tree.get_children()[0]
+            first = next(
+                item_id
+                for item_id in self.focus_tree.get_children()
+                if item_id in self.focus_tree_items
+            )
             self.focus_tree.selection_set(first)
             self.focus_tree.focus(first)
             self.status_var.set(
@@ -2291,6 +2386,57 @@ class LauncherApp:
         else:
             self.status_var.set("No Actions or Work Items match the current filters.")
         self._update_preview()
+
+    def _guard_mixed_group_click(self, event: tk.Event) -> str | None:
+        item_id = self.focus_tree.identify_row(event.y)
+        if item_id and item_id not in self.focus_tree_items:
+            return "break"
+        return None
+
+    def _activate_mixed_tree_from_event(self, event: tk.Event) -> str:
+        if str(getattr(event, "keysym", "")) == "Return":
+            selected = self.focus_tree.selection()
+            item_id = selected[0] if selected else ""
+        else:
+            item_id = self.focus_tree.identify_row(event.y)
+        if item_id not in self.focus_tree_items:
+            return "break"
+        self.focus_tree.selection_set(item_id)
+        self.focus_tree.focus(item_id)
+        self._update_preview()
+        self._execute_selected()
+        return "break"
+
+    def _navigate_mixed_tree_groups(self, event: tk.Event) -> str | None:
+        keysym = str(getattr(event, "keysym", ""))
+        if keysym not in {"Up", "Down", "Prior", "Next", "Home", "End"}:
+            return None
+        children = list(self.focus_tree.get_children())
+        selectable = [
+            item_id for item_id in children if item_id in self.focus_tree_items
+        ]
+        if len(selectable) == len(children) or not selectable:
+            return None
+        selected = self.focus_tree.selection()
+        current = selected[0] if selected and selected[0] in selectable else None
+        if keysym == "Home":
+            target_index = 0
+        elif keysym == "End":
+            target_index = len(selectable) - 1
+        elif current is None:
+            target_index = 0 if keysym in {"Down", "Next"} else len(selectable) - 1
+        else:
+            offset = {"Up": -1, "Down": 1, "Prior": -5, "Next": 5}[keysym]
+            target_index = max(
+                0,
+                min(len(selectable) - 1, selectable.index(current) + offset),
+            )
+        target = selectable[target_index]
+        self.focus_tree.selection_set(target)
+        self.focus_tree.focus(target)
+        self.focus_tree.see(target)
+        self._update_preview()
+        return "break"
 
     def _render_work_items(self) -> None:
         self._show_flat_results()
@@ -2860,7 +3006,10 @@ class LauncherApp:
     def _edit_selected(self) -> None:
         action = self._selected_action()
         if action is not None:
-            self._show_configuration(initial_action_id=action.id)
+            self._show_configuration(
+                initial_action_id=action.id,
+                start_action_edit=True,
+            )
             return
         item = self._selected_work_item()
         if item is None:
@@ -2975,23 +3124,15 @@ class LauncherApp:
         if self.work_items_mode and self.results_view == "flat":
             item = self._selected_work_item()
             if item is None:
-                self.action_info_full = "Select a Work Item to see its source and open target."
+                self.action_info_full = (
+                    "Select a Work Item to see its source and open target."
+                )
+                self.status_var.set(
+                    "Select an Action or Work Item to see Input → Effect before Run or Open."
+                )
                 return
-            tags = self._work_item_tags(item)
-            default = (
-                f"Workbook: {item.matching_workbook_path.name}"
-                if item.matching_workbook_path is not None
-                else "Default: Open work-item folder"
-            )
-            detail = (
-                f"{item.display_name}\n"
-                f"{item.kind_name or 'Work item'} · {item.organisation or 'Unparsed'} · {item.source_name}\n"
-                f"Project codes: {', '.join(item.project_codes) or '(none)'}\n"
-                f"Tags: {', '.join(tags) or '(none)'}\n"
-                f"{default}"
-            )
-            self.action_info_full = detail
-            self.status_var.set(" · ".join(detail.splitlines()))
+            self.action_info_full, summary = self._work_item_preview(item)
+            self.status_var.set(summary)
             return
         focus_reference = self._selected_focus_item()
         if focus_reference is not None and focus_reference.work_item_ref is not None:
@@ -3002,46 +3143,60 @@ class LauncherApp:
                     f"{focus_reference.work_item_ref.relative_folder}\n"
                     "Refresh Work Items or repair its personal source configuration."
                 )
-                self.status_var.set(self.action_info_full.replace("\n", " · "))
+                self.status_var.set(
+                    "Input: needed—Work Item source unavailable → "
+                    "Effect: Run will stop without changes"
+                )
                 return
-            tags = self._work_item_tags(item)
-            default = (
-                f"Workbook: {item.matching_workbook_path.name}"
-                if item.matching_workbook_path is not None
-                else "Default: Open work-item folder"
-            )
-            self.action_info_full = (
-                f"{item.display_name}\n"
-                f"{item.kind_name or 'Work item'} · "
-                f"{item.organisation or 'Unparsed'} · {item.source_name}\n"
-                f"Tags: {', '.join(tags) or '(none)'}\n{default}"
-            )
-            self.status_var.set(" · ".join(self.action_info_full.splitlines()))
+            self.action_info_full, summary = self._work_item_preview(item)
+            self.status_var.set(summary)
             return
         action = self._selected_action()
         if action is None:
             self.action_info_full = (
                 "Select an Action or Work Item to see what it will do."
             )
-            self.status_var.set(self.action_info_full)
+            self.status_var.set(
+                "Select an Action or Work Item to see Input → Effect before Run or Open."
+            )
             return
-        detail = self._preview_text(action)
-        lines = detail.splitlines()
-        if len(lines) > 5:
-            detail = "\n".join(lines[:5]) + "\n…"
-        if len(detail) > 520:
-            detail = detail[:517].rstrip() + "…"
-        compact_detail = " · ".join(line.strip() for line in detail.splitlines() if line.strip())
-        description = (
-            f"\n\nDescription\n{action.description}"
-            if action.description
-            else ""
+        preview = build_action_preview(
+            action,
+            workspace_has_text=bool(self._workspace_text()),
+            captured_selection_available=bool(self.captured_selection),
+            destination_available=self.source_foreground_handle is not None,
         )
-        self.action_info_full = (
-            f"{action.display_text}{description}\n\n{self._preview_text(action)}"
-        )
-        message = f"{action.display_text} — {compact_detail}"
+        self.action_info_full = preview.full_text(action)
+        message = preview.summary
         self.status_var.set(message[:217].rstrip() + "…" if len(message) > 220 else message)
+
+    def _work_item_preview(self, item: DiscoveredWorkItem) -> tuple[str, str]:
+        tags = self._work_item_tags(item)
+        if item.matching_workbook_path is not None:
+            effect = f"open workbook: {item.matching_workbook_path.name}"
+            compact_effect = (
+                "open workbook: "
+                f"{compact_preview_value(item.matching_workbook_path.name)}"
+            )
+            recovery = "The adjacent folder command can open the Work Item folder instead."
+        else:
+            effect = "open the Work Item folder"
+            compact_effect = effect
+            recovery = "No exact matching workbook is currently available."
+        full_effect = effect[0].upper() + effect[1:]
+        detail = (
+            f"{item.display_name}\n\n"
+            "Type\nWork Item\n\n"
+            "Input\nNo runtime input.\n\n"
+            f"Effect\n{full_effect}.\n\n"
+            f"Source\n{item.source_name}\n\n"
+            f"Kind / organisation\n"
+            f"{item.kind_name or 'Work item'} · {item.organisation or 'Unparsed'}\n\n"
+            f"Project codes\n{', '.join(item.project_codes) or '(none)'}\n\n"
+            f"Tags\n{', '.join(tags) or '(none)'}\n\n"
+            f"Recovery / limitations\n{recovery}"
+        )
+        return detail, format_preview_summary("none", compact_effect)
 
     def _focus_tree_tooltip_text(self, item_id: str) -> str:
         reference = self.focus_tree_items.get(item_id)
@@ -3088,107 +3243,6 @@ class LauncherApp:
             f"Type: {ACTION_TYPES[action.type].display_label}\n"
             f"State: {action.state}"
         )
-
-    def _preview_text(self, action: Action) -> str:
-        try:
-            action = expanded_action(action, clipboard_getter=self._get_clipboard_text)
-        except ActionError:
-            pass
-        if action.type == "copy_text":
-            return (
-                action.value
-                + "\n\nRuns as direct paste after a hotkey capture; otherwise copies to the clipboard."
-            )
-        if action.type == "open_url":
-            return f"Open URL:\n{action.value}"
-        if action.type == "open_windows_target":
-            lines = [
-                f"Open or run Windows target:\n{action.value}",
-                "This target may execute code and is not sandboxed.",
-            ]
-            if action.arguments:
-                lines.append("Arguments:")
-                lines.extend(action.arguments)
-            if action.working_directory:
-                lines.append(f"Working folder:\n{action.working_directory}")
-            return "\n".join(lines)
-        if action.type == "open_file":
-            return f"Open file:\n{action.value}"
-        if action.type == "open_folder":
-            return f"Open folder:\n{action.value}"
-        if action.type == "launch_app":
-            lines = [f"Launch app:\n{action.value}"]
-            if action.arguments:
-                lines.append("Arguments:")
-                lines.extend(action.arguments)
-            if action.working_directory:
-                lines.append(f"Working folder:\n{action.working_directory}")
-            return "\n".join(lines)
-        if action.type == "paste_credential":
-            return (
-                "Paste a protected Windows credential.\n"
-                f"Credential target: {action.value}\n"
-                "Requires a fresh hotkey invocation from the destination field."
-            )
-        if action.type == "build_url_open":
-            return f"Ask for an ID, then copy and open this URL:\n{action.value}"
-        if action.type == "build_url_selection_open":
-            selected = self._workspace_text() or self.captured_selection or "(no input available)"
-            return f"Selected ID: {selected}\nCopy URL and open it:\n{action.value}"
-        if action.type == "transform_file_text":
-            operation = (
-                WORKSPACE_TRANSFORMS.get(action.arguments[0])
-                if action.arguments
-                else None
-            )
-            lines = [
-                f"Read text file:\n{action.value}",
-                (
-                    "Operation: "
-                    + operation.label.rstrip("…")
-                    if operation is not None
-                    else "Operation: unavailable"
-                ),
-            ]
-            if operation is not None:
-                for label, argument in zip(
-                    operation.parameter_labels,
-                    action.arguments[1:],
-                ):
-                    lines.append(f"{label}: {argument or '(empty)'}")
-            lines.append(
-                "The result is shown in Input / Output. "
-                "The source changes only after explicit replacement."
-            )
-            return "\n".join(lines)
-        if action.type == "transform_list_csv":
-            mode = "quoted SQL strings" if action.value == "sql_strings" else "comma-separated values"
-            return f"Transform Input / Output lines into {mode}.\nThe result replaces the field and is copied."
-        if action.type == "transform_text":
-            definition = WORKSPACE_TRANSFORMS[action.value]
-            lines = [
-                f"Transform Input / Output: {definition.label.rstrip('…')}",
-            ]
-            for label, argument in zip(
-                definition.parameter_labels,
-                action.arguments,
-            ):
-                lines.append(f"{label}: {argument or '(empty)'}")
-            lines.append("The result replaces the field and is copied.")
-            return "\n".join(lines)
-        if action.type == "transform_slashes":
-            direction = (
-                "/ to \\"
-                if action.value == "forward_to_back"
-                else "\\ to /"
-            )
-            return (
-                f"Convert every {direction} in Input / Output.\n"
-                "The result replaces the field and is copied."
-            )
-        if action.type == "workspace_template":
-            return "Load this template into Input / Output and copy it:\n" + action.value
-        return f"{action.type}:\n{action.value}"
 
     def _workspace_text(self) -> str:
         return self.workspace_component.get_text()
@@ -3309,11 +3363,13 @@ class LauncherApp:
     def _show_configuration(
         self,
         *,
-        initial_tab: str = "actions",
+        initial_tab: str = "start",
         initial_action_id: str | None = None,
         initial_work_item_key: str | None = None,
         start_work_item_creation: bool = False,
         start_action_creation: bool = False,
+        initial_action_suggestion: ActionCreationSuggestion | None = None,
+        start_action_edit: bool = False,
     ) -> None:
         if getattr(self, "_configuration_recovery_required", False):
             messagebox.showerror(
@@ -3338,6 +3394,8 @@ class LauncherApp:
                     initial_work_item_key=initial_work_item_key,
                     start_work_item_creation=start_work_item_creation,
                     start_action_creation=start_action_creation,
+                    initial_action_suggestion=initial_action_suggestion,
+                    start_action_edit=start_action_edit,
                 )
                 return
         self.configuration_window = ConfigurationWindow(
@@ -3364,6 +3422,8 @@ class LauncherApp:
             initial_work_item_key=initial_work_item_key,
             start_work_item_creation=start_work_item_creation,
             start_action_creation=start_action_creation,
+            initial_action_suggestion=initial_action_suggestion,
+            start_action_edit=start_action_edit,
             data_paths=self.data_paths,
             on_restore_complete=self._reload,
             on_restore_recovery_required=self._require_restore_recovery_restart,
@@ -3390,6 +3450,25 @@ class LauncherApp:
             start_action_creation=True,
         )
         return "break"
+
+    def _create_action_from_workspace(self, source_text: str) -> None:
+        suggestion = suggest_action_from_text(source_text)
+        if suggestion is None:
+            messagebox.showinfo(
+                "No obvious Action found",
+                (
+                    "Context Palette could not confidently identify one clear "
+                    "website, file, folder, or application in Input / Output.\n\n"
+                    "Select one complete target and try again. Use + Action when "
+                    "you want to choose the Action type yourself."
+                ),
+                parent=self.root,
+            )
+            return
+        self._show_configuration(
+            initial_tab="actions",
+            initial_action_suggestion=suggestion,
+        )
 
     def _send_workspace_to_work_item_inbox(
         self,

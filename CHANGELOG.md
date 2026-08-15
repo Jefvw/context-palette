@@ -4,6 +4,48 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Added a task-oriented **Start** page to Configure. Ordinary Configure now
+  opens with direct choices to create or edit Actions, organize Focuses,
+  arrange Quick actions, set up Work Items, and back up or restore. Existing
+  direct Edit, Context, Work Item, Diagnostics, and creation routes still open
+  their requested destination in the one reused Configure window.
+- Added **Create Action...** beside **Text tools** in Input / Output. It uses a
+  non-blank selection first, otherwise the complete field, and opens the
+  existing reviewed Action form with one clear website or absolute file,
+  folder, or `.exe` target prefilled. It does not wait for mapped-drive access;
+  ambiguous or script-like text is explained rather than guessed, and the
+  existing **+ Action** type chooser is unchanged.
+- Made the main palette's **Edit** command open the selected Action editor
+  directly. It reuses and retargets an existing Configure workspace, preserves
+  the Built-in Git/privacy warning, and safely falls back to Configure if the
+  Action changed before the editor opened. Right-click keeps its existing
+  selection-only Configure route.
+- Completed the visible Active/Archived Action lifecycle in Configure. The
+  Actions table now filters Active, Archived, or all stored Actions; archiving
+  reports and removes saved placements before hiding an Action from runtime
+  discovery; restoring preserves the Action record without silently recreating
+  old assignments; and permanent deletion is reserved for Archived Actions.
+- Replaced selection-time action prose with a stable, current-state
+  **Input → Effect** summary for all Actions and Work Items. The one-line
+  preview now exposes missing input, clipboard/destination fallback,
+  workbook/folder behavior, protected-credential handling, AI non-submission,
+  file recovery, and Windows-target risk before Run/Open. Hover or click still
+  opens structured details without exposing technical action-type IDs.
+- Made a selected specific Focus useful during ordinary **All items** discovery
+  without turning it into a hidden filter. Matching shortcut rows remain first,
+  other matching Focus members follow, and a non-action **All other matches**
+  divider separates the remaining global results. Find stays global; General,
+  explicit Context filters, kind-specific scopes, and **Focus items** retain
+  their existing behavior.
+- Cancelled pending Tk callbacks during safe application shutdown and when
+  short-lived configuration or Cheat Sheet windows close, preventing delayed
+  focus and polling commands from producing background teardown errors.
+  Interpreter-wide shutdown cancellation stops Tcl timers without prematurely
+  deleting child-widget commands owned by Tkinter.
+- Removed organization-internal product destinations and a machine-specific
+  Outlook executable from the shared Built-in starter configuration. The
+  portable public shopping destinations remain available, and personal
+  destination actions continue to belong in My configuration.
 - Unified normal discovery around **All items**, **Actions**, and **Work Items**.
   All items shows both kinds in one searchable list; Context and tag filters
   apply to both, while type and project filters stay kind-specific. Run/Open,
@@ -156,6 +198,11 @@ This project has not published a versioned release. Changes are recorded under *
   encoding/decoding, SQL quote escaping, and Windows path/file-URI conversion.
   The same catalogue supplies readable operations and parameter fields for
   preview-first text-file actions.
+- Added a dedicated **Lists** transformation group with explicit unquoted,
+  single-quoted-text, double-quoted-text, and parenthesized SQL comma lists.
+  One quote-aware parser accepts line, comma, tab, and semicolon input,
+  preserves quoted separators, detects numbers and `NULL`, and safely doubles
+  embedded quote characters. The legacy saved list Action remains compatible.
 - Replaced the Markdown viewer's generic Browser button with a direct **Edge**
   button. It finds Microsoft Edge across `PATH` and standard user/system
   installations, then opens the current validated local Markdown file for the

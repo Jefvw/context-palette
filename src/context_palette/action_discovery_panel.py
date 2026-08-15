@@ -17,6 +17,7 @@ DISCOVERY_WORK_ITEMS = "work_items"
 DISCOVERY_SCOPES = (DISCOVERY_ALL, DISCOVERY_ACTIONS, DISCOVERY_WORK_ITEMS)
 PINNED_SLOT_ROW_TAG = "slot_pinned"
 FOCUS_SLOT_ROW_TAG = "slot_focus"
+FOCUS_GROUP_ROW_TAG = "focus_group"
 
 
 def slot_row_tag(slot: int | None) -> str | None:
@@ -160,7 +161,7 @@ class ActionDiscoveryPanel:
         self.context_picker.configure(menu=self.focus_menu)
         tooltip_adder(
             self.context_picker,
-            "Focus — Choose what you are working on. This changes slots 6–0 without limiting global Find.",
+            "Focus — Choose what you are working on. This sets slots 6–0 and groups matching All items first without limiting global Find.",
         )
 
         self.focus_items_button = ttk.Button(
@@ -178,7 +179,7 @@ class ActionDiscoveryPanel:
         )
         tooltip_adder(
             self.focus_items_button,
-            "Focus items — Show the Actions and Work Items belonging to the active Focus; activate again to return.",
+            "Focus items — Show only members of the active Focus. All items keeps global matches and groups Focus matches first.",
         )
 
         self.scope_buttons: dict[str, ttk.Button] = {}
@@ -204,7 +205,12 @@ class ActionDiscoveryPanel:
             self.scope_buttons[scope] = button
             tooltip_adder(
                 button,
-                f"{label} — Choose which kinds of Palette items appear in Find.",
+                (
+                    "All — Find remains global; matching items in the selected "
+                    "Focus appear before other matches."
+                    if scope == DISCOVERY_ALL
+                    else f"{label} — Choose which kinds of Palette items appear in Find."
+                ),
             )
         self.work_items_button = ttk.Button(
             self.tool_rail,
@@ -506,6 +512,12 @@ class ActionDiscoveryPanel:
             background=COLORS["slot_focus"],
             foreground=COLORS["text"],
         )
+        self.focus_tree.tag_configure(
+            FOCUS_GROUP_ROW_TAG,
+            background=COLORS["surface"],
+            foreground=COLORS["muted_text"],
+            font=("Segoe UI", 9, "bold"),
+        )
         self.focus_tree.bind("<<TreeviewSelect>>", lambda _event: update_preview())
         self.focus_tree.bind("<Double-Button-1>", lambda _event: execute_selected())
         self.focus_tree.bind("<Return>", lambda _event: execute_selected())
@@ -656,7 +668,9 @@ class ActionDiscoveryPanel:
                 "Run the selected Action or open the selected Work Item."
             )
             self.mode_help_text = (
-                "All items combines Actions and discovered Work Items. Use Actions or Work Items for type-specific filters."
+                "All items keeps Find global and groups matching items in the "
+                "selected Focus before other matches. Use Actions or Work Items "
+                "for type-specific filters."
             )
         self._fit_rail_height()
         self.set_tags(tags)
