@@ -255,9 +255,10 @@ AI coding agents must also follow [AGENTS.md](AGENTS.md).
 ## Current boundaries
 
 Context Palette does not parse compound shell command lines or provide
-unattended action execution, automatic context switching, safe multi-action
-sequences, clipboard restoration transactions, rich clipboard/image actions,
-or generic browser-tab/document restoration. A configured Windows target can
+unattended action execution, automatic context switching, sequence loops or
+conditions, general clipboard restoration transactions, rich clipboard/image
+actions, or generic browser-tab/document restoration. Its attended sequence
+Action can dispatch reviewed launch/open Actions with bounded waits. A configured Windows target can
 execute code through its registered association; this personal-tool capability
 is explicit and not sandboxed.
 

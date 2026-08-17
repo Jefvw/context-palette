@@ -41,6 +41,13 @@ from .action_suggestions import (
     ActionCreationSuggestion,
     suggest_action_from_text,
 )
+from .action_sequences import (
+    ActionSequenceError,
+    ResolvedActionStep,
+    ResolvedWaitStep,
+    SequenceRunPlan,
+    resolve_sequence_steps,
+)
 from .cheat_sheet_window import CheatSheetWindow
 from .cheatsheets import CheatSheetError, load_cheatsheets
 from .command_surface import (
@@ -96,10 +103,11 @@ from .palette_state import (
 )
 from .palette_items import PaletteItemReference
 from .windows_credentials import (
+    ClipboardTextSnapshot,
     CredentialAccessError,
-    clear_clipboard_if_unchanged,
+    begin_protected_clipboard_transaction,
     read_windows_credential,
-    set_protected_clipboard_text,
+    restore_clipboard_text_if_unchanged,
 )
 from .workspace_panel import WorkspacePanel
 from .work_item_refresh import WorkItemIndex, WorkItemRefreshCoordinator
@@ -271,6 +279,11 @@ class LauncherApp:
         self.captured_selection: str | None = None
         self.source_foreground_handle: int | None = None
         self.protected_clipboard_sequence: int | None = None
+        self.protected_clipboard_snapshot: ClipboardTextSnapshot | None = None
+        self.sequence_run_plan: SequenceRunPlan | None = None
+        self.sequence_run_index = 0
+        self.sequence_started_actions = 0
+        self.sequence_after_id: str | None = None
         self.hotkey_available = False
         self.hide_after_id: str | None = None
         self.search_entry: ttk.Entry | None = None
@@ -535,6 +548,11 @@ class LauncherApp:
             project_codes=self._available_work_project_codes(),
             tags=self._available_item_tags(),
         )
+        self.action_discovery_panel.render_control_state(
+            work_item=None,
+            has_selection=False,
+            sequence_running=getattr(self, "sequence_run_plan", None) is not None,
+        )
         if not self.main_split_customized:
             self.root.after_idle(self._sync_main_split)
         self._sync_filter_indicators()
@@ -622,6 +640,7 @@ class LauncherApp:
         self.all_items_button = discovery.all_items_button
         self.actions_button = discovery.actions_button
         self.work_items_button = discovery.work_items_button
+        self.scope_options_button = discovery.scope_options_button
         self.new_work_item_button = discovery.new_work_item_button
         self.send_work_item_inbox_button = discovery.send_work_item_inbox_button
         self.copy_file_to_work_item_button = discovery.copy_file_to_work_item_button
@@ -673,18 +692,8 @@ class LauncherApp:
         self.focus_tree_tooltip = discovery.focus_tree_tooltip
         discovery.set_discovery_scope(DISCOVERY_ALL)
 
-        self.command_surface_panel = ttk.Frame(outer, padding=(0, 8, 0, 0))
-        self.command_surface_panel.pack(fill=tk.BOTH, expand=True)
-        surface_header = ttk.Frame(self.command_surface_panel)
-        surface_header.pack(fill=tk.X, pady=(0, 5))
-        ttk.Label(surface_header, text="Quick actions", style="PaneHeader.TLabel").pack(
-            side=tk.LEFT
-        )
-        ttk.Label(
-            surface_header,
-            textvariable=self.surface_count_var,
-            style="Muted.TLabel",
-        ).pack(side=tk.RIGHT)
+        self.command_surface_panel = ttk.Frame(outer, padding=(0, 4, 0, 0))
+        self.command_surface_panel.pack(fill=tk.X)
         surface_body = ttk.Frame(self.command_surface_panel)
         surface_body.pack(fill=tk.BOTH, expand=True)
         surface_scrollbar = ttk.Scrollbar(surface_body, orient=tk.VERTICAL)
@@ -703,14 +712,53 @@ class LauncherApp:
         )
         self.command_tiles_frame.bind(
             "<Configure>",
-            lambda _event: self.command_surface_canvas.configure(
-                scrollregion=self.command_surface_canvas.bbox("all")
-            ),
+            self._sync_command_surface_height,
         )
         self.command_surface_canvas.bind(
             "<Configure>",
             self._resize_command_surface,
         )
+        # Reserve the compact application controls before letting the Quick
+        # action surface consume the remaining vertical space.
+        surface_body.pack_forget()
+        self.app_controls = ttk.Frame(self.command_surface_panel)
+        self.app_controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(6, 0))
+        discovery.configure_button = ttk.Button(
+            self.app_controls,
+            image=discovery.ui_icons["configure"],
+            command=self._show_configuration,
+            style="Icon.TButton",
+        )
+        discovery.configure_button.pack(side=tk.LEFT)
+        discovery.help_button = ttk.Button(
+            self.app_controls,
+            image=discovery.ui_icons["help"],
+            command=self._show_help,
+            style="Icon.TButton",
+        )
+        discovery.help_button.pack(side=tk.LEFT, padx=(4, 0))
+        discovery.more_button = ttk.Menubutton(
+            self.app_controls,
+            image=discovery.ui_icons["more"],
+            menu=discovery.more_menu,
+            style="Icon.TButton",
+            takefocus=True,
+        )
+        discovery.more_button.pack(side=tk.LEFT, padx=(4, 0))
+        self._tooltip(
+            discovery.configure_button,
+            "Configure — Manage Actions, Focuses, Quick actions, Work Items, and diagnostics.",
+        )
+        self._tooltip(discovery.help_button, lambda: discovery.mode_help_text)
+        self._tooltip(
+            discovery.more_button,
+            "More — Open keyboard shortcuts, hide Context Palette, or quit.",
+        )
+        surface_body.pack(fill=tk.X)
+        self.configure_button = discovery.configure_button
+        self.action_help_button = discovery.help_button
+        self.global_help_button = discovery.help_button
+        self.more_button = discovery.more_button
         self.action_console = outer
         self.actions_panel = discovery.frame
 
@@ -727,6 +775,14 @@ class LauncherApp:
             return
         self.command_surface_columns = columns
         self.root.after_idle(self._render_command_surface)
+
+    def _sync_command_surface_height(self, event: tk.Event) -> None:
+        """Shrink Quick actions to its real rows so discovery gets the rest."""
+
+        self.command_surface_canvas.configure(
+            scrollregion=self.command_surface_canvas.bbox("all"),
+            height=max(1, int(event.height)),
+        )
 
     def _bind_main_shortcuts(self) -> None:
 
@@ -809,6 +865,8 @@ class LauncherApp:
             status_setter=self.status_var.set,
             tooltip_adder=self._tooltip,
             create_action=self._create_action_from_workspace,
+            capture=self._capture_clipboard,
+            show_inbox=self._show_inbox,
             text_change_callback=self._update_preview,
         )
         # Compatibility aliases keep launcher orchestration and integrations
@@ -820,6 +878,14 @@ class LauncherApp:
         self.workspace_transform_button = self.workspace_component.transform_button
         self.text_tools_button = self.workspace_component.text_tools_button
         self.create_action_button = self.workspace_component.create_action_button
+        self.capture_button = self.workspace_component.capture_button
+        self.inbox_button = self.workspace_component.inbox_button
+        self.footer_action_buttons = [
+            self.workspace_component.capture_button,
+            self.workspace_component.inbox_button,
+            self.action_discovery_panel.edit_button,
+            self.action_discovery_panel.pin_button,
+        ]
 
     def _tooltip(self, widget: tk.Widget, text: str | Callable[[], str]) -> None:
         self.widget_tooltips.append(WidgetTooltip(widget, text))
@@ -1053,7 +1119,17 @@ class LauncherApp:
                 parent=self.root,
             )
             return
-        self._clear_protected_clipboard()
+        self._stop_action_sequence()
+        self._finish_protected_clipboard()
+        if getattr(self, "protected_clipboard_sequence", None) is not None:
+            self.status_var.set("Quit blocked: protected clipboard cleanup is pending.")
+            messagebox.showwarning(
+                "Protected clipboard cleanup pending",
+                "Context Palette cannot quit while Windows is keeping the protected "
+                "clipboard busy. Keep the app open; cleanup will retry automatically.",
+                parent=self.root,
+            )
+            return
         self.hotkey.stop()
         self.instance_server.stop()
         self._cancel_pending_tk_callbacks()
@@ -1164,7 +1240,7 @@ class LauncherApp:
             self.root.after(80, self.focus_search)
 
     def _capture_selection(self, request: dict[str, str]) -> None:
-        self._clear_protected_clipboard()
+        self._finish_protected_clipboard()
         self.source_foreground_handle = int(ctypes.windll.user32.GetForegroundWindow())
         send_copy_shortcut()
         self.root.after(120, lambda: self._finish_selection_capture(request))
@@ -1934,7 +2010,7 @@ class LauncherApp:
 
     def _refresh_focus_controls(self) -> None:
         context = self.context_var.get().strip() or "General"
-        self.focus_launcher_var.set(f"{context} ▾")
+        self.focus_launcher_var.set(f"Focus: {context}")
         self.context_menu.delete(0, tk.END)
         for name in self.available_context_names:
             self.context_menu.add_radiobutton(
@@ -1945,6 +2021,10 @@ class LauncherApp:
             )
         if self.available_context_names:
             self.context_menu.add_separator()
+        self.context_menu.add_command(
+            label="Show only this Focus",
+            command=self._activate_focus_actions,
+        )
         self.context_menu.add_command(
             label="Manage focuses…",
             command=self._show_focus_configuration,
@@ -2384,6 +2464,22 @@ class LauncherApp:
                 f"{len(actions)} Actions · {len(work_items)} Work Items"
             )
         else:
+            has_filter = bool(
+                query.strip()
+                or self.item_context_filter is not None
+                or self.item_tag_filter is not None
+            )
+            self.focus_tree.insert(
+                "",
+                tk.END,
+                iid="empty:all",
+                text=(
+                    "No items match Find or the selected filters."
+                    if has_filter
+                    else "No items are available. Use +A to create an Action."
+                ),
+                tags=(FOCUS_GROUP_ROW_TAG,),
+            )
             self.status_var.set("No Actions or Work Items match the current filters.")
         self._update_preview()
 
@@ -2619,6 +2715,13 @@ class LauncherApp:
                 f"{count} Palette items in {context}. Find remains global."
             )
         else:
+            self.focus_tree.insert(
+                "",
+                tk.END,
+                iid="empty:focus",
+                text=f"No items belong to {context}. Use Configure to add members.",
+                tags=(FOCUS_GROUP_ROW_TAG,),
+            )
             self.status_var.set(
                 f"No Actions or Work Items belong to {context}. Find remains global."
             )
@@ -2749,6 +2852,8 @@ class LauncherApp:
         self.status_var.set(f"{verb}: {action.display_text}")
 
     def _execute_selected(self, *, open_folder: bool = False) -> None:
+        if self._stop_action_sequence():
+            return
         if self.results_view != "flat":
             selected = self.focus_tree.selection()
             reference = (
@@ -2814,6 +2919,9 @@ class LauncherApp:
         )
 
     def _execute_action(self, action: Action) -> None:
+        if getattr(self, "sequence_run_plan", None) is not None:
+            self.status_var.set("A sequence is running; stop it before another Action.")
+            return
         destination = self.source_foreground_handle
         self.source_foreground_handle = None
         workspace_component = getattr(self, "workspace_component", None)
@@ -2836,6 +2944,7 @@ class LauncherApp:
                     destination,
                 ),
                 opener=self._open_action_target,
+                sequence_runner=self._run_action_sequence,
             )
             if action.type == "copy_text":
                 message = self._paste_saved_text_if_destination(destination)
@@ -2844,6 +2953,116 @@ class LauncherApp:
             self.status_var.set("Action failed")
             messagebox.showerror("Context Palette", str(exc))
             LOGGER.exception("Action failed: id=%s type=%s", action.id, action.type)
+
+    def _run_action_sequence(self, action: Action) -> str:
+        if getattr(self, "sequence_run_plan", None) is not None:
+            raise ActionError("Another Action sequence is already running.")
+        try:
+            plan = resolve_sequence_steps(
+                action.sequence_steps,
+                self.actions,
+                sequence_id=action.id,
+            )
+        except ActionSequenceError as exc:
+            raise ActionError(str(exc)) from exc
+        confirmation = (
+            f'Run sequence "{action.title}"?\n\n'
+            + "\n".join(plan.preview_lines)
+            + "\n\nOpened targets and started scripts cannot be undone. "
+            "Waits are delays, not completion checks. Stop prevents only "
+            "steps that have not started."
+        )
+        if not messagebox.askyesno(
+            "Run Action sequence?",
+            confirmation,
+            icon=messagebox.WARNING,
+            parent=self.root,
+        ):
+            return "Action sequence cancelled."
+        self.sequence_run_plan = plan
+        self.sequence_run_index = 0
+        self.sequence_started_actions = 0
+        panel = getattr(self, "action_discovery_panel", None)
+        if panel is not None:
+            panel.render_control_state(sequence_running=True)
+        elif hasattr(self, "run_button"):
+            self.run_button.configure(text="Stop remaining", style="Accent.TButton")
+        self.sequence_after_id = self.root.after(0, self._run_next_sequence_step)
+        return "Action sequence approved; starting step 1."
+
+    def _run_next_sequence_step(self) -> None:
+        self.sequence_after_id = None
+        plan = self.sequence_run_plan
+        if plan is None:
+            return
+        if self.sequence_run_index >= len(plan.steps):
+            started = self.sequence_started_actions
+            self._finish_action_sequence(
+                f"Sequence finished dispatching {started} Action(s)."
+            )
+            return
+        step_number = self.sequence_run_index + 1
+        step = plan.steps[self.sequence_run_index]
+        self.sequence_run_index += 1
+        if isinstance(step, ResolvedWaitStep):
+            self.status_var.set(
+                f"Sequence step {step_number}: waiting {step.milliseconds} ms."
+            )
+            self.sequence_after_id = self.root.after(
+                step.milliseconds,
+                self._run_next_sequence_step,
+            )
+            return
+        assert isinstance(step, ResolvedActionStep)
+        selected = Action(
+            id=step.action_id,
+            title=step.title,
+            context="General",
+            type=step.action_type,
+            value=step.value,
+            arguments=step.arguments,
+            working_directory=step.working_directory,
+        )
+        try:
+            execute_action(selected, opener=self._open_action_target)
+        except ActionError as exc:
+            self._finish_action_sequence(
+                f"Sequence stopped at step {step_number}: {exc}",
+                error=True,
+            )
+            return
+        self.sequence_started_actions += 1
+        self.status_var.set(
+            f"Sequence started Action {self.sequence_started_actions} at step {step_number}."
+        )
+        self.sequence_after_id = self.root.after(0, self._run_next_sequence_step)
+
+    def _stop_action_sequence(self) -> bool:
+        if getattr(self, "sequence_run_plan", None) is None:
+            return False
+        if self.sequence_after_id is not None:
+            try:
+                self.root.after_cancel(self.sequence_after_id)
+            except tk.TclError:
+                pass
+        started = self.sequence_started_actions
+        self._finish_action_sequence(
+            f"Sequence stopped. Started {started} Action(s); remaining steps were skipped."
+        )
+        return True
+
+    def _finish_action_sequence(self, message: str, *, error: bool = False) -> None:
+        self.sequence_run_plan = None
+        self.sequence_after_id = None
+        self.sequence_run_index = 0
+        panel = getattr(self, "action_discovery_panel", None)
+        if panel is not None:
+            panel.render_control_state(sequence_running=False)
+        elif hasattr(self, "run_button"):
+            self.run_button.configure(text="Run", style="Accent.TButton")
+        self.status_var.set(message)
+        if error:
+            messagebox.showerror("Action sequence stopped", message, parent=self.root)
 
     def _open_action_target(self, action: Action) -> None:
         """Open Markdown actions in-app and delegate every other safe target."""
@@ -2938,7 +3157,9 @@ class LauncherApp:
             (
                 f"Paste credential target:\n{action.value}\n\n"
                 f"Destination:\n{destination_title}\n\n"
-                "The password will not be shown or added to clipboard history."
+                "The password will not be shown or added to clipboard history. "
+                "After 15 seconds, Context Palette will restore the previous "
+                "plain-text clipboard value unless something newer was copied."
             ),
             parent=self.root,
         ):
@@ -2949,11 +3170,20 @@ class LauncherApp:
             )
             return "Credential paste cancelled."
         try:
+            self._finish_protected_clipboard()
+            if self.protected_clipboard_sequence is not None:
+                raise CredentialAccessError(
+                    "Windows could not finish the previous protected clipboard operation. "
+                    "Try again."
+                )
             secret = read_windows_credential(action.value)
-            sequence = set_protected_clipboard_text(secret.password)
+            transaction = begin_protected_clipboard_transaction(secret.password)
         except CredentialAccessError as exc:
             raise ActionError(str(exc)) from exc
-        self.protected_clipboard_sequence = sequence
+        sequence = transaction.sequence_number
+        previous_clipboard = transaction.snapshot
+        self.protected_clipboard_sequence = transaction.sequence_number
+        self.protected_clipboard_snapshot = transaction.snapshot
         self.root.withdraw()
 
         def paste_into_destination() -> None:
@@ -2964,7 +3194,7 @@ class LauncherApp:
                     "destination_unavailable",
                     level=logging.WARNING,
                 )
-                self._clear_protected_clipboard(sequence)
+                self._finish_protected_clipboard(sequence)
                 self.show_window()
                 messagebox.showerror(
                     "Credential paste cancelled",
@@ -2979,14 +3209,25 @@ class LauncherApp:
                     "Automatic paste: category=protected_credential outcome=failed "
                     "reason=dispatch_error",
                 )
-                self._clear_protected_clipboard(sequence)
+                restored = self._finish_protected_clipboard(sequence)
+                recovery_pending = self.protected_clipboard_sequence == sequence
                 self.show_window()
                 self.status_var.set("Protected credential paste was cancelled.")
                 messagebox.showerror(
                     "Credential paste cancelled",
-                    "Windows could not send the paste command. The protected "
-                    "clipboard item was cleared.\n\n"
-                    f"Technical detail: {exc}",
+                    "Windows could not send the paste command. Context Palette "
+                    + (
+                        "restored the previous clipboard text.\n\n"
+                        if restored and previous_clipboard.text is not None
+                        else (
+                            "could not access the protected clipboard yet; "
+                            "cleanup will retry.\n\n"
+                            if recovery_pending
+                            else "removed the protected clipboard item or left "
+                            "newer clipboard content untouched.\n\n"
+                        )
+                    )
+                    + f"Technical detail: {exc}",
                     parent=self.root,
                 )
                 return
@@ -2998,7 +3239,7 @@ class LauncherApp:
 
         self.root.after(
             15_000,
-            lambda: self._clear_protected_clipboard(sequence),
+            lambda: self._finish_protected_clipboard(sequence),
         )
         self.root.after(120, paste_into_destination)
         return "Protected credential paste approved; returning to the destination."
@@ -3114,12 +3355,20 @@ class LauncherApp:
         selected_reference = self._selected_focus_item()
         panel = getattr(self, "action_discovery_panel", None)
         if panel is not None:
-            panel.set_selected_item_kind(
+            selected_work_item = self._selected_work_item()
+            selected_action = self._selected_action()
+            panel.render_control_state(
                 work_item=(
-                    selected_reference.work_item_ref is not None
-                    if selected_reference is not None
+                    True
+                    if selected_work_item is not None
+                    else False
+                    if selected_action is not None
                     else None
-                )
+                ),
+                has_selection=(
+                    selected_work_item is not None or selected_action is not None
+                ),
+                sequence_running=getattr(self, "sequence_run_plan", None) is not None,
             )
         if self.work_items_mode and self.results_view == "flat":
             item = self._selected_work_item()
@@ -3156,6 +3405,8 @@ class LauncherApp:
             self.action_info_full = (
                 "Select an Action or Work Item to see what it will do."
             )
+            if self.results_count_var.get().startswith("0 "):
+                return
             self.status_var.set(
                 "Select an Action or Work Item to see Input → Effect before Run or Open."
             )
@@ -3165,6 +3416,7 @@ class LauncherApp:
             workspace_has_text=bool(self._workspace_text()),
             captured_selection_available=bool(self.captured_selection),
             destination_available=self.source_foreground_handle is not None,
+            available_actions=self.actions,
         )
         self.action_info_full = preview.full_text(action)
         message = preview.summary
@@ -3257,6 +3509,8 @@ class LauncherApp:
         self.workspace_component.sync_from_clipboard()
 
     def _sync_workspace_from_clipboard_if_safe(self) -> None:
+        if self.protected_clipboard_sequence is not None:
+            self._finish_protected_clipboard()
         if self.protected_clipboard_sequence is None:
             self._sync_workspace_from_clipboard()
 
@@ -3268,17 +3522,48 @@ class LauncherApp:
         self.root.clipboard_append(value)
         self.root.update()
         self.protected_clipboard_sequence = None
+        self.protected_clipboard_snapshot = None
 
-    def _clear_protected_clipboard(self, sequence: int | None = None) -> None:
+    def _finish_protected_clipboard(
+        self,
+        sequence: int | None = None,
+        retry_count: int = 0,
+    ) -> bool:
         current = self.protected_clipboard_sequence
         if sequence is not None and current != sequence:
-            return
+            return False
         target = sequence if sequence is not None else current
         if target is None:
-            return
-        clear_clipboard_if_unchanged(target)
-        if self.protected_clipboard_sequence == target:
+            return False
+        snapshot = (
+            getattr(self, "protected_clipboard_snapshot", None)
+            or ClipboardTextSnapshot()
+        )
+        result = restore_clipboard_text_if_unchanged(target, snapshot)
+        if result is None and retry_count < 5:
+            try:
+                self.root.after(
+                    1_000,
+                    lambda: self._finish_protected_clipboard(target, retry_count + 1),
+                )
+            except (AttributeError, tk.TclError):
+                pass
+        elif result is None:
+            try:
+                self.status_var.set("Protected clipboard cleanup still needs attention.")
+                messagebox.showwarning(
+                    "Protected clipboard cleanup needs attention",
+                    "Windows kept the clipboard busy, so Context Palette could not "
+                    "finish cleanup. Copy harmless text, reopen Context Palette, "
+                    "and do not quit until this warning no longer appears.",
+                    parent=self.root,
+                )
+            except (AttributeError, tk.TclError):
+                pass
+        if result is not None and self.protected_clipboard_sequence == target:
             self.protected_clipboard_sequence = None
+            self.protected_clipboard_snapshot = None
+        return result is True
 
     def _get_clipboard_text(self) -> str:
         try:

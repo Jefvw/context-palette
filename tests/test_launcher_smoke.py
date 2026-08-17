@@ -721,10 +721,33 @@ class LauncherSmokeTests(unittest.TestCase):
                         app.work_item_folder_button.master,
                         app.action_discovery_panel.primary_action_frame,
                     )
-                    self.assertIs(app.action_help_button.master, app.actions_tool_rail)
-                    self.assertGreater(app.actions_tool_rail.winfo_width(), 100)
-                    self.assertLessEqual(app.actions_tool_rail.winfo_width(), 148)
-                    self.assertGreaterEqual(app.focus_tree.winfo_width(), 130)
+                    self.assertIs(app.action_help_button.master, app.app_controls)
+                    self.assertIs(app.configure_button.master, app.app_controls)
+                    self.assertIs(app.more_button.master, app.app_controls)
+                    self.assertGreaterEqual(
+                        app.actions_tool_rail.winfo_width(),
+                        app.results.winfo_width() - 12,
+                    )
+                    initial_toolbar_width = app.actions_tool_rail.winfo_width()
+                    initial_common_positions = {
+                        widget: (widget.winfo_x(), widget.winfo_y())
+                        for widget in (
+                            app.new_action_button,
+                            app.action_discovery_panel.edit_button,
+                            app.action_discovery_panel.pin_button,
+                            app.action_discovery_panel.primary_action_frame,
+                        )
+                    }
+                    for scope_button in (
+                        app.all_items_button,
+                        app.actions_button,
+                        app.work_items_button,
+                    ):
+                        self.assertGreaterEqual(
+                            scope_button.winfo_width(),
+                            scope_button.winfo_reqwidth(),
+                        )
+                    self.assertGreaterEqual(app.focus_tree.winfo_width(), 180)
                     self.assertEqual(app.focus_tree.cget("style"), "Flat.Treeview")
                     self.assertEqual(
                         app.passwords_button.cget("text"),
@@ -738,7 +761,15 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertFalse(app.type_filter.winfo_manager())
                     self.assertEqual(app.run_button.cget("text"), "Run")
                     self.assertFalse(app.work_item_folder_button.winfo_manager())
-                    self.assertEqual(app.action_help_button.cget("text"), "?")
+                    self.assertTrue(app.action_help_button.cget("image"))
+                    self.assertTrue(app.scope_options_button.cget("image"))
+                    self.assertIs(
+                        app.scope_options_button.master,
+                        app.search_entry.master,
+                    )
+                    self.assertFalse(
+                        app.action_discovery_panel.find_label.winfo_manager()
+                    )
                     self.assertTrue(root.bind("<F5>"))
                     self.assertTrue(root.bind("<Control-Shift-D>"))
                     focus_chain = (
@@ -951,6 +982,9 @@ class LauncherSmokeTests(unittest.TestCase):
                     app.focus_tree.focus(work_item_row)
                     app._update_preview()
                     self.assertEqual(app.run_button.cget("text"), "Open")
+                    self.assertEqual(str(app.run_button.cget("state")), "normal")
+                    self.assertEqual(str(app.action_discovery_panel.edit_button.cget("state")), "normal")
+                    self.assertEqual(str(app.action_discovery_panel.pin_button.cget("state")), "disabled")
                     self.assertTrue(app.work_item_folder_button.winfo_manager())
                     self.assertTrue(app.status_var.get().startswith("Input: none → Effect: open "))
                     self.assertIn("\n\nInput\nNo runtime input.", app.action_info_full)
@@ -1026,30 +1060,67 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertTrue(app.work_item_folder_button.winfo_manager())
                     self.assertTrue(app.work_item_folder_button.cget("takefocus"))
                     self.assertFalse(app.passwords_button.winfo_manager())
-                    self.assertTrue(app.new_work_item_button.winfo_manager())
-                    self.assertTrue(app.send_work_item_inbox_button.winfo_manager())
-                    self.assertTrue(app.copy_file_to_work_item_button.winfo_manager())
-                    self.assertIs(
-                        app.work_items_button.tk_focusNext(),
-                        app.new_work_item_button,
+                    self.assertFalse(app.new_work_item_button.winfo_manager())
+                    self.assertFalse(app.send_work_item_inbox_button.winfo_manager())
+                    self.assertFalse(app.copy_file_to_work_item_button.winfo_manager())
+                    self.assertTrue(app.scope_options_button.cget("image"))
+                    work_tools_menu = root.nametowidget(
+                        app.scope_options_button.cget("menu")
                     )
-                    self.assertIs(
-                        app.new_work_item_button.tk_focusNext(),
-                        app.send_work_item_inbox_button,
+                    self.assertEqual(
+                        [
+                            work_tools_menu.entrycget(index, "label")
+                            for index in range(work_tools_menu.index(tk.END) + 1)
+                            if work_tools_menu.type(index) != "separator"
+                        ],
+                        [
+                            "New Work Item…",
+                            "Send Input / Output to Inbox",
+                            "Copy file into Work Item",
+                            "Filter by project",
+                            "Filter by context…",
+                            "Filter by tag…",
+                        ],
                     )
-                    self.assertIs(
-                        app.send_work_item_inbox_button.tk_focusNext(),
-                        app.copy_file_to_work_item_button,
+                    context_filter_index = next(
+                        index
+                        for index in range(work_tools_menu.index(tk.END) + 1)
+                        if work_tools_menu.type(index) != "separator"
+                        if work_tools_menu.entrycget(index, "label")
+                        == "Filter by context…"
                     )
-                    self.assertIs(
-                        app.copy_file_to_work_item_button.tk_focusNext(),
-                        app.type_filter,
+                    self.assertEqual(
+                        work_tools_menu.type(context_filter_index),
+                        "command",
                     )
-                    self.assertLessEqual(
-                        app.action_help_button.winfo_y()
-                        + app.action_help_button.winfo_height(),
-                        app.actions_tool_rail.winfo_height(),
+                    work_tools_menu.invoke(context_filter_index)
+                    root.update()
+                    context_popup = app.action_discovery_panel.context_picker_popup
+                    review_index = context_popup.visible_values.index("Review")
+                    context_popup.listbox.selection_clear(0, tk.END)
+                    context_popup.listbox.selection_set(review_index)
+                    context_popup._selection_changed()
+                    context_popup.apply()
+                    self.assertEqual(app.item_context_filter, "Review")
+                    work_tools_menu.invoke(context_filter_index)
+                    root.update()
+                    context_popup = app.action_discovery_panel.context_picker_popup
+                    all_contexts_index = context_popup.visible_values.index(
+                        "All contexts"
                     )
+                    context_popup.listbox.selection_clear(0, tk.END)
+                    context_popup.listbox.selection_set(all_contexts_index)
+                    context_popup._selection_changed()
+                    context_popup.apply()
+                    self.assertIsNone(app.item_context_filter)
+                    self.assertEqual(
+                        {
+                            widget: (widget.winfo_x(), widget.winfo_y())
+                            for widget in initial_common_positions
+                        },
+                        initial_common_positions,
+                    )
+                    self.assertTrue(app.action_help_button.winfo_ismapped())
                     self._assert_input_first_layout(app)
                     self.assertEqual(app.work_project_filter_var.get(), "All project codes")
 
@@ -1070,20 +1141,47 @@ class LauncherSmokeTests(unittest.TestCase):
 
                     app.actions_button.invoke()
                     root.update()
+                    self.assertEqual(
+                        app.actions_tool_rail.winfo_width(),
+                        initial_toolbar_width,
+                    )
+                    for scope_button in (
+                        app.all_items_button,
+                        app.actions_button,
+                        app.work_items_button,
+                    ):
+                        self.assertGreaterEqual(
+                            scope_button.winfo_width(),
+                            scope_button.winfo_reqwidth(),
+                        )
                     self.assertFalse(app.work_items_mode)
                     self.assertEqual(app.actions_heading_var.get(), "Actions")
                     self.assertEqual(app.action_discovery_panel.find_label.cget("text"), "Find action")
                     self.assertEqual(app.type_filter.cget("text"), "Types ▾")
                     self.assertEqual(app.run_button.cget("text"), "Run")
                     self.assertFalse(app.work_item_folder_button.winfo_manager())
-                    self.assertTrue(app.passwords_button.winfo_manager())
+                    self.assertFalse(app.passwords_button.winfo_manager())
                     self.assertFalse(app.new_work_item_button.winfo_manager())
                     self.assertFalse(app.send_work_item_inbox_button.winfo_manager())
                     self.assertFalse(app.copy_file_to_work_item_button.winfo_manager())
+                    self.assertTrue(app.scope_options_button.cget("image"))
+                    self.assertEqual(
+                        {
+                            widget: (widget.winfo_x(), widget.winfo_y())
+                            for widget in initial_common_positions
+                        },
+                        initial_common_positions,
+                    )
                     self._assert_input_first_layout(app)
                     self.assertEqual(app.item_tag_filter, "urgent")
                     self.assertEqual(app.results_count_var.get(), "0 actions")
+                    self.assertEqual(str(app.run_button.cget("state")), "disabled")
+                    self.assertEqual(str(app.action_discovery_panel.edit_button.cget("state")), "disabled")
+                    self.assertEqual(str(app.action_discovery_panel.pin_button.cget("state")), "disabled")
                     app._select_item_tag_filter(None)
+                    self.assertEqual(str(app.run_button.cget("state")), "normal")
+                    self.assertEqual(str(app.action_discovery_panel.edit_button.cget("state")), "normal")
+                    self.assertEqual(str(app.action_discovery_panel.pin_button.cget("state")), "normal")
 
                     opened_action_ids: list[str] = []
                     original_show_configuration = app._show_configuration
@@ -1103,11 +1201,17 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(opened_action_ids, [expected_flat_action])
                     self.assertEqual(app.results.curselection(), (flat_index,))
 
-                    app.passwords_button.invoke()
-                    self.assertEqual(app.action_type_filter, "paste_credential")
-                    self.assertEqual(app.passwords_button.cget("style"), "RailIconAccent.TButton")
-                    app.passwords_button.invoke()
-                    self.assertIsNone(app.action_type_filter)
+                    action_tools_menu = root.nametowidget(
+                        app.scope_options_button.cget("menu")
+                    )
+                    self.assertEqual(
+                        [
+                            action_tools_menu.entrycget(index, "label")
+                            for index in range(action_tools_menu.index(tk.END) + 1)
+                            if action_tools_menu.type(index) != "separator"
+                        ],
+                        ["Filter by type", "Filter by context…", "Filter by tag…"],
+                    )
 
                     type_menu = root.nametowidget(app.type_filter.cget("menu"))
                     open_url_index = next(
@@ -1149,6 +1253,17 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertIsNone(app.action_tag_filter)
                     self.assertEqual(app.tag_filter.cget("text"), "#")
                     self.assertEqual(app.tag_filter.cget("style"), "RailIcon.TButton")
+
+                    app.search_var.set("definitely-no-match")
+                    app.all_items_button.invoke()
+                    root.update()
+                    empty_rows = app.focus_tree.get_children()
+                    self.assertEqual(empty_rows, ("empty:all",))
+                    self.assertIn("No items match", app.focus_tree.item("empty:all", "text"))
+                    self.assertEqual(str(app.run_button.cget("state")), "disabled")
+                    self.assertTrue(app.status_var.get().startswith("No Actions or Work Items"))
+                    app.search_var.set("")
+                    root.update()
 
                     app._activate_focus_actions()
                     root.update()
@@ -1350,11 +1465,25 @@ class LauncherSmokeTests(unittest.TestCase):
                             surface_right,
                             control.cget("text"),
                         )
-                    self.assertEqual(
-                        [button.cget("text") for button in app.footer_action_buttons],
-                        ["⇩", "▣", "✎", "⌖"],
+                    self.assertLessEqual(
+                        app.command_tiles_frame.winfo_reqheight(),
+                        app.command_surface_canvas.winfo_height(),
+                        "All Quick actions should fit at the default window size.",
                     )
-                    self.assertEqual(app.more_button.cget("text"), "⋯")
+                    self.assertLessEqual(
+                        app.command_surface_canvas.winfo_height(),
+                        app.command_tiles_frame.winfo_reqheight() + 2,
+                        "Quick actions should not retain blank canvas below its rows.",
+                    )
+                    self.assertGreater(
+                        app.actions_list_frame.winfo_height(),
+                        app.actions_list_frame.winfo_reqheight(),
+                        "Recovered Quick-action space should expand the results list.",
+                    )
+                    self.assertTrue(
+                        all(button.cget("image") for button in app.footer_action_buttons)
+                    )
+                    self.assertTrue(app.more_button.cget("image"))
                     self.assertEqual(
                         [
                             app.more_menu.entrycget(index, "label")
@@ -1373,7 +1502,14 @@ class LauncherSmokeTests(unittest.TestCase):
                     ):
                         self.assertTrue(tooltips[button].startswith(f"{name} —"))
                     self.assertTrue(tooltips[app.more_button].startswith("More —"))
-                    self.assertEqual(app.text_tools_button.cget("text"), "Text tools ▾")
+                    self.assertTrue(app.text_tools_button.cget("image"))
+                    workspace_header = app.workspace_component.frame.winfo_children()[0]
+                    self.assertFalse(
+                        any(
+                            isinstance(widget, ttk.Label)
+                            for widget in workspace_header.winfo_children()
+                        )
+                    )
 
                     transform_groups = [
                         app.workspace_transform_menu.entrycget(index, "label")
@@ -1532,7 +1668,7 @@ class LauncherSmokeTests(unittest.TestCase):
                         surface_tooltip_count,
                     )
 
-                    self.assertEqual(app.configure_button.cget("text"), "⚙")
+                    self.assertTrue(app.configure_button.cget("image"))
 
                     root.focus_force()
                     root.event_generate("<Control-Shift-KeyPress-d>")

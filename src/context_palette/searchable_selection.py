@@ -25,12 +25,15 @@ class SearchableSelectionPopup:
         on_select: Callable[[tuple[str, ...]], None],
         title: str,
         empty_label: str | None = None,
+        search_label: str = "Find tag",
+        item_name: str = "tag",
     ) -> None:
         self.owner = owner
         self.values = tuple(values)
         self.multiple = multiple
         self.on_select = on_select
         self.empty_label = empty_label
+        self.item_name = item_name
         self._selected_keys = {value.casefold() for value in selected}
         self.previous_grab = owner.grab_current()
         self.closed = False
@@ -47,7 +50,7 @@ class SearchableSelectionPopup:
         outer.pack(fill=tk.BOTH, expand=True)
         search_row = ttk.Frame(outer)
         search_row.pack(fill=tk.X, pady=(0, 6))
-        ttk.Label(search_row, text="Find tag").pack(side=tk.LEFT)
+        ttk.Label(search_row, text=search_label).pack(side=tk.LEFT)
         self.search_entry = ttk.Entry(
             search_row,
             textvariable=self.search_var,
@@ -127,7 +130,10 @@ class SearchableSelectionPopup:
             and self.empty_label in self.visible_values
             else 0
         )
-        self.count_var.set(f"{result_count} tag{'s' if result_count != 1 else ''}")
+        self.count_var.set(
+            f"{result_count} {self.item_name}"
+            f"{'s' if result_count != 1 else ''}"
+        )
         self.apply_button.configure(
             state=tk.NORMAL if self.visible_values else tk.DISABLED
         )

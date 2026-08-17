@@ -62,8 +62,14 @@ def delete_action_and_references(
     context_paths: tuple[Path, ...],
     command_surface_paths: tuple[Path, ...],
     palette_path: Path,
+    sequence_paths: tuple[Path, ...] = (),
 ) -> ActionDeletionReport:
     with configuration_mutation_gate():
+        _assert_no_sequence_dependencies(
+            action_id,
+            sequence_paths,
+            include_archived=True,
+        )
         return _delete_action_and_references(
             action_path,
             action_id,
@@ -80,10 +86,16 @@ def archive_action_and_references(
     context_paths: tuple[Path, ...],
     command_surface_paths: tuple[Path, ...],
     palette_path: Path,
+    sequence_paths: tuple[Path, ...] = (),
 ) -> ActionDeletionReport:
     """Archive an action after detaching every active-only saved reference."""
 
     with configuration_mutation_gate():
+        _assert_no_sequence_dependencies(
+            action_id,
+            sequence_paths,
+            include_archived=False,
+        )
         action_data = _read_object(action_path)
         action = _find_action_record(action_data, action_path, action_id)
         if action.get("state", "Active") == "Archived":
@@ -181,6 +193,48 @@ def _find_action_record(
         if isinstance(action, dict) and action.get("id") == action_id:
             return action
     raise ActionDeletionError(f"Action was not found: {action_id}")
+
+
+def _assert_no_sequence_dependencies(
+    action_id: str,
+    paths: tuple[Path, ...],
+    *,
+    include_archived: bool,
+) -> None:
+    key = action_id.casefold()
+    dependents: list[str] = []
+    for path in paths:
+        data = _read_optional_object(path)
+        if data is None:
+            continue
+        actions = data.get("actions")
+        if not isinstance(actions, list):
+            raise ActionDeletionError(f"{path.name} must contain an 'actions' list.")
+        for action in actions:
+            if not isinstance(action, dict) or action.get("type") != "sequence":
+                continue
+            owner_id = action.get("id")
+            if not isinstance(owner_id, str) or owner_id.casefold() == key:
+                continue
+            if not include_archived and action.get("state", "Active") == "Archived":
+                continue
+            steps = action.get("steps")
+            if not isinstance(steps, list):
+                continue
+            if any(
+                isinstance(step, dict)
+                and isinstance(step.get("action_id"), str)
+                and step["action_id"].casefold() == key
+                for step in steps
+            ):
+                title = action.get("title")
+                dependents.append(title if isinstance(title, str) else owner_id)
+    if dependents:
+        raise ActionDeletionError(
+            "The Action is used by these sequences: "
+            + ", ".join(dependents)
+            + ". Edit or archive/delete those sequences first."
+        )
 
 
 def _prepare_reference_removals(

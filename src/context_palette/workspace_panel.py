@@ -12,6 +12,8 @@ from .actions import (
     save_text_file_preview_as,
     transform_text,
 )
+from .style import COLORS
+from .ui_icons import load_ui_icons
 from .workspace_transforms import WORKSPACE_TRANSFORM_GROUPS, WorkspaceTransform
 
 
@@ -69,6 +71,8 @@ class WorkspacePanel:
         status_setter: Callable[[str], None],
         tooltip_adder: Callable[[tk.Widget, str], None],
         create_action: Callable[[str], None] | None = None,
+        capture: Callable[[], None] | None = None,
+        show_inbox: Callable[[], None] | None = None,
         text_change_callback: Callable[[], None] | None = None,
     ) -> None:
         self.clipboard_getter = clipboard_getter
@@ -79,31 +83,44 @@ class WorkspacePanel:
 
         self.frame = ttk.Frame(parent)
         self.frame.pack(fill=tk.BOTH, expand=True)
+        self.ui_icons = load_ui_icons(
+            self.frame,
+            ("capture", "inbox", "create_from_input", "text_tools"),
+            foreground=COLORS["text"],
+        )
         header = ttk.Frame(self.frame)
         header.pack(fill=tk.X, pady=(0, 4))
         self.text_tools_button = ttk.Menubutton(
             header,
-            text="Text tools ▾",
-            style="Compact.TButton",
+            image=self.ui_icons["text_tools"],
+            style="Icon.TButton",
+            takefocus=True,
         )
         self.text_tools_button.pack(side=tk.RIGHT)
         self.create_action_button = ttk.Button(
             header,
-            text="Create Action...",
+            image=self.ui_icons["create_from_input"],
             command=self._create_action,
             state=tk.DISABLED,
+            style="Icon.TButton",
         )
-        self.create_action_button.pack(side=tk.RIGHT, padx=(0, 6))
-        ttk.Label(
+        self.create_action_button.pack(side=tk.RIGHT, padx=(0, 4))
+        self.inbox_button = ttk.Button(
             header,
-            text="Input / Output",
-            style="PaneHeader.TLabel",
-        ).pack(side=tk.LEFT)
-        ttk.Label(
+            image=self.ui_icons["inbox"],
+            command=show_inbox,
+            state=tk.NORMAL if show_inbox is not None else tk.DISABLED,
+            style="Icon.TButton",
+        )
+        self.inbox_button.pack(side=tk.RIGHT, padx=(0, 4))
+        self.capture_button = ttk.Button(
             header,
-            text="Selection, clipboard, and transformation workspace",
-            style="Muted.TLabel",
-        ).pack(side=tk.LEFT, padx=(8, 0))
+            image=self.ui_icons["capture"],
+            command=capture,
+            state=tk.NORMAL if capture is not None else tk.DISABLED,
+            style="Icon.TButton",
+        )
+        self.capture_button.pack(side=tk.RIGHT, padx=(0, 4))
 
         self.file_preview: TextFileTransformPreview | None = None
         self.file_preview_frame = ttk.Frame(self.frame)
@@ -159,14 +176,22 @@ class WorkspacePanel:
         self.transform_button = self.text_tools_button
         tooltip_adder(
             self.text_tools_button,
-            "Transform selected text, or the complete field when nothing is selected. Results are copied.",
+            "Text tools — Transform selected text, or the complete field when nothing is selected. Results are copied.",
         )
         tooltip_adder(
             self.create_action_button,
             (
-                "Create a reviewed Action from one clear website, file, folder, "
+                "Create from Input — Prefill a reviewed Action from one clear website, file, folder, "
                 "or application in Input / Output."
             ),
+        )
+        tooltip_adder(
+            self.capture_button,
+            "Capture — Save current clipboard text to Inbox after asking for a title.",
+        )
+        tooltip_adder(
+            self.inbox_button,
+            "Inbox — Review captures and convert them into permanent Actions.",
         )
 
     def _on_text_modified(self, _event: tk.Event) -> None:

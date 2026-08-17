@@ -22,6 +22,95 @@ from context_palette.persistence import atomic_write_json as real_atomic_write_j
 
 
 class ActionDeletionTests(unittest.TestCase):
+    def test_referenced_action_cannot_be_archived_or_deleted_behind_sequence(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            actions = root / "actions.json"
+            palette = root / "palette.json"
+            self._write(
+                actions,
+                {
+                    "actions": [
+                        {"id": "target", "title": "Target", "state": "Active"},
+                        {
+                            "id": "sequence",
+                            "title": "Morning setup",
+                            "type": "sequence",
+                            "value": "sequence-v1",
+                            "state": "Active",
+                            "steps": [
+                                {"kind": "action", "action_id": "target"},
+                                {"kind": "action", "action_id": "other"},
+                            ],
+                        },
+                    ]
+                },
+            )
+            self._write(palette, {"pinned_action_ids": []})
+
+            with self.assertRaisesRegex(ActionDeletionError, "Morning setup"):
+                archive_action_and_references(
+                    actions,
+                    "target",
+                    context_paths=(),
+                    command_surface_paths=(),
+                    palette_path=palette,
+                    sequence_paths=(actions,),
+                )
+
+            data = self._read(actions)
+            data["actions"][0]["state"] = "Archived"
+            self._write(actions, data)
+            with self.assertRaisesRegex(ActionDeletionError, "Morning setup"):
+                delete_action_and_references(
+                    actions,
+                    "target",
+                    context_paths=(),
+                    command_surface_paths=(),
+                    palette_path=palette,
+                    sequence_paths=(actions,),
+                )
+
+    def test_archived_sequence_blocks_delete_but_not_archive(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            actions = root / "actions.json"
+            palette = root / "palette.json"
+            self._write(
+                actions,
+                {
+                    "actions": [
+                        {"id": "target", "title": "Target", "state": "Active"},
+                        {
+                            "id": "history",
+                            "title": "Archived history",
+                            "type": "sequence",
+                            "state": "Archived",
+                            "steps": [{"kind": "action", "action_id": "target"}],
+                        },
+                    ]
+                },
+            )
+            self._write(palette, {"pinned_action_ids": []})
+
+            archive_action_and_references(
+                actions,
+                "target",
+                context_paths=(),
+                command_surface_paths=(),
+                palette_path=palette,
+                sequence_paths=(actions,),
+            )
+            with self.assertRaisesRegex(ActionDeletionError, "Archived history"):
+                delete_action_and_references(
+                    actions,
+                    "target",
+                    context_paths=(),
+                    command_surface_paths=(),
+                    palette_path=palette,
+                    sequence_paths=(actions,),
+                )
+
     def test_archive_reference_write_failure_keeps_action_active_and_stops_in_order(self) -> None:
         for failure_index in (0, 1):
             with self.subTest(failure_index=failure_index), TemporaryDirectory() as directory:

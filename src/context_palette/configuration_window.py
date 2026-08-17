@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 from dataclasses import dataclass
 from pathlib import Path
 import re
@@ -29,6 +29,14 @@ from .action_deletion import (
     restore_action,
 )
 from .action_types import ACTION_TYPES, CREATABLE_ACTION_TYPES
+from .action_sequences import (
+    ALLOWED_ACTION_TYPES,
+    ActionSequenceError,
+    SequenceStep,
+    dependent_sequences,
+    resolve_sequence_steps,
+    sequence_reference_ids,
+)
 from .action_suggestions import ActionCreationSuggestion
 from .action_type_picker import ActionTypePickerDialog, ActionTypePickerOption
 from .action_bound_quick_actions import action_bound_quick_groups
@@ -110,6 +118,7 @@ ACTION_TYPE_EXAMPLES = {
     "open_file": r"Example: Open %PROJECT_ROOT%\README.md in its associated application.",
     "open_folder": r"Example: Open %PROJECT_ROOT%\docs in File Explorer.",
     "launch_app": r"Example: Start C:\Tools\Example\Example.exe with reviewed arguments.",
+    "sequence": "Example: Start an import Action, wait briefly, then open its results folder.",
     "paste_credential": "Example: Paste the Windows or generic credential target oracle-pc17.",
     "build_url_open": "Example: Ask for ABC 123, then copy and open its generated website address.",
     "build_url_selection_open": "Example: Use selected text ABC 123, copy its URL, and open it.",
@@ -1440,6 +1449,19 @@ class ConfigurationWindow:
         destination: str = LOCAL_DESTINATION,
     ) -> bool:
         local = destination != PROJECT_DESTINATION
+        if (
+            action.type == "sequence"
+            and not local
+            and set(sequence_reference_ids(action.sequence_steps))
+            & self.local_action_ids
+        ):
+            messagebox.showerror(
+                "Action was not created",
+                "A Built-in sequence can reference Built-in Actions only. "
+                "Choose My configuration or remove personal Action steps.",
+                parent=self.window,
+            )
+            return False
         target_path = self.local_actions_path if local else self.shared_actions_path
         try:
             append_actions_with_context_memberships(
@@ -2157,6 +2179,18 @@ class ConfigurationWindow:
             )
             return False
         local = target_path == self.local_actions_path
+        if (
+            action.type == "sequence"
+            and not local
+            and set(sequence_reference_ids(action.sequence_steps))
+            & self.local_action_ids
+        ):
+            messagebox.showerror(
+                "Action was not saved",
+                "A Built-in sequence can reference Built-in Actions only.",
+                parent=self.window,
+            )
+            return False
         try:
             update_action_with_context_memberships(
                 target_path,
@@ -2198,6 +2232,20 @@ class ConfigurationWindow:
             )
 
         if action.state == "Archived":
+            if action.type == "sequence":
+                try:
+                    resolve_sequence_steps(
+                        action.sequence_steps,
+                        self.actions,
+                        sequence_id=action.id,
+                    )
+                except ActionSequenceError as exc:
+                    messagebox.showerror(
+                        "Action was not restored",
+                        f"Repair its sequence steps first.\n\n{exc}",
+                        parent=self.window,
+                    )
+                    return
             if not messagebox.askyesno(
                 "Restore action?",
                 f'Restore "{action.title}" as Active?\n\nIt will return to normal '
@@ -2225,6 +2273,19 @@ class ConfigurationWindow:
             self.feedback_label.configure(style="Success.TLabel")
             return
 
+        blockers = dependent_sequences(
+            self.stored_actions,
+            action.id,
+            include_archived=False,
+        )
+        if blockers:
+            messagebox.showerror(
+                "Action was not archived",
+                "Archive or edit these active sequences first:\n\n"
+                + "\n".join(sequence.title for sequence in blockers),
+                parent=self.window,
+            )
+            return
         try:
             usage = inspect_action_references(
                 action.id,
@@ -2268,6 +2329,7 @@ class ConfigurationWindow:
                     self.local_command_surface_path,
                 ),
                 palette_path=self.palette_path,
+                sequence_paths=(self.shared_actions_path, self.local_actions_path),
             )
         except (ActionDeletionError, OSError) as exc:
             # Reference cleanup intentionally precedes the state write. A
@@ -2291,6 +2353,19 @@ class ConfigurationWindow:
         if action is None or action.state != "Archived":
             return
         local = action.id in self.local_action_ids
+        blockers = dependent_sequences(
+            self.stored_actions,
+            action.id,
+            include_archived=True,
+        )
+        if blockers:
+            messagebox.showerror(
+                "Action was not deleted",
+                "Edit or delete these sequences first:\n\n"
+                + "\n".join(sequence.title for sequence in blockers),
+                parent=self.window,
+            )
+            return
         try:
             usage = inspect_action_references(
                 action.id,
@@ -2341,6 +2416,7 @@ class ConfigurationWindow:
                     self.local_command_surface_path,
                 ),
                 palette_path=self.palette_path,
+                sequence_paths=(self.shared_actions_path, self.local_actions_path),
             )
         except (ActionDeletionError, OSError) as exc:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
@@ -2550,7 +2626,7 @@ class ConfigurationWindow:
                 self.local_actions_path,
                 inspect_external_paths=False,
             )
-        except ActionError as exc:
+        except (ActionError, ActionSequenceError) as exc:
             messagebox.showerror(
                 "Context deleted; reload needed",
                 f"The context was deleted, but actions could not be reloaded.\n\n{exc}",
@@ -3095,6 +3171,7 @@ class ActionDialog:
     ) -> None:
         self.action_type = action_type
         self.action = action
+        self.available_actions = list(actions)
         self.on_save = on_save
         self.choose_destination = choose_destination
         self.default_text_file_path = default_text_file_path
@@ -3318,7 +3395,10 @@ class ActionDialog:
         self.transform_parameter_vars: list[tk.StringVar] = []
         self.transform_parameters_frame: ttk.Frame | None = None
         self.value: tk.Text | None = None
-        if action_type in {"transform_text", "transform_file_text"}:
+        if action_type == "sequence":
+            self.sequence_steps = list(action.sequence_steps if action else ())
+            self._build_sequence_fields(form)
+        elif action_type in {"transform_text", "transform_file_text"}:
             self._build_transform_fields(
                 form,
                 action,
@@ -3444,6 +3524,147 @@ class ActionDialog:
             self.action_guidance,
             parent=self.window,
         )
+
+    def _build_sequence_fields(self, parent: ttk.Frame) -> None:
+        eligible = [
+            action
+            for action in self.available_actions
+            if action.state == "Active"
+            and action.type in ALLOWED_ACTION_TYPES
+            and (self.action is None or action.id != self.action.id)
+        ]
+        self.sequence_action_choices = _action_choices(eligible)
+        chooser_row = ttk.Frame(parent)
+        chooser_row.pack(fill=tk.X, pady=(7, 0))
+        ttk.Label(
+            chooser_row,
+            text="Add Action",
+            width=ACTION_DIALOG_LABEL_WIDTH,
+        ).pack(side=tk.LEFT, padx=(0, 8))
+        self.sequence_action_var = tk.StringVar()
+        self.sequence_action_picker = ActionPickerField(
+            chooser_row,
+            variable=self.sequence_action_var,
+            options=_action_picker_options(
+                eligible,
+                choices=self.sequence_action_choices,
+            ),
+            title="Choose Action for sequence",
+            scope_note=(
+                "Sequences may start reviewed websites, files, folders, "
+                "applications, and Windows targets."
+            ),
+        )
+        self.sequence_action_picker.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(
+            chooser_row,
+            text="Add",
+            command=self._add_sequence_action,
+        ).pack(side=tk.LEFT, padx=(6, 0))
+        list_frame = ttk.Frame(parent)
+        list_frame.pack(fill=tk.BOTH, expand=True, pady=(7, 0))
+        self.sequence_list = tk.Listbox(list_frame, exportselection=False, height=8)
+        self.sequence_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar = ttk.Scrollbar(
+            list_frame,
+            orient=tk.VERTICAL,
+            command=self.sequence_list.yview,
+        )
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.sequence_list.configure(yscrollcommand=scrollbar.set)
+        controls = ttk.Frame(parent)
+        controls.pack(fill=tk.X, pady=(6, 0))
+        ttk.Button(
+            controls,
+            text="Add waitâ€¦",
+            command=self._add_sequence_wait,
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            controls,
+            text="Remove",
+            command=self._remove_sequence_step,
+        ).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(
+            controls,
+            text="Move up",
+            command=lambda: self._move_sequence_step(-1),
+        ).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(
+            controls,
+            text="Move down",
+            command=lambda: self._move_sequence_step(1),
+        ).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Label(
+            parent,
+            text=(
+                "2â€“12 steps. Waits are 100â€“10,000 ms, cannot touch each "
+                "other or the ends, and never prove that a program finished."
+            ),
+            style="Muted.TLabel",
+            wraplength=610,
+        ).pack(anchor=tk.W, pady=(5, 0))
+        self._refresh_sequence_steps()
+
+    def _add_sequence_action(self) -> None:
+        action_id = self.sequence_action_choices.get(self.sequence_action_var.get())
+        if not action_id:
+            return
+        self.sequence_steps.append(SequenceStep("action", action_id=action_id))
+        self._refresh_sequence_steps(select=len(self.sequence_steps) - 1)
+
+    def _add_sequence_wait(self) -> None:
+        milliseconds = simpledialog.askinteger(
+            "Add wait",
+            "Wait how many milliseconds? (100 to 10,000)",
+            parent=self.window,
+            minvalue=100,
+            maxvalue=10_000,
+            initialvalue=500,
+        )
+        if milliseconds is None:
+            return
+        self.sequence_steps.append(SequenceStep("wait", milliseconds=milliseconds))
+        self._refresh_sequence_steps(select=len(self.sequence_steps) - 1)
+
+    def _remove_sequence_step(self) -> None:
+        selection = self.sequence_list.curselection()
+        if not selection:
+            return
+        index = selection[0]
+        del self.sequence_steps[index]
+        self._refresh_sequence_steps(select=min(index, len(self.sequence_steps) - 1))
+
+    def _move_sequence_step(self, offset: int) -> None:
+        selection = self.sequence_list.curselection()
+        if not selection:
+            return
+        index = selection[0]
+        target = index + offset
+        if target < 0 or target >= len(self.sequence_steps):
+            return
+        self.sequence_steps[index], self.sequence_steps[target] = (
+            self.sequence_steps[target],
+            self.sequence_steps[index],
+        )
+        self._refresh_sequence_steps(select=target)
+
+    def _refresh_sequence_steps(self, *, select: int | None = None) -> None:
+        actions_by_id = {action.id: action for action in self.available_actions}
+        self.sequence_list.delete(0, tk.END)
+        for number, step in enumerate(self.sequence_steps, start=1):
+            if step.kind == "wait":
+                label = f"{number}. Wait {step.milliseconds} ms"
+            else:
+                action = actions_by_id.get(step.action_id)
+                label = (
+                    f"{number}. {action.title} Â· {ACTION_TYPES[action.type].label}"
+                    if action is not None
+                    else f"{number}. Unavailable Action"
+                )
+            self.sequence_list.insert(tk.END, label)
+        if select is not None and self.sequence_steps:
+            self.sequence_list.selection_set(select)
+            self.sequence_list.see(select)
 
     def _update_form_scrollregion(self, _event: tk.Event | None = None) -> None:
         bounds = self.form_canvas.bbox("all")
@@ -3657,7 +3878,17 @@ class ActionDialog:
                 _comma_separated(self.contexts_var.get()),
                 self.context_names,
             )
-            if self.action_type in {"transform_text", "transform_file_text"}:
+            sequence_steps: tuple[SequenceStep, ...] = ()
+            if self.action_type == "sequence":
+                value = "sequence-v1"
+                arguments = []
+                sequence_steps = tuple(self.sequence_steps)
+                resolve_sequence_steps(
+                    sequence_steps,
+                    self.available_actions,
+                    sequence_id=self.action.id if self.action else "",
+                )
+            elif self.action_type in {"transform_text", "transform_file_text"}:
                 operation = self._selected_transform_operation()
                 parameters = [
                     variable.get() for variable in self.transform_parameter_vars
@@ -3694,13 +3925,15 @@ class ActionDialog:
                     if quick_action_path_var is not None
                     else ""
                 ),
+                sequence_steps=sequence_steps,
+                available_actions=getattr(self, "available_actions", ()),
             )
             action = (
                 edited_configured_action(self.action, **values)
                 if self.action
                 else configured_action(**values)
             )
-        except ActionError as exc:
+        except (ActionError, ActionSequenceError) as exc:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
             return
         saved = (

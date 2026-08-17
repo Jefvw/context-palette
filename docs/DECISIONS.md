@@ -1,5 +1,93 @@
 # Decisions
 
+## 2026-08-16 - Use task-oriented toolbars instead of a command rail
+
+**Decision:** Keep the Focus selector and All items / Actions / Work Items
+choices readable, but remove the side rail and redundant pane, count, and Find
+headings. Use one icon Filters menu on the same row as Find, show active filters
+as a removable text chip, and place
+`+A`, Edit, Pin, and Run/Open in a stable toolbar below results. Put Capture,
+Inbox, Create from Input, and Text tools in the Input / Output header. Put
+Configure, Help, and More below Quick actions.
+
+**Reason:** The rail made commands compact by separating them from the object
+they affect, repeatedly squeezed result names, and used font-dependent symbols.
+The new placement groups each command with its target: result commands stay
+with results, text commands stay with Input / Output, and application commands
+stay with Quick actions. Embedded Tk bitmaps keep icon sizing portable without
+a new dependency; semantic tooltips retain the complete names. Seven result
+rows at normal scaling leave all four rows of the standard seven Quick actions
+visible in the default window instead of requiring off-screen scrolling. The
+Quick-action canvas shrink-wraps its rendered rows; any unused height belongs
+to the result list rather than appearing as a blank block below the last menu.
+
+**Boundary:** `ActionDiscoveryPanel` still reuses the existing launcher
+callbacks and keeps `+A` as the unchanged generic type chooser. The separate
+Input-derived route only prefills the existing reviewed Action form. Focus
+changes priority and slots without hiding global results; the Context filter
+remains an explicit temporary restriction. Execution and persistence behavior
+are unchanged.
+
+## 2026-08-16 - Compose launch sequences from reviewed Actions
+
+**Decision:** Model the first Action sequence as an ordered list of references
+to existing launch/open Actions plus optional bounded waits. Supported targets
+are website, file, folder, application, and Windows-target Actions. Reject
+nested sequences, clipboard/paste steps, credentials, transformations, missing
+or Archived references, leading/trailing/adjacent waits, more than 12 steps,
+individual waits outside 100–10,000 ms, and more than 30 seconds total wait.
+
+**Reason:** Existing Actions already own target validation, structured
+arguments, working folders, and warnings. Referencing them avoids duplicating
+PowerShell, batch, path, or command-line data and avoids inventing a compound
+command language. Clipboard paste and arbitrary keys require a separate focus
+and recovery design; adding them now would outrun the text-only clipboard
+transaction.
+
+**Script boundary:** A sequence may eventually reference a reviewed Windows
+target for `.bat`/`.cmd`, or a Run application Action targeting an exact
+`powershell.exe`/`pwsh.exe` with separate `-NoProfile`, `-File`, and script-path
+arguments. It never embeds inline PowerShell or claims a dispatched script has
+completed. Direct `.ps1` behavior remains dependent on Windows association.
+
+**Implementation:** The structured model, validation, persistence, guided
+editor, live reference preview, immutable run plan, dependency-aware
+archive/delete blocking, attended confirmation, **Stop remaining**, and
+nonblocking Tk-scheduled dispatch are implemented together. Closing the app
+stops unstarted steps without attempting to terminate launched programs.
+Runtime messages report dispatch counts, never process completion.
+
+## 2026-08-16 - Start clipboard recovery with protected plain-text transactions
+
+**Decision:** Treat each protected credential paste as a bounded clipboard
+transaction. Capture the prior plain-text clipboard value without logging or
+displaying it, replace the clipboard with the protected credential, and after
+15 seconds—or immediately after a failed automatic paste—restore that text
+only when the protected clipboard sequence is still current. If another
+application has changed the clipboard, preserve the newer content. When no
+clipboard formats were present, clear the protected item as before. If the
+clipboard contains only non-text formats, stop before replacement because the
+current transaction cannot restore them.
+
+**Reason:** Credential paste was the most consequential existing clipboard
+overwrite: it deliberately destroyed the user's prior clipboard and already
+had a sequence-checked cleanup boundary. Windows increments the clipboard
+sequence whenever the contents change, so the same guard can provide recovery
+without overwriting later user activity. Restricting the first slice to text
+avoids pretending that bitmap, HTML, private, or delayed-rendered handles can be
+captured and recreated through one generic byte-copy mechanism.
+
+**Consequences:** Native capture and protected replacement share one open
+clipboard operation, so another application cannot insert a value between the
+snapshot and overwrite. Clipboard text is recoverable across successful timeout,
+focus failure, input-dispatch failure, and orderly application shutdown. A
+snapshot hides its value from object representations and never enters actions,
+Input / Output, logs, previews, or AI guidance. If Windows keeps the clipboard
+busy, protected tracking remains active, cleanup retries are bounded and
+visible, and quit is blocked rather than abandoning the protected item.
+Ordinary saved-text paste, rich formats, and image formats remain separate
+future transactions with their own timing and format semantics.
+
 ## 2026-08-15 - Make Active/Archived a guided recoverable lifecycle
 
 **Decision:** Configure keeps separate stored and Active Action projections.

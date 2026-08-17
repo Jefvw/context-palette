@@ -102,9 +102,10 @@ Presentation and application orchestration.
   mode: **Open** retains workbook-first behavior while its adjacent folder
   button requests the same constrained boundary with the folder target.
 
-The main window has no separate toolbar or footer command bar. Discovery and
-Quick actions form the left command console; Input / Output and the one-line
-status display form the right workspace. Secondary
+Discovery and Quick actions form the left command console; Input / Output and
+the one-line status display form the right workspace. A result toolbar owns
+selection commands, the workspace header owns text/input commands, and a small
+application toolbar follows Quick actions. Secondary
 Inbox and Inbox-action-creation presentation lives in `inbox_window.py`;
 `launcher.py` retains only the capture command and window orchestration.
 
@@ -132,17 +133,18 @@ The shared discovery area has three explicit scopes plus the reversible Focus
 presentation. Focus is never inferred or changed automatically, and Find
 remains global regardless of Focus.
 
-| State | Heading/results | Rail | Primary action |
+| State | Heading/results | Secondary tools | Primary action |
 | --- | --- | --- | --- |
-| All items | Mixed Actions and discovered Work Items: color-coded shortcut rows first, then matching members of a selected specific Focus, a non-action divider when needed, and remaining global matches | Contexts, Tags, Help | Run or Open, selected-kind specific |
-| Actions | Actions only, including Action slots | Passwords, Types, Contexts, Tags, Help | Run |
-| Work Items | Indexed Work Item folders, never Action records | New item, To inbox, Copy file, Projects, Contexts, Tags, Help | Open |
-| Focus items, empty Find | Flat mixed membership of the selected Focus, including soft unavailable Work Item references | All-items rail | Run or Open |
-| Find while Focus items is active | Normal mixed global matches; changing Focus does not filter them | All-items rail | Run or Open |
-| Find cleared after Focus items | Restores the selected Focus's flat mixed membership list | All-items rail | Run or Open |
+| All items | Mixed Actions and discovered Work Items: color-coded shortcut rows first, then matching members of a selected specific Focus, a non-action divider when needed, and remaining global matches | Filters menu: Context and Tag | Run or Open, selected-kind specific |
+| Actions | Actions only, including Action slots | Filters menu: Type, Context, and Tag | Run |
+| Work Items | Indexed Work Item folders, never Action records | Filters/tools menu: New item, To inbox, Copy file, Project, Context, and Tag | Open |
+| Focus items, empty Find | Flat mixed membership of the selected Focus, including soft unavailable Work Item references | All-items tools | Run or Open |
+| Find while Focus items is active | Normal mixed global matches; changing Focus does not filter them | All-items tools | Run or Open |
+| Find cleared after Focus items | Restores the selected Focus's flat mixed membership list | All-items tools | Run or Open |
 
-The heading, count, empty state, selection preview, rail labels, status, and
-primary verb must all describe the active scope and selected kind.
+The scope selection, empty state, selection preview, toolbar state, status, and
+primary verb must all describe the active scope and selected kind. Redundant
+pane headings and counts are maintained as internal state only, not rendered.
 `ActionDiscoveryPanel` owns those widgets; `LauncherApp` owns scope policy,
 typed selection resolution, and the constrained Run/Open
 callbacks. Both `?` controls continue to open the same general Help document.
@@ -238,8 +240,8 @@ Pure transformation algorithms and validation remain in `actions.py`.
 ### `workspace_panel.py`
 
 Owns the complete Input / Output UI component: text widget, edit menu, visible
-**Create Action...** and **Text tools** controls, selection-first source choice
-and replacement, undo boundaries, prompting,
+Capture, Inbox, **Create from Input**, and **Text tools** bitmap controls;
+selection-first source choice and replacement; undo boundaries; prompting;
 clipboard copy and replacement, transformation feedback, and file-transform
 preview provenance. A file preview exposes explicit replace, save-as, and
 dismiss commands; ordinary workspace replacement clears that provenance. It
@@ -260,17 +262,19 @@ execution and returns no suggestion for mixed or ambiguous content.
 ### `action_discovery_panel.py`
 
 Owns construction and event wiring for the left action-discovery presentation:
-heading and count, a Find entry bounded to the result-list width, the two-column
-command rail, scope-specific filters and Work Item commands, Run/Open, flat
-result list, Focus list, scrollbar, and row tooltips. The rail also presents
-the existing Focus selector and the launcher-owned management callbacks without
-duplicating their behavior. State-bearing scope and primary controls keep text;
-routine expert commands use stable compact symbols with semantic tooltips. The
-rail is scaling-aware within a 114–148 pixel width bound so the result list
-receives the recovered width. Search
+readable Focus and scope rows; one Find row containing the search field and
+Filters menu; an active-filter chip; flat result list, Focus list, scrollbar, row tooltips;
+and the stable `+A`, Edit, Pin, and Run/Open result toolbar. Action-only and Work
+Item-only commands live in the Filters menu instead of reshaping the toolbar.
+Routine icon controls use retained 16-pixel Tk bitmap images with semantic
+tooltips, avoiding font-dependent Unicode toolbar symbols and new dependencies. Search
 policy, action ranking, filtering, Focus membership, selection meaning, and execution remain in
 `launcher.py` and are supplied through narrow callbacks. Compatibility aliases
 allow existing launcher orchestration to migrate incrementally.
+
+Context and tag filters open the shared searchable single-selection popup from
+the Filters menu. Each supplies its own wording and explicit All choice; the
+launcher callback remains the only owner of filter state and result refresh.
 
 Right-click callbacks preserve the clicked flat or Focus row as the current
 selection, then route its stable action ID into the existing Configure Actions
@@ -279,7 +283,7 @@ My configuration actions persist to the ignored local action file. Built-in
 actions may also be edited after an explicit developer-impact warning and
 persist to the Git-tracked starter action file.
 
-The main discovery rail's explicit **Edit** command adds a one-shot direct-edit
+The result toolbar's explicit **Edit** command adds a one-shot direct-edit
 request to that same stable-ID route. Configure reloads and raises its existing
 workspace, clears conflicting Action filters, resolves the ID only against the
 current Active projection, and opens the existing `ActionDialog` path after the
@@ -292,7 +296,7 @@ Provides reusable comma-separated picker fields used by Configure, Inbox
 conversion, and action editing. Context membership combines an editable field
 with a checklist of canonical defined contexts. Tag selection uses a shared
 searchable multi-select picker for existing normalized tags but continues to
-allow new free-form values. The discovery rail uses the same picker in
+allow new free-form values. The discovery Filters menu uses the same picker in
 single-select mode, including its explicit clear choice. Selection mechanics
 remain separate from domain validation in
 `actions.py`, so typed values and non-UI callers follow the same persistence
@@ -318,7 +322,7 @@ membership source.
 ### `searchable_selection.py`
 
 Provides the compact searchable tag popup shared by guided multi-select tag
-fields and the discovery rail's single-tag filters. It preserves selections
+fields and the discovery Filters menu's single-tag filter. It preserves selections
 while search narrows the visible list, provides an explicit clear choice for
 filters, and restores an owning dialog's modal grab when it closes.
 
@@ -537,7 +541,7 @@ feature.
 
 Action creation starts from the educational **Create action** catalogue, the
 launcher/Actions-tab **+ Action** searchable type chooser, or a conservative
-**Create Action...** suggestion beside Input / Output. The suggestion route uses
+**Create from Input** suggestion beside Input / Output. The suggestion route uses
 selected text first, requires one clear supported target, and prepopulates
 the existing form with a visible review notice. It does not change the general
 type chooser or bypass confirmation. All routes
@@ -912,13 +916,22 @@ standard-library `ctypes`.
 - Reads one exact `CRED_TYPE_GENERIC` target from the current Windows logon session.
 - Frees the native credential buffer immediately after decoding it.
 - Writes the password with Windows clipboard-history and cloud-upload exclusion formats.
-- Returns a clipboard sequence number so delayed clearing occurs only if another
-  application has not replaced the clipboard.
-- Arms delayed conditional clearing before destination focus and paste dispatch,
-  so an input-dispatch failure cannot leave cleanup unscheduled.
+- Captures the previous plain-text value and performs protected replacement
+  while the clipboard remains open, eliminating a snapshot/replace race, then
+  returns a sequence number so recovery occurs only if another application has
+  not replaced the protected item.
+- Arms delayed conditional restoration before destination focus and paste
+  dispatch, so an input-dispatch failure cannot leave recovery unscheduled.
+- Restores plain text after timeout or failure; an absent prior text value
+  becomes a clear only for an originally empty clipboard. A clipboard with only
+  non-text formats stops the operation before replacement. Rich, image,
+  private, and delayed-rendered formats are not treated as generic memory and
+  remain outside this first transaction boundary.
 - Retains protected-clipboard tracking until an ordinary clipboard replacement
   completes, so a failed write cannot make the secret eligible for workspace
   synchronization.
+- Retries a busy recovery, warns after bounded failures, and blocks orderly quit
+  while the protected transaction remains unresolved.
 - Never enumerates credentials, writes credentials, logs passwords, or exposes
   passwords to action JSON, Input / Output, preview, search, or AI guidance.
 
@@ -1011,20 +1024,23 @@ sash keeps both panes usable and preserves a user-adjusted ratio during later
 resizing in the session.
 
 The command console stacks discovery above the independently scrolling Quick
-actions. Discovery shows about ten result rows at the standard size. Find sits
-in the same column as the result list, while a fixed compact rail beside it
-orders Focus, scope, filter, creation, capture, configuration, help, and
-Run/Open controls. Actions exposes Passwords and Types; Work Items substitutes
-New item, To inbox, Copy file, Projects, Open, and Open folder. Quick actions
+actions. Discovery shows seven result rows at the standard size so the complete
+standard Quick-action grid remains visible. Focus and scope navigation sit
+above Find; one Filters menu shares the Find row; and `+A`,
+Edit, Pin, and Run/Open form one stable row below the full-width results.
+Actions adds type filtering; Work Items adds New item, To inbox, Copy file,
+project filtering, Open, and Open folder through the same stable surface. Quick actions
 use two columns at the standard and supported minimum widths, falling back to
-one only when the console is narrower. Input / Output consumes nearly the full
-right-pane height; its existing communication line sits at the bottom. The
-expert rail uses fixed positions and compact mnemonic symbols for filters,
-creation, capture, editing, configuration, help, and overflow. Focus, discovery
-scopes, Work Items, and Run/Open retain text because their state must remain
-immediately readable.
-Search text can be combined with one shared built-in action-type filter;
-Passwords is a direct shortcut into that same filter state.
+one only when the console is narrower. Its canvas height follows the rendered
+row height instead of expanding; discovery owns the remaining vertical space
+and its result list grows with it. Input / Output consumes nearly the full
+right-pane height; its existing communication line sits at the bottom. Capture,
+Inbox, Create from Input, and Text tools use bitmap-icon controls in the
+workspace header. Configure, Help, and More follow Quick actions. Focus,
+discovery scopes, Work Items, and Run/Open retain text because their state must
+remain immediately readable. Search text can be combined with one shared
+built-in action-type filter; credentials remain selectable through that type
+filter and the fixed Passwords Quick-action menu.
 
 Each group renders in stable row-major order within a responsive one- or
 two-column grid. The
@@ -1077,6 +1093,7 @@ The current allow-list includes:
 - `open_file`
 - `open_folder`
 - `launch_app`
+- `sequence`
 - `paste_credential`
 - `build_url_open`
 - `build_url_selection_open`
@@ -1115,11 +1132,31 @@ Input / Output workspace <---- Paste / manual edit
 Windows Credential Manager -- exact target --> protected clipboard --> captured destination
 ```
 
+### Previewable Action sequences
+
+`action_sequences.py` owns the pure `SequenceStep` model, structural bounds,
+live reference resolution, immutable run plan, and readable ordered preview.
+A sequence persists an explicit `steps` array containing only Action references
+and waits. It can reference Active `open_url`, `open_file`, `open_folder`,
+`launch_app`, and `open_windows_target` Actions. Nested sequences, clipboard
+inputs, credentials, transformations, and missing or Archived references fail
+before any effect.
+
+The Action editor adds, removes, and reorders existing Actions and bounded
+waits without displaying technical IDs. The launcher resolves every reference,
+shows one complete confirmation, and schedules each step through Tk so the UI
+remains responsive. **Stop remaining** cancels only the pending callback;
+already opened targets or started processes are not rolled back or terminated.
+Archive/delete treats sequence references as blocking semantic dependencies,
+not removable placements. Built-in sequences may reference Built-in Actions
+only; personal sequences may reference either ownership.
+
 Destination paste callbacks treat focus restoration and input dispatch as
 separate failure points. Both restore the hidden palette. Ordinary saved text
-remains on the clipboard for manual recovery, while protected credential data
-is cleared immediately. Sequence-aware cleanup ignores an obsolete delayed
-callback after an earlier failure has already cleared the protected item.
+remains on the clipboard for manual recovery. Protected credential paste
+restores the prior plain-text clipboard value on failure or after 15 seconds,
+or clears the protected item when no prior text existed. Sequence-aware
+recovery yields to newer clipboard content and ignores obsolete callbacks.
 Automatic-paste observability uses a fixed event schema containing only
 category, outcome, and reason. It never accepts action values, clipboard text,
 credential targets, usernames, passwords, or window titles. Successful and
@@ -1408,7 +1445,9 @@ When adding context behavior:
 - Separate Configure dialog families from `configuration_window.py` when a
   material Configure change benefits from the boundary.
 - Add supporting-context composition and weighted ranking.
-- Design safe linear action sequences and clipboard transactions as explicit, previewable models.
+- Extend clipboard transactions beyond protected plain text only with
+  action-specific timing and format semantics before adding sequence paste,
+  Tab, or Enter steps.
 - Consider optional application-aware context suggestions that never switch focus silently.
 - Add rich HTML and image actions only with explicit clipboard semantics.
 

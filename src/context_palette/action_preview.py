@@ -4,6 +4,11 @@ from dataclasses import dataclass
 
 from .actions import Action
 from .action_types import ACTION_TYPES
+from .action_sequences import (
+    ActionSequenceError,
+    ResolvedActionStep,
+    resolve_sequence_steps,
+)
 from .workspace_transforms import WORKSPACE_TRANSFORMS
 
 
@@ -53,6 +58,7 @@ def build_action_preview(
     workspace_has_text: bool = False,
     captured_selection_available: bool = False,
     destination_available: bool = False,
+    available_actions: tuple[Action, ...] | list[Action] = (),
 ) -> ActionPreview:
     """Describe current Action input and effect without reading runtime data."""
 
@@ -122,6 +128,30 @@ def build_action_preview(
             details,
             limitations,
         )
+    if action.type == "sequence":
+        try:
+            plan = resolve_sequence_steps(
+                action.sequence_steps,
+                available_actions,
+                sequence_id=action.id,
+            )
+        except ActionSequenceError as exc:
+            return ActionPreview(
+                "needed: every sequence Action must be available",
+                "Run will stop without changes",
+                (*details, ("Sequence issue", str(exc))),
+                limitations,
+            )
+        action_count = sum(
+            isinstance(step, ResolvedActionStep) for step in plan.steps
+        )
+        wait_count = len(plan.steps) - action_count
+        return ActionPreview(
+            "none",
+            f"start {action_count} Actions in order with {wait_count} bounded wait(s); no rollback",
+            (*details, ("Steps", "\n".join(plan.preview_lines))),
+            limitations,
+        )
     if action.type == "paste_credential":
         if not destination_available:
             return ActionPreview(
@@ -132,7 +162,7 @@ def build_action_preview(
             )
         return ActionPreview(
             "Credential Manager + captured destination",
-            "confirm, paste, then clear the protected clipboard",
+            "confirm, paste, then restore prior clipboard text",
             details,
             limitations,
         )

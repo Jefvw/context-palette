@@ -30,8 +30,8 @@ and retrieve it quickly in a chosen focus context.
 | Work Item file copy | Implemented | Copies one exact absolute file path from Input / Output into the selected Work Item folder; background, collision-safe, no overwrite |
 | Bulk action harvesting | Implemented | Attended local extraction of HTTP/HTTPS candidates from selected `.md`, `.txt`, `.docx`, and `.xlsx` files; review and atomic permanent creation |
 | External automation | Partial by design | Show/context/search only; no action execution API |
-| Clipboard transactions | Deferred | No automatic preservation/restoration |
-| Safe action sequences | Deferred | No multi-step sequence language |
+| Clipboard transactions | Partial | Protected credential paste atomically captures and conditionally restores prior plain text; non-text-only content stops safely; ordinary saved text and rich/image formats are not preserved |
+| Safe action sequences | Implemented with limits | 2â€“12 references to reviewed launch/open Actions, bounded waits, complete confirmation, Stop remaining, and dependency-safe lifecycle; no paste/keys, loops, conditions, inline commands, completion checks, retry, or rollback |
 | Rich clipboard/image actions | Deferred | Plain-text workspace only |
 | Automatic context inference | Deferred | The user chooses focus explicitly |
 

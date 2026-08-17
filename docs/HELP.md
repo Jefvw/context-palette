@@ -146,8 +146,10 @@ important. It changes slots 6 through 0 and controls the mixed **Focus items**
 view. In ordinary **All items**, matching Focus members appear before other
 matches while Find remains global.
 
-Focus is the first control in the command rail beside Find. Hover over or
-keyboard-focus it for guidance without permanently consuming screen space.
+Focus and its icon-only **Show only this Focus** control share the first row
+above Find. The same command is available in the Focus menu. The next row keeps
+**All items**, **Actions**, and **Work Items** visible without taking width from
+the result list.
 
 - Slots `1–5` are personal pinned Actions and never change with Context.
 - Slots `6–0` are the top five Actions or Work Items for the selected Focus. Slot
@@ -181,13 +183,19 @@ that list is visible with Find empty.
 
 ## Find and open Palette items
 
-The left side is one compact command console. Find and the result list share
-the same width; frequent controls remain in the rail beside them, and Quick
-actions appear underneath. Choose **All items** to find Actions and Work Items
-together, **Actions** for Action-specific
-type and Password filters, or **Work Items** for project filters and Work Item
-commands. The selected scope is highlighted and does not change the active
-Focus.
+The left side is one compact command console. Focus and the three view choices
+sit above Find; Find and the result list use the full console width. Quick
+actions appear underneath. Choose **All
+items** to find Actions and Work Items together, **Actions** for
+Action-specific tools, or **Work Items** for Work Item tools. The selected view
+is highlighted and does not change the active Focus. The filter icon beside
+Find contains the current view's secondary commands and filters. An active
+filter appears as a readable chip below Find; activate the chip to clear the
+current Context, tag, type, and project filters.
+
+Quick actions use only the height required by their visible menu rows. Extra
+space automatically enlarges the result list instead of leaving a blank area
+below the last Quick-action menu.
 
 Find, **Contexts**, and **Tags** apply to both Actions and Work Items. A
 specific Context returns the Actions and Work Items assigned to that Context;
@@ -196,8 +204,10 @@ both kinds in one result list.
 
 - Type in **Find item** to filter both kinds by their searchable names and
   metadata.
-- Choose **Contexts** or **Tags** to narrow the mixed list. Active filters are
-  highlighted and marked **✓** until cleared.
+- Open the filter icon and choose **Filter by context…** or **Filter by tag…**
+  to open a searchable chooser and narrow the mixed list. Choose **All
+  contexts** or **All tags** to clear that filter. Active filters highlight the
+  icon and appear in the removable chip until cleared.
 - Select an Action to show **Run**. Select a Work Item to show **Open** and the
   adjacent folder command. Enter and double-click use the selected kind's
   normal execution policy.
@@ -206,12 +216,11 @@ both kinds in one result list.
 - **Pin** remains available only for Actions in slots 1–5. Work Items can be
   assigned to numbered Focus slots 6–0 through a personal Context.
 
-In the **Actions** scope:
+In the **Actions** view:
 
-- Click **Passwords** for the protected-credential shortcut, or open **Types**
-  to filter by any built-in action type. Choose **All types** to clear the type
-  filter.
-- Open **Tags** to search and choose one exact reusable tag. Choose **All tags**
+- Open the filter icon beside Find, then choose **Filter by type** for any
+  built-in Action type. Choose **All types** to clear the type filter.
+- Choose **Filter by tag…** to search and select one exact reusable tag. Choose **All tags**
   to clear it. Type part of a tag name, use the arrow keys, then press Enter or
   click **Choose**. Find text, type, and tag filters work together. An active type,
   project-code, or tag filter is highlighted and marked **✓** until it is
@@ -235,7 +244,9 @@ In the **Actions** scope:
   Find input. This positional rule works on AZERTY and QWERTY.
 - Selecting an action updates the slim communication line at the bottom.
 
-The Actions heading shows the current match count. When nothing matches, the list explains how to clear Find or create an action instead of presenting a blank pane.
+The selected scope and results make the current view explicit without a
+duplicate heading or count row. When nothing matches, the list explains how to
+clear Find or create an action instead of presenting a blank pane.
 
 Blue rows map top-to-bottom to pinned slots 1–5. Green rows map top-to-bottom
 to focus-context slots 6–0. The numeric prefixes are hidden to leave more room
@@ -248,21 +259,21 @@ aligned without a dash or an unused tree-expansion gutter.
 ## Work Item-specific discovery and commands
 
 Choose **Work Items** above Find to use the same result area for configured
-local work-item folders. The heading changes to **Work Items**, Find becomes
-**Find Work Item**, action-only **Passwords** is hidden, **Types** becomes
-**Projects**, and the primary command becomes **Open**. Choose **All items** or
-**Actions** to change scope. The shared Context and tag filters remain active
-across scope changes; the project filter applies only in Work Items.
+local work-item folders. The selected **Work Items** scope remains highlighted,
+the filter/tools icon gains Work Item commands, and the primary command
+becomes **Open**. Choose **All items** or **Actions** to change view. The shared
+Context and tag filters remain active across view changes; **Filter by project**
+inside that menu applies only to Work Items.
 
-- **New item** opens the guided Work Item creation flow. If setup is incomplete,
+- **New Work Item** opens the guided Work Item creation flow. If setup is incomplete,
   Configure opens on the missing source or generic Excel template first.
-- **To inbox** appends the current Input / Output to the selected Work Item
+- **Send Input / Output to Inbox** appends the current Input / Output to the selected Work Item
   workbook's `Inbox` sheet. The result context menu offers the same command.
-- **Copy file** copies the one exact file path in Input / Output into the
+- **Copy file into Work Item** copies the one exact file path in Input / Output into the
   selected Work Item folder. The result context menu offers the same command.
 - Find matches the folder name, parsed kind, organisation, subject, source
   name, detected project codes, and personal tags.
-- **Projects** filters by one detected four-character project code.
+- **Filter by project** filters by one detected four-character project code.
 - **Tags** uses the same exact reusable tag filter as Actions.
 - **Contexts** filters by personal Context membership.
 - Enter, double-click, or **Open** opens the exact matching
@@ -639,8 +650,8 @@ areas shrink and retain their scrolling. Divider movement is bounded so
 neither side can be accidentally collapsed. A fresh
 application start leaves the workspace empty. Reopening the resident palette
 can show the current clipboard or captured selection. Actions can read or
-replace it. Its compact heading includes **Create Action...** and the visible
-**Text tools** menu without adding a separate toolbar.
+replace it. Its compact heading includes bitmap controls for Capture, Inbox,
+**Create from Input**, and **Text tools** without consuming label space.
 
 Numbered action triggering is deliberately active only while Find has focus. In every other control—including Clipboard / Input / Output, the result list, context selector, and buttons—`1` through `9` do not execute actions. This makes Find the explicit keyboard command mode. Standard text editing remains available in the workspace.
 
@@ -652,13 +663,13 @@ The bottom communication line always stays one row high. Hover over it for the c
 - The right-click command `Clear` empties it.
 - The right-click menu also provides Undo, Redo, Cut, Copy, Paste, Select all, and Copy all.
 - Open `Transform` through the right-click menu or choose **Text tools**.
-- Choose **Create Action...** to turn one clear target into a reusable Action.
+- Choose the **Create from Input** icon to turn one clear target into a reusable Action.
   A non-blank selection is used first; otherwise Context Palette checks the
   complete Input / Output field. One complete HTTP/HTTPS address, clear
   absolute file path, folder path, or `.exe` path opens the ordinary Action form
   with its type, editable name, and exact target prefilled. Quoted Explorer
   paths are accepted. A long path that only wraps visually remains one target.
-- **Create Action...** never rereads the clipboard, saves, opens, runs, or waits
+- **Create from Input** never rereads the clipboard, saves, opens, runs, or waits
   for a drive lookup. Review the prefilled name, target, effect, Contexts,
   tags, and storage, then choose **Create action** normally. Multiple targets, prose around a
   target, unsupported addresses, line-broken content, relative paths, and
@@ -693,26 +704,20 @@ the three comma-list choices produce:
 - `'alpha', 42, 'O''Brien'`
 - `"alpha", 42, "O'Brien"`
 
-## Command rail
+## Task-oriented controls
 
-The rail beside the results keeps frequent commands visible without a separate
-top toolbar or bottom command bar. It is optimized for one expert user: Focus,
-Focus items, All/Actions, Work Items, and Run/Open retain text because they
-communicate current state; learned commands use stable compact symbols so the
-result list remains wide. Hover over or keyboard-focus a control to see its
-complete explanation.
+Controls now stay beside the thing they affect. Focus and the three view
+choices remain readable above Find. The bitmap-icon filter control sits beside
+Find. Below results, the stable item toolbar contains `+A`, Edit, Pin, and
+Run/Open; invalid selection commands are disabled instead of failing after a
+click. Work Item-specific New, Inbox, Copy file, and project commands live in
+the filter/tools menu.
 
-| Symbol | Command |
-| --- | --- |
-| `C` / `#` | Context and tag filters; a check mark means the filter is active |
-| `+A` / `⌖` | Create an Action / pin the selected Action |
-| `⇩` / `▣` | Capture clipboard text / open Inbox |
-| `✎` / `⚙` | Edit the selected item / open Configure |
-| `?` / `⋯` | Help / keyboard shortcuts, Hide, and Quit |
-
-The Actions scope adds the credential key and Types controls. Work Items adds
-`+W`, `→▣`, `⧉`, and Proj for New item, To inbox, Copy file, and Projects.
-Their positions do not change within a scope.
+The Input / Output header contains Capture, Inbox, Create from Input, and Text
+tools. Configure, Help, and More sit below Quick actions. These icon-only
+controls use portable Tk bitmaps rather than font characters. Hover over or
+keyboard-focus any icon to see its complete name and explanation. The generic
+`+A` chooser and the conservative Create from Input route remain separate.
 
 ### Run
 
@@ -736,6 +741,32 @@ Hover over the line for the complete explanation, or click it to open
 structured Type, Input, Effect, configured-value, and recovery details. The
 compact line never includes captured input content, passwords, or technical
 action-type IDs.
+
+#### Run a sequence
+
+Create **Run a sequence** from **+ Action** when several reviewed launch/open
+Actions should start in a fixed order. Add existing website, file, folder,
+application, or Windows-target Actions, optionally insert waits, and reorder the
+list. A sequence needs 2â€“12 steps. Each wait is 100â€“10,000 milliseconds; waits
+cannot be first, last, or adjacent, and their total cannot exceed 30 seconds.
+
+Running shows every current Action name, type, target, and structured argument
+before anything starts. Confirm to dispatch the steps in order. While it runs,
+the Run button becomes **Stop remaining**. Stopping skips unstarted steps but
+does not close targets, terminate programs, or undo anything already started.
+Waits are delays only: they do not test readiness, exit codes, or success.
+
+For `.bat` or `.cmd`, first configure an **Open or run a Windows target** Action
+for the exact script. Direct `.ps1` behavior depends on Windows file
+association. For predictable PowerShell dispatch, configure **Run an
+application** with an exact `powershell.exe` or `pwsh.exe` and separate reviewed
+arguments such as `-NoProfile`, `-File`, and the script path, then add that
+Action to the sequence. A sequence never stores inline shell commands.
+
+An Action used by an Active sequence cannot be archived. An Action used by any
+Active or Archived sequence cannot be permanently deleted until those sequences
+are edited, archived, or deleted as appropriate. Built-in sequences may use
+Built-in Actions only; My configuration sequences may use either source.
 
 For **Paste saved text**, Run directly pastes into the application from which
 the palette was opened by hotkey. Every action attempt consumes that captured
@@ -997,10 +1028,9 @@ the palette is positioned near a display edge.
 
 ## Protected Windows credential paste
 
-Choose **Passwords** in the Actions tool rail to show only protected credential
-actions. The highlighted button remains active while ordinary Find text
-narrows that password list; choose **Passwords** again to return to all
-actions.
+Choose **Actions**, open the filter icon, then choose **Filter by type → Paste
+a Windows credential** to show only protected credential Actions. Choose **All
+types** to return to every Action; ordinary Find text narrows either list.
 
 Every Active credential action also appears automatically under the fixed
 **Passwords** Quick-action menu. Choosing one starts the existing protected
@@ -1034,13 +1064,23 @@ To paste:
 
 The password is retrieved only after confirmation. It is placed temporarily on
 a Windows clipboard item marked to stay out of clipboard history and cloud
-sync, then cleared after 15 seconds if no other program replaced the clipboard.
-It is never placed in Input / Output, previews, action files, or logs,
-or AI prompts. The prior clipboard is not restored.
+sync. Context Palette remembers the previous plain-text clipboard value and
+restores it after 15 seconds, or immediately when automatic paste fails, only
+if no other program replaced the clipboard meanwhile. A newer clipboard value
+always wins. If the previous clipboard had no text, the protected item is
+cleared instead only when the clipboard was empty. Rich text and image formats
+are not yet preserved; if the clipboard contains only a file, image, or other
+non-text format, credential paste stops without changing it.
+
+The password and remembered text are never placed in Input / Output, previews,
+action files, logs, or AI prompts.
 
 If an ordinary clipboard write fails while a protected credential is still
 tracked, Context Palette keeps treating the clipboard as protected and will
-not synchronize its content into Input / Output.
+not synchronize its content into Input / Output. Cleanup retries five times and
+then displays a warning; quitting is blocked while protected cleanup remains
+unresolved. Copy harmless text and reopen Context Palette to let the sequence
+guard recognize that the protected item has been replaced.
 
 Credential paste is unavailable after an ordinary launcher/external show
 request because that route has no fresh destination window. Archived

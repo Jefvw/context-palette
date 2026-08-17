@@ -14,6 +14,7 @@ from context_palette.action_preview import (
 )
 from context_palette.action_types import ACTION_TYPES
 from context_palette.actions import Action
+from context_palette.action_sequences import SequenceStep
 
 
 class ActionPreviewTests(unittest.TestCase):
@@ -30,6 +31,17 @@ class ActionPreviewTests(unittest.TestCase):
             "open_file": self._action("open_file", "C:/work/report.txt"),
             "open_folder": self._action("open_folder", "C:/work"),
             "launch_app": self._action("launch_app", "C:/Tools/tool.exe"),
+            "sequence": Action(
+                id="preview-sequence",
+                title="Preview sequence",
+                context="General",
+                type="sequence",
+                value="sequence-v1",
+                sequence_steps=(
+                    SequenceStep("action", action_id="preview-open_url"),
+                    SequenceStep("action", action_id="preview-open_folder"),
+                ),
+            ),
             "paste_credential": self._action(
                 "paste_credential",
                 "ContextPalette:Example",
@@ -63,6 +75,7 @@ class ActionPreviewTests(unittest.TestCase):
                     workspace_has_text=True,
                     captured_selection_available=True,
                     destination_available=True,
+                    available_actions=list(actions.values()),
                 )
                 self.assertTrue(preview.summary.startswith("Input: "))
                 self.assertIn(" → Effect: ", preview.summary)
@@ -133,7 +146,7 @@ class ActionPreviewTests(unittest.TestCase):
 
         self.assertIn("fresh hotkey destination is missing", missing.input_text)
         self.assertEqual(missing.effect_text, "Run will stop without changes")
-        self.assertIn("clear the protected clipboard", available.effect_text)
+        self.assertIn("restore prior clipboard text", available.effect_text)
         self.assertNotIn(saved_text.value, copied.summary)
         self.assertIn("manual paste", copied.effect_text)
 

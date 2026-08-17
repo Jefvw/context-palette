@@ -5,19 +5,19 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.actions import Action, ActionError
+from context_palette.action_sequences import SequenceStep
 from context_palette.action_suggestions import ActionCreationSuggestion
 from context_palette.action_types import ACTION_TYPES
 from context_palette.action_discovery_panel import (
     FOCUS_SLOT_ROW_TAG,
     PINNED_SLOT_ROW_TAG,
-    compact_rail_width,
     slot_row_tag,
     visible_result_row_count,
 )
@@ -30,7 +30,11 @@ from context_palette.launcher import (
 )
 from context_palette.palette_state import PaletteState
 from context_palette.palette_items import PaletteItemReference
-from context_palette.windows_credentials import CredentialSecret
+from context_palette.windows_credentials import (
+    ClipboardTextSnapshot,
+    CredentialSecret,
+    ProtectedClipboardTransaction,
+)
 from context_palette.work_item_file_copy import (
     WorkItemFileCopyError,
     WorkItemFileCopyResult,
@@ -62,12 +66,17 @@ class FakeRoot:
     def __init__(self) -> None:
         self.withdraw_calls = 0
         self.after_callbacks: list[object] = []
+        self.cancelled_after_ids: list[object] = []
 
     def withdraw(self) -> None:
         self.withdraw_calls += 1
 
-    def after(self, _delay: int, callback: object) -> None:
+    def after(self, _delay: int, callback: object) -> str:
         self.after_callbacks.append(callback)
+        return f"after#{len(self.after_callbacks)}"
+
+    def after_cancel(self, callback_id: object) -> None:
+        self.cancelled_after_ids.append(callback_id)
 
 
 class FakeKeyEvent:
@@ -88,6 +97,89 @@ class FakeKeyEvent:
 
 
 class LauncherInteractionTests(unittest.TestCase):
+    def test_sequence_confirms_and_dispatches_resolved_actions_in_order(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = FakeRoot()
+        app.run_button = FakeButton()
+        app.action_discovery_panel = Mock()
+        app.status_var = FakeVariable()
+        app.sequence_run_plan = None
+        first = Action("first", "First", "General", "open_url", "https://example.com")
+        second = Action("second", "Second", "General", "open_folder", r"C:\work")
+        sequence = Action(
+            "sequence",
+            "Morning",
+            "General",
+            "sequence",
+            "sequence-v1",
+            sequence_steps=(
+                SequenceStep("action", action_id="first"),
+                SequenceStep("wait", milliseconds=200),
+                SequenceStep("action", action_id="second"),
+            ),
+        )
+        app.actions = [first, second, sequence]
+        app._open_action_target = Mock()
+
+        with patch("context_palette.launcher.messagebox.askyesno", return_value=True) as confirm:
+            message = app._run_action_sequence(sequence)
+        app.root.after_callbacks.pop(0)()
+        app.root.after_callbacks.pop(0)()
+        app.root.after_callbacks.pop(0)()
+        app.root.after_callbacks.pop(0)()
+
+        self.assertIn("starting", message)
+        self.assertIn("Wait 200 ms", confirm.call_args.args[1])
+        self.assertEqual(
+            [call.args[0].id for call in app._open_action_target.call_args_list],
+            ["first", "second"],
+        )
+        self.assertIsNone(app.sequence_run_plan)
+        self.assertIn("finished dispatching 2", app.status_var.value)
+        self.assertEqual(
+            app.action_discovery_panel.render_control_state.call_args_list,
+            [call(sequence_running=True), call(sequence_running=False)],
+        )
+
+    def test_sequence_stop_cancels_only_remaining_steps(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = FakeRoot()
+        app.run_button = FakeButton()
+        app.action_discovery_panel = Mock()
+        app.status_var = FakeVariable()
+        app.sequence_run_plan = None
+        first = Action("first", "First", "General", "open_url", "https://example.com")
+        second = Action("second", "Second", "General", "open_folder", r"C:\work")
+        sequence = Action(
+            "sequence",
+            "Morning",
+            "General",
+            "sequence",
+            "sequence-v1",
+            sequence_steps=(
+                SequenceStep("action", action_id="first"),
+                SequenceStep("wait", milliseconds=500),
+                SequenceStep("action", action_id="second"),
+            ),
+        )
+        app.actions = [first, second, sequence]
+        app._open_action_target = Mock()
+
+        with patch("context_palette.launcher.messagebox.askyesno", return_value=True):
+            app._run_action_sequence(sequence)
+        app.root.after_callbacks.pop(0)()
+        app.root.after_callbacks.pop(0)()
+        stopped = app._stop_action_sequence()
+
+        self.assertTrue(stopped)
+        self.assertEqual(app._open_action_target.call_args.args[0].id, "first")
+        self.assertIsNone(app.sequence_run_plan)
+        self.assertTrue(app.root.cancelled_after_ids)
+        self.assertIn("remaining steps were skipped", app.status_var.value)
+        self.assertEqual(
+            app.action_discovery_panel.render_control_state.call_args_list,
+            [call(sequence_running=True), call(sequence_running=False)],
+        )
     def test_incomplete_restore_recovery_hides_launcher_and_requests_exit(self):
         app = LauncherApp.__new__(LauncherApp)
         app.root = Mock()
@@ -206,7 +298,7 @@ class LauncherInteractionTests(unittest.TestCase):
                 app.work_item_file_copy = Mock(running=file_copy_running)
                 app.work_item_inbox = Mock(running=inbox_running)
                 app.status_var = FakeVariable()
-                app._clear_protected_clipboard = Mock()
+                app._finish_protected_clipboard = Mock()
 
                 with patch(
                     "context_palette.launcher.messagebox.showwarning"
@@ -215,7 +307,7 @@ class LauncherInteractionTests(unittest.TestCase):
 
                 self.assertIn(expected, warning.call_args.args[1])
                 self.assertIn("Quit blocked", app.status_var.value)
-                app._clear_protected_clipboard.assert_not_called()
+                app._finish_protected_clipboard.assert_not_called()
                 app.hotkey.stop.assert_not_called()
                 app.instance_server.stop.assert_not_called()
                 app.root.destroy.assert_not_called()
@@ -228,16 +320,37 @@ class LauncherInteractionTests(unittest.TestCase):
         app.work_item_file_copy = Mock(running=False)
         app.work_item_inbox = Mock(running=False)
         app.status_var = FakeVariable()
-        app._clear_protected_clipboard = Mock()
+        app._finish_protected_clipboard = Mock()
         app._cancel_pending_tk_callbacks = Mock()
 
         app.quit_app()
 
-        app._clear_protected_clipboard.assert_called_once_with()
+        app._finish_protected_clipboard.assert_called_once_with()
         app.hotkey.stop.assert_called_once_with()
         app.instance_server.stop.assert_called_once_with()
         app._cancel_pending_tk_callbacks.assert_called_once_with()
         app.root.destroy.assert_called_once_with()
+
+    def test_quit_is_blocked_while_protected_clipboard_cleanup_is_pending(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.hotkey = Mock()
+        app.instance_server = Mock()
+        app.work_item_file_copy = Mock(running=False)
+        app.work_item_inbox = Mock(running=False)
+        app.status_var = FakeVariable()
+        app.protected_clipboard_sequence = 42
+        app._finish_protected_clipboard = Mock(return_value=False)
+        app._cancel_pending_tk_callbacks = Mock()
+
+        with patch("context_palette.launcher.messagebox.showwarning") as warning:
+            app.quit_app()
+
+        self.assertIn("cannot quit", warning.call_args.args[1])
+        self.assertIn("Quit blocked", app.status_var.value)
+        app.hotkey.stop.assert_not_called()
+        app.instance_server.stop.assert_not_called()
+        app.root.destroy.assert_not_called()
 
     def test_cancel_pending_tk_callbacks_cancels_every_interpreter_callback(self):
         app = LauncherApp.__new__(LauncherApp)
@@ -266,7 +379,7 @@ class LauncherInteractionTests(unittest.TestCase):
         app.work_item_file_copy = Mock(running=False)
         app.work_item_inbox = Mock(running=False)
         app.status_var = FakeVariable()
-        app._clear_protected_clipboard = Mock()
+        app._finish_protected_clipboard = Mock()
         app._cancel_pending_tk_callbacks = Mock()
         app.configuration_window = Mock()
         app.configuration_window.window.winfo_exists.return_value = True
@@ -730,15 +843,9 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertEqual(quick_action_column_count(900), 2)
 
     def test_visible_result_rows_adapt_to_text_scaling(self):
-        self.assertEqual(visible_result_row_count(1.333), 10)
-        self.assertEqual(visible_result_row_count(1.667), 8)
-        self.assertEqual(visible_result_row_count(2.0), 7)
-
-    def test_compact_expert_rail_expands_only_for_text_scaling(self):
-        self.assertEqual(compact_rail_width(1.333, 200), 114)
-        self.assertEqual(compact_rail_width(1.667, 200), 131)
-        self.assertEqual(compact_rail_width(2.0, 200), 148)
-        self.assertEqual(compact_rail_width(2.0, 130), 130)
+        self.assertEqual(visible_result_row_count(1.333), 7)
+        self.assertEqual(visible_result_row_count(1.667), 6)
+        self.assertEqual(visible_result_row_count(2.0), 5)
 
     def test_slot_row_tags_distinguish_shortcut_groups_without_number_labels(self):
         for slot in range(1, 6):
@@ -885,10 +992,12 @@ class LauncherInteractionTests(unittest.TestCase):
         app = LauncherApp.__new__(LauncherApp)
         synchronizations: list[bool] = []
         app._sync_workspace_from_clipboard = lambda: synchronizations.append(True)
+        app._finish_protected_clipboard = Mock()
         app.protected_clipboard_sequence = 42
 
         app._sync_workspace_from_clipboard_if_safe()
         self.assertEqual(synchronizations, [])
+        app._finish_protected_clipboard.assert_called_once_with()
 
         app.protected_clipboard_sequence = None
         app._sync_workspace_from_clipboard_if_safe()
@@ -905,6 +1014,73 @@ class LauncherInteractionTests(unittest.TestCase):
             app._set_clipboard("ordinary text")
 
         self.assertEqual(app.protected_clipboard_sequence, 42)
+
+    def test_busy_clipboard_keeps_protected_transaction_tracked(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = FakeRoot()
+        app.protected_clipboard_sequence = 42
+        app.protected_clipboard_snapshot = ClipboardTextSnapshot("previous")
+
+        with patch(
+            "context_palette.launcher.restore_clipboard_text_if_unchanged",
+            return_value=None,
+        ):
+            restored = app._finish_protected_clipboard(42)
+
+        self.assertFalse(restored)
+        self.assertEqual(app.protected_clipboard_sequence, 42)
+        self.assertEqual(
+            app.protected_clipboard_snapshot,
+            ClipboardTextSnapshot("previous"),
+        )
+        self.assertEqual(len(app.root.after_callbacks), 1)
+
+        with patch(
+            "context_palette.launcher.restore_clipboard_text_if_unchanged",
+            return_value=True,
+        ) as restore:
+            app.root.after_callbacks.pop()()
+
+        restore.assert_called_once_with(42, ClipboardTextSnapshot("previous"))
+        self.assertIsNone(app.protected_clipboard_sequence)
+        self.assertIsNone(app.protected_clipboard_snapshot)
+
+    def test_newer_clipboard_content_ends_obsolete_protected_transaction(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.protected_clipboard_sequence = 42
+        app.protected_clipboard_snapshot = ClipboardTextSnapshot("previous")
+
+        with patch(
+            "context_palette.launcher.restore_clipboard_text_if_unchanged",
+            return_value=False,
+        ):
+            restored = app._finish_protected_clipboard(42)
+
+        self.assertFalse(restored)
+        self.assertIsNone(app.protected_clipboard_sequence)
+        self.assertIsNone(app.protected_clipboard_snapshot)
+
+    def test_exhausted_clipboard_retries_keep_tracking_and_warn(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = FakeRoot()
+        app.status_var = FakeVariable()
+        app.protected_clipboard_sequence = 42
+        app.protected_clipboard_snapshot = ClipboardTextSnapshot("previous")
+
+        with (
+            patch(
+                "context_palette.launcher.restore_clipboard_text_if_unchanged",
+                return_value=None,
+            ),
+            patch("context_palette.launcher.messagebox.showwarning") as warning,
+        ):
+            restored = app._finish_protected_clipboard(42, retry_count=5)
+
+        self.assertFalse(restored)
+        self.assertEqual(app.protected_clipboard_sequence, 42)
+        self.assertEqual(app.root.after_callbacks, [])
+        self.assertIn("needs attention", app.status_var.value)
+        self.assertIn("Copy harmless text", warning.call_args.args[1])
 
     def test_saved_text_pastes_into_fresh_hotkey_destination(self):
         app = LauncherApp.__new__(LauncherApp)
@@ -1051,6 +1227,7 @@ class LauncherInteractionTests(unittest.TestCase):
         app.root = FakeRoot()
         app.source_foreground_handle = 123
         app.protected_clipboard_sequence = None
+        app.protected_clipboard_snapshot = None
         action = Action(
             "credential",
             "Paste login",
@@ -1067,13 +1244,19 @@ class LauncherInteractionTests(unittest.TestCase):
                 "context_palette.launcher.read_windows_credential",
                 return_value=CredentialSecret("user", "do-not-show"),
             ),
-            patch("context_palette.launcher.set_protected_clipboard_text", return_value=42),
+            patch(
+                "context_palette.launcher.begin_protected_clipboard_transaction",
+                return_value=ProtectedClipboardTransaction(
+                    42,
+                    ClipboardTextSnapshot("previous clipboard text"),
+                ),
+            ),
             patch("context_palette.launcher.focus_window", return_value=True),
             patch("context_palette.launcher.send_paste_shortcut") as paste,
             patch(
-                "context_palette.launcher.clear_clipboard_if_unchanged",
+                "context_palette.launcher.restore_clipboard_text_if_unchanged",
                 return_value=True,
-            ) as clear,
+            ) as restore,
         ):
             with self.assertLogs("context_palette.launcher", level="INFO") as logs:
                 result = app._paste_credential_action(action)
@@ -1088,7 +1271,10 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertEqual(app.root.withdraw_calls, 1)
         self.assertIsNone(app.source_foreground_handle)
         paste.assert_called_once()
-        clear.assert_called_once_with(42)
+        restore.assert_called_once_with(
+            42,
+            ClipboardTextSnapshot("previous clipboard text"),
+        )
         self.assertIsNone(app.protected_clipboard_sequence)
         self.assertIn("approved", result)
         logged = "\n".join(logs.output)
@@ -1116,6 +1302,7 @@ class LauncherInteractionTests(unittest.TestCase):
         app.root = FakeRoot()
         app.source_foreground_handle = 123
         app.protected_clipboard_sequence = None
+        app.protected_clipboard_snapshot = None
         app.status_var = FakeVariable()
         app.show_window = Mock()
         action = Action(
@@ -1134,16 +1321,22 @@ class LauncherInteractionTests(unittest.TestCase):
                 "context_palette.launcher.read_windows_credential",
                 return_value=CredentialSecret("user", "do-not-show"),
             ),
-            patch("context_palette.launcher.set_protected_clipboard_text", return_value=42),
+            patch(
+                "context_palette.launcher.begin_protected_clipboard_transaction",
+                return_value=ProtectedClipboardTransaction(
+                    42,
+                    ClipboardTextSnapshot("previous clipboard text"),
+                ),
+            ),
             patch("context_palette.launcher.focus_window", return_value=True),
             patch(
                 "context_palette.launcher.send_paste_shortcut",
                 side_effect=RuntimeError("Windows input failed"),
             ),
             patch(
-                "context_palette.launcher.clear_clipboard_if_unchanged",
+                "context_palette.launcher.restore_clipboard_text_if_unchanged",
                 return_value=True,
-            ) as clear,
+            ) as restore,
             patch("context_palette.launcher.messagebox.showerror") as error,
         ):
             app._paste_credential_action(action)
@@ -1153,10 +1346,13 @@ class LauncherInteractionTests(unittest.TestCase):
             paste_callback()
             cleanup_callback()
 
-        clear.assert_called_once_with(42)
+        restore.assert_called_once_with(
+            42,
+            ClipboardTextSnapshot("previous clipboard text"),
+        )
         self.assertIsNone(app.protected_clipboard_sequence)
         app.show_window.assert_called_once()
-        self.assertIn("was cleared", error.call_args.args[1])
+        self.assertIn("restored the previous clipboard text", error.call_args.args[1])
         self.assertNotIn("do-not-show", error.call_args.args[1])
         self.assertEqual(
             app.status_var.value,

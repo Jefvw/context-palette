@@ -8,6 +8,7 @@ from .action_types import ACTION_TYPES
 from .searchable_selection import SearchableSelectionPopup
 from .style import COLORS
 from .tooltips import ListboxItemTooltip, TreeviewItemTooltip
+from .ui_icons import load_ui_icons
 
 
 TooltipText = str | Callable[[], str]
@@ -34,17 +35,8 @@ def visible_result_row_count(tk_scaling: float) -> int:
     """Keep discovery and Quick actions usable as Windows text scales up."""
 
     if tk_scaling <= 0:
-        return 10
-    return max(7, min(10, round(13.333 / tk_scaling)))
-
-
-def compact_rail_width(tk_scaling: float, requested_width: int) -> int:
-    """Bound the expert rail tightly while allowing scaled text enough room."""
-
-    scale = max(1.333, tk_scaling)
-    scaling_cap = round(114 + (scale - 1.333) * 51)
-    scaling_cap = max(114, min(148, scaling_cap))
-    return max(114, min(scaling_cap, requested_width))
+        return 7
+    return max(5, min(7, round(9.333 / tk_scaling)))
 
 
 class ActionDiscoveryPanel:
@@ -92,50 +84,61 @@ class ActionDiscoveryPanel:
         configure_focus_action: Callable[[tk.Event], object],
     ) -> None:
         self.frame = ttk.Frame(parent)
-        self.frame.pack(fill=tk.X)
+        self.frame.pack(fill=tk.BOTH, expand=True)
+        self.discovery_scope = DISCOVERY_ALL
+        self._selected_work_item: bool | None = None
+        self._has_selection = False
+        self._sequence_running = False
+        self.ui_icons = load_ui_icons(
+            self.frame,
+            (
+                "focus",
+                "filters",
+                "edit",
+                "pin",
+                "folder",
+                "configure",
+                "help",
+                "more",
+            ),
+            foreground=COLORS["text"],
+        )
 
-        header = ttk.Frame(self.frame)
-        header.pack(fill=tk.X, pady=(0, 5))
-        ttk.Label(
-            header,
-            textvariable=heading_var,
-            style="PaneHeader.TLabel",
-        ).pack(side=tk.LEFT)
-        ttk.Label(
-            header,
-            textvariable=count_var,
-            style="Muted.TLabel",
-        ).pack(side=tk.RIGHT)
+        navigation = ttk.Frame(self.frame)
+        navigation.pack(fill=tk.X, pady=(0, 5))
+        focus_row = ttk.Frame(navigation)
+        focus_row.pack(fill=tk.X, pady=(0, 3))
+        focus_row.columnconfigure(0, weight=1)
+        scope_row = ttk.Frame(navigation)
+        scope_row.pack(fill=tk.X)
+        for column in range(3):
+            scope_row.columnconfigure(column, weight=1, uniform="scope")
 
         body = ttk.Frame(self.frame)
-        body.pack(fill=tk.X)
-        self.tool_rail = ttk.Frame(body)
-        self.tool_rail.pack(side=tk.RIGHT, fill=tk.Y, padx=(6, 0))
-        self.tool_rail.columnconfigure(0, weight=1, uniform="rail")
-        self.tool_rail.columnconfigure(1, weight=1, uniform="rail")
-
+        body.pack(fill=tk.BOTH, expand=True)
         discovery_column = ttk.Frame(body)
-        discovery_column.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        discovery_column.pack(fill=tk.BOTH, expand=True)
+        # Compatibility name retained for integrations. This is now a
+        # horizontal item toolbar below results instead of a narrow side rail.
+        self.tool_rail = ttk.Frame(discovery_column)
         search_row = ttk.Frame(discovery_column)
         search_row.pack(fill=tk.X, pady=(0, 5))
+        search_header = ttk.Frame(search_row)
+        search_header.pack(fill=tk.X)
         self.find_label = ttk.Label(
-            search_row,
+            search_header,
             text="Find action",
             style="Heading.TLabel",
             takefocus=False,
         )
-        self.find_label.pack(anchor=tk.W)
-        tooltip_adder(
-            self.find_label,
-            lambda: self.find_help_text,
-        )
         self.find_help_text = "Type any tag, context, action name, type, or content."
         self.search_entry = ttk.Entry(
-            search_row,
+            search_header,
             textvariable=search_var,
             font=("Segoe UI", 11),
         )
-        self.search_entry.pack(fill=tk.X, pady=(3, 0))
+        self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
+        tooltip_adder(self.search_entry, lambda: self.find_help_text)
         self.search_entry.focus_set()
         self.search_entry.bind("<KeyPress>", keypress_handler)
         self.search_entry.bind(
@@ -145,17 +148,15 @@ class ActionDiscoveryPanel:
         self.search_entry.bind("<Return>", lambda _event: execute_selected())
 
         self.context_picker = ttk.Menubutton(
-            self.tool_rail,
+            focus_row,
             textvariable=focus_launcher_var,
-            width=15,
             style="Compact.TButton",
         )
         self.context_picker.grid(
             row=0,
             column=0,
-            columnspan=2,
             sticky=tk.EW,
-            pady=(0, 2),
+            padx=(0, 3),
         )
         self.focus_menu = tk.Menu(self.context_picker, tearoff=False)
         self.context_picker.configure(menu=self.focus_menu)
@@ -165,17 +166,16 @@ class ActionDiscoveryPanel:
         )
 
         self.focus_items_button = ttk.Button(
-            self.tool_rail,
-            text="Focus items",
+            focus_row,
+            image=self.ui_icons["focus"],
             command=toggle_focus_items,
-            style="Compact.TButton",
+            style="Icon.TButton",
+            takefocus=True,
         )
         self.focus_items_button.grid(
-            row=1,
-            column=0,
-            columnspan=2,
+            row=0,
+            column=1,
             sticky=tk.EW,
-            pady=(0, 2),
         )
         tooltip_adder(
             self.focus_items_button,
@@ -185,22 +185,21 @@ class ActionDiscoveryPanel:
         self.scope_buttons: dict[str, ttk.Button] = {}
         for column, (scope, label) in enumerate(
             (
-                (DISCOVERY_ALL, "All"),
+                (DISCOVERY_ALL, "All items"),
                 (DISCOVERY_ACTIONS, "Actions"),
             )
         ):
             button = ttk.Button(
-                self.tool_rail,
+                scope_row,
                 text=label,
                 command=lambda selected=scope: select_scope(selected),
                 style="RailAccent.TButton" if scope == DISCOVERY_ALL else "Compact.TButton",
             )
             button.grid(
-                row=2,
+                row=0,
                 column=column,
                 sticky=tk.EW,
-                padx=(0, 2) if column == 0 else (2, 0),
-                pady=(0, 2),
+                padx=(0, 2),
             )
             self.scope_buttons[scope] = button
             tooltip_adder(
@@ -213,17 +212,16 @@ class ActionDiscoveryPanel:
                 ),
             )
         self.work_items_button = ttk.Button(
-            self.tool_rail,
+            scope_row,
             text="Work Items",
             command=lambda: select_scope(DISCOVERY_WORK_ITEMS),
             style="Compact.TButton",
         )
         self.work_items_button.grid(
-            row=3,
-            column=0,
-            columnspan=2,
+            row=0,
+            column=2,
             sticky=tk.EW,
-            pady=(0, 2),
+            padx=(0, 2),
         )
         self.scope_buttons[DISCOVERY_WORK_ITEMS] = self.work_items_button
         tooltip_adder(
@@ -233,13 +231,38 @@ class ActionDiscoveryPanel:
         self.all_items_button = self.scope_buttons[DISCOVERY_ALL]
         self.actions_button = self.scope_buttons[DISCOVERY_ACTIONS]
 
+        self.scope_options_menu = tk.Menu(search_header, tearoff=False)
+        self.scope_options_button = ttk.Menubutton(
+            search_header,
+            image=self.ui_icons["filters"],
+            menu=self.scope_options_menu,
+            style="Icon.TButton",
+            takefocus=True,
+        )
+        self.scope_options_button.pack(side=tk.RIGHT)
+        tooltip_adder(
+            self.scope_options_button,
+            lambda: self.scope_options_help_text,
+        )
+        self.scope_options_help_text = "Filters and tools for the current item view."
+
+        self.filter_chip = ttk.Button(
+            search_row,
+            text="",
+            command=self._clear_active_filters,
+            style="Compact.TButton",
+        )
+        tooltip_adder(
+            self.filter_chip,
+            "Active filters. Activate to clear the Context, tag, type, or project filters.",
+        )
+
         self.passwords_button = ttk.Button(
             self.tool_rail,
             text=ACTION_TYPES["paste_credential"].icon,
             command=toggle_password_actions,
             style="RailIcon.TButton",
         )
-        self.passwords_button.grid(row=4, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
         tooltip_adder(
             self.passwords_button,
             "Passwords — Show only protected Windows Credential Manager actions. Activate again to show all actions.",
@@ -251,7 +274,6 @@ class ActionDiscoveryPanel:
             command=create_work_item,
             style="RailIcon.TButton",
         )
-        self.new_work_item_button.grid(row=4, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
         tooltip_adder(
             self.new_work_item_button,
             "New Work Item — Create a folder and exact-name Excel workbook from the configured generic template.",
@@ -263,7 +285,6 @@ class ActionDiscoveryPanel:
             command=send_work_item_inbox,
             style="RailIcon.TButton",
         )
-        self.send_work_item_inbox_button.grid(row=4, column=1, sticky=tk.EW, padx=(2, 0), pady=(0, 2))
         tooltip_adder(
             self.send_work_item_inbox_button,
             "Send to Inbox — Append Input / Output to columns A–D of the selected Work Item workbook's Inbox sheet.",
@@ -275,7 +296,6 @@ class ActionDiscoveryPanel:
             command=copy_file_to_work_item,
             style="RailIcon.TButton",
         )
-        self.copy_file_to_work_item_button.grid(row=5, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
         tooltip_adder(
             self.copy_file_to_work_item_button,
             "Copy file — Copy the one exact file path in Input / Output into the selected Work Item folder without overwriting.",
@@ -286,7 +306,6 @@ class ActionDiscoveryPanel:
             text="Types ▾",
             style="Compact.TButton",
         )
-        self.type_filter.grid(row=4, column=1, sticky=tk.EW, padx=(2, 0), pady=(0, 2))
         self.action_type_filter_var = action_type_filter_var
         self.project_filter_var = project_filter_var
         self.select_action_type_filter = select_action_type_filter
@@ -306,7 +325,7 @@ class ActionDiscoveryPanel:
             text="C",
             style="RailIcon.TButton",
         )
-        self.context_filter.grid(row=6, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
+        self.context_filter.grid(row=0, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
         self.set_contexts(())
         tooltip_adder(
             self.context_filter,
@@ -318,7 +337,7 @@ class ActionDiscoveryPanel:
             style="RailIcon.TButton",
             command=self._show_tag_picker,
         )
-        self.tag_filter.grid(row=6, column=1, sticky=tk.EW, padx=(2, 0), pady=(0, 2))
+        self.tag_filter.grid(row=0, column=1, sticky=tk.EW, padx=(2, 0), pady=(0, 2))
         self.tag_filter.bind("<Alt-Down>", self._show_tag_picker)
         self.tag_filter.bind("<F4>", self._show_tag_picker)
         self.tag_filter_help_text = (
@@ -333,18 +352,18 @@ class ActionDiscoveryPanel:
             command=create_action,
             style="RailIconAccent.TButton",
         )
-        self.new_action_button.grid(row=7, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
+        self.new_action_button.grid(row=1, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
         tooltip_adder(
             self.new_action_button,
             "+ Action — Choose an Action type, then complete the validated Action form.",
         )
         self.pin_button = ttk.Button(
             self.tool_rail,
-            text="⌖",
+            image=self.ui_icons["pin"],
             command=toggle_pin,
-            style="RailIcon.TButton",
+            style="Icon.TButton",
         )
-        self.pin_button.grid(row=7, column=1, sticky=tk.EW, padx=(2, 0), pady=(0, 2))
+        self.pin_button.grid(row=1, column=1, sticky=tk.EW, padx=(2, 0), pady=(0, 2))
         tooltip_adder(
             self.pin_button,
             "Pin — Pin or unpin the selected Action in stable slots 1–5.",
@@ -356,7 +375,7 @@ class ActionDiscoveryPanel:
             command=capture,
             style="RailIcon.TButton",
         )
-        self.capture_button.grid(row=8, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
+        self.capture_button.grid(row=2, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
         tooltip_adder(
             self.capture_button,
             "Capture — Save current clipboard text to Inbox after asking for a title.",
@@ -367,7 +386,7 @@ class ActionDiscoveryPanel:
             command=show_inbox,
             style="RailIcon.TButton",
         )
-        self.inbox_button.grid(row=8, column=1, sticky=tk.EW, padx=(2, 0), pady=(0, 2))
+        self.inbox_button.grid(row=2, column=1, sticky=tk.EW, padx=(2, 0), pady=(0, 2))
         tooltip_adder(
             self.inbox_button,
             "Inbox — Review captures and convert them into permanent Actions.",
@@ -375,22 +394,22 @@ class ActionDiscoveryPanel:
 
         self.edit_button = ttk.Button(
             self.tool_rail,
-            text="✎",
+            image=self.ui_icons["edit"],
             command=edit_item,
-            style="RailIcon.TButton",
+            style="Icon.TButton",
         )
-        self.edit_button.grid(row=9, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
+        self.edit_button.grid(row=3, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
         tooltip_adder(
             self.edit_button,
             "Edit item — Configure the selected Action or Work Item.",
         )
         self.configure_button = ttk.Button(
             self.tool_rail,
-            text="⚙",
+            image=self.ui_icons["configure"],
             command=configure,
-            style="RailIcon.TButton",
+            style="Icon.TButton",
         )
-        self.configure_button.grid(row=9, column=1, sticky=tk.EW, padx=(2, 0), pady=(0, 2))
+        self.configure_button.grid(row=3, column=1, sticky=tk.EW, padx=(2, 0), pady=(0, 2))
         tooltip_adder(
             self.configure_button,
             "Configure — Manage Actions, Focuses, Quick actions, Work Items, and diagnostics.",
@@ -398,11 +417,11 @@ class ActionDiscoveryPanel:
 
         self.help_button = ttk.Button(
             self.tool_rail,
-            text="?",
+            image=self.ui_icons["help"],
             command=show_help,
-            style="RailIcon.TButton",
+            style="Icon.TButton",
         )
-        self.help_button.grid(row=10, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
+        self.help_button.grid(row=4, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
         tooltip_adder(self.help_button, lambda: self.mode_help_text)
         self.mode_help_text = (
             "Search globally across tags, contexts, Action names, types, and content."
@@ -414,11 +433,11 @@ class ActionDiscoveryPanel:
         self.more_menu.add_command(label="Quit", command=quit_app)
         self.more_button = ttk.Menubutton(
             self.tool_rail,
-            text="⋯",
+            image=self.ui_icons["more"],
             menu=self.more_menu,
-            style="RailIcon.TButton",
+            style="Icon.TButton",
         )
-        self.more_button.grid(row=10, column=1, sticky=tk.EW, padx=(2, 0), pady=(0, 2))
+        self.more_button.grid(row=4, column=1, sticky=tk.EW, padx=(2, 0), pady=(0, 2))
         tooltip_adder(
             self.more_button,
             "More — Open keyboard shortcuts, hide Context Palette, or quit.",
@@ -426,7 +445,7 @@ class ActionDiscoveryPanel:
 
         self.primary_action_frame = ttk.Frame(self.tool_rail)
         self.primary_action_frame.grid(
-            row=11,
+            row=5,
             column=0,
             columnspan=2,
             sticky=tk.EW,
@@ -446,7 +465,7 @@ class ActionDiscoveryPanel:
         )
         self.work_item_folder_button = ttk.Button(
             self.primary_action_frame,
-            text="📁",
+            image=self.ui_icons["folder"],
             width=3,
             command=lambda: execute_selected(open_folder=True),
             style="Compact.TButton",
@@ -460,7 +479,7 @@ class ActionDiscoveryPanel:
             "Execute the highlighted action. Its input and effect appear in Action info below."
         )
         self.list_frame = ttk.Frame(discovery_column)
-        self.list_frame.pack(fill=tk.X)
+        self.list_frame.pack(fill=tk.BOTH, expand=True)
         self.scrollbar = ttk.Scrollbar(self.list_frame, orient=tk.VERTICAL)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         visible_rows = visible_result_row_count(
@@ -526,17 +545,16 @@ class ActionDiscoveryPanel:
             self.focus_tree,
             focus_tree_tooltip_text,
         )
-        # Bound only the rail width. Its height is measured from the complete
-        # scope-specific command set so Windows text scaling cannot clip the
-        # bottom commands.
-        self.tool_rail.update_idletasks()
-        rail_width = compact_rail_width(
-            float(self.frame.tk.call("tk", "scaling")),
-            self.tool_rail.winfo_reqwidth(),
-        )
-        rail_height = self.tool_rail.winfo_reqheight()
-        self.tool_rail.grid_propagate(False)
-        self.tool_rail.configure(width=rail_width, height=rail_height)
+        # The result toolbar is deliberately stable across scopes. Scope-only
+        # commands stay in the Filters menu rather than reshaping the screen.
+        for child in self.tool_rail.winfo_children():
+            child.grid_forget()
+        self.tool_rail.pack(fill=tk.X, pady=(5, 0))
+        self.tool_rail.columnconfigure(3, weight=1)
+        self.new_action_button.grid(row=0, column=0, padx=(0, 4))
+        self.edit_button.grid(row=0, column=1, padx=(0, 4))
+        self.pin_button.grid(row=0, column=2, padx=(0, 6))
+        self.primary_action_frame.grid(row=0, column=3, sticky=tk.EW)
 
     def set_filter_indicators(
         self,
@@ -546,12 +564,18 @@ class ActionDiscoveryPanel:
         context_value: str | None,
         tag_value: str | None,
     ) -> None:
-        """Keep compact filter controls explicit about hidden active state."""
+        """Keep the single filter control explicit about hidden active state."""
         work_items = scope == DISCOVERY_WORK_ITEMS
         primary_label = "Proj" if work_items else "Types"
         self.type_filter.configure(
             text=f"{primary_label} ✓" if primary_value else f"{primary_label} ▾",
             style="RailAccent.TButton" if primary_value else "Compact.TButton",
+        )
+        active_values = tuple(
+            value for value in (primary_value, context_value, tag_value) if value
+        )
+        self.scope_options_button.configure(
+            style="RailIconAccent.TButton" if active_values else "Icon.TButton"
         )
         self.context_filter.configure(
             text="C✓" if context_value else "C",
@@ -583,6 +607,31 @@ class ActionDiscoveryPanel:
             self.tag_filter_help_text = (
                 "Tags — Narrow Actions and Work Items by a reusable tag."
             )
+        if active_values:
+            parts: list[str] = []
+            if context_value:
+                parts.append(f"Context: {context_value}")
+            if tag_value:
+                parts.append(f"Tag: {tag_value}")
+            if primary_value:
+                parts.append(f"{primary_label}: {primary_value}")
+            self.filter_chip.configure(text=" | ".join(parts) + " (clear)")
+            if not self.filter_chip.winfo_manager():
+                self.filter_chip.pack(fill=tk.X, pady=(4, 0))
+        elif self.filter_chip.winfo_manager():
+            self.filter_chip.pack_forget()
+
+    def _clear_active_filters(self) -> None:
+        """Clear only active filters through the launcher-owned callbacks."""
+
+        if self.context_filter_var.get() != "All contexts":
+            self.select_context_filter(None)
+        if self.tag_filter_var.get() not in {"All tags", "All work tags"}:
+            self.select_tag_filter(None)
+        if self.action_type_filter_var.get() != "All types":
+            self.select_action_type_filter(None)
+        if self.project_filter_var.get() != "All project codes":
+            self.select_project_filter(None)
 
     def set_discovery_scope(
         self,
@@ -603,12 +652,6 @@ class ActionDiscoveryPanel:
                 )
             )
         if scope == DISCOVERY_WORK_ITEMS:
-            self.passwords_button.grid_remove()
-            self.new_work_item_button.grid()
-            self.send_work_item_inbox_button.grid()
-            self.copy_file_to_work_item_button.grid()
-            self.type_filter.grid_configure(row=5, column=1)
-            self.type_filter.grid()
             self.pin_button.configure(state=tk.DISABLED)
             self.find_label.configure(text="Find Work Item")
             self.type_filter.configure(text="Projects ▾")
@@ -627,13 +670,8 @@ class ActionDiscoveryPanel:
                 "Choose All items to browse them beside Actions."
             )
             self._set_project_menu(project_codes)
+            self._set_scope_options_menu(scope)
         elif scope == DISCOVERY_ACTIONS:
-            self.copy_file_to_work_item_button.grid_remove()
-            self.send_work_item_inbox_button.grid_remove()
-            self.new_work_item_button.grid_remove()
-            self.passwords_button.grid()
-            self.type_filter.grid_configure(row=4, column=1)
-            self.type_filter.grid()
             self.pin_button.configure(state=tk.NORMAL)
             self.find_label.configure(text="Find action")
             self.type_filter.configure(text="Types ▾")
@@ -649,12 +687,8 @@ class ActionDiscoveryPanel:
                 "Search globally across tags, contexts, action names, types, and content."
             )
             self._set_action_type_menu()
+            self._set_scope_options_menu(scope)
         else:
-            self.copy_file_to_work_item_button.grid_remove()
-            self.send_work_item_inbox_button.grid_remove()
-            self.new_work_item_button.grid_remove()
-            self.passwords_button.grid_remove()
-            self.type_filter.grid_remove()
             self.pin_button.configure(state=tk.NORMAL)
             self.find_label.configure(text="Find item")
             self.run_button.configure(text="Open / Run")
@@ -672,48 +706,72 @@ class ActionDiscoveryPanel:
                 "selected Focus before other matches. Use Actions or Work Items "
                 "for type-specific filters."
             )
-        self._fit_rail_height()
+            self._set_scope_options_menu(scope)
         self.set_tags(tags)
-
-    def _fit_rail_height(self) -> None:
-        """Reserve height for the active scope without leaving hidden-row gaps."""
-
-        self.tool_rail.update_idletasks()
-        visible_bottom = max(
-            (
-                child.winfo_y() + max(child.winfo_height(), child.winfo_reqheight())
-                for child in self.tool_rail.winfo_children()
-                if child.winfo_manager()
-            ),
-            default=1,
-        )
-        self.tool_rail.configure(height=visible_bottom)
+        self.render_control_state()
 
     def set_selected_item_kind(self, *, work_item: bool | None) -> None:
         """Make mixed-view commands describe the selected Palette item."""
 
-        if getattr(self, "discovery_scope", DISCOVERY_ALL) != DISCOVERY_ALL:
-            return
-        self.run_button.configure(
-            text=(
-                "Open"
-                if work_item is True
-                else "Run"
-                if work_item is False
-                else "Open / Run"
+        self._selected_work_item = work_item
+        self._has_selection = work_item is not None
+        self.render_control_state()
+
+    def render_control_state(
+        self,
+        *,
+        work_item: bool | None = None,
+        has_selection: bool | None = None,
+        sequence_running: bool | None = None,
+    ) -> None:
+        """Render one coherent command state for scope, selection, and sequence."""
+
+        if work_item is not None or has_selection is False:
+            self._selected_work_item = work_item
+        if has_selection is not None:
+            self._has_selection = has_selection
+        if sequence_running is not None:
+            self._sequence_running = sequence_running
+        selected_work_item = self._selected_work_item is True
+        can_select = self._has_selection
+        self.edit_button.configure(state=tk.NORMAL if can_select else tk.DISABLED)
+        self.pin_button.configure(
+            state=(
+                tk.NORMAL
+                if can_select and not selected_work_item
+                else tk.DISABLED
             )
         )
+        self.run_button.configure(
+            state=tk.NORMAL if can_select or self._sequence_running else tk.DISABLED,
+            text=(
+                "Stop remaining"
+                if self._sequence_running
+                else "Open"
+                if selected_work_item
+                else "Run"
+                if can_select
+                else "Run"
+                if self.discovery_scope == DISCOVERY_ACTIONS
+                else "Open"
+                if self.discovery_scope == DISCOVERY_WORK_ITEMS
+                else "Open / Run"
+            ),
+            style="RailAccent.TButton",
+        )
         self.primary_help_text = (
-            "Open the selected Work Item's workbook, or its folder when none exists."
-            if work_item is True
+            "Stop the sequence before its next step starts."
+            if self._sequence_running
+            else "Open the selected Work Item's workbook, or its folder when none exists."
+            if selected_work_item
             else "Run the selected Action."
-            if work_item is False
-            else "Run the selected Action or open the selected Work Item."
+            if can_select
+            else "Select an Action or Work Item to preview and run or open it."
         )
         self.work_item_folder_button.pack_forget()
         self.run_button.pack_forget()
-        if work_item is True:
-            self.work_item_folder_button.pack(side=tk.RIGHT)
+        if selected_work_item and can_select and not self._sequence_running:
+            self.work_item_folder_button.pack(side=tk.RIGHT, padx=(0, 4))
         self.run_button.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     def set_work_item_mode(
@@ -745,6 +803,7 @@ class ActionDiscoveryPanel:
         specific = tuple(
             context for context in contexts if context.casefold() != "general"
         )
+        self._context_options = specific
         if specific:
             menu.add_separator()
         for context in specific:
@@ -756,6 +815,8 @@ class ActionDiscoveryPanel:
             )
         self.context_filter.configure(menu=menu)
         self.context_menu = menu
+        if hasattr(self, "discovery_scope"):
+            self._set_scope_options_menu(self.discovery_scope)
 
     def _set_action_type_menu(self) -> None:
         previous_menu = getattr(self, "type_menu", None)
@@ -802,6 +863,51 @@ class ActionDiscoveryPanel:
         self.type_filter.configure(menu=menu)
         self.type_menu = menu
 
+    def _set_scope_options_menu(self, scope: str) -> None:
+        """Compose filters and scope tools behind one stable icon button."""
+
+        previous_menu = getattr(self, "scope_options_menu", None)
+        if previous_menu is not None:
+            previous_menu.destroy()
+        menu = tk.Menu(self.scope_options_button, tearoff=False)
+        if scope == DISCOVERY_ACTIONS:
+            menu.add_cascade(label="Filter by type", menu=self.type_menu)
+            help_text = "Filter Actions by type, Context, or tag."
+        elif scope == DISCOVERY_WORK_ITEMS:
+            menu.add_command(
+                label="New Work Item…",
+                command=self.new_work_item_button.invoke,
+            )
+            menu.add_separator()
+            menu.add_command(
+                label="Send Input / Output to Inbox",
+                command=self.send_work_item_inbox_button.invoke,
+            )
+            menu.add_command(
+                label="Copy file into Work Item",
+                command=self.copy_file_to_work_item_button.invoke,
+            )
+            menu.add_separator()
+            menu.add_cascade(label="Filter by project", menu=self.type_menu)
+            help_text = (
+                "Create or update a Work Item, or filter by project, Context, or tag."
+            )
+        else:
+            help_text = "Filter All items by Context or tag."
+        if menu.index(tk.END) is not None:
+            menu.add_separator()
+        menu.add_command(
+            label="Filter by context…",
+            command=self._show_context_picker,
+        )
+        menu.add_command(label="Filter by tag…", command=self._show_tag_picker)
+        self.scope_options_menu = menu
+        self.scope_options_help_text = help_text
+        self.scope_options_button.configure(
+            menu=menu,
+            state=tk.NORMAL,
+        )
+
     def set_tags(
         self,
         tags: tuple[str, ...],
@@ -827,7 +933,7 @@ class ActionDiscoveryPanel:
             existing_popup.search_entry.focus_set()
             return "break"
         self.tag_picker_popup = SearchableSelectionPopup(
-            self.tag_filter,
+            self.scope_options_button,
             self._tag_options,
             selected=(self._tag_selected_variable.get(),),
             multiple=False,
@@ -836,6 +942,28 @@ class ActionDiscoveryPanel:
             empty_label=self._tag_empty_label,
         )
         return "break" if _event is not None else None
+
+    def _show_context_picker(self) -> None:
+        existing_popup = getattr(self, "context_picker_popup", None)
+        if existing_popup is not None and existing_popup.window.winfo_exists():
+            existing_popup.window.lift()
+            existing_popup.search_entry.focus_set()
+            return
+        self.context_picker_popup = SearchableSelectionPopup(
+            self.scope_options_button,
+            self._context_options,
+            selected=(self.context_filter_var.get(),),
+            multiple=False,
+            on_select=self._select_context_from_picker,
+            title="Filter contexts",
+            empty_label="All contexts",
+            search_label="Find context",
+            item_name="context",
+        )
+
+    def _select_context_from_picker(self, selected: tuple[str, ...]) -> None:
+        value = selected[0] if selected else "All contexts"
+        self.select_context_filter(None if value == "All contexts" else value)
 
     def _select_tag_from_picker(self, selected: tuple[str, ...]) -> None:
         value = selected[0] if selected else self._tag_empty_label

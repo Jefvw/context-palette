@@ -13,6 +13,7 @@ CF_UNICODETEXT = 13
 GMEM_MOVEABLE = 0x0002
 CLIPBOARD_RETRY_COUNT = 5
 CLIPBOARD_RETRY_DELAY_SECONDS = 0.02
+MAX_CLIPBOARD_SNAPSHOT_BYTES = 4 * 1024 * 1024
 
 
 class CredentialAccessError(Exception):
@@ -44,6 +45,19 @@ class CredentialW(ctypes.Structure):
 class CredentialSecret:
     username: str
     password: str = field(repr=False)
+
+
+@dataclass(frozen=True)
+class ClipboardTextSnapshot:
+    """Plain-text clipboard value retained without exposing it in representations."""
+
+    text: str | None = field(default=None, repr=False)
+
+
+@dataclass(frozen=True)
+class ProtectedClipboardTransaction:
+    sequence_number: int
+    snapshot: ClipboardTextSnapshot = field(repr=False)
 
 
 def decode_credential_blob(blob: bytes) -> str:
@@ -136,8 +150,43 @@ def _set_clipboard_data(format_id: int, data: bytes, user32: object, kernel32: o
         raise CredentialAccessError("Windows could not protect the credential clipboard item.")
 
 
-def set_protected_clipboard_text(value: str) -> int:
-    """Replace the clipboard and exclude the secret from history and cloud sync."""
+def _clipboard_text_snapshot(user32: object, kernel32: object) -> ClipboardTextSnapshot:
+    if not user32.IsClipboardFormatAvailable(CF_UNICODETEXT):
+        if user32.CountClipboardFormats():
+            raise CredentialAccessError(
+                "The clipboard contains non-text content that Context Palette cannot "
+                "restore yet. Copy plain text or clear the clipboard, then try again."
+            )
+        return ClipboardTextSnapshot()
+
+    handle = user32.GetClipboardData(CF_UNICODETEXT)
+    if not handle:
+        raise CredentialAccessError("Windows could not read the current clipboard text.")
+    size = int(kernel32.GlobalSize(handle))
+    if size <= 0 or size > MAX_CLIPBOARD_SNAPSHOT_BYTES:
+        raise CredentialAccessError(
+            "The current clipboard text is too large to preserve safely. "
+            "Copy shorter text or clear the clipboard, then try again."
+        )
+    pointer = kernel32.GlobalLock(handle)
+    if not pointer:
+        raise CredentialAccessError("Windows could not read the current clipboard text.")
+    try:
+        raw = ctypes.string_at(pointer, size)
+    finally:
+        kernel32.GlobalUnlock(handle)
+    try:
+        text = raw.decode("utf-16-le").split("\0", 1)[0]
+    except UnicodeDecodeError as exc:
+        raise CredentialAccessError(
+            "Windows returned invalid plain-text clipboard data."
+        ) from exc
+    return ClipboardTextSnapshot(text)
+
+
+def begin_protected_clipboard_transaction(value: str) -> ProtectedClipboardTransaction:
+    """Atomically snapshot plain text, write a protected secret, and return state."""
+
     user32 = ctypes.WinDLL("User32.dll", use_last_error=True)
     kernel32 = ctypes.WinDLL("Kernel32.dll", use_last_error=True)
     kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
@@ -148,6 +197,13 @@ def set_protected_clipboard_text(value: str) -> int:
     kernel32.GlobalUnlock.restype = wintypes.BOOL
     kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
     kernel32.GlobalFree.restype = wintypes.HGLOBAL
+    kernel32.GlobalSize.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalSize.restype = ctypes.c_size_t
+    user32.GetClipboardData.argtypes = [wintypes.UINT]
+    user32.GetClipboardData.restype = wintypes.HANDLE
+    user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
+    user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
+    user32.CountClipboardFormats.restype = wintypes.INT
     user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
     user32.SetClipboardData.restype = wintypes.HANDLE
     user32.RegisterClipboardFormatW.argtypes = [wintypes.LPCWSTR]
@@ -156,6 +212,7 @@ def set_protected_clipboard_text(value: str) -> int:
     _open_clipboard(user32)
     sequence_number = 0
     try:
+        snapshot = _clipboard_text_snapshot(user32, kernel32)
         if not user32.EmptyClipboard():
             raise CredentialAccessError("Windows could not clear the clipboard.")
         _set_clipboard_data(
@@ -181,10 +238,21 @@ def set_protected_clipboard_text(value: str) -> int:
         raise
     finally:
         user32.CloseClipboard()
-    return sequence_number
+    return ProtectedClipboardTransaction(sequence_number, snapshot)
 
 
-def clear_clipboard_if_unchanged(sequence_number: int) -> bool:
+def set_protected_clipboard_text(value: str) -> int:
+    """Compatibility helper returning only the protected clipboard sequence."""
+
+    return begin_protected_clipboard_transaction(value).sequence_number
+
+
+def restore_clipboard_text_if_unchanged(
+    sequence_number: int,
+    snapshot: ClipboardTextSnapshot,
+) -> bool | None:
+    """Restore prior text, or clear the clipboard, if the protected item remains."""
+
     user32 = ctypes.WinDLL("User32.dll", use_last_error=True)
     user32.GetClipboardSequenceNumber.restype = wintypes.DWORD
     if int(user32.GetClipboardSequenceNumber()) != sequence_number:
@@ -192,10 +260,36 @@ def clear_clipboard_if_unchanged(sequence_number: int) -> bool:
     try:
         _open_clipboard(user32)
     except CredentialAccessError:
-        return False
+        return None
     try:
         if int(user32.GetClipboardSequenceNumber()) != sequence_number:
             return False
-        return bool(user32.EmptyClipboard())
+        if not user32.EmptyClipboard():
+            return None
+        if snapshot.text is None:
+            return True
+
+        kernel32 = ctypes.WinDLL("Kernel32.dll", use_last_error=True)
+        kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+        kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
+        kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+        kernel32.GlobalLock.restype = ctypes.c_void_p
+        kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+        kernel32.GlobalUnlock.restype = wintypes.BOOL
+        kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
+        kernel32.GlobalFree.restype = wintypes.HGLOBAL
+        user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+        user32.SetClipboardData.restype = wintypes.HANDLE
+        _set_clipboard_data(
+            CF_UNICODETEXT,
+            (snapshot.text + "\0").encode("utf-16-le"),
+            user32,
+            kernel32,
+        )
+        return True
+    except CredentialAccessError:
+        # EmptyClipboard has already removed the protected value. Restoration
+        # failure must never cause the secret to remain tracked as available.
+        return False
     finally:
         user32.CloseClipboard()

@@ -19,6 +19,14 @@ import webbrowser
 from .persistence import atomic_write_json
 from .configuration_mutation import configuration_mutation_gate
 from .action_types import ACTION_TYPES, SUPPORTED_ACTION_TYPES
+from .action_sequences import (
+    ActionSequenceError,
+    SequenceStep,
+    parse_sequence_steps,
+    resolve_sequence_steps,
+    sequence_reference_ids,
+    sequence_steps_to_data,
+)
 from .workspace_transforms import WORKSPACE_TRANSFORMS
 
 
@@ -59,6 +67,7 @@ class Action:
     tags: tuple[str, ...] = ()
     description: str = ""
     quick_action_path: tuple[str, ...] = ()
+    sequence_steps: tuple[SequenceStep, ...] = ()
 
     @property
     def effective_contexts(self) -> tuple[str, ...]:
@@ -240,7 +249,10 @@ def load_combined_actions(
             "Local action IDs duplicate shared actions: "
             + ", ".join(sorted(local_ids_by_key[key] for key in duplicate_ids))
         )
-    return shared_actions + local_actions, {action.id for action in local_actions}
+    combined = shared_actions + local_actions
+    validate_action_sequences(combined)
+    _validate_shared_sequence_ownership(shared_actions, set(local_ids_by_key))
+    return combined, {action.id for action in local_actions}
 
 
 def load_combined_stored_actions(
@@ -271,7 +283,57 @@ def load_combined_stored_actions(
             "Local action IDs duplicate shared actions: "
             + ", ".join(sorted(local_ids_by_key[key] for key in duplicate_ids))
         )
-    return shared_actions + local_actions, {action.id for action in local_actions}
+    combined = shared_actions + local_actions
+    validate_action_sequences(
+        combined,
+        require_active_references=False,
+    )
+    _validate_shared_sequence_ownership(shared_actions, set(local_ids_by_key))
+    return combined, {action.id for action in local_actions}
+
+
+def validate_action_sequences(
+    actions: Iterable[Action],
+    *,
+    require_active_references: bool = True,
+) -> None:
+    action_list = list(actions)
+    eligible = (
+        action_list
+        if require_active_references
+        else [action for action in action_list if action.state == ACTIVE_STATE]
+    )
+    for action in action_list:
+        if action.type != "sequence" or (
+            not require_active_references and action.state == ARCHIVED_STATE
+        ):
+            continue
+        try:
+            resolve_sequence_steps(
+                action.sequence_steps,
+                eligible,
+                sequence_id=action.id,
+            )
+        except ActionSequenceError as exc:
+            raise ActionError(f'Sequence "{action.title}": {exc}') from exc
+
+
+def _validate_shared_sequence_ownership(
+    shared_actions: Iterable[Action],
+    local_id_keys: set[str],
+) -> None:
+    for action in shared_actions:
+        if action.type != "sequence":
+            continue
+        personal = [
+            action_id
+            for action_id in sequence_reference_ids(action.sequence_steps)
+            if action_id.casefold() in local_id_keys
+        ]
+        if personal:
+            raise ActionError(
+                f'Built-in sequence "{action.title}" references personal Actions.'
+            )
 
 
 def append_action(path: Path, action: Action) -> None:
@@ -450,6 +512,8 @@ def configured_action(
     working_directory: str = "",
     description: str = "",
     quick_action_path: Iterable[str] = (),
+    sequence_steps: Iterable[SequenceStep] = (),
+    available_actions: Iterable[Action] = (),
 ) -> Action:
     """Create a validated active action from the built-in action catalogue."""
     clean_title = title.strip()
@@ -458,6 +522,7 @@ def configured_action(
         raise ActionError("Action title cannot be empty.")
     if action_type not in SUPPORTED_ACTION_TYPES:
         raise ActionError(f"Unsupported action type: {action_type}")
+    steps = tuple(sequence_steps)
     validate_action_value(action_type, clean_value)
     clean_contexts = normalize_contexts((*contexts, context))
     clean_quick_action_path = normalize_quick_action_path(quick_action_path)
@@ -477,6 +542,11 @@ def configured_action(
         source_path = validate_text_file_source(clean_value, require_existing=True)
         _decode_text_file(_read_bounded_text_file(source_path), source_path)
         validate_file_text_transform(clean_arguments)
+    elif action_type == "sequence":
+        try:
+            resolve_sequence_steps(steps, available_actions)
+        except ActionSequenceError as exc:
+            raise ActionError(str(exc)) from exc
 
     return Action(
         id=f"action-{uuid4().hex[:12]}",
@@ -493,6 +563,7 @@ def configured_action(
         tags=normalize_tags(tags),
         description=description.strip(),
         quick_action_path=clean_quick_action_path,
+        sequence_steps=steps,
     )
 
 
@@ -511,6 +582,8 @@ def edited_configured_action(
     working_directory: str = "",
     description: str = "",
     quick_action_path: Iterable[str] = (),
+    sequence_steps: Iterable[SequenceStep] = (),
+    available_actions: Iterable[Action] = (),
 ) -> Action:
     """Validate edits while preserving an action's stable identity and maturity."""
     validated = configured_action(
@@ -526,6 +599,8 @@ def edited_configured_action(
         working_directory=working_directory,
         description=description,
         quick_action_path=quick_action_path,
+        sequence_steps=sequence_steps,
+        available_actions=available_actions,
     )
     return Action(
         id=action.id,
@@ -542,6 +617,7 @@ def edited_configured_action(
         tags=validated.tags,
         description=validated.description,
         quick_action_path=validated.quick_action_path,
+        sequence_steps=validated.sequence_steps,
     )
 
 
@@ -602,6 +678,7 @@ def action_search_text(action: Action) -> str:
             *action.arguments,
             action.working_directory or "",
             *action.quick_action_path,
+            *sequence_reference_ids(action.sequence_steps),
         )
     )
 
@@ -641,7 +718,12 @@ def execute_action(
     file_preview_setter: Callable[[TextFileTransformPreview], None] | None = None,
     credential_paster: Callable[[Action], str] | None = None,
     opener: Callable[[Action], None] | None = None,
+    sequence_runner: Callable[[Action], str] | None = None,
 ) -> str:
+    if action.type == "sequence":
+        if sequence_runner is None:
+            raise ActionError("Action sequence execution is unavailable.")
+        return sequence_runner(action)
     if action.type == "paste_credential":
         validate_credential_target(action.value)
         if credential_paster is None:
@@ -877,6 +959,10 @@ def validate_action_value(
 ) -> None:
     """Validate the configured value shared by guided creation and JSON loading."""
     clean_value = value.strip()
+    if action_type == "sequence":
+        if clean_value != "sequence-v1":
+            raise ActionError("Sequence data uses an unsupported version.")
+        return
     if not clean_value:
         raise ActionError("The action value cannot be empty.")
     if action_type == "open_url":
@@ -1701,6 +1787,18 @@ def _parse_action(
         except ActionError as exc:
             raise ActionError(f"Action #{index}: {exc}") from exc
 
+    raw_steps = item.get("steps", [])
+    try:
+        sequence_steps = (
+            parse_sequence_steps(raw_steps)
+            if action_type == "sequence"
+            else ()
+        )
+    except ActionSequenceError as exc:
+        raise ActionError(f"Action #{index}: {exc}") from exc
+    if action_type != "sequence" and raw_steps:
+        raise ActionError(f"Action #{index}: Only sequences may contain steps.")
+
     working_directory = item.get("working_directory")
     if working_directory is not None and not isinstance(working_directory, str):
         raise ActionError(f"Action #{index} has an invalid working directory.")
@@ -1757,6 +1855,7 @@ def _parse_action(
         tags=normalize_tags(raw_tags),
         description=description.strip(),
         quick_action_path=quick_action_path,
+        sequence_steps=sequence_steps,
     )
 
 
@@ -1805,6 +1904,8 @@ def _action_to_dict(action: Action) -> dict[str, object]:
         data["description"] = action.description
     if action.quick_action_path:
         data["quick_action_path"] = list(action.quick_action_path)
+    if action.type == "sequence":
+        data["steps"] = sequence_steps_to_data(action.sequence_steps)
     return data
 
 

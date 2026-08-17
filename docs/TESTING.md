@@ -230,9 +230,11 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    each and verify the primary command changes between Run and Open. Choose one
    Context and one tag that each belong to both kinds and verify both remain in
    the mixed results. Switch to Actions, then Work Items, and back; verify
-   Passwords/Types and Projects/Work Item commands appear only in their
-   applicable scopes. Verify Configure remains visible in the rail. Resize to
-   the supported minimum and verify every rail control remains available. Drag
+   **Action tools** contains Passwords/Types and **Work tools** contains the
+   project and Work Item commands. Confirm the result width and every common
+   rail-control position remain unchanged. Verify Configure remains visible in
+   the rail. Resize to the supported minimum and verify every rail control and
+   all three scope labels remain available. Drag
    the vertical divider and verify both sides remain bounded and the manual
    balance remains adjustable for the session.
    While moving through representative Actions and Work Items, verify the
@@ -326,10 +328,11 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    focuses Tags. From each field, verify `Alt+Down` or `F4` opens **Choose…**,
    arrow keys move through the checklist, Space toggles an item, and `Esc`
    closes it without losing typed values.
-11. Verify the compact expert-rail symbols remain fully visible and their
+11. Verify the compact rail symbols remain fully visible and their
     tooltips begin with the semantic command names: `C`, `#`, `+A`, `⌖`, `⇩`,
-    `▣`, `✎`, `⚙`, `?`, and `⋯`. Switch scopes and verify the credential key,
-    Types, `+W`, `→▣`, `⧉`, and Proj controls retain their fixed positions.
+    `▣`, `✎`, `⚙`, `?`, and `⋯`. Switch views and verify those controls never
+    move. Verify Action tools and Work tools expose the corresponding
+    scope-specific commands without inserting rail rows.
     Open `⋯` and verify the searchable Keyboard Shortcuts page appears. With
     Find focused on an AZERTY keyboard, press Shift plus
     each physical top-row number key and verify the corresponding populated

@@ -78,7 +78,11 @@ Context Palette may grow through five families:
 4. Clipboard transactions that preserve and restore prior content.
 5. Rich-content and image actions with format-aware previews.
 
-Only the first family and constrained window preparation are currently implemented. The others remain proposals until their preview, recovery, testing, and trust behavior is designed.
+The first family, constrained window preparation, and reference-based launch
+sequences are implemented. Protected credential paste provides the first
+text-only clipboard transaction; sequence paste/key steps, other clipboard
+effects, and rich formats remain proposals until their recovery and trust
+behavior is designed.
 
 ## Knowledge and cheat sheets
 

@@ -46,9 +46,50 @@ from context_palette.actions import (
     validate_http_url,
 )
 from context_palette.action_types import ACTION_TYPES
+from context_palette.action_sequences import SequenceStep
 
 
 class ActionTests(unittest.TestCase):
+    def test_sequence_steps_round_trip_as_structured_data(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "actions.json"
+            path.write_text('{"actions": []}', encoding="utf-8")
+            sequence = Action(
+                "sequence",
+                "Morning setup",
+                "General",
+                "sequence",
+                "sequence-v1",
+                sequence_steps=(
+                    SequenceStep("action", action_id="website"),
+                    SequenceStep("wait", milliseconds=500),
+                    SequenceStep("action", action_id="folder"),
+                ),
+            )
+            append_action(path, sequence)
+
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            loaded = load_actions(path)
+
+        self.assertEqual(raw["actions"][0]["steps"][1], {"kind": "wait", "milliseconds": 500})
+        self.assertEqual(loaded[0].sequence_steps, sequence.sequence_steps)
+
+    def test_sequence_execute_requires_launcher_coordinator(self):
+        action = Action(
+            "sequence",
+            "Setup",
+            "General",
+            "sequence",
+            "sequence-v1",
+        )
+
+        with self.assertRaisesRegex(ActionError, "execution is unavailable"):
+            execute_action(action)
+        self.assertEqual(
+            execute_action(action, sequence_runner=lambda _action: "started"),
+            "started",
+        )
+
     def test_context_membership_validation_canonicalizes_and_rejects_unknown_names(self):
         self.assertEqual(
             validate_context_memberships(

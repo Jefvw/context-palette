@@ -4,12 +4,42 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Replaced the main command rail with the validated task-oriented layout.
+  Focus and **All items / Actions / Work Items** remain readable above Find;
+  one bitmap-icon Filters menu and a removable active-filter chip replace the
+  scattered filter controls. `+A`, Edit, Pin, and Run/Open now sit directly
+  below results; Capture, Inbox, Create from Input, and Text tools sit in the
+  Input / Output header; Configure, Help, and More sit below Quick actions.
+  Embedded Tk bitmaps avoid font-dependent toolbar characters, empty selections
+  disable invalid commands, and **Stop remaining** stays visible throughout a
+  running sequence. Redundant All-items/count, Find, Quick-actions/count, and
+  Input/Output headings were removed; the filter icon now shares the Find row,
+  and seven normal-scale result rows leave the complete standard Quick-action
+  grid visible at the default window size. Quick actions now shrink-wrap their
+  real rows, and the result list expands into every pixel that would otherwise
+  be blank below the final Quick-action menu. **Filter by context…** now opens
+  an explicit searchable Context chooser; selecting or clearing a Context is
+  covered through the real menu route instead of relying on a fragile submenu.
+- Added guided, previewable **Run a sequence** Actions. A sequence references
+  2â€“12 existing reviewed website, file, folder, application, or Windows-target
+  Actions and may place bounded waits between them. Every live target and
+  argument is confirmed before nonblocking ordered dispatch; **Stop remaining**
+  skips only steps not yet started. Referenced Actions cannot be archived or
+  deleted behind a sequence, and Built-in sequences cannot depend on personal
+  Actions. There are no inline commands, loops, conditions, paste/key steps,
+  completion claims, retries, or rollback.
+- Added the first recoverable clipboard transaction to protected credential
+  paste. Context Palette now remembers the prior plain-text clipboard value and
+  restores it after the protected item expires or an automatic paste fails,
+  but leaves any newer clipboard content untouched. Non-text and rich formats
+  are not yet preserved; a non-text-only clipboard stops the paste instead of
+  being destroyed, while an originally empty clipboard is cleared as before.
 - Added a task-oriented **Start** page to Configure. Ordinary Configure now
   opens with direct choices to create or edit Actions, organize Focuses,
   arrange Quick actions, set up Work Items, and back up or restore. Existing
   direct Edit, Context, Work Item, Diagnostics, and creation routes still open
   their requested destination in the one reused Configure window.
-- Added **Create Action...** beside **Text tools** in Input / Output. It uses a
+- Added **Create from Input** beside **Text tools** in Input / Output. It uses a
   non-blank selection first, otherwise the complete field, and opens the
   existing reviewed Action form with one clear website or absolute file,
   folder, or `.exe` target prefilled. It does not wait for mapped-drive access;
@@ -59,12 +89,11 @@ This project has not published a versioned release. Changes are recorded under *
   bounded and user-adjustable; the redundant top toolbar and bottom command bar
   are gone. Quick actions use two columns at the standard and supported minimum
   widths, falling back to one only when genuinely narrower.
-- Widened the expert user's result list by reducing the learned-command rail to
-  a scaling-aware 114–148 pixels. Focus, scopes, Work Items, and Run/Open retain
-  readable state labels; filters and routine commands use fixed mnemonic
-  symbols with complete semantic tooltips. Scope-specific commands keep stable
-  positions, icon buttons use tighter padding, and higher text scaling can
-  widen the rail only within its bound.
+- Widened the result list by reducing the learned-command rail to a
+  scaling-aware 84–112 pixels. Focus and scope choices use readable rows above
+  Find; filters and routine commands use fixed mnemonic symbols with complete
+  semantic tooltips. Higher text scaling can widen only the icon rail within
+  its bound.
 - Removed numeric prefixes from result rows while preserving Shift+number
   execution. Blue identifies pinned shortcuts 1–5, green identifies Focus
   shortcuts 6–0, neutral identifies ordinary results, and tooltips expose the

@@ -19,8 +19,11 @@ The roadmap describes ordered product outcomes, not commitments or implemented b
   recorded validation findings; the discovery, configuration, local tags, and
   generic-template creation foundation is complete.
 - Add richer context composition and ranking while preserving explicit focus and global search.
-- Design clipboard preservation/restoration as an explicit transaction with tests.
-- Design a small previewable linear sequence model; no loops, conditions, or arbitrary commands.
+- Extend the implemented protected plain-text clipboard transaction to other
+  action effects with explicit paste timing, fallback, and format-specific tests.
+- Extend the implemented launch-sequence Action with paste or constrained key
+  steps only after clipboard and focus recovery are complete; retain no loops,
+  conditions, or arbitrary commands.
 - Expand AI-proposable action types only where type-specific validation and review are adequate.
 
 ## Later — richer actions

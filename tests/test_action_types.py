@@ -17,7 +17,7 @@ from context_palette.action_types import (
 class ActionTypeCatalogueTests(unittest.TestCase):
     def test_catalogue_covers_every_supported_action_type(self):
         self.assertEqual(set(ACTION_TYPES), SUPPORTED_ACTION_TYPES)
-        self.assertEqual(len(ACTION_TYPES), 15)
+        self.assertEqual(len(ACTION_TYPES), 16)
         self.assertNotIn("build_url_copy", ACTION_TYPES)
         self.assertEqual(
             {

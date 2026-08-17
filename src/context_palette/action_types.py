@@ -147,6 +147,16 @@ ACTION_TYPES = {
             "Usually machine-local; requires an installed executable.",
         ),
         _definition(
+            "sequence",
+            "â‡¥",
+            "Run a sequence",
+            "Action sequence",
+            "Start a short reviewed list of existing Actions in order, with optional bounded waits.",
+            "Uses configured Actions only; no clipboard or typed input.",
+            "Confirms every resolved step, then starts them in order.",
+            "Started effects cannot be undone. Waits are delays, not completion checks.",
+        ),
+        _definition(
             "paste_credential",
             "🔑",
             "Paste a Windows credential",

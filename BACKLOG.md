@@ -37,11 +37,9 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Next
 
-- If the compact expert rail still leaves insufficient result width in real
-  use, evaluate the preserved alternatives in order: a horizontal command strip
-  below discovery, a collapsible rail, a modest 44/56 outer split, then a single
-  Commands menu. Do not introduce one unless the fixed compact rail proves
-  inadequate.
+- Validate the task-oriented main-window toolbar at 100%, 125%, and 150%
+  display scaling and refine bitmap contrast only if real Windows themes expose
+  a problem.
 - Evaluate typed Work Item support for global pins 1–5 only after the normal
   mixed-result projection can display those pins consistently.
 - Consider optional Context visibility/grouping for Quick-action groups. The
@@ -50,8 +48,12 @@ This file contains actionable future work. Completed user-visible work belongs i
 - Add line-ending normalization and CSV/TSV column operations after real-use
   feedback on the expanded reusable text-operation catalogue.
 - Design supporting-context composition and weighted ranking while preserving explicit Focus and global search.
-- Design clipboard preservation/restoration as an explicit transaction.
-- Design constrained, previewable linear sequences for supported actions, paste, Tab, Enter, and bounded waits.
+- Extend the protected plain-text clipboard transaction to ordinary saved-text
+  paste only after destination paste timing and manual-fallback recovery are
+  defined; add rich/image formats only through format-specific snapshots.
+- Add sequence paste, Tab, and Enter steps only after ordinary clipboard
+  restoration, destination-focus recovery, and stop/failure semantics are
+  defined and manually verified.
 - Define context activation bundles only after effect preview and recovery behavior are documented.
 - Continue extracting stable UI families only when a demonstrated change
   boundary benefits; avoid line-count-only refactors.
