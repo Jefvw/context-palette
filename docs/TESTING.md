@@ -434,7 +434,8 @@ Perform only when relevant:
   file-picker fallback, non-empty and concurrently edited workspace text, a
   no-text image, an oversized image, accented Latin text, and networking
   disabled. On a copy without the component, verify the command explains local
-  setup and leaves Input / Output unchanged.
+  setup and leaves Input / Output unchanged. Also verify the app still starts
+  and ordinary Find, Configure, Quick actions, and Work Items remain usable.
 
 - Run the real Windows keyboard path with
   `$env:CONTEXT_PALETTE_PHYSICAL_KEY_TEST='1'; .\python-context-palette.bat -m unittest tests.test_physical_keyboard_shortcuts`.

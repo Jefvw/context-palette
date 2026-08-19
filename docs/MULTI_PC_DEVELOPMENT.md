@@ -22,7 +22,7 @@ No open-source license has been selected yet. Keep the repository private, or ch
 
    ```powershell
    git status --short
-   git check-ignore data\inbox.json data\local_actions.json data\local_contexts.json data\local_command_surface.json data\palette.json data\context-palette.log
+   git check-ignore data\inbox.json data\local_actions.json data\local_contexts.json data\local_command_surface.json data\local_work_item_sources.json data\local_work_item_metadata.json data\local_work_item_settings.json data\local_text_action_source.txt data\palette.json data\context-palette.log
    ```
 
 3. Review the complete history for previously committed private data before pushing.
@@ -36,11 +36,14 @@ No open-source license has been selected yet. Keep the repository private, or ch
    Python family from python.org with Tcl/Tk enabled.
 3. Clone the repository.
 4. Open a terminal in the cloned folder.
-5. Run:
+5. For ordinary application use, run:
 
    ```text
-   develop-context-palette.bat
+   setup-context-palette.bat
    ```
+
+   For development, run `develop-context-palette.bat` instead; it performs
+   setup and the complete check.
 
 6. Start:
 
@@ -54,7 +57,8 @@ No open-source license has been selected yet. Keep the repository private, or ch
    setup-ocr-context-palette.bat
    ```
 
-   Then restart Context Palette. If package downloads are blocked on the target
+   Then restart Context Palette. OCR is optional; if its setup fails, every
+   non-OCR feature still works. If package downloads are blocked on the target
    PC, follow [OCR setup and other-PC handoff](OCR_SETUP.md) to prepare and use
    an offline package folder.
 

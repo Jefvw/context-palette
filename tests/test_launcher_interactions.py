@@ -28,7 +28,7 @@ from context_palette.launcher import (
     bounded_sash_position,
     quick_action_column_count,
 )
-from context_palette.ocr import OcrResult, OcrSource
+from context_palette.ocr import OcrError, OcrResult, OcrSource
 from context_palette.palette_state import PaletteState
 from context_palette.palette_items import PaletteItemReference
 from context_palette.windows_credentials import (
@@ -140,6 +140,45 @@ class LauncherInteractionTests(unittest.TestCase):
         )
         app.workspace_component.set_ocr_running.assert_called_with(False)
         self.assertIn("Appended", app.status_var.value)
+
+    def test_broken_optional_image_source_is_contained_without_workspace_changes(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.status_var = FakeVariable()
+        app.workspace_component = Mock()
+        app.ocr = Mock(running=False)
+        app._show_ocr_error = Mock()
+
+        with (
+            patch("context_palette.launcher.image_source_from_text", return_value=None),
+            patch(
+                "context_palette.launcher.clipboard_image_source",
+                side_effect=RuntimeError("broken optional image library"),
+            ),
+            patch("context_palette.launcher.LOGGER.exception") as log_error,
+        ):
+            app._extract_text_from_image("Existing notes")
+
+        log_error.assert_called_once()
+        error = app._show_ocr_error.call_args.args[0]
+        self.assertIsInstance(error, OcrError)
+        self.assertNotIn("broken optional image library", str(error))
+        app.ocr.start.assert_not_called()
+        app.workspace_component.raw_text.assert_not_called()
+        app.workspace_component.apply_ocr_text.assert_not_called()
+        app.workspace_component.set_ocr_running.assert_not_called()
+
+    def test_ocr_failure_reenables_control_and_preserves_workspace(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.workspace_component = Mock()
+        app._show_ocr_error = Mock()
+        error = OcrError("Image text extraction failed safely.")
+
+        app._accept_ocr_result("clipboard image", "Existing notes", None, error)
+
+        app.workspace_component.set_ocr_running.assert_called_once_with(False)
+        app.workspace_component.apply_ocr_text.assert_not_called()
+        app._show_ocr_error.assert_called_once_with(error)
 
     def test_sequence_confirms_and_dispatches_resolved_actions_in_order(self):
         app = LauncherApp.__new__(LauncherApp)

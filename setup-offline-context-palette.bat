@@ -15,12 +15,22 @@ if not exist "offline-packages\." (
 )
 
 set "CONTEXT_PALETTE_WHEELHOUSE=%CD%\offline-packages"
-call setup-ocr-context-palette.bat
+call setup-context-palette.bat --skip-tests
 if errorlevel 1 exit /b 1
+
+set "OCR_SETUP_FAILED=0"
+call setup-ocr-context-palette.bat
+if errorlevel 1 set "OCR_SETUP_FAILED=1"
 
 call check-context-palette.bat
 if errorlevel 1 exit /b 1
 
 echo.
-echo Offline setup and checks are complete. Start with run-context-palette.bat
+if "%OCR_SETUP_FAILED%"=="1" (
+    echo Core offline setup and checks are complete. Optional OCR is unavailable.
+    echo Context Palette still works; only Extract text is unavailable.
+) else (
+    echo Offline setup, optional OCR, and checks are complete.
+)
+echo Start with run-context-palette.bat
 exit /b 0

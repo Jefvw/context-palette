@@ -6,14 +6,16 @@ OCR service, and the clipboard image is not replaced.
 
 The OCR component is optional because its native runtime and models add about
 270 MB. It installs inside the repository's ignored `.venv`; administrator
-rights are not required.
+rights are not required. If OCR setup is skipped or fails, Context Palette still
+starts normally and every non-OCR feature remains available. Only **Extract
+text** reports that its optional component is unavailable.
 
 ## Choose the setup that matches the PC
 
 | Target PC | Use this route |
 | --- | --- |
 | Compatible Python and package-download access | Run `setup-ocr-context-palette.bat` on that PC. |
-| Compatible Python, but package downloads are blocked | Prepare `offline-packages` on a connected compatible PC, copy it with the repository, then run `setup-offline-context-palette.bat`. |
+| Compatible Python, but package downloads are blocked | Prepare `offline-packages` on a connected compatible PC, then copy only that directory into a clean checkout/export of the same commit and run `setup-offline-context-palette.bat`. |
 | No compatible Python, and Python cannot be installed | The current source distribution cannot run there. A future self-contained portable release must bundle Python, Tk, application packages, and OCR. Do not copy `.venv` as a workaround. |
 
 A compatible base installation is Python 3.12 or newer 3.x with pip and
@@ -39,7 +41,9 @@ rights, but an organization's application policy may still block it.
 
 The setup first prepares the normal application, then installs the pinned OCR
 packages, initializes the local engine once, and reports **Local OCR is ready**.
-Later recognition does not need network access.
+Later recognition does not need network access. If the optional installation or
+engine check fails after core setup, start Context Palette normally; the setup
+output explicitly confirms that only **Extract text** is unavailable.
 
 ## Offline package setup
 
@@ -48,21 +52,29 @@ but cannot reach Python package servers.
 
 ### On a connected preparation PC
 
-Use a Windows PC with the same processor architecture and Python family as the
-target. From a current Context Palette repository, run:
+Use a Windows PC with the same processor architecture and exact Python
+major/minor version as the target. From a clean checkout of the exact commit
+that the target will use, run:
 
 ```powershell
 .\prepare-offline-context-palette.bat
 ```
 
-The script checks the application and OCR locally, then downloads/builds all
-pinned application and OCR packages into the ignored `offline-packages` folder.
-Copy the complete repository folder, including `offline-packages`, to the target
-PC. A removable drive or an organization-approved file-transfer route is fine.
+The script prepares the core application environment, downloads/builds required
+application packages, then separately attempts the optional OCR packages. It
+does not install or initialize OCR merely to prepare the handoff. If OCR package
+preparation fails, it keeps a usable core package folder and prints a warning.
+
+On the target, use a clean checkout/export of the same commit and copy only the
+generated `offline-packages` directory into it. Do not copy `.venv`, `.venv-*`,
+logs, `data/local_*`, Inbox, palette state, `.bak` files, or other ignored
+personal/runtime content. Transfer personal configuration separately through
+**Configure → Backup and restore**, after reviewing its privacy warning. A
+removable drive or an organization-approved file-transfer route is fine.
 
 Do not commit `offline-packages`: it is large, platform-specific, and ignored by
 Git. Prepare separate folders for different Windows architectures or Python
-families.
+major/minor versions.
 
 ### On the disconnected or package-blocked target PC
 
@@ -74,8 +86,19 @@ Open a terminal in the copied Context Palette folder and run:
 ```
 
 Offline setup uses `--no-index`, so it consumes only the prepared local packages
-and cannot fall back to a network package source. It then runs the complete
-application check.
+and cannot fall back to a network package source. It installs and checks the
+core application first, then attempts optional OCR, then runs the complete
+application check. If optional OCR is absent or cannot initialize, the script
+reports a core-only success and Context Palette remains usable without
+**Extract text**.
+
+To install only the core from the prepared folder, use:
+
+```powershell
+$env:CONTEXT_PALETTE_WHEELHOUSE = "$PWD\offline-packages"
+.\setup-context-palette.bat
+.\run-context-palette.bat
+```
 
 ## Use Extract text
 
@@ -156,11 +179,12 @@ wheel workflow. Rebuild `offline-packages` after requirement changes.
 ## Troubleshooting
 
 - **OCR component unavailable:** run `setup-ocr-context-palette.bat`, then
-  restart the app.
+  restart the app. Until it succeeds, continue using the rest of Context
+  Palette normally.
 - **Package downloads blocked:** use the offline package workflow above.
 - **Offline package not found:** keep `offline-packages` next to
   `setup-offline-context-palette.bat` and prepare it again for the target's
-  Python family/architecture.
+  exact Python major/minor and processor architecture.
 - **No image available:** copy a screenshot/image, enter one exact absolute
   image path, or choose a file when prompted.
 - **No readable text:** try a sharper crop with larger, horizontal text and

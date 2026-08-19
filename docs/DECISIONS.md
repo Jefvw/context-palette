@@ -1,5 +1,25 @@
 # Decisions
 
+## 2026-08-19 - Keep optional OCR failure outside core setup
+
+**Decision:** Install and validate required application dependencies before
+attempting the optional OCR stack. Online OCR setup may report failure for its
+own feature, but it must explicitly leave the core app usable. Offline package
+preparation builds required wheels first and treats optional OCR-wheel failure
+as a warning; target setup always runs the core check and reports core-only
+success when OCR remains unavailable.
+
+**Reason:** RapidOCR and ONNX Runtime are large native optional dependencies.
+Package policy, architecture, or engine initialization can reject them on a PC
+that can otherwise run Context Palette. Optional image extraction must not turn
+that compatible computer into a failed application installation.
+
+**Consequences:** `requirements.txt` remains the required contract and
+`requirements-ocr.txt` remains separate. OCR imports stay lazy. A failed OCR
+setup disables only **Extract text** and can be retried later. Offline handoff
+uses a clean checkout of the exact commit plus `offline-packages`; it never
+copies `.venv` or ignored personal/runtime files between computers.
+
 ## 2026-08-18 - Extend the Configure hierarchy and make Inbox cleanup explicit
 
 **Decision:** Apply the accepted title/purpose, one-primary-command, dominant

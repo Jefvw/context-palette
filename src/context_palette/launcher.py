@@ -3794,6 +3794,15 @@ class LauncherApp:
         except OcrError as exc:
             self._show_ocr_error(exc)
             return
+        except Exception:
+            LOGGER.exception("Unexpected local OCR source-acquisition failure")
+            self._show_ocr_error(
+                OcrError(
+                    "The optional image component could not read the selected source. "
+                    "Nothing was changed."
+                )
+            )
+            return
 
         if source is None:
             selected = filedialog.askopenfilename(

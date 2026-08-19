@@ -275,6 +275,13 @@ is never overwritten without an attended choice. No-text and failed results chan
 nothing. OCR does not copy its result automatically, persist the source image,
 upload content, or join the current launch-only Action sequence model.
 
+OCR deployment remains independent of core setup. `requirements.txt` contains
+only required application packages; `requirements-ocr.txt` contains the pinned
+optional engine. Online setup establishes the core environment before
+attempting OCR; offline setup additionally runs the complete core check after
+the optional attempt. An OCR installation or initialization failure leaves the
+core environment and non-OCR launcher behavior available.
+
 ### `action_suggestions.py`
 
 Defines the pure, typed inference boundary for creating an Action from Input /

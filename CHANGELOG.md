@@ -4,6 +4,14 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Decoupled optional OCR preparation from core application readiness. Online
+  setup now establishes the core first, while offline setup also runs the full
+  core check; OCR installation or initialization failure leaves Context Palette
+  usable with only **Extract text** unavailable. Offline package preparation no
+  longer installs OCR on the preparation PC, preserves a usable core wheelhouse
+  when optional OCR wheels fail, and directs users to transfer only
+  `offline-packages` into a clean checkout instead of copying environments or
+  personal runtime data.
 - Corrected current guides to match the Active/Archived lifecycle, Context-owned
   membership, menu-only Quick actions, all eight Configure sections, protected
   clipboard restoration, offline OCR setup, and the redesigned main palette.

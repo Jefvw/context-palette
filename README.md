@@ -70,10 +70,13 @@ folder with no administrator rights:
 ```
 
 After setup, restart Context Palette. Recognition is local and does not need
-network access; the setup download itself does. A future prebuilt portable
-bundle must include Python and the OCR pack for PCs where package downloads are
-blocked. See [OCR setup, offline handoff, and use](docs/OCR_SETUP.md) for
-step-by-step instructions for normal, package-blocked, and developer PCs.
+network access; the setup download itself does. OCR is optional: if setup is
+skipped or fails, the rest of Context Palette continues to work and only
+**Extract text** is unavailable. A prepared offline package folder supports a
+package-blocked PC that already has compatible Python and Tcl/Tk. A future
+self-contained build is needed only where Python itself cannot be installed.
+See [OCR setup, offline handoff, and use](docs/OCR_SETUP.md) for step-by-step
+instructions for normal, package-blocked, and developer PCs.
 
 ## Quick start
 

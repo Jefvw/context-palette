@@ -466,6 +466,9 @@ class WindowsScriptTests(unittest.TestCase):
         self.assertIn(".context-palette-ocr-requirements.sha256", script)
         self.assertIn("OCR dependencies are unchanged", script)
         self.assertIn("does not require administrator rights", script)
+        self.assertIn("Core Context Palette setup completed", script)
+        self.assertIn("remains available", script)
+        self.assertIn("Only Extract text is unavailable", script)
         self.assertNotIn("runas", script.casefold())
 
     def test_setup_supports_a_strict_offline_package_folder(self) -> None:
@@ -489,13 +492,72 @@ class WindowsScriptTests(unittest.TestCase):
         )
         ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
 
-        self.assertIn("call setup-ocr-context-palette.bat", prepare)
-        self.assertIn("-m pip wheel", prepare)
-        self.assertIn("-r requirements.txt -r requirements-ocr.txt", prepare)
+        core_setup = "call setup-context-palette.bat --skip-tests"
+        core_wheels = '-m pip wheel --disable-pip-version-check --wheel-dir "offline-packages" -r requirements.txt'
+        ocr_wheels = '-m pip wheel --disable-pip-version-check --wheel-dir "offline-packages" -r requirements-ocr.txt'
+        self.assertIn(core_setup, prepare)
+        self.assertNotIn("call setup-ocr-context-palette.bat", prepare)
+        self.assertLess(prepare.index(core_setup), prepare.index(core_wheels))
+        self.assertLess(prepare.index(core_wheels), prepare.index(ocr_wheels))
+        self.assertIn("target PC can still install and run Context Palette", prepare)
         self.assertIn('set "CONTEXT_PALETTE_WHEELHOUSE=', setup)
+        self.assertIn(core_setup, setup)
         self.assertIn("call setup-ocr-context-palette.bat", setup)
         self.assertIn("call check-context-palette.bat", setup)
+        self.assertLess(setup.index(core_setup), setup.index("call setup-ocr-context-palette.bat"))
+        self.assertLess(setup.index("call setup-ocr-context-palette.bat"), setup.index("call check-context-palette.bat"))
+        self.assertIn("Core offline setup and checks are complete", setup)
+        self.assertIn("only Extract text is unavailable", setup)
         self.assertIn("/offline-packages/", ignore)
+
+    @unittest.skipUnless(os.name == "nt", "Windows batch behavior")
+    def test_offline_setup_finishes_core_when_optional_ocr_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "setup-offline-context-palette.bat").write_text(
+                (ROOT / "setup-offline-context-palette.bat").read_text(
+                    encoding="utf-8"
+                ),
+                encoding="utf-8",
+            )
+            (root / "offline-packages").mkdir()
+            for filename, label, return_code in (
+                ("setup-context-palette.bat", "core", 0),
+                ("setup-ocr-context-palette.bat", "ocr", 1),
+                ("check-context-palette.bat", "check", 0),
+            ):
+                (root / filename).write_text(
+                    "@echo off\n"
+                    f"echo {label}>>order.txt\n"
+                    f"exit /b {return_code}\n",
+                    encoding="utf-8",
+                )
+
+            result = subprocess.run(
+                [
+                    os.environ.get("COMSPEC", r"C:\Windows\System32\cmd.exe"),
+                    "/d",
+                    "/c",
+                    "setup-offline-context-palette.bat",
+                ],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+
+            self.assertEqual(
+                result.returncode,
+                0,
+                msg=f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
+            )
+            self.assertEqual(
+                (root / "order.txt").read_text(encoding="utf-8").splitlines(),
+                ["core", "ocr", "check"],
+            )
+            self.assertIn("Core offline setup and checks are complete", result.stdout)
+            self.assertIn("only Extract text is unavailable", result.stdout)
 
     def test_ci_runs_the_same_three_validation_phases_as_local_check(self) -> None:
         local = (ROOT / "check-context-palette.bat").read_text(encoding="utf-8")

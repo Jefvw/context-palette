@@ -160,6 +160,21 @@ class DocumentationSemanticsTests(unittest.TestCase):
         self.assertNotIn("**Yes** to replace", ocr_setup)
         self.assertNotIn("**No** to append", ocr_setup)
 
+    def test_ocr_handoff_keeps_core_setup_independent_and_private(self):
+        readme = _read("README.md")
+        ocr_setup = _read("docs/OCR_SETUP.md")
+        prepare_script = _read("prepare-offline-context-palette.bat")
+
+        for document in (readme, ocr_setup):
+            with self.subTest(document=document[:30]):
+                normalized = " ".join(document.split())
+                self.assertIn("only **Extract text** is unavailable", normalized)
+        self.assertIn("clean checkout", ocr_setup)
+        self.assertIn("copy only", prepare_script)
+        self.assertNotIn("copy it with the repository", ocr_setup)
+        self.assertNotIn("copy the whole Context Palette folder", prepare_script)
+        self.assertNotIn("copy the complete repository folder", ocr_setup)
+
     def test_architecture_mentions_every_production_module(self):
         architecture = _read("docs/ARCHITECTURE.md")
         module_names = {
