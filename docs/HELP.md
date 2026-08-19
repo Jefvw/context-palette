@@ -35,11 +35,21 @@ loaded inside the viewer.
 
 Multi-PC cloning, GitHub publishing, portable paths, and shared/local data are
 documented in [Multi-PC development](MULTI_PC_DEVELOPMENT.md).
+OCR installation, offline handoff, use, configuration transfer, and developer
+verification are documented in [OCR setup](OCR_SETUP.md).
 Each development computer creates its own ignored `.venv` by running
 `setup-context-palette.bat` or `develop-context-palette.bat`. Setup accepts
 Python 3.12 or newer 3.x only when pip and Tkinter are available; it preserves
 an incompatible local environment as `.venv-unusable*` before rebuilding.
 Personal Context Palette data is stored outside `.venv`.
+
+Image-to-text extraction uses an optional local OCR component. From the Context
+Palette folder, run `setup-ocr-context-palette.bat`, then restart the app. It
+stays inside that folder, needs no administrator rights, and adds about 270 MB.
+Recognition works offline after setup; the initial setup download requires
+package access. On a PC where downloads and software preparation are blocked,
+use Context Palette without OCR until a prebuilt OCR-enabled portable bundle is
+available.
 
 Power Automate Desktop setup is documented in
 [Power Automate integration](../integrations/README.md).
@@ -47,7 +57,7 @@ Power Automate Desktop setup is documented in
 ## Harvest actions from documents
 
 For the primary route, press `Ctrl+,`, then open **Actions** and choose
-**Harvest documents...**. You can also choose **Harvest documents...** in
+**Other ways to create → Harvest documents…**. You can also choose **Harvest documents...** in
 Inbox. The workflow extracts possible website actions from several documents
 at once. Supported files are Markdown (`.md`), text (`.txt`), Word (`.docx`),
 and Excel (`.xlsx`). Context Palette reads these files locally; it does not
@@ -153,7 +163,10 @@ the result list.
 
 - Slots `1–5` are personal pinned Actions and never change with Context.
 - Slots `6–0` are the top five Actions or Work Items for the selected Focus. Slot
-  `0` is the tenth overall slot and follows slot `9`.
+  `0` is the tenth overall slot and follows slot `9`. Unfilled slots use other
+  genuine members of that Focus; they remain empty when no members remain and
+  never borrow unrelated global Actions. **General** still treats all Actions
+  as global members.
 - An Action may appear in both groups.
 
 With a specific Focus selected, **All items** keeps matching shortcut rows at
@@ -232,11 +245,11 @@ In the **Actions** view:
   returns to the captured application, and pastes automatically. When Context
   Palette has no fresh destination, the text remains on the clipboard and the
   status asks you to paste manually with `Ctrl+V`.
-- Right-click an action row to open the Actions tab in Configure with that
+- Right-click an action row to open the Actions section in Configure with that
   exact action highlighted. Personal actions can then be edited, including
   short name, description, contexts, tags, type-specific value, and supported
   launch settings. Context changes update the same context definitions used by
-  Focus items, slots, search, and the Contexts tab.
+  Focus items, slots, search, and the Contexts section.
   Built-in actions can also be edited after acknowledging their developer warning.
 - Plain number-row and numpad digits remain ordinary Find text.
 - Shift plus a physical top-row number key executes slots 1 through 0 only
@@ -282,30 +295,41 @@ inside that menu applies only to Work Items.
   folder directly.
 - Right-click offers the exact workbook when available, the work-item folder,
   and the configured source folder.
-- Right-click a result and choose **Edit personal tags…** to open that exact
+- Right-click a result and choose **Edit tags and contexts…** to open that exact
   Work Item in Configure.
 - To reuse a Work Item on the permanent Quick-action surface, open
-  **Configure**, choose **Quick actions**, add or edit a My configuration menu level,
-  choose the Work Item, and select **Use Work Item**. Its Quick action retains
+  **Configure**, choose **Quick actions**, add or edit a My configuration Quick-action
+  item, choose the Work Item, and select **Use Work Item**. Its Quick action retains
   the same matching-workbook-first and folder-fallback behavior.
 - Unavailable sources keep their last successful in-memory results for the
   current app session. No Work Item index is written to disk.
 
-To set up Work Items, open **Configure**, then choose **Work Items**. Add one or more folders
-named `workitems`, giving each a friendly source name. The stable source ID is
-suggested automatically and keeps tags attached when the source path differs
-on another computer. The same page shows source state, provides explicit
-refresh, and lets you edit comma-separated personal tags. Removing a source
-never deletes work folders or files. Its private tags are retained, so adding a
-source with the same stable ID restores them.
+To set up Work Items, open **Configure**, then choose **Work Items** in the left
+navigator. Add one or more folders named `workitems`, giving each a friendly
+source name. Choose a source to show only its discovered items. Its complete
+folder path and availability remain visible above the full-width table; use
+**Refresh** to scan again and the Find field to narrow names, types, projects,
+Contexts, or tags. The stable source ID is suggested automatically and keeps
+tags attached when the source path differs on another computer. **Manage sources…**
+contains Add, Edit, safe source removal, and generic-template setup; **Refresh**
+remains visible for the selected source. Removing a source never deletes
+work folders or files. Its private tags are retained, so adding a source with
+the same stable ID restores them.
+
+Double-click a discovered Work Item, press Enter, or choose **Edit tags and
+contexts** to update its personal tags and assign it directly to existing **My
+configuration** Contexts. The editor writes membership to those Context records,
+so the Work Item and Context editors show the same truth. Create or rename
+Contexts from the Contexts page first; Built-in Contexts cannot reference
+personal Work Items.
 
 Source paths and tags remain in ignored local files on this computer. Configure
 does not alter the Work Item folders or their Excel files.
 
-For keyboard setup, `F6` switches between the Sources and Discovered Work Items
-lists. In Sources, use `Insert` to add and `Delete` to remove; `F5` refreshes
-from either list and Enter edits the selected row. Source dialogs place focus in
-the Source name field automatically.
+For keyboard setup, `Ctrl+F` moves to Find and `F6` switches between the source
+selector and discovered Work Items. `F5` refreshes from either control; Enter
+edits the selected Work Item. Source dialogs place focus in the Source name
+field automatically.
 
 ### Create a Work Item from the generic Excel template
 
@@ -370,30 +394,26 @@ For safety:
 ## Quick-action surface
 
 The wider right side of the action console contains global configurable
-subareas and stays visible when Focus changes. A group can use direct
-Quick-action rows or one compact nested-menu launcher.
+menus and stays visible when Focus changes. Every visible control is one menu
+launcher; no launcher silently runs a default Action.
 
-- In a Quick-action-row group, left-click a subject to execute its first
-  available action or Work Item; right-click opens its complete ordered target
-  menu. A group with one
-  row uses that row as its visible identity instead of repeating a heading;
-  groups with multiple rows retain their heading.
-- In a nested-menu group, the one group-labelled launcher replaces a separate
-  group heading. Click, right-click, Enter, or Space on it to open the group.
-  Choose zero to three submenu levels, then an action.
-- Shift+click or Ctrl+click a configured group to open its technical menu and
-  action files. The same gesture on Passwords, Folders, or Prompts opens guided
-  action configuration.
+- Left-click a menu, or focus it and press Enter or Space, to browse its
+  ordered Actions and submenus.
+- Right-click that same launcher for related management commands such as Add,
+  Organize, and Find matching Actions.
+- Inside an open menu, left-click an Action to run exactly that Action.
+  Right-click an Action to open that exact record for editing without running
+  it. Right-click a submenu to add or organize within that branch.
 - Action targets use the same selected text, Input / Output, clipboard, and safe
   executor as the search list. Work Item targets use the same constrained
   workbook-first opener as the Work Items scope.
 - Configure shared groups in `data/command_surface.json` and private groups in `data/local_command_surface.json`.
-- Press `Ctrl+,`, then use **Quick actions** to add or edit personal groups
-  and menu levels without editing JSON. Add actions and Work Items from their
+- Press `Ctrl+,`, then use **Quick actions** to add or edit personal menus,
+  Quick actions, and submenus without editing JSON. Add Actions and Work Items from their
   searchable lists, then reorder them together; stable IDs are generated from the visible names
   when left blank.
 - **Standard** is the single Built-in group. Its one **Standard** launcher
-  distributes all active Built-in actions across direct commands and three
+  distributes all active Built-in actions across root commands and three
   first-level sections with deeper subject levels, leaving the other editable
   group positions for **My configuration**.
 - **Passwords**, **Folders**, and **Prompts** are permanent action-bound nested
@@ -402,22 +422,26 @@ Quick-action rows or one compact nested-menu launcher.
   after the launcher opens and reloads.
 - Edit one of those actions and set **Quick menu** to as many as three levels
   separated by `>`, such as `Work > Reports > Monthly`. Leave it empty to put
-  the action under **Unsorted**. Archiving or deleting the action removes it
+  the Action directly at that menu's root, with no extra submenu. Archiving or
+  deleting the action removes it
   from its generated menu without maintaining a second assignment.
 - The fixed first rows are **Standard | Passwords** and **Folders | Prompts**.
   Personal configured groups continue below them in their configured order.
 - Groups remain in configured order across two columns. Subjects remain in
   configured order from top to bottom inside each group.
-- The group and every menu level accept any number of ordered actions. Nesting
-  is bounded at group → level 1 → level 2 → level 3 → action. Actions may stop
-  at any earlier point, including directly under the group. Native menus do not
+- The menu and every submenu accept any number of ordered Actions. Nesting
+  is bounded at menu → level 1 → level 2 → level 3 → Action. Actions may stop
+  at any earlier point, including directly under the menu. Native menus do not
   provide search or app-managed scrolling.
 
 ## Configure
 
 Choose **Manage focuses…** in the Focus selector for direct Focus
 configuration. Choose **Configure**, or use the shortcut (`Ctrl+,`), for the
-complete guided configuration workspace:
+complete guided configuration workspace. The left navigator replaces the
+crowded row of tabs and keeps every section in one stable place. Frequent
+destinations are grouped under **Set up** and backup or troubleshooting
+destinations under **Support**:
 
 - **Start:** ordinary Configure opens with task choices instead of assuming
   which configuration category you need. Choose **Create an Action...**,
@@ -425,42 +449,49 @@ complete guided configuration workspace:
   **Set up Work Items**, or **Back up or restore**. **Browse Action types** and
   **View diagnostics** remain available as secondary choices. Each choice
   opens the existing editor; it does not create a second configuration window.
-- **Actions:** assign the five machine-local pinned slots directly, then edit
-  every kind of My configuration or Built-in action, including URLs, files,
-  folders, applications, credentials, URL builders, and transformations.
-  Empty pin choices are closed automatically when saved. New actions default
-  to **My configuration**; choose **Built-in** only when deliberately changing
-  shipped starter data.
-- **+ Action:** use the visible launcher or Actions-tab button, or press
+- **Actions:** choose **New Action…** for the normal creation flow. **Other ways
+  to create** contains the educational Action-type catalogue and attended
+  document Harvest. Find, lifecycle, and selection commands surround one
+  Actions table; Contexts and tags for the selection appear below it. Choose
+  **Show pins** only when assigning the five machine-local slots, then save and
+  collapse them again. Hiding preserves unsaved choices for the current
+  Configure window and marks the summary **unsaved changes** until Save; closing
+  without Save discards them. Empty pin choices are closed automatically when saved.
+  New actions default to **My configuration**; choose **Built-in** only when
+  deliberately changing shipped starter data.
+- **+ Action / New Action:** use the visible launcher button, Configure's
+  **New Action…**, or press
   `Ctrl+N`, to search and choose a type before completing the usual Action
   form. The chooser supports typing, arrow keys, Enter, and Escape; it does
   not save anything until the Action form is confirmed. A non-General active
   Focus is prefilled as a Context. Use **Browse action types…** for the full
   educational catalogue.
-- **Create action:** inspect what each available action reads and does, see a
+- **Action types:** inspect what each available action reads and does, see a
   concrete example, then create a validated permanent action. Older
   Input / Output transformation types remain editable for compatibility but
   are not offered for new actions; use the Transform menu for immediate text
   changes or **Transform a text file** for a repeated file workflow.
-- **Contexts:** add, edit, or delete Contexts; assign built-in Actions, personal
-  Actions, and Work Items as members; and choose mixed defaults for slots 6–0.
-  My configuration Contexts stay on this PC. Built-in Contexts remain
-  Action-only.
-- **Quick actions:** create, rename, delete, and reorder groups and menu levels.
-  Choose **Quick-action rows** or **Nested subject menu** when adding or editing
-  a group. Edit the group to assign actions directly below it. Select a group
-  and choose **Add menu level** for level 1; select an existing level and use
-  the same command to add its child, up to level 3. Edit any level to assign its
-  ordered mix of actions and Work Items to a My configuration level. In row
-  presentation, the first available target is the left-click default. The
-  automatic **Passwords**, **Folders**, and **Prompts** groups also
-  appear in this table. Expand one and choose **Edit selected**, press Enter, or
-  double-click an action leaf to edit that action and its **Quick menu** path.
-  Editing an automatic group or level opens the matching Actions list. Add,
-  delete, and reorder commands apply only to configured groups; automatic menu
-  structure is changed through each action's **Quick menu** field. In nested
-  presentation, actions appear before child submenus. A preview shows the full
-  selected path.
+- **Contexts:** choose **New Context…**, use Find to search the full table, then
+  use the selected-Context card to **Edit…** or **Delete permanently…**. A
+  Context organizes items; Focus is the Context currently highlighted in the
+  palette. The editor lists members first, followed by optional Focus shortcuts
+  6–0. My configuration Contexts can contain built-in Actions, personal Actions,
+  and Work Items; Built-in Contexts remain Action-only.
+- **Quick actions:** choose **New menu…** to create a configured shortcut menu.
+  Select a custom menu and use **New Quick action**; select a custom item and
+  use **New submenu** where the bounded hierarchy permits it. Edit, Move, and
+  Delete apply only to configured structure. Each menu has one launcher;
+  assigned Actions and Work Items appear in their explicit menu order.
+  The automatic **Passwords**, **Folders**, and **Prompts** menus also appear in
+  the same tree, marked as generated from Actions. Select an automatic menu or
+  branch to add a correctly typed Action with the ordinary full form, including
+  Contexts, tags, target, and a prefilled **Quick menu** location. Select an
+  automatic Action leaf to **Edit Action**, or choose **Find all/matching
+  Actions** from a menu or branch. Their
+  structure cannot be moved or deleted here; organize it through each Action's
+  **Quick menu** path. Actions at a menu root appear before child submenus. The
+  selection card shows the complete path and only the commands valid for that
+  selection.
   The single Built-in **Standard** group offers only Built-in actions, keeping
   starter buttons usable
   without one PC's private files. My configuration groups may use both
@@ -470,8 +501,9 @@ complete guided configuration workspace:
   Quick-action groups are currently global; Context-based visibility or
   grouping is not applied.
 - **Diagnostics:** review a safe summary of loaded configuration, recent error
-  counts, and automatic-paste outcomes. Use **Refresh** after reproducing a
-  problem or **Copy safe summary** when asking for help. Raw log messages,
+  counts, and automatic-paste outcomes in a scrollable read-only report. Use
+  **Refresh** after reproducing a problem or **Copy safe summary** when asking
+  for help. Raw log messages,
   pasted text, credentials, action values, paths, and window titles are not
   included.
 - **Backup and restore:** create a complete-configuration ZIP or inspect one
@@ -483,17 +515,17 @@ complete guided configuration workspace:
   themselves are never copied. Credential secrets, logs, caches, environments,
   and unknown files are also excluded.
 
-  **Create backup...** asks where to save the ZIP and asks again before
+  **Create backup…** asks where to save the ZIP and asks again before
   replacing an existing file. Its result lists the archive location, included
   file count, warnings, and excluded categories. Treat a backup as sensitive:
   it can contain personal configuration, captured Inbox content, and configured
   machine paths even though external files and credential secrets are absent.
 
-  **Restore backup...** first inspects the archive without changing live
+  **Choose backup to inspect…** first inspects the archive without changing live
   configuration. Review files to replace or create, omitted live files that
   stay preserved, Built-in impact, sensitive categories, compatibility and
   legacy status, and privacy-safe portability warnings. **Apply inspected
-  restore...** then asks for confirmation and separately confirms any Built-in
+  changes…** then asks for confirmation and separately confirms any Built-in
   replacement. A successful restore reports the retained recovery archive,
   closes Configure, and reloads the launcher. If rollback completes after a
   failed restore, the previous configuration remains usable. If recovery is
@@ -507,14 +539,14 @@ complete guided configuration workspace:
   confirmation.
 
   `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, `Alt+W`, `Alt+D`, and `Alt+B` directly
-  select Actions, Create action, Contexts, Quick actions, Work Items,
+  select Actions, Action types, Contexts, Quick actions, Work Items,
   Diagnostics, and Backup and restore.
-  `Ctrl+Tab` cycles through all Configure tabs. Both paths move focus into the
-  selected tab's main content.
+  `Ctrl+Tab` cycles through all Configure sections. Both paths move focus into
+  the selected section's main content.
 
 Only one Configure workspace opens at a time. Choosing Configure again, using
 Manage focuses, right-clicking an action, or opening Work Item configuration
-raises that same window and moves it to the requested tab or record. Close it
+raises that same window and moves it to the requested section or record. Close it
 when finished; the next request creates a fresh Configure window.
 
 Ordinary Configure opens on Start with focus on **Create an Action...**. Direct
@@ -567,13 +599,14 @@ Keyboard shortcuts in these guided forms:
 - Use the normal arrow keys and Space to select tags, then choose **Add
   selected**. Press `Esc` to close without applying changes.
 
-Use the visible **Find** field in **Actions**, **Contexts**, or **Quick actions**
+Use the visible **Find** field in **Actions**, **Contexts**, **Quick actions**,
+or **Work Items**
 to reduce that table. `Ctrl+F` focuses and selects the Find field for the
-current one of those tabs. On another Configure tab, it opens the Actions tab
-and focuses **Find actions**. Multiple words must all match.
+current one of those sections. On another Configure section, it opens Actions
+and focuses **Find**. Multiple words must all match.
 
-The Actions, Contexts, Quick actions, Work Item sources, and discovered Work
-Items tables resize within the Configure window instead of hiding their final
+The Actions, Contexts, Quick actions, and discovered Work Items tables resize
+within the Configure window instead of hiding their final
 columns. Each table has a visible vertical scrollbar for records that extend
 beyond the available height.
 
@@ -581,9 +614,9 @@ beyond the available height.
   tag, state, target or saved value, arguments, working folder, and storage.
 - Contexts search name, description, member and preferred action names, and
   storage.
-- Quick actions search group name, menu level, assigned action name, action
-  metadata, and storage. **Unsorted** finds action-bound entries whose
-  **Quick menu** field is empty.
+- Quick actions search menu name, submenu, assigned Action name, Action
+  metadata, and storage. **Menu root** finds automatic entries whose **Quick
+  menu** field is empty.
 
 Press Enter on a selected result to edit it.
 
@@ -593,7 +626,7 @@ created from Inbox, Harvest, or Cheat Sheets also refresh an already-open
 Configure workspace.
 
 Use **Show** to switch the Actions table between **Active**, **Archived**, and
-**All** stored actions. **Archive selected...** is the normal way to remove an
+**All** stored actions. **Archive…** is the normal way to remove an
 Active Action from use without destroying its record. The confirmation reports
 how many saved pins, Focus slots, Context memberships, and configured Quick
 actions will be removed; empty Quick-action buttons are cleaned automatically.
@@ -601,12 +634,12 @@ The Archived Action remains searchable and editable in Configure. Restore it
 before assigning a Context because Archived Actions cannot own active saved
 placements.
 
-Select an Archived Action and choose **Restore selected** to make the same
+Select an Archived Action and choose **Restore…** to make the same
 record Active again. Restore does not recreate its former saved placements, so
 reassign any wanted pins, Context membership, Focus slots, or configured Quick
 actions. Generated Passwords, Folders, or Prompts placement can return
 automatically when the Action type and retained **Quick menu** path apply.
-**Delete permanently...** is available for Archived Actions and cannot be
+**Delete permanently…** is available for Archived Actions and cannot be
 undone inside Context Palette. Built-in lifecycle changes add a warning because
 they alter starter configuration tracked by Git.
 
@@ -651,7 +684,7 @@ neither side can be accidentally collapsed. A fresh
 application start leaves the workspace empty. Reopening the resident palette
 can show the current clipboard or captured selection. Actions can read or
 replace it. Its compact heading includes bitmap controls for Capture, Inbox,
-**Create from Input**, and **Text tools** without consuming label space.
+**Create from Input**, **Extract text**, and **Text tools** without consuming label space.
 
 Numbered action triggering is deliberately active only while Find has focus. In every other control—including Clipboard / Input / Output, the result list, context selector, and buttons—`1` through `9` do not execute actions. This makes Find the explicit keyboard command mode. Standard text editing remains available in the workspace.
 
@@ -676,6 +709,18 @@ The bottom communication line always stays one row high. Hover over it for the c
   script-like targets are explained instead of guessed. An unavailable absolute
   path can still be reviewed for portable or temporarily disconnected use. Use
   the unchanged **+ Action** command to choose a type yourself.
+- Choose **Extract text** to read one local image into Input / Output. Context
+  Palette first checks selected or complete Input / Output for one exact image
+  path, otherwise reads a clipboard bitmap, and finally offers an image file
+  picker. PNG, JPEG, BMP, GIF, TIFF, and WebP are supported. Recognition runs
+  locally in the background and does not upload the image.
+- OCR never replaces the clipboard image. If Input / Output is empty, the
+  extracted text is inserted directly. If it already contains text, choose
+  the explicitly labelled **Replace**, **Append**, or **Cancel** button. If the
+  workspace changed during recognition, the
+  choice explicitly warns about that change. The insertion is one Undo step.
+  No readable text, an unsupported or oversized image, or an OCR failure leaves
+  Input / Output unchanged.
 - A transform changes the selection, or the complete field when nothing is selected.
 - Every transform result is copied to the clipboard automatically and can be reverted with one Undo.
 - Transform groups provide case and naming styles, whitespace cleanup, literal
@@ -713,8 +758,8 @@ Run/Open; invalid selection commands are disabled instead of failing after a
 click. Work Item-specific New, Inbox, Copy file, and project commands live in
 the filter/tools menu.
 
-The Input / Output header contains Capture, Inbox, Create from Input, and Text
-tools. Configure, Help, and More sit below Quick actions. These icon-only
+The Input / Output header contains Capture, Inbox, Create from Input, Extract
+text, and Text tools. Configure, Help, and More sit below Quick actions. These icon-only
 controls use portable Tk bitmaps rather than font characters. Hover over or
 keyboard-focus any icon to see its complete name and explanation. The generic
 `+A` chooser and the conservative Create from Input route remain separate.
@@ -747,8 +792,16 @@ action-type IDs.
 Create **Run a sequence** from **+ Action** when several reviewed launch/open
 Actions should start in a fixed order. Add existing website, file, folder,
 application, or Windows-target Actions, optionally insert waits, and reorder the
-list. A sequence needs 2â€“12 steps. Each wait is 100â€“10,000 milliseconds; waits
+list. A sequence needs 2–12 steps. Each wait is 100–10,000 milliseconds; waits
 cannot be first, last, or adjacent, and their total cannot exceed 30 seconds.
+
+For safe UAT, run **UAT: Run a harmless sequence**. Its reviewed preview opens
+only the local Context Palette project folder, waits five seconds, and dispatches
+the same folder again. During the wait, Context Palette remains visible, shows
+the current step, and offers **Stop remaining**. Windows may reuse one Explorer
+window, so use the in-app progress rather than window count to verify dispatch.
+The sequence is intentionally visible in the **Developing Context Palette**
+Focus and does not run a script, modify a file, or use the clipboard.
 
 Running shows every current Action name, type, target, and structured argument
 before anything starts. Confirm to dispatch the steps in order. While it runs,
@@ -792,6 +845,17 @@ Copies current clipboard text into the Inbox after asking for a title. Captures 
 Shows captured items. An item can be converted into a permanent structured action
 with contexts, tags, short name, optional searchable description, and a guided
 action type.
+
+Select an unused capture and choose **Delete capture…** to permanently remove
+only that local Inbox copy. Context Palette confirms the selected title first.
+An Action already created from the capture remains unchanged because conversion
+copies the reviewed data into the Action; it does not retain an Inbox reference.
+**Other ways to create** contains the attended Ask AI and document-Harvest
+routes so the normal **Create action** path remains primary.
+
+This Capture Inbox and `data/inbox.json` are separate from the **Inbox** sheet
+inside a Work Item Excel workbook. Context Palette appends to that workbook
+sheet but does not delete its rows; remove those in Excel.
 
 Select an Inbox item and click **Ask AI** for an attended AI-guidance workflow:
 
@@ -848,7 +912,7 @@ prompt actions. Choosing a prompt loads it into Input / Output for review and
 copies it to the clipboard.
 
 Stored prompts reuse the normal action lifecycle. In Configure, choose
-**Create action**, select **AI prompt**, and create a personal action.
+**Action types**, select **AI prompt**, and create a personal action.
 Enter the visible prompt name and prompt text; no technical tag is required.
 Active AI prompt actions appear automatically, while Archived
 prompts do not. Personal prompt text stays in ignored `data/local_actions.json`
@@ -957,7 +1021,7 @@ file-oriented.
 
 ### Transform a text file
 
-Open **Configure**, choose **Create action**, then select **Transform a text
+Open **Configure**, choose **Action types**, then select **Transform a text
 file**. Select an existing local text file, choose an operation by its readable
 name, and fill only the parameters required by that operation. New forms start
 with an ignored machine-local default file beside the personal configuration;
@@ -1036,9 +1100,9 @@ Every Active credential action also appears automatically under the fixed
 **Passwords** Quick-action menu. Choosing one starts the existing protected
 destination confirmation. Set its optional **Quick menu** path when creating or
 editing it to organize credentials into as many as three nested levels; leave
-the path empty for **Unsorted**.
+the path empty to show it directly at the Passwords menu root.
 
-Press `Ctrl+,`, then choose **Create action → Paste a Windows
+Press `Ctrl+,`, then choose **Action types → Paste a Windows
 credential** to create a permanent personal action. The action stores only an exact target
 from the **Windows Credentials** or **Generic Credentials** section of
 Credential Manager; it never stores the username or password.

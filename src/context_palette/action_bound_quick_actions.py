@@ -15,13 +15,27 @@ def action_bound_quick_group(
     label: str,
     action_type: str,
 ) -> CommandGroup:
-    """Build one nested menu directly from active actions of a single type."""
+    """Build one live menu directly from active actions of a single type.
+
+    Actions without a Quick-menu path belong at the menu root.  A path creates
+    only the requested nested branches; it never adds a synthetic ``Unsorted``
+    level that costs the user another click.
+    """
 
     entries = [
-        (action.quick_action_path or ("Unsorted",), action)
+        (action.quick_action_path, action)
         for action in actions
-        if action.type == action_type and action.state != "Archived"
+        if action.type == action_type
+        and action.state != "Archived"
+        and action.quick_action_path
     ]
+    root_action_ids = tuple(
+        action.id
+        for action in actions
+        if action.type == action_type
+        and action.state != "Archived"
+        and not action.quick_action_path
+    )
     item_counter = 0
 
     def build_items(
@@ -68,6 +82,7 @@ def action_bound_quick_group(
         label=label,
         items=build_items(entries, 0) if entries else (),
         presentation=GROUP_PRESENTATION_NESTED_MENU,
+        action_ids=root_action_ids,
     )
 
 

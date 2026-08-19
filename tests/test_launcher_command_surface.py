@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,11 +35,24 @@ class FakeStatusVar:
         self.value = value
 
 
+class FakeRoot:
+    def after_idle(self, callback: object) -> str:
+        callback()
+        return "after-idle"
+
+
 class FakeEvent:
-    def __init__(self, state: int = 0, x_root: int = 10, y_root: int = 20) -> None:
+    def __init__(
+        self,
+        state: int = 0,
+        x_root: int = 10,
+        y_root: int = 20,
+        y: int = 0,
+    ) -> None:
         self.state = state
         self.x_root = x_root
         self.y_root = y_root
+        self.y = y
 
 
 class FakeMenu:
@@ -54,10 +67,17 @@ class FakeMenu:
         self.cascades: list["FakeMenu"] = []
         self.popup_calls: list[tuple[int, int]] = []
         self.grab_release_calls = 0
+        self.unpost_calls = 0
+        self.bindings: dict[str, object] = {}
         FakeMenu.last_instance = self
         FakeMenu.instances.append(self)
 
-    def add_command(self, label: str, command: object | None = None, state: str | None = None) -> None:
+    def add_command(
+        self,
+        label: str,
+        command: object | None = None,
+        state: str | None = None,
+    ) -> None:
         self.labels.append(label)
         self.commands.append(command)
         self.states.append(state)
@@ -73,18 +93,40 @@ class FakeMenu:
         self.states.append(None)
         self.cascades.append(menu)
 
-    def index(self, _marker: object) -> int | None:
-        return None if not self.labels else len(self.labels) - 1
+    def index(self, marker: object) -> int | None:
+        if not self.labels:
+            return None
+        if isinstance(marker, str) and marker.startswith("@"):
+            try:
+                candidate = int(marker[1:])
+            except ValueError:
+                return None
+            return candidate if 0 <= candidate < len(self.labels) else None
+        return len(self.labels) - 1
+
+    def bind(self, sequence: str, callback: object, add: str | None = None) -> None:
+        self.bindings[sequence] = callback
 
     def tk_popup(self, x_root: int, y_root: int) -> None:
         self.popup_calls.append((x_root, y_root))
 
+    def unpost(self) -> None:
+        self.unpost_calls += 1
+
     def grab_release(self) -> None:
         self.grab_release_calls += 1
 
+    def right_click(self, index: int) -> str:
+        callback = self.bindings["<Button-3>"]
+        return callback(FakeEvent(x_root=30, y_root=40, y=index))
+
 
 class LauncherCommandSurfaceTests(unittest.TestCase):
-    def test_action_bound_groups_include_matching_active_actions_and_nested_paths(self):
+    def setUp(self) -> None:
+        FakeMenu.last_instance = None
+        FakeMenu.instances = []
+
+    def test_action_bound_groups_put_blank_paths_at_menu_root(self):
         actions = [
             Action("password", "Database", "General", "paste_credential", "database"),
             Action(
@@ -95,24 +137,23 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
                 ".",
                 quick_action_path=("Work", "Reports"),
             ),
-            Action("one", "First prompt", "General", "ai_prompt", "Review this", "Active"),
-            Action("template", "Not a prompt", "General", "workspace_template", "text", "Active"),
+            Action("one", "First prompt", "General", "ai_prompt", "Review this"),
+            Action("template", "Not a prompt", "General", "workspace_template", "text"),
             Action("old", "Archived", "General", "ai_prompt", "old", "Archived"),
         ]
 
         passwords, folders, prompts = action_bound_quick_groups(actions)
 
-        self.assertEqual([group.label for group in (passwords, folders, prompts)], [
-            "Passwords",
-            "Folders",
-            "Prompts",
-        ])
-        self.assertEqual(passwords.items[0].label, "Unsorted")
-        self.assertEqual(passwords.items[0].action_ids, ("password",))
+        self.assertEqual(
+            [group.label for group in (passwords, folders, prompts)],
+            ["Passwords", "Folders", "Prompts"],
+        )
+        self.assertEqual(passwords.action_ids, ("password",))
+        self.assertEqual(passwords.items, ())
         self.assertEqual(folders.items[0].label, "Work")
         self.assertEqual(folders.items[0].items[0].label, "Reports")
         self.assertEqual(folders.items[0].items[0].action_ids, ("folder",))
-        self.assertEqual(prompts.items[0].action_ids, ("one",))
+        self.assertEqual(prompts.action_ids, ("one",))
 
     def test_failed_reload_preserves_last_known_good_buttons(self):
         app = self._app()
@@ -143,7 +184,7 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
 
     def _app(self) -> LauncherApp:
         app = LauncherApp.__new__(LauncherApp)
-        app.root = object()
+        app.root = FakeRoot()
         app.status_var = FakeStatusVar()
         app.actions = [
             Action(
@@ -183,151 +224,192 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
         )
         app._execute_action_calls = []
         app._opened_work_items = []
+        app._configuration_requests = []
 
-        def _execute_action(action: Action) -> None:
-            app._execute_action_calls.append(action.id)
-
-        def _open_command_configuration(group: CommandGroup) -> None:
-            app._opened_group = group.id
-
-        app._execute_action = _execute_action
-        app._open_command_configuration = _open_command_configuration
+        app._execute_action = lambda action: app._execute_action_calls.append(action.id)
         app._open_work_item_target = (
             lambda item, target: app._opened_work_items.append((item, target)) or True
         )
+        app._show_configuration = (
+            lambda **kwargs: app._configuration_requests.append(kwargs)
+        )
         return app
 
-    def test_work_item_quick_action_uses_existing_workbook_first_opener(self):
+    def test_group_left_click_browses_without_executing(self):
         app = self._app()
-        item = CommandItem(
-            "current",
-            "Current item",
-            work_item_ref=WorkItemReference(
-                "product-work",
-                "ISS-ABC-example",
+        group = CommandGroup(
+            "writing",
+            "Writing",
+            (
+                CommandItem(
+                    "greeting",
+                    "Greetings",
+                    primary_action_id="primary",
+                    action_ids=("secondary",),
+                ),
             ),
         )
 
-        result = app._handle_command_item_left_click(
-            FakeEvent(),
-            CommandGroup("work", "Work"),
-            item,
-        )
+        with patch("context_palette.launcher.tk.Menu", FakeMenu):
+            result = app._show_group_menu(FakeEvent(), group)
 
         self.assertEqual(result, "break")
+        self.assertEqual(app._execute_action_calls, [])
+        self.assertEqual(app._active_command_menu.labels, ["Greetings"])
+        self.assertEqual(app._active_command_menu.popup_calls, [(10, 20)])
+        self.assertEqual(
+            app._active_command_submenus[0].labels,
+            ["↗ - Primary", "↗ - Secondary"],
+        )
+
+    def test_legacy_primary_only_controls_menu_order(self):
+        app = self._app()
+        group = CommandGroup(
+            "writing",
+            "Writing",
+            (
+                CommandItem(
+                    "greeting",
+                    "Greetings",
+                    primary_action_id="primary",
+                    action_ids=("secondary", "primary"),
+                ),
+            ),
+        )
+
+        with patch("context_palette.launcher.tk.Menu", FakeMenu):
+            app._show_group_menu(FakeEvent(), group)
+
+        self.assertEqual(
+            app._active_command_submenus[0].labels,
+            ["↗ - Primary", "↗ - Secondary"],
+        )
+        self.assertEqual(app._execute_action_calls, [])
+
+    def test_action_entry_left_click_executes_only_selected_action(self):
+        app = self._app()
+        group = CommandGroup(
+            "standard",
+            "Standard",
+            presentation=GROUP_PRESENTATION_NESTED_MENU,
+            action_ids=("primary", "secondary"),
+        )
+
+        with patch("context_palette.launcher.tk.Menu", FakeMenu):
+            app._show_group_menu(FakeEvent(), group)
+
+        app._active_command_menu.commands[1]()
+        self.assertEqual(app._execute_action_calls, ["secondary"])
+
+    def test_action_entry_right_click_edits_exact_action_without_running(self):
+        app = self._app()
+        group = CommandGroup(
+            "standard",
+            "Standard",
+            presentation=GROUP_PRESENTATION_NESTED_MENU,
+            action_ids=("primary",),
+        )
+
+        with patch("context_palette.launcher.tk.Menu", FakeMenu):
+            app._show_group_menu(FakeEvent(), group)
+            result = app._active_command_menu.right_click(0)
+
+        self.assertEqual(result, "break")
+        self.assertEqual(app._execute_action_calls, [])
+        self.assertEqual(
+            app._configuration_requests,
+            [
+                {
+                    "initial_tab": "actions",
+                    "initial_action_id": "primary",
+                    "start_action_edit": True,
+                }
+            ],
+        )
+        self.assertEqual(app._active_command_menu.unpost_calls, 1)
+
+    def test_work_item_entry_left_opens_and_right_selects_for_management(self):
+        app = self._app()
+        reference = WorkItemReference("product-work", "ISS-ABC-example")
+        group = CommandGroup(
+            "work",
+            "Work",
+            (CommandItem("current", "Current item", work_item_ref=reference),),
+        )
+
+        with patch("context_palette.launcher.tk.Menu", FakeMenu):
+            app._show_group_menu(FakeEvent(), group)
+            item_menu = app._active_command_submenus[0]
+            item_menu.commands[0]()
+            item_menu.right_click(0)
+
         self.assertEqual(
             app._opened_work_items,
             [(app._test_work_item, app._test_work_item.matching_workbook_path)],
         )
-        self.assertIn("Opened workbook", app.status_var.value)
-        self.assertEqual(app._execute_action_calls, [])
-
-    def test_unavailable_work_item_quick_action_is_kept_and_reports_recovery(self):
-        app = self._app()
-        item = CommandItem(
-            "missing",
-            "Missing item",
-            work_item_ref=WorkItemReference("product-work", "ISS-ABC-missing"),
+        self.assertEqual(
+            app._configuration_requests[-1],
+            {
+                "initial_tab": "work_items",
+                "initial_work_item_key": "product-work/ISS-ABC-example",
+            },
         )
 
-        with patch("context_palette.launcher.messagebox.showerror") as error:
-            result = app._execute_item_primary(item)
-
-        self.assertEqual(result, "break")
-        self.assertEqual(app._opened_work_items, [])
-        self.assertIn("unavailable", app.status_var.value.casefold())
-        self.assertIn("has been kept", error.call_args.args[1])
-
-    def test_work_item_quick_action_menu_uses_live_reference(self):
+    def test_unavailable_work_item_stays_visible_and_disabled(self):
         app = self._app()
-        item = CommandItem(
-            "current",
-            "Current item",
-            work_item_ref=WorkItemReference(
-                "product-work",
-                "ISS-ABC-example",
+        group = CommandGroup(
+            "work",
+            "Work",
+            (
+                CommandItem(
+                    "missing",
+                    "Missing item",
+                    work_item_ref=WorkItemReference(
+                        "product-work",
+                        "ISS-ABC-missing",
+                    ),
+                ),
             ),
         )
 
         with patch("context_palette.launcher.tk.Menu", FakeMenu):
-            app._show_item_menu(FakeEvent(), item)
+            app._show_group_menu(FakeEvent(), group)
 
-        menu = FakeMenu.last_instance
-        self.assertEqual(menu.labels, ["▣ - ISS-ABC-example"])
-        menu.commands[0]()
-        self.assertEqual(len(app._opened_work_items), 1)
-
-    def test_mixed_quick_action_runs_first_available_target(self):
-        app = self._app()
-        item = CommandItem(
-            "mixed",
-            "Mixed",
-            targets=(
-                CommandTarget(
-                    work_item_ref=WorkItemReference(
-                        "product-work",
-                        "ISS-ABC-missing",
-                    )
-                ),
-                CommandTarget(action_id="secondary"),
-            ),
+        missing_menu = app._active_command_submenus[0]
+        self.assertEqual(
+            missing_menu.labels,
+            ["Unavailable Work Item - ISS-ABC-missing"],
         )
-
-        app._execute_item_primary(item)
-
-        self.assertEqual(app._execute_action_calls, ["secondary"])
-        self.assertEqual(app._opened_work_items, [])
-
-    def test_mixed_quick_action_can_fall_through_to_second_work_item(self):
-        app = self._app()
-        item = CommandItem(
-            "mixed",
-            "Mixed",
-            targets=(
-                CommandTarget(
-                    work_item_ref=WorkItemReference(
-                        "product-work",
-                        "ISS-ABC-missing",
-                    )
-                ),
-                CommandTarget(
-                    work_item_ref=WorkItemReference(
-                        "product-work",
-                        "ISS-ABC-example",
-                    )
-                ),
-                CommandTarget(action_id="secondary"),
-            ),
-        )
-
-        app._execute_item_primary(item)
-
-        self.assertEqual(len(app._opened_work_items), 1)
-        self.assertEqual(app._opened_work_items[0][0], app._test_work_item)
-        self.assertEqual(app._execute_action_calls, [])
+        self.assertEqual(missing_menu.states, ["disabled"])
 
     def test_mixed_quick_action_menu_preserves_target_order(self):
         app = self._app()
-        item = CommandItem(
+        group = CommandGroup(
             "mixed",
             "Mixed",
-            targets=(
-                CommandTarget(action_id="primary"),
-                CommandTarget(
-                    work_item_ref=WorkItemReference(
-                        "product-work",
-                        "ISS-ABC-example",
-                    )
+            (
+                CommandItem(
+                    "mixed",
+                    "Mixed targets",
+                    targets=(
+                        CommandTarget(action_id="primary"),
+                        CommandTarget(
+                            work_item_ref=WorkItemReference(
+                                "product-work",
+                                "ISS-ABC-example",
+                            )
+                        ),
+                        CommandTarget(action_id="secondary"),
+                    ),
                 ),
-                CommandTarget(action_id="secondary"),
             ),
         )
 
         with patch("context_palette.launcher.tk.Menu", FakeMenu):
-            app._show_item_menu(FakeEvent(), item)
+            app._show_group_menu(FakeEvent(), group)
 
         self.assertEqual(
-            FakeMenu.last_instance.labels,
+            app._active_command_submenus[0].labels,
             [
                 app.actions[0].compact_display_text,
                 "▣ - ISS-ABC-example",
@@ -335,93 +417,152 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
             ],
         )
 
-    def test_left_click_executes_primary_action(self):
+    def test_configured_launcher_right_click_offers_add_and_organize(self):
         app = self._app()
-        item = CommandItem(
-            id="test",
-            label="Test",
-            primary_action_id="primary",
-            action_ids=("secondary",),
-        )
+        group = CommandGroup("writing", "Writing")
+        app._open_configured_quick_manager = Mock()
 
-        result = app._handle_command_item_left_click(FakeEvent(state=0), CommandGroup("g", "Group"), item)
+        with patch("context_palette.launcher.tk.Menu", FakeMenu):
+            result = app._show_configured_group_management(FakeEvent(), group)
 
         self.assertEqual(result, "break")
-        self.assertEqual(app._execute_action_calls, ["primary"])
-
-    def test_primary_action_wins_when_listed_after_another_action(self):
-        app = self._app()
-        item = CommandItem(
-            id="test",
-            label="Test",
-            primary_action_id="primary",
-            action_ids=("secondary", "primary"),
+        self.assertEqual(
+            app._active_quick_management_menu.labels,
+            ["Add Quick action to Writing…", "---", "Organize Writing…"],
         )
-
-        left_click_result = app._handle_command_item_left_click(
-            FakeEvent(state=0),
-            CommandGroup("g", "Group"),
-            item,
+        app._active_quick_management_menu.commands[0]()
+        app._active_quick_management_menu.commands[2]()
+        self.assertEqual(
+            app._open_configured_quick_manager.call_args_list,
+            [
+                call("writing", (), start_add=True),
+                call("writing", ()),
+            ],
         )
-        keyboard_result = app._execute_item_primary(item)
-
-        self.assertEqual(left_click_result, "break")
-        self.assertEqual(keyboard_result, "break")
-        self.assertEqual(app._execute_action_calls, ["primary", "primary"])
-
-    def test_shift_or_ctrl_left_click_opens_configuration(self):
-        app = self._app()
-        item = CommandItem(id="test", label="Test", primary_action_id="primary")
-        group = CommandGroup("group-id", "Group")
-
-        app._handle_command_item_left_click(FakeEvent(state=0x0001), group, item)
-        app._handle_command_item_left_click(FakeEvent(state=0x0004), group, item)
-
-        self.assertEqual(app._opened_group, "group-id")
         self.assertEqual(app._execute_action_calls, [])
 
-    def test_item_menu_posts_and_keeps_menu_alive_for_callbacks(self):
+    def test_automatic_launcher_right_click_offers_typed_add_and_management(self):
         app = self._app()
-        item = CommandItem(
-            id="test",
-            label="Test",
-            primary_action_id="primary",
-            action_ids=("secondary",),
+        group = CommandGroup("action-bound-folders", "Folders")
+        app._open_automatic_quick_creator = Mock()
+        app._open_automatic_quick_manager = Mock()
+        app._find_automatic_quick_actions = Mock()
+
+        with patch("context_palette.launcher.tk.Menu", FakeMenu):
+            result = app._show_action_bound_group_management(
+                FakeEvent(),
+                group,
+                "open_folder",
+            )
+
+        self.assertEqual(result, "break")
+        self.assertEqual(
+            app._active_quick_management_menu.labels,
+            [
+                "Add folder shortcut…",
+                "---",
+                "Organize Folders…",
+                "Find matching Actions…",
+            ],
+        )
+        for index in (0, 2, 3):
+            app._active_quick_management_menu.commands[index]()
+        app._open_automatic_quick_creator.assert_called_once_with(
+            "open_folder",
+            (),
+        )
+        app._open_automatic_quick_manager.assert_called_once_with(
+            "open_folder",
+            (),
+        )
+        app._find_automatic_quick_actions.assert_called_once_with(
+            "Folders",
+            "open_folder",
+            (),
+        )
+
+    def test_branch_right_click_offers_related_branch_commands(self):
+        app = self._app()
+        app._open_automatic_quick_creator = Mock()
+        app._open_automatic_quick_manager = Mock()
+        app._find_automatic_quick_actions = Mock()
+        group = CommandGroup(
+            "action-bound-folders",
+            "Folders",
+            (CommandItem("work", "Work", action_ids=("primary",)),),
+            presentation=GROUP_PRESENTATION_NESTED_MENU,
         )
 
         with patch("context_palette.launcher.tk.Menu", FakeMenu):
-            result = app._show_item_menu(FakeEvent(), item)
+            app._post_group_menu(
+                group,
+                10,
+                20,
+                automatic_action_type="open_folder",
+            )
+            app._active_command_menu.right_click(0)
 
-        self.assertEqual(result, "break")
-        menu = FakeMenu.last_instance
-        self.assertIsNotNone(menu)
-        self.assertEqual(menu.popup_calls, [(10, 20)])
-        self.assertEqual(menu.grab_release_calls, 1)
-        self.assertGreaterEqual(len(menu.commands), 2)
-        self.assertEqual(menu.labels, ["↗ - Primary", "↗ - Secondary"])
-        first_callback = menu.commands[0]
-        self.assertTrue(callable(first_callback))
-        first_callback()
-        self.assertEqual(app._execute_action_calls, ["primary"])
+        self.assertEqual(
+            app._active_quick_management_menu.labels,
+            [
+                "Add folder here…",
+                "---",
+                "Organize Folders > Work…",
+                "Find matching Actions…",
+            ],
+        )
+        for index in (0, 2, 3):
+            app._active_quick_management_menu.commands[index]()
+        app._open_automatic_quick_creator.assert_called_once_with(
+            "open_folder",
+            ("Work",),
+        )
+        app._open_automatic_quick_manager.assert_called_once_with(
+            "open_folder",
+            ("Work",),
+        )
 
-    def test_item_menu_keeps_disabled_fallback_when_no_action_is_available(self):
+    def test_configured_branch_uses_submenu_language_and_hides_add_at_max_depth(self):
         app = self._app()
-        item = CommandItem(
-            id="missing",
-            label="Missing",
-            primary_action_id="not-found",
+        app._open_configured_quick_manager = Mock()
+        group = CommandGroup(
+            "tools",
+            "Tools",
+            (
+                CommandItem(
+                    "one",
+                    "One",
+                    items=(
+                        CommandItem(
+                            "two",
+                            "Two",
+                            items=(CommandItem("three", "Three"),),
+                        ),
+                    ),
+                ),
+            ),
+            presentation=GROUP_PRESENTATION_NESTED_MENU,
         )
 
         with patch("context_palette.launcher.tk.Menu", FakeMenu):
-            result = app._show_item_menu(FakeEvent(), item)
+            app._post_configured_quick_management(group, (0,), 10, 20)
+            self.assertEqual(
+                app._active_quick_management_menu.labels,
+                ["New submenu here…", "---", "Organize One…"],
+            )
+            app._post_configured_quick_management(group, (0, 0, 0), 10, 20)
 
-        self.assertEqual(result, "break")
-        menu = FakeMenu.last_instance
-        self.assertIsNotNone(menu)
-        self.assertEqual(menu.labels, ["No available actions"])
-        self.assertEqual(menu.states, ["disabled"])
+        self.assertEqual(
+            app._active_quick_management_menu.labels,
+            ["Organize Three…"],
+        )
+        app._active_quick_management_menu.commands[0]()
+        app._open_configured_quick_manager.assert_called_once_with(
+            "tools",
+            ("one", "two", "three"),
+        )
 
-    def test_nested_group_menu_shows_subject_cascades_and_actions(self):
+    def test_nested_group_menu_keeps_root_actions_and_subject_tree(self):
         app = self._app()
         group = CommandGroup(
             "standard",
@@ -444,55 +585,24 @@ class LauncherCommandSurfaceTests(unittest.TestCase):
                         ),
                     ),
                 ),
-                CommandItem(
-                    "missing",
-                    "Missing",
-                    primary_action_id="not-found",
-                ),
             ),
             presentation=GROUP_PRESENTATION_NESTED_MENU,
             primary_action_id="primary",
             action_ids=("primary",),
         )
-        first_new_menu = len(FakeMenu.instances)
 
         with patch("context_palette.launcher.tk.Menu", FakeMenu):
             result = app._show_group_menu(FakeEvent(), group)
 
         self.assertEqual(result, "break")
-        (
-            root_menu,
-            lookup_menu,
-            details_menu,
-            deep_menu,
-            missing_menu,
-        ) = FakeMenu.instances[first_new_menu:]
-        self.assertEqual(
-            root_menu.labels,
-            ["↗ - Primary", "---", "Lookup", "Missing"],
-        )
-        self.assertEqual(root_menu.cascades, [lookup_menu, missing_menu])
-        self.assertEqual(root_menu.popup_calls, [(10, 20)])
-        self.assertEqual(root_menu.grab_release_calls, 1)
+        root_menu = app._active_command_menu
+        lookup_menu, details_menu, deep_menu = app._active_command_submenus
+        self.assertEqual(root_menu.labels, ["↗ - Primary", "---", "Lookup"])
         self.assertEqual(lookup_menu.labels, ["Details"])
         self.assertEqual(details_menu.labels, ["Deep"])
         self.assertEqual(deep_menu.labels, ["↗ - Secondary"])
-        self.assertEqual(missing_menu.labels, ["No available actions"])
         deep_menu.commands[0]()
         self.assertEqual(app._execute_action_calls, ["secondary"])
-
-    def test_modified_nested_group_click_opens_configuration(self):
-        app = self._app()
-        group = CommandGroup(
-            "standard",
-            "Standard",
-            presentation=GROUP_PRESENTATION_NESTED_MENU,
-        )
-
-        result = app._show_group_menu(FakeEvent(state=0x0001), group)
-
-        self.assertEqual(result, "break")
-        self.assertEqual(app._opened_group, "standard")
 
 
 if __name__ == "__main__":

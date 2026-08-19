@@ -21,13 +21,14 @@ from context_palette.action_discovery_panel import (
     slot_row_tag,
     visible_result_row_count,
 )
-from context_palette.command_surface import CommandItem
+from context_palette.command_surface import CommandGroup, CommandItem
 from context_palette.contexts import ContextDefinition, ContextError
 from context_palette.launcher import (
     LauncherApp,
     bounded_sash_position,
     quick_action_column_count,
 )
+from context_palette.ocr import OcrResult, OcrSource
 from context_palette.palette_state import PaletteState
 from context_palette.palette_items import PaletteItemReference
 from context_palette.windows_credentials import (
@@ -65,11 +66,23 @@ class FakeButton:
 class FakeRoot:
     def __init__(self) -> None:
         self.withdraw_calls = 0
+        self.deiconify_calls = 0
+        self.lift_calls = 0
+        self.attributes_calls: list[tuple[object, ...]] = []
         self.after_callbacks: list[object] = []
         self.cancelled_after_ids: list[object] = []
 
     def withdraw(self) -> None:
         self.withdraw_calls += 1
+
+    def deiconify(self) -> None:
+        self.deiconify_calls += 1
+
+    def lift(self) -> None:
+        self.lift_calls += 1
+
+    def attributes(self, *values: object) -> None:
+        self.attributes_calls.append(values)
 
     def after(self, _delay: int, callback: object) -> str:
         self.after_callbacks.append(callback)
@@ -97,6 +110,37 @@ class FakeKeyEvent:
 
 
 class LauncherInteractionTests(unittest.TestCase):
+    def test_ocr_request_uses_clipboard_image_and_places_background_result(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.status_var = FakeVariable()
+        app.workspace_component = Mock()
+        app.workspace_component.raw_text.return_value = "Existing notes"
+        app.workspace_component.apply_ocr_text.return_value = "append"
+        app.ocr = Mock()
+        app.ocr.running = False
+        app.ocr.start.return_value = True
+        source = OcrSource("clipboard", "clipboard image", b"png")
+
+        with (
+            patch("context_palette.launcher.image_source_from_text", return_value=None),
+            patch("context_palette.launcher.clipboard_image_source", return_value=source),
+        ):
+            app._extract_text_from_image("Existing notes")
+
+        app.workspace_component.set_ocr_running.assert_called_once_with(True)
+        self.assertIn("clipboard image", app.status_var.value)
+        callback = app.ocr.start.call_args.args[1]
+        callback(OcrResult("Found text", 1, 0.4, "Fake OCR", 0.9), None)
+
+        app.workspace_component.apply_ocr_text.assert_called_once_with(
+            "Found text",
+            source_label="clipboard image",
+            expected_text="Existing notes",
+        )
+        app.workspace_component.set_ocr_running.assert_called_with(False)
+        self.assertIn("Appended", app.status_var.value)
+
     def test_sequence_confirms_and_dispatches_resolved_actions_in_order(self):
         app = LauncherApp.__new__(LauncherApp)
         app.root = FakeRoot()
@@ -125,6 +169,9 @@ class LauncherInteractionTests(unittest.TestCase):
             message = app._run_action_sequence(sequence)
         app.root.after_callbacks.pop(0)()
         app.root.after_callbacks.pop(0)()
+        self.assertIn("step 2/3", app.status_var.value.casefold())
+        self.assertIn("waiting 0.2 seconds", app.status_var.value.casefold())
+        self.assertIn("Stop remaining", app.status_var.value)
         app.root.after_callbacks.pop(0)()
         app.root.after_callbacks.pop(0)()
 
@@ -136,6 +183,8 @@ class LauncherInteractionTests(unittest.TestCase):
         )
         self.assertIsNone(app.sequence_run_plan)
         self.assertIn("finished dispatching 2", app.status_var.value)
+        self.assertIn(("-topmost", True), app.root.attributes_calls)
+        self.assertEqual(app.root.attributes_calls[-1], ("-topmost", False))
         self.assertEqual(
             app.action_discovery_panel.render_control_state.call_args_list,
             [call(sequence_running=True), call(sequence_running=False)],
@@ -180,6 +229,34 @@ class LauncherInteractionTests(unittest.TestCase):
             app.action_discovery_panel.render_control_state.call_args_list,
             [call(sequence_running=True), call(sequence_running=False)],
         )
+
+    def test_active_sequence_suspends_focus_loss_auto_hide(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.root.focus_get.return_value = None
+        app.hotkey_available = True
+        app.hide_after_id = None
+        app.sequence_run_plan = Mock()
+
+        app._schedule_hide_when_inactive(Mock())
+        app._hide_if_inactive()
+
+        app.root.after.assert_not_called()
+        app.root.withdraw.assert_not_called()
+
+    def test_manual_hide_is_blocked_while_sequence_stop_is_attended(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.status_var = FakeVariable()
+        app.hide_after_id = None
+        app.sequence_run_plan = Mock()
+
+        app.hide_window()
+
+        app.root.withdraw.assert_not_called()
+        app.root.attributes.assert_called_with("-topmost", True)
+        self.assertIn("Stop remaining", app.status_var.value)
+
     def test_incomplete_restore_recovery_hides_launcher_and_requests_exit(self):
         app = LauncherApp.__new__(LauncherApp)
         app.root = Mock()
@@ -330,6 +407,24 @@ class LauncherInteractionTests(unittest.TestCase):
         app.instance_server.stop.assert_called_once_with()
         app._cancel_pending_tk_callbacks.assert_called_once_with()
         app.root.destroy.assert_called_once_with()
+
+    def test_quit_is_blocked_while_local_ocr_is_running(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.hotkey = Mock()
+        app.instance_server = Mock()
+        app.work_item_file_copy = Mock(running=False)
+        app.work_item_inbox = Mock(running=False)
+        app.ocr = Mock(running=True)
+        app.status_var = FakeVariable()
+        app._finish_protected_clipboard = Mock()
+
+        with patch("context_palette.launcher.messagebox.showwarning") as warning:
+            app.quit_app()
+
+        self.assertIn("image text extraction", warning.call_args.args[1])
+        app._finish_protected_clipboard.assert_not_called()
+        app.root.destroy.assert_not_called()
 
     def test_quit_is_blocked_while_protected_clipboard_cleanup_is_pending(self):
         app = LauncherApp.__new__(LauncherApp)
@@ -1610,40 +1705,37 @@ class LauncherInteractionTests(unittest.TestCase):
         app._reload.assert_called_once_with()
         app.configuration_window.refresh_from_storage.assert_called_once_with()
 
-    def test_keyboard_quick_action_runs_primary_action(self):
+    def test_keyboard_quick_action_opens_its_menu_without_running(self):
         app = LauncherApp.__new__(LauncherApp)
-        action = Action(
-            id="open-docs",
-            title="Open documentation",
-            context="Developing",
-            type="open_url",
-            value="https://docs.python.org/",
+        app._post_group_menu = Mock(return_value="break")
+        control = Mock()
+        control.winfo_rootx.return_value = 12
+        control.winfo_rooty.return_value = 20
+        control.winfo_height.return_value = 30
+        group = CommandGroup(
+            "docs",
+            "Docs",
+            (CommandItem("python", "Python", primary_action_id="open-docs"),),
         )
-        app.actions = [action]
-        executed: list[Action] = []
-        app._execute_action = executed.append
-        app.status_var = FakeVariable()
 
-        result = app._execute_item_primary(
-            CommandItem(
-                id="docs",
-                label="Docs",
-                primary_action_id="open-docs",
-                action_ids=("open-docs",),
-            )
-        )
+        result = app._show_group_menu_at_control(control, group)
 
         self.assertEqual(result, "break")
-        self.assertEqual(executed, [action])
+        app._post_group_menu.assert_called_once_with(group, 12, 50)
 
-    def test_keyboard_quick_action_explains_missing_assignment(self):
+    def test_keyboard_empty_quick_action_still_opens_disabled_menu(self):
         app = LauncherApp.__new__(LauncherApp)
-        app.actions = []
-        app.status_var = FakeVariable()
+        app._post_group_menu = Mock(return_value="break")
+        control = Mock()
+        control.winfo_rootx.return_value = 4
+        control.winfo_rooty.return_value = 5
+        control.winfo_height.return_value = 6
+        group = CommandGroup("empty", "Empty")
 
-        app._execute_item_primary(CommandItem(id="empty", label="Empty"))
+        result = app._show_group_menu_at_control(control, group)
 
-        self.assertIn("no available action", app.status_var.value)
+        self.assertEqual(result, "break")
+        app._post_group_menu.assert_called_once_with(group, 4, 11)
 
 
 if __name__ == "__main__":

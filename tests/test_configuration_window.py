@@ -6,7 +6,7 @@ import tempfile
 import tkinter as tk
 from tkinter import ttk
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +16,7 @@ from context_palette.configuration_window import (
     ActionDialog,
     ActionBoundQuickSelection,
     ButtonDialog,
+    CONFIGURATION_TAB_INDEXES,
     ConfigurationWindow,
     ContextDialog,
     GroupDialog,
@@ -24,6 +25,8 @@ from context_palette.configuration_window import (
     EMPTY_PIN_LABEL,
     action_reference_labels,
     action_matches_filter,
+    compact_selection_summary,
+    compact_selection_title,
     context_action_summary,
     context_membership_count,
     context_matches_filter,
@@ -147,6 +150,12 @@ class HarvestRefreshTests(unittest.TestCase):
 
 
 class ContextMembershipCountTests(unittest.TestCase):
+    def test_selection_summary_is_bounded(self) -> None:
+        value = compact_selection_summary("word " * 100)
+
+        self.assertLessEqual(len(value), 180)
+        self.assertTrue(value.endswith("…"))
+
     def test_explicit_context_membership_is_authoritative(self):
         context = ContextDefinition(
             "My work",
@@ -209,7 +218,7 @@ class ActionReferenceLabelTests(unittest.TestCase):
 
         self.assertEqual(
             summary,
-            "2 member(s) | Preferred: Open project folder, Open code editor",
+            "2 member(s) · Focus shortcuts: Open project folder, Open code editor",
         )
         self.assertNotIn("open-project", summary)
 
@@ -439,6 +448,7 @@ class FakeActionTree(FakeTree):
         self.inserted: list[str] = []
         self.rows: dict[str, tuple[str, dict[str, object]]] = {}
         self.seen: str | None = None
+        self.configuration: dict[str, object] = {}
 
     def delete(self, *_items: str) -> None:
         self.inserted.clear()
@@ -450,6 +460,9 @@ class FakeActionTree(FakeTree):
 
     def tag_configure(self, _tag: str, **_options: object) -> None:
         return
+
+    def configure(self, **options: object) -> None:
+        self.configuration.update(options)
 
     def see(self, item: str) -> None:
         self.seen = item
@@ -473,6 +486,268 @@ class FakeSelectedConfigTree(FakeSelectedActionTree):
 
 
 class ConfigurationDialogTests(unittest.TestCase):
+    def test_selection_title_is_single_line_and_bounded(self) -> None:
+        title = "  A long\nAction title  " * 20
+
+        compact = compact_selection_title(title)
+
+        self.assertNotIn("\n", compact)
+        self.assertLessEqual(len(compact), 88)
+        self.assertTrue(compact.endswith("…"))
+
+    def test_context_selection_card_reflects_selected_context(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.contexts = [
+            ContextDefinition(
+                "Developing",
+                description="Application maintenance",
+                action_ids=("one",),
+                preferred_action_ids=("one",),
+            )
+        ]
+        configuration.actions = [
+            Action("one", "One", "General", "copy_text", "Text")
+        ]
+        configuration.context_tree = FakeSelectedConfigTree(
+            "context-0",
+            LOCAL_DESTINATION,
+        )
+        configuration.context_detail_title_var = FakeVariable()
+        configuration.context_detail_summary_var = FakeVariable()
+        configuration.context_edit_button = Mock()
+        configuration.context_delete_button = Mock()
+
+        configuration._update_context_controls()
+
+        self.assertEqual(
+            configuration.context_detail_title_var.value,
+            "Developing",
+        )
+        self.assertIn(
+            "1 member(s) · 1 Focus shortcut(s)",
+            configuration.context_detail_summary_var.value,
+        )
+        self.assertIn(
+            "Application maintenance",
+            configuration.context_detail_summary_var.value,
+        )
+        configuration.context_edit_button.configure.assert_called_once_with(
+            state="normal"
+        )
+        configuration.context_delete_button.configure.assert_called_once_with(
+            state="normal"
+        )
+
+    def test_empty_context_selection_disables_selection_commands(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.contexts = []
+        configuration.context_tree = Mock()
+        configuration.context_tree.selection.return_value = ()
+        configuration.context_detail_title_var = FakeVariable()
+        configuration.context_detail_summary_var = FakeVariable()
+        configuration.context_edit_button = Mock()
+        configuration.context_delete_button = Mock()
+
+        configuration._update_context_controls()
+
+        self.assertEqual(
+            configuration.context_detail_title_var.value,
+            "Select a Context",
+        )
+        configuration.context_edit_button.configure.assert_called_once_with(
+            state="disabled"
+        )
+        configuration.context_delete_button.configure.assert_called_once_with(
+            state="disabled"
+        )
+
+    def test_custom_quick_menu_selection_enables_valid_commands(self) -> None:
+        local_path = Path("local-commands.json")
+        selected_group = CommandGroup(
+            "selected",
+            "Selected menu",
+            source_path=local_path,
+        )
+        next_group = CommandGroup(
+            "next",
+            "Next menu",
+            source_path=local_path,
+        )
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.groups = [selected_group, next_group]
+        configuration.actions = []
+        configuration.command_surface_path = Path("shared-commands.json")
+        configuration.local_command_surface_path = local_path
+        configuration.button_tree = FakeSelectedActionTree("group-0")
+        configuration.action_bound_button_records = {}
+        configuration.button_preview_var = FakeVariable()
+        configuration.button_detail_title_var = FakeVariable()
+        configuration.quick_item_edit_button = Mock()
+        configuration.new_quick_item_button = Mock()
+        configuration.quick_item_move_menu = Mock()
+        configuration.quick_item_move_button = Mock()
+        configuration.quick_item_delete_button = Mock()
+
+        configuration._update_button_preview()
+
+        configuration.quick_item_edit_button.configure.assert_called_once_with(
+            text="Edit…",
+            state="normal",
+        )
+        configuration.new_quick_item_button.configure.assert_called_once_with(
+            text="New Quick action…",
+            state="normal",
+        )
+        self.assertEqual(
+            configuration.quick_item_move_menu.entryconfigure.call_args_list,
+            [
+                call(0, state="disabled"),
+                call(1, state="normal"),
+            ],
+        )
+        configuration.quick_item_delete_button.configure.assert_called_once_with(
+            state="normal"
+        )
+        configuration.new_quick_item_button.pack.assert_called_once()
+        configuration.quick_item_edit_button.pack.assert_called_once()
+        configuration.quick_item_move_button.pack.assert_called_once()
+        configuration.quick_item_delete_button.pack.assert_called_once()
+
+    def test_configured_quick_manager_selects_exact_stable_submenu(self) -> None:
+        child = CommandItem("child", "Child")
+        parent = CommandItem("parent", "Parent", items=(child,))
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.groups = [CommandGroup("tools", "Tools", (parent,))]
+        configuration.notebook = Mock()
+        configuration.button_filter_var = FakeVariable()
+        configuration.button_tree = Mock()
+        configuration.button_tree.exists.return_value = True
+        configuration._update_button_preview = Mock()
+
+        selected = configuration.select_configured_quick_action(
+            "TOOLS",
+            ("PARENT", "CHILD"),
+        )
+
+        self.assertTrue(selected)
+        configuration.notebook.select.assert_called_once_with(
+            CONFIGURATION_TAB_INDEXES["buttons"]
+        )
+        configuration.button_tree.selection_set.assert_called_once_with(
+            "button-0-0.0"
+        )
+        configuration.button_tree.see.assert_called_once_with("button-0-0.0")
+
+    def test_automatic_quick_manager_selects_exact_branch(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.notebook = Mock()
+        configuration.button_filter_var = FakeVariable()
+        configuration.button_tree = Mock()
+        configuration.action_bound_button_records = {
+            "automatic-work": ActionBoundQuickSelection(
+                "Folders",
+                "open_folder",
+                ("Work", "Reports"),
+            ),
+            "automatic-other": ActionBoundQuickSelection(
+                "Folders",
+                "open_folder",
+                ("Other",),
+            ),
+        }
+        configuration._update_button_preview = Mock()
+
+        selected = configuration.select_automatic_quick_action(
+            "open_folder",
+            ("work", "REPORTS"),
+        )
+
+        self.assertTrue(selected)
+        configuration.button_tree.selection_set.assert_called_once_with(
+            "automatic-work"
+        )
+        configuration.button_tree.see.assert_called_once_with("automatic-work")
+
+    def test_automatic_quick_action_disables_structure_commands(self) -> None:
+        action = Action(
+            "folder",
+            "Reports folder",
+            "General",
+            "open_folder",
+            ".",
+        )
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.actions = [action]
+        configuration.button_tree = FakeSelectedActionTree("automatic-folder")
+        configuration.action_bound_button_records = {
+            "automatic-folder": ActionBoundQuickSelection(
+                "Folders",
+                "open_folder",
+                ("Reports",),
+                action.id,
+            )
+        }
+        configuration.button_preview_var = FakeVariable()
+        configuration.button_detail_title_var = FakeVariable()
+        configuration.quick_item_edit_button = Mock()
+        configuration.new_quick_item_button = Mock()
+        configuration.quick_item_move_menu = Mock()
+        configuration.quick_item_move_button = Mock()
+        configuration.quick_item_delete_button = Mock()
+
+        configuration._update_button_preview()
+
+        configuration.quick_item_edit_button.configure.assert_called_once_with(
+            text="Edit Action…",
+            state="normal",
+        )
+        configuration.new_quick_item_button.configure.assert_called_once_with(
+            text="New submenu…",
+            state="disabled",
+        )
+        configuration.quick_item_move_button.configure.assert_called_once_with(
+            state="disabled"
+        )
+        configuration.quick_item_delete_button.configure.assert_called_once_with(
+            state="disabled"
+        )
+        configuration.quick_item_edit_button.pack.assert_called_once()
+        configuration.new_quick_item_button.pack.assert_not_called()
+        configuration.quick_item_move_button.pack.assert_not_called()
+        configuration.quick_item_delete_button.pack.assert_not_called()
+
+    def test_automatic_branch_offers_typed_add_and_matching_actions(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.actions = []
+        configuration.button_tree = FakeSelectedActionTree("automatic-work")
+        configuration.action_bound_button_records = {
+            "automatic-work": ActionBoundQuickSelection(
+                "Folders",
+                "open_folder",
+                ("Work",),
+            )
+        }
+        configuration.button_preview_var = FakeVariable()
+        configuration.button_detail_title_var = FakeVariable()
+        configuration.quick_item_edit_button = Mock()
+        configuration.new_quick_item_button = Mock()
+        configuration.quick_item_move_menu = Mock()
+        configuration.quick_item_move_button = Mock()
+        configuration.quick_item_delete_button = Mock()
+
+        configuration._update_button_preview()
+
+        configuration.new_quick_item_button.configure.assert_called_once_with(
+            text="Add folder here…",
+            state="normal",
+        )
+        configuration.quick_item_edit_button.configure.assert_called_once_with(
+            text="Find matching Actions…",
+            state="normal",
+        )
+        configuration.new_quick_item_button.pack.assert_called_once()
+        configuration.quick_item_edit_button.pack.assert_called_once()
+
     def test_reused_configuration_opens_requested_active_action_editor_directly(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         action = Action("edit-me", "Edit me", "General", "copy_text", "one")
@@ -509,6 +784,55 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration._edit_action_record.assert_called_once_with(action)
         configuration.window.deiconify.assert_called_once_with()
         configuration.window.lift.assert_called_once_with()
+
+    def test_reused_configuration_preserves_unsaved_pin_choices(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.initial_action_id = None
+        configuration.pin_vars = [
+            FakeVariable("Draft one"),
+            FakeVariable("Draft two"),
+        ]
+        configuration._pins_dirty = True
+        configuration._pins_rendering = False
+        configuration.notebook = Mock()
+        configuration.work_items_panel = Mock()
+        configuration.window = Mock()
+        configuration._focus_current_tab = Mock()
+        configuration._update_pin_summary = Mock()
+
+        def reload_saved_state() -> None:
+            for variable in configuration.pin_vars:
+                variable.set("Saved value")
+            configuration._pins_dirty = False
+
+        configuration._reload = Mock(side_effect=reload_saved_state)
+
+        configuration.show(initial_tab="buttons")
+
+        self.assertEqual(
+            [variable.get() for variable in configuration.pin_vars],
+            ["Draft one", "Draft two"],
+        )
+        self.assertTrue(configuration._pins_dirty)
+        configuration._update_pin_summary.assert_called_once_with()
+        configuration.notebook.select.assert_called_once_with(
+            CONFIGURATION_TAB_INDEXES["buttons"]
+        )
+
+    def test_automatic_menu_creation_forwards_type_and_exact_path(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration._raise_existing_action_creation_dialog = Mock(return_value=False)
+        configuration._create_action_for_type = Mock()
+
+        configuration.create_action_for_automatic_menu(
+            "open_folder",
+            ("Work", "Reports"),
+        )
+
+        configuration._create_action_for_type.assert_called_once_with(
+            "open_folder",
+            initial_quick_action_path=("Work", "Reports"),
+        )
 
     def test_direct_action_edit_fails_safely_when_active_action_disappeared(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
@@ -757,8 +1081,8 @@ class ConfigurationDialogTests(unittest.TestCase):
             ("c", 3),
             ("q", 4),
             ("w", 5),
-            ("d", 6),
-            ("b", 7),
+            ("b", 6),
+            ("d", 7),
         ):
             with self.subTest(keysym=keysym):
                 self.assertEqual(
@@ -802,12 +1126,17 @@ class ConfigurationDialogTests(unittest.TestCase):
         callback()
 
         self.assertEqual(result, "break")
-        self.assertEqual(configuration.notebook.selected, 6)
+        self.assertEqual(
+            configuration.notebook.selected,
+            CONFIGURATION_TAB_INDEXES["diagnostics"],
+        )
         self.assertEqual(configuration.diagnostics_text.focus_calls, 1)
 
     def test_diagnostics_tab_change_moves_focus_into_read_only_summary(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
-        configuration.notebook = FakeNotebook(selected=6)
+        configuration.notebook = FakeNotebook(
+            selected=CONFIGURATION_TAB_INDEXES["diagnostics"]
+        )
         configuration.action_tree = FakeEntry()
         configuration.type_list = FakeEntry()
         configuration.context_tree = FakeEntry()
@@ -823,7 +1152,9 @@ class ConfigurationDialogTests(unittest.TestCase):
 
     def test_backup_restore_tab_focuses_primary_action(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
-        configuration.notebook = FakeNotebook(selected=7)
+        configuration.notebook = FakeNotebook(
+            selected=CONFIGURATION_TAB_INDEXES["backup_restore"]
+        )
         configuration.action_tree = FakeEntry()
         configuration.type_list = FakeEntry()
         configuration.context_tree = FakeEntry()
@@ -835,6 +1166,20 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration._focus_current_tab()
 
         configuration.backup_restore_panel.focus_primary.assert_called_once_with()
+
+    def test_collapsing_pins_returns_focus_to_disclosure_button(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.pins_body = Mock()
+        configuration.pins_body.winfo_manager.return_value = "grid"
+        configuration.toggle_pins_button = Mock()
+
+        configuration._toggle_pins()
+
+        configuration.pins_body.grid_remove.assert_called_once_with()
+        configuration.toggle_pins_button.configure.assert_called_once_with(
+            text="Show pins"
+        )
+        configuration.toggle_pins_button.focus_set.assert_called_once_with()
 
     def test_configure_waits_for_active_backup_before_closing(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
@@ -938,6 +1283,22 @@ class ConfigurationDialogTests(unittest.TestCase):
         self.assertEqual(configuration.context_filter_entry.selection, (0, "end"))
         self.assertEqual(configuration.action_filter_entry.focus_calls, 0)
 
+    def test_find_shortcut_focuses_work_item_search(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.notebook = FakeNotebook(selected=5)
+        configuration.action_filter_entry = FakeEntry()
+        configuration.context_filter_entry = FakeEntry()
+        configuration.button_filter_entry = FakeEntry()
+        configuration.work_items_panel = Mock(search_entry=FakeEntry())
+
+        result = configuration._focus_current_filter()
+
+        self.assertEqual(result, "break")
+        search = configuration.work_items_panel.search_entry
+        self.assertEqual(search.focus_calls, 1)
+        self.assertEqual(search.selection, (0, "end"))
+        self.assertEqual(configuration.action_filter_entry.focus_calls, 0)
+
     def test_action_filter_matches_multiple_visible_facets(self) -> None:
         action = Action(
             id="python-docs",
@@ -977,6 +1338,10 @@ class ConfigurationDialogTests(unittest.TestCase):
         self.assertEqual(configuration.action_tree.selected, "action-1")
         self.assertEqual(configuration.action_tree.focused, "action-1")
         self.assertEqual(configuration.action_tree.seen, "action-1")
+        self.assertEqual(
+            configuration.action_tree.configuration["displaycolumns"],
+            ("type", "contexts", "source"),
+        )
 
     def test_action_state_filter_shows_archived_records_without_exposing_them_as_active(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
@@ -1002,6 +1367,10 @@ class ConfigurationDialogTests(unittest.TestCase):
 
         self.assertEqual(configuration.action_tree.inserted, ["action-1"])
         self.assertEqual(configuration.action_filter_count_var.value, "1 archived")
+        self.assertEqual(
+            configuration.action_tree.configuration["displaycolumns"],
+            ("type", "contexts", "source"),
+        )
         self.assertEqual(configuration.actions, [active])
 
     def test_archive_confirmation_reports_impact_and_runs_lifecycle_service(self) -> None:
@@ -1446,6 +1815,27 @@ class ConfigurationDialogTests(unittest.TestCase):
         delete.assert_called_once()
         self.assertIn("2 action(s)", configuration.feedback_var.value)
 
+    def test_delete_built_in_context_explains_shared_git_impact(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.contexts = [ContextDefinition("Shared")]
+        configuration.context_tree = FakeSelectedConfigTree(
+            "context-0",
+            PROJECT_DESTINATION,
+        )
+        configuration.contexts_path = Path("contexts.json")
+        configuration.local_contexts_path = Path("local-contexts.json")
+        configuration.actions = []
+        configuration.window = FakeWindow()
+
+        with patch(
+            "context_palette.configuration_window.messagebox.askyesno",
+            return_value=False,
+        ) as confirmation:
+            configuration._delete_context()
+
+        self.assertIn("tracked by Git", confirmation.call_args.args[1])
+        self.assertIn("other computers", confirmation.call_args.args[1])
+
     def test_editing_shared_quick_action_warns_and_saves_to_shared_file(self) -> None:
         shared_path = Path("shared-commands.json")
         item = CommandItem("docs", "Docs", action_ids=("one",))
@@ -1488,6 +1878,54 @@ class ConfigurationDialogTests(unittest.TestCase):
             original_group_id="tools",
             original_item_id="docs",
         )
+
+    def test_delete_built_in_quick_menu_explains_shared_git_impact(self) -> None:
+        shared_path = Path("shared-commands.json")
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.groups = [
+            CommandGroup("tools", "Tools", source_path=shared_path)
+        ]
+        configuration.button_tree = FakeSelectedActionTree("group-0")
+        configuration.action_bound_button_records = {}
+        configuration.command_surface_path = shared_path
+        configuration.local_command_surface_path = Path("local-commands.json")
+        configuration.window = FakeWindow()
+
+        with patch(
+            "context_palette.configuration_window.messagebox.askyesno",
+            return_value=False,
+        ) as confirmation:
+            configuration._delete_button()
+
+        self.assertIn("tracked by Git", confirmation.call_args.args[1])
+        self.assertIn("other computers", confirmation.call_args.args[1])
+
+    def test_move_built_in_quick_menu_requires_shared_change_confirmation(self) -> None:
+        shared_path = Path("shared-commands.json")
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.groups = [
+            CommandGroup("one", "One", source_path=shared_path),
+            CommandGroup("two", "Two", source_path=shared_path),
+        ]
+        configuration.button_tree = FakeSelectedActionTree("group-0")
+        configuration.action_bound_button_records = {}
+        configuration.command_surface_path = shared_path
+        configuration.local_command_surface_path = Path("local-commands.json")
+        configuration.window = FakeWindow()
+
+        with (
+            patch(
+                "context_palette.configuration_window.messagebox.askokcancel",
+                return_value=False,
+            ) as confirmation,
+            patch(
+                "context_palette.configuration_window.move_command_group"
+            ) as move,
+        ):
+            configuration._move_button(1)
+
+        self.assertIn("tracked by Git", confirmation.call_args.args[1])
+        move.assert_not_called()
 
     def test_local_quick_action_can_assign_project_and_local_actions(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
@@ -1551,6 +1989,43 @@ class ConfigurationDialogTests(unittest.TestCase):
             ],
         )
 
+    def test_automatic_action_without_path_is_rendered_at_menu_root(self) -> None:
+        folder = Action(
+            "folder",
+            "Project folder",
+            "General",
+            "open_folder",
+            ".",
+        )
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.actions = [folder]
+        configuration.local_action_ids = {folder.id}
+        configuration.button_tree = FakeActionTree()
+        configuration.action_bound_button_records = {}
+
+        matches = configuration._render_action_bound_button_groups(
+            action_bound_quick_groups(configuration.actions),
+            "folders",
+        )
+
+        folder_group_iid = "automatic-group-open_folder"
+        root_action_rows = [
+            (parent, options)
+            for parent, options in configuration.button_tree.rows.values()
+            if options["text"] == folder.compact_display_text
+        ]
+        self.assertEqual(matches, 1)
+        self.assertEqual(len(root_action_rows), 1)
+        self.assertEqual(root_action_rows[0][0], folder_group_iid)
+        self.assertIn("menu root", root_action_rows[0][1]["values"][1])
+        self.assertNotIn(
+            "Unsorted",
+            {
+                options["text"]
+                for _parent, options in configuration.button_tree.rows.values()
+            },
+        )
+
     def test_editing_automatic_folder_leaf_opens_its_action_editor(self) -> None:
         folder = Action("folder", "Reports", "General", "open_folder", ".")
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
@@ -1582,6 +2057,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         }
         configuration.notebook = FakeNotebook(selected=4)
         configuration.action_filter_var = FakeVariable()
+        configuration.action_state_filter_var = FakeVariable("Archived")
         configuration.action_filter_entry = FakeEntry()
         configuration.feedback_var = FakeVariable()
         configuration.feedback_label = Mock()
@@ -1589,6 +2065,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration._edit_button()
 
         self.assertEqual(configuration.notebook.selected, 1)
+        self.assertEqual(configuration.action_state_filter_var.value, "Active")
         self.assertEqual(configuration.action_filter_var.value, "Open a folder")
         self.assertEqual(configuration.action_filter_entry.focus_calls, 1)
         self.assertIsNotNone(configuration.action_filter_entry.selection)
@@ -1757,7 +2234,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.on_change.assert_not_called()
         configuration._reload.assert_not_called()
         self.assertEqual(configuration.feedback_var.value, "unchanged")
-        self.assertEqual(error.call_args.args[0], "Menu level was not saved")
+        self.assertEqual(error.call_args.args[0], "Quick-action item was not saved")
         self.assertIn("left unchanged", error.call_args.args[1])
 
     def test_cancelling_shared_action_deletion_preserves_action(self) -> None:
@@ -2126,6 +2603,36 @@ class ConfigurationDialogTests(unittest.TestCase):
                 child.destroy()
             root.destroy()
 
+    def test_automatic_menu_creation_uses_full_action_form_and_prefills_branch(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            dialog = ActionDialog(
+                root,
+                "open_folder",
+                [],
+                lambda _action: True,
+                context_names=["General", "Work"],
+                choose_destination=True,
+                initial_contexts=("Work",),
+                initial_quick_action_path=("Projects", "Reports"),
+            )
+            root.update_idletasks()
+
+            self.assertEqual(dialog.contexts_var.get(), "Work")
+            self.assertEqual(dialog.tags_var.get(), "")
+            self.assertEqual(
+                dialog.quick_action_path_var.get(),
+                "Projects > Reports",
+            )
+            self.assertTrue(dialog.context_field.entry.winfo_exists())
+            self.assertTrue(dialog.tag_field.entry.winfo_exists())
+            self.assertEqual(dialog.destination_var.get(), LOCAL_DESTINATION)
+        finally:
+            for child in root.winfo_children():
+                child.destroy()
+            root.destroy()
+
     def test_transform_action_dialog_uses_readable_operation_and_parameters(self) -> None:
         root = tk.Tk()
         root.withdraw()
@@ -2406,7 +2913,6 @@ class ConfigurationDialogTests(unittest.TestCase):
         dialog.original_group_id = ""
         dialog.label_var = FakeVariable("Project tools")
         dialog.id_var = FakeVariable()
-        dialog.presentation_var = FakeVariable("Nested subject menu")
         dialog.direct_action_ids = ["direct"]
         dialog.destination_var = FakeVariable(PROJECT_DESTINATION)
         dialog.window = FakeWindow()
@@ -2422,8 +2928,26 @@ class ConfigurationDialogTests(unittest.TestCase):
             GROUP_PRESENTATION_NESTED_MENU,
         )
         self.assertEqual(captured[0][0].action_ids, ("direct",))
+        self.assertEqual(captured[0][0].primary_action_id, "")
         self.assertEqual(captured[0][2], PROJECT_DESTINATION)
         self.assertEqual(dialog.window.destroy_calls, 1)
+
+    def test_editing_legacy_row_menu_without_root_actions_preserves_presentation(self) -> None:
+        dialog = GroupDialog.__new__(GroupDialog)
+        dialog.group = CommandGroup("legacy", "Legacy")
+        dialog.original_group_id = "legacy"
+        dialog.label_var = FakeVariable("Renamed legacy")
+        dialog.id_var = FakeVariable("legacy")
+        dialog.direct_action_ids = []
+        dialog.destination_var = FakeVariable(LOCAL_DESTINATION)
+        dialog.window = FakeWindow()
+        captured: list[tuple[CommandGroup, str, str]] = []
+        dialog.on_save = lambda *args: captured.append(args) or True
+
+        dialog._save()
+
+        self.assertEqual(captured[0][0].presentation, "rows")
+        self.assertEqual(captured[0][0].primary_action_id, "")
 
     def test_shared_edit_dialog_titles_identify_permanent_destination(self) -> None:
         root = tk.Tk()
@@ -2450,10 +2974,140 @@ class ConfigurationDialogTests(unittest.TestCase):
             )
             self.assertEqual(
                 button_dialog.window.title(),
-                "Edit built-in menu level",
+                "Edit built-in Quick-action item",
             )
             button_dialog.window.destroy()
         finally:
+            for child in root.winfo_children():
+                child.destroy()
+            root.destroy()
+
+    def _assert_scrollable_dialog_target_visible(
+        self,
+        root: tk.Tk,
+        dialog: object,
+        target: tk.Misc,
+        *,
+        expect_overflow: bool = False,
+    ) -> None:
+        root.update()
+        view = dialog.form_view
+        self.assertTrue(view.scrollbar.winfo_ismapped())
+        overflow = view.canvas.yview()[1] < 1.0
+        if expect_overflow:
+            self.assertTrue(overflow)
+        self.assertLessEqual(
+            view.canvas.winfo_rooty() + view.canvas.winfo_height(),
+            dialog.controls_frame.winfo_rooty(),
+        )
+        self.assertLessEqual(
+            dialog.controls_frame.winfo_rooty()
+            + dialog.controls_frame.winfo_height(),
+            dialog.window.winfo_rooty() + dialog.window.winfo_height(),
+        )
+        if not overflow:
+            self.assertGreaterEqual(
+                target.winfo_rooty(),
+                view.canvas.winfo_rooty() - 1,
+            )
+            self.assertLessEqual(
+                target.winfo_rooty() + target.winfo_height(),
+                view.canvas.winfo_rooty() + view.canvas.winfo_height() + 1,
+            )
+            return
+
+        view.canvas.yview_moveto(0.0)
+        root.update()
+        with patch.object(
+            view,
+            "_pointer_is_over_canvas",
+            return_value=True,
+        ):
+            self.assertEqual(
+                view._on_mousewheel(Mock(widget=view.canvas, delta=-120)),
+                "break",
+            )
+        root.update()
+        self.assertGreater(view.canvas.yview()[0], 0.0)
+
+        view.canvas.yview_moveto(0.0)
+        root.update()
+        view.ensure_visible(target)
+        root.update()
+        self.assertGreater(view.canvas.yview()[0], 0.0)
+        self.assertGreaterEqual(
+            target.winfo_rooty(),
+            view.canvas.winfo_rooty() - 1,
+        )
+        self.assertLessEqual(
+            target.winfo_rooty() + target.winfo_height(),
+            view.canvas.winfo_rooty() + view.canvas.winfo_height() + 1,
+        )
+
+    def test_configuration_dialog_bodies_scroll_at_150_percent(self) -> None:
+        root = tk.Tk()
+        root.geometry("780x600+0+0")
+        original_scaling = float(root.tk.call("tk", "scaling"))
+        action = Action("one", "One", "General", "copy_text", "one")
+        try:
+            root.tk.call("tk", "scaling", 2.0)
+
+            context_dialog = ContextDialog(
+                root,
+                None,
+                [action],
+                lambda *_args: True,
+                choose_destination=True,
+            )
+            self.assertEqual(context_dialog.window.title(), "New context")
+            self._assert_scrollable_dialog_target_visible(
+                root,
+                context_dialog,
+                context_dialog.slot_choices[-1].entry,
+                expect_overflow=True,
+            )
+            context_dialog.window.destroy()
+            root.update()
+
+            group_dialog = GroupDialog(
+                root,
+                None,
+                lambda *_args: True,
+                actions=[action],
+                choose_destination=True,
+            )
+            self.assertEqual(
+                group_dialog.window.title(),
+                "New Quick-action menu",
+            )
+            self._assert_scrollable_dialog_target_visible(
+                root,
+                group_dialog,
+                group_dialog.direct_move_down_button,
+            )
+            group_dialog.window.destroy()
+            root.update()
+
+            button_dialog = ButtonDialog(
+                root,
+                CommandGroup("tools", "Tools"),
+                None,
+                [action],
+                lambda *_args: True,
+            )
+            self.assertEqual(
+                button_dialog.window.title(),
+                "New Quick action",
+            )
+            self._assert_scrollable_dialog_target_visible(
+                root,
+                button_dialog,
+                button_dialog.assignment_preview_label,
+            )
+            button_dialog.window.destroy()
+            root.update()
+        finally:
+            root.tk.call("tk", "scaling", original_scaling)
             for child in root.winfo_children():
                 child.destroy()
             root.destroy()
@@ -2495,8 +3149,12 @@ class ConfigurationDialogTests(unittest.TestCase):
             self.assertIsInstance(dialog.action_choice, ActionPickerField)
             dialog._save()
 
-            self.assertEqual(captured[0].action_ids, tuple(action.id for action in actions))
-            self.assertEqual(captured[0].primary_action_id, "action-0")
+            self.assertEqual(captured[0].action_ids, ())
+            self.assertEqual(captured[0].primary_action_id, "")
+            self.assertEqual(
+                captured[0].targets,
+                tuple(CommandTarget(action_id=action.id) for action in actions),
+            )
             self.assertEqual(
                 [child.id for child in captured[0].items],
                 ["child"],

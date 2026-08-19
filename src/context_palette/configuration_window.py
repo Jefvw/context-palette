@@ -48,7 +48,6 @@ from .command_surface import (
     CommandTarget,
     CommandSurfaceError,
     GROUP_PRESENTATION_NESTED_MENU,
-    GROUP_PRESENTATION_ROWS,
     MAX_COMMAND_MENU_LEVELS,
     command_group_action_ids,
     command_group_all_action_ids,
@@ -147,17 +146,123 @@ CONFIGURATION_TAB_INDEXES = {
     "contexts": 3,
     "buttons": 4,
     "work_items": 5,
-    "diagnostics": 6,
-    "backup_restore": 7,
+    "backup_restore": 6,
+    "diagnostics": 7,
 }
-GROUP_PRESENTATION_LABELS = {
-    GROUP_PRESENTATION_ROWS: "Quick-action rows",
-    GROUP_PRESENTATION_NESTED_MENU: "Nested subject menu",
+CONFIGURATION_NAVIGATION_GROUPS = (
+    (
+        "SET UP",
+        (
+            ("start", "Start"),
+            ("actions", "Actions"),
+            ("types", "Action types"),
+            ("contexts", "Contexts"),
+            ("buttons", "Quick actions"),
+            ("work_items", "Work Items"),
+        ),
+    ),
+    (
+        "SUPPORT",
+        (
+            ("backup_restore", "Backup & restore"),
+            ("diagnostics", "Diagnostics"),
+        ),
+    ),
+)
+CONFIGURATION_NAVIGATION = tuple(
+    destination
+    for _group_label, destinations in CONFIGURATION_NAVIGATION_GROUPS
+    for destination in destinations
+)
+ACTION_BOUND_QUICK_ADD_LABELS = {
+    "paste_credential": "Add credential shortcut…",
+    "open_folder": "Add folder shortcut…",
+    "ai_prompt": "Add prompt…",
 }
-GROUP_PRESENTATIONS_BY_LABEL = {
-    label: presentation
-    for presentation, label in GROUP_PRESENTATION_LABELS.items()
+ACTION_BOUND_QUICK_NOUNS = {
+    "paste_credential": "credential",
+    "open_folder": "folder",
+    "ai_prompt": "prompt",
 }
+
+
+class ConfigurationPageStack(ttk.Frame):
+    """A tab-compatible internal page host with no visible tab strip."""
+
+    def __init__(self, parent: tk.Misc) -> None:
+        super().__init__(parent)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        self._pages: list[tuple[tk.Widget, str, int | None]] = []
+        self._selected_index = 0
+
+    def add(
+        self,
+        child: tk.Widget,
+        *,
+        text: str,
+        underline: int | None = None,
+    ) -> None:
+        self._pages.append((child, text, underline))
+        child.grid(row=0, column=0, sticky=tk.NSEW)
+        if len(self._pages) == 1:
+            child.tkraise()
+        else:
+            child.grid_remove()
+
+    def tabs(self) -> tuple[str, ...]:
+        return tuple(str(page) for page, _text, _underline in self._pages)
+
+    def tab(self, page: object, option: str | None = None) -> object:
+        index = self.index(page)
+        _widget, text, underline = self._pages[index]
+        values = {"text": text, "underline": underline}
+        return values.get(option) if option is not None else values
+
+    def index(self, page: object) -> int:
+        if page == "end":
+            return len(self._pages)
+        if isinstance(page, int):
+            if 0 <= page < len(self._pages):
+                return page
+            raise tk.TclError(f"page index {page} is out of range")
+        page_name = str(page)
+        for index, (widget, _text, _underline) in enumerate(self._pages):
+            if page is widget or page_name == str(widget):
+                return index
+        raise tk.TclError(f'unknown Configure page "{page_name}"')
+
+    def select(self, page: object | None = None) -> str:
+        if not self._pages:
+            return ""
+        if page is None:
+            return str(self._pages[self._selected_index][0])
+        index = self.index(page)
+        if index == self._selected_index:
+            return str(self._pages[index][0])
+        current = self._pages[self._selected_index][0]
+        current.grid_remove()
+        self._selected_index = index
+        selected = self._pages[index][0]
+        selected.grid()
+        selected.tkraise()
+        self.event_generate("<<NotebookTabChanged>>")
+        return str(selected)
+
+    def enable_traversal(self) -> None:
+        owner = self.winfo_toplevel()
+        owner.bind("<Control-Tab>", self._next_page, add="+")
+        owner.bind("<Control-Shift-Tab>", self._previous_page, add="+")
+
+    def _next_page(self, _event: tk.Event | None = None) -> str:
+        if self._pages:
+            self.select((self._selected_index + 1) % len(self._pages))
+        return "break"
+
+    def _previous_page(self, _event: tk.Event | None = None) -> str:
+        if self._pages:
+            self.select((self._selected_index - 1) % len(self._pages))
+        return "break"
 
 
 @dataclass(frozen=True)
@@ -166,6 +271,24 @@ class ActionBoundQuickSelection:
     action_type: str
     path: tuple[str, ...] = ()
     action_id: str = ""
+
+
+def compact_selection_title(value: str, *, limit: int = 88) -> str:
+    """Keep an arbitrary record title from displacing selection commands."""
+
+    clean = " ".join(value.split())
+    if len(clean) <= limit:
+        return clean
+    return f"{clean[: limit - 1].rstrip()}…"
+
+
+def compact_selection_summary(value: str, *, limit: int = 180) -> str:
+    """Bound selection-card detail so arbitrary data cannot erase its table."""
+
+    clean = " ".join(value.split())
+    if len(clean) <= limit:
+        return clean
+    return f"{clean[: limit - 1].rstrip()}…"
 
 
 def action_matches_filter(action: Action, query: str, *, personal: bool) -> bool:
@@ -353,8 +476,8 @@ def context_action_summary(
     )
     preferred_text = ", ".join(preferred) if preferred else "automatic"
     return (
-        f"{context_membership_count(context, actions)} member(s) | "
-        f"Preferred: {preferred_text}"
+        f"{context_membership_count(context, actions)} member(s) · "
+        f"Focus shortcuts: {preferred_text}"
     )
 
 
@@ -528,6 +651,7 @@ class ConfigurationWindow:
         self.work_item_metadata_path = work_item_metadata_path
         self.work_item_settings_path = work_item_settings_path
         self.work_item_index = work_item_index
+        self.local_contexts: list[ContextDefinition] = []
         self.on_change = on_change
         self.focus_context = focus_context
         self.contexts: list[ContextDefinition] = []
@@ -564,6 +688,15 @@ class ConfigurationWindow:
         self.window = tk.Toplevel(parent)
         self.window.title("Configure Context Palette")
         configure_standard_window(self.window, parent)
+        configured_width, configured_height, _x, _y = place_child_window(
+            self.window,
+            parent,
+            size=(960, 680),
+        )
+        self.window.minsize(
+            min(900, configured_width),
+            min(520, configured_height),
+        )
         self.window.protocol("WM_DELETE_WINDOW", self._request_close)
         self.window.bind("<Escape>", self._close_on_plain_escape)
         self.window.bind("<KeyPress>", self._handle_configure_keypress, add="+")
@@ -572,7 +705,7 @@ class ConfigurationWindow:
         footer = ttk.Frame(outer)
         footer.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
         self.feedback_var = tk.StringVar(
-            value="Everything shown here is editable; project changes travel through Git."
+            value="Changes save immediately."
         )
         self.feedback_label = ttk.Label(
             footer,
@@ -587,14 +720,13 @@ class ConfigurationWindow:
             style="Compact.TButton",
         )
         self.close_button.pack(side=tk.RIGHT)
-        ttk.Label(outer, text="Configure Context Palette", style="Title.TLabel").pack(anchor=tk.W)
-        ttk.Label(
-            outer,
-            text="Choose a task, then make the change in its focused editor.",
-            style="Muted.TLabel",
-        ).pack(anchor=tk.W, pady=(2, 10))
-        self.notebook = ttk.Notebook(outer)
-        self.notebook.pack(fill=tk.BOTH, expand=True)
+        body = ttk.Frame(outer)
+        body.pack(fill=tk.BOTH, expand=True)
+        self.configuration_navigation = ttk.Frame(body, padding=(0, 0, 10, 0))
+        self.configuration_navigation.pack(side=tk.LEFT, fill=tk.Y)
+        ttk.Separator(body, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y)
+        self.notebook = ConfigurationPageStack(body)
+        self.notebook.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(10, 0))
         self.notebook.enable_traversal()
         self._build_start_tab(self.notebook)
         self._build_actions_tab(self.notebook)
@@ -607,10 +739,12 @@ class ConfigurationWindow:
             work_item_metadata,
             work_item_index,
         )
-        self._build_diagnostics_tab(self.notebook)
         self._build_backup_restore_tab(self.notebook)
+        self._build_diagnostics_tab(self.notebook)
+        self._build_configuration_navigation()
         self.notebook.select(CONFIGURATION_TAB_INDEXES.get(self.initial_tab, 0))
         self.notebook.bind("<<NotebookTabChanged>>", self._focus_selected_tab)
+        self._sync_configuration_navigation()
         self.window.bind("<Control-f>", self._focus_current_filter)
         self._reload()
         if self.initial_work_item_key:
@@ -639,12 +773,26 @@ class ConfigurationWindow:
         start_action_edit: bool = False,
     ) -> None:
         """Refresh, navigate, and raise an already-open Configure workspace."""
+        pin_draft = (
+            tuple(variable.get() for variable in self.pin_vars)
+            if getattr(self, "_pins_dirty", False)
+            else None
+        )
         self.initial_action_id = initial_action_id
         if initial_action_id and self.action_filter_var.get():
             self.action_filter_var.set("")
         if initial_action_id and self.action_state_filter_var.get() != "Active":
             self.action_state_filter_var.set("Active")
         self._reload()
+        if pin_draft is not None:
+            self._pins_rendering = True
+            try:
+                for variable, value in zip(self.pin_vars, pin_draft):
+                    variable.set(value)
+            finally:
+                self._pins_rendering = False
+            self._pins_dirty = True
+            self._update_pin_summary()
         self.notebook.select(CONFIGURATION_TAB_INDEXES.get(initial_tab, 0))
         if initial_work_item_key:
             self.work_items_panel.select_item(initial_work_item_key)
@@ -665,6 +813,131 @@ class ConfigurationWindow:
         """Refresh an already-open workspace after another window changes data."""
 
         self._reload()
+
+    def select_configured_quick_action(
+        self,
+        group_id: str,
+        item_ids: tuple[str, ...] = (),
+    ) -> bool:
+        """Show one configured menu or submenu by stable persisted IDs."""
+
+        self.notebook.select(CONFIGURATION_TAB_INDEXES["buttons"])
+        if self.button_filter_var.get():
+            self.button_filter_var.set("")
+        group_index = next(
+            (
+                index
+                for index, group in enumerate(self.groups)
+                if group.id.casefold() == group_id.casefold()
+            ),
+            None,
+        )
+        if group_index is None:
+            self.feedback_var.set("That Quick-action menu is no longer available.")
+            return False
+        group = self.groups[group_index]
+        path: list[int] = []
+        items = group.items
+        for item_id in item_ids:
+            item_index = next(
+                (
+                    index
+                    for index, item in enumerate(items)
+                    if item.id.casefold() == item_id.casefold()
+                ),
+                None,
+            )
+            if item_index is None:
+                self.feedback_var.set(
+                    "That Quick-action submenu is no longer available."
+                )
+                return False
+            path.append(item_index)
+            items = items[item_index].items
+        iid = (
+            f"button-{group_index}-"
+            + ".".join(str(index) for index in path)
+            if path
+            else f"group-{group_index}"
+        )
+        if not self.button_tree.exists(iid):
+            self._render_buttons()
+        if not self.button_tree.exists(iid):
+            self.feedback_var.set("That Quick-action item is no longer available.")
+            return False
+        self.button_tree.selection_set(iid)
+        self.button_tree.focus(iid)
+        self.button_tree.see(iid)
+        self._update_button_preview()
+        self.button_tree.focus_set()
+        return True
+
+    def select_automatic_quick_action(
+        self,
+        action_type: str,
+        path: tuple[str, ...] = (),
+        action_id: str = "",
+    ) -> bool:
+        """Show an automatic menu branch or Action without an approximate search."""
+
+        self.notebook.select(CONFIGURATION_TAB_INDEXES["buttons"])
+        if self.button_filter_var.get():
+            self.button_filter_var.set("")
+        expected_path = tuple(part.casefold() for part in path)
+        iid = next(
+            (
+                record_iid
+                for record_iid, selection in self.action_bound_button_records.items()
+                if selection.action_type == action_type
+                and tuple(part.casefold() for part in selection.path) == expected_path
+                and selection.action_id.casefold() == action_id.casefold()
+            ),
+            None,
+        )
+        if iid is None:
+            self.feedback_var.set(
+                "That automatic Quick-action selection is no longer available."
+            )
+            return False
+        self.button_tree.selection_set(iid)
+        self.button_tree.focus(iid)
+        self.button_tree.see(iid)
+        self._update_button_preview()
+        self.button_tree.focus_set()
+        return True
+
+    def add_quick_action_to_selection(self) -> None:
+        """Start the normal guided add flow for the selected configured menu."""
+
+        self._add_button()
+
+    def create_action_for_automatic_menu(
+        self,
+        action_type: str,
+        path: tuple[str, ...] = (),
+    ) -> None:
+        """Create one normal reviewed Action pre-organized in a live menu."""
+
+        if action_type not in ACTION_BOUND_QUICK_TYPES:
+            return
+        if self._raise_existing_action_creation_dialog():
+            return
+        self._create_action_for_type(
+            action_type,
+            initial_quick_action_path=path,
+        )
+
+    def show_automatic_quick_actions(
+        self,
+        group_label: str,
+        action_type: str,
+        path: tuple[str, ...] = (),
+    ) -> None:
+        """Open the existing Actions view for one automatic menu selection."""
+
+        self._manage_action_bound_quick_selection(
+            ActionBoundQuickSelection(group_label, action_type, path)
+        )
 
     def _start_work_item_creation(self) -> None:
         self.work_items_panel.create_work_item()
@@ -804,12 +1077,57 @@ class ConfigurationWindow:
         self.notebook.select(tab_index)
         return "break"
 
-    def _build_start_tab(self, notebook: ttk.Notebook) -> None:
+    def _build_configuration_navigation(self) -> None:
+        self.configuration_navigation_buttons: dict[int, ttk.Button] = {}
+        self.configuration_navigation_groups: dict[str, ttk.Frame] = {}
+        self.configuration_navigation_group_labels: dict[str, ttk.Label] = {}
+        for group_index, (group_label, destinations) in enumerate(
+            CONFIGURATION_NAVIGATION_GROUPS
+        ):
+            group = ttk.Frame(self.configuration_navigation)
+            group.pack(
+                side=tk.BOTTOM if group_index else tk.TOP,
+                fill=tk.X,
+            )
+            heading = ttk.Label(
+                group,
+                text=group_label,
+                style="ConfigureNavGroup.TLabel",
+            )
+            heading.pack(fill=tk.X, pady=(0, 2))
+            self.configuration_navigation_groups[group_label] = group
+            self.configuration_navigation_group_labels[group_label] = heading
+            for section, label in destinations:
+                index = CONFIGURATION_TAB_INDEXES[section]
+                button = ttk.Button(
+                    group,
+                    text=label,
+                    width=20,
+                    style="ConfigureNav.TButton",
+                    command=lambda tab_index=index: self._show_config_tab(tab_index),
+                )
+                button.pack(fill=tk.X, pady=(0, 2))
+                self.configuration_navigation_buttons[index] = button
+
+    def _sync_configuration_navigation(self) -> None:
+        if not hasattr(self, "configuration_navigation_buttons"):
+            return
+        selected = self.notebook.index(self.notebook.select())
+        for index, button in self.configuration_navigation_buttons.items():
+            button.configure(
+                style=(
+                    "ConfigureNavSelected.TButton"
+                    if index == selected
+                    else "ConfigureNav.TButton"
+                )
+            )
+
+    def _build_start_tab(self, notebook: ConfigurationPageStack) -> None:
         tab = ttk.Frame(notebook, padding=14)
         notebook.add(tab, text="Start", underline=0)
         ttk.Label(
             tab,
-            text="What do you want to change?",
+            text="Choose a setup task",
             style="Heading.TLabel",
         ).grid(row=0, column=0, columnspan=2, sticky=tk.W)
         ttk.Label(
@@ -895,56 +1213,137 @@ class ConfigurationWindow:
     def _show_config_named_tab(self, name: str) -> str:
         return self._show_config_tab(CONFIGURATION_TAB_INDEXES[name])
 
-    def _build_actions_tab(self, notebook: ttk.Notebook) -> None:
+    def _build_actions_tab(self, notebook: ConfigurationPageStack) -> None:
         tab = ttk.Frame(notebook, padding=10)
         notebook.add(tab, text="Actions", underline=0)
+
+        header = ttk.Frame(tab)
+        header.pack(fill=tk.X, pady=(0, 8))
+        heading = ttk.Frame(header)
+        heading.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(
+            heading,
+            text="Manage Actions",
+            style="Title.TLabel",
+        ).pack(anchor=tk.W)
+        ttk.Label(
+            heading,
+            text="Create, find, edit, archive, and restore saved Actions.",
+            style="Muted.TLabel",
+        ).pack(anchor=tk.W, pady=(2, 0))
+        header_commands = ttk.Frame(header)
+        header_commands.pack(side=tk.RIGHT, padx=(10, 0))
+        self.other_action_creation_button = ttk.Menubutton(
+            header_commands,
+            text="Other ways to create",
+        )
+        self.other_action_creation_menu = tk.Menu(
+            self.other_action_creation_button,
+            tearoff=False,
+        )
+        self.other_action_creation_menu.add_command(
+            label="Browse Action types…",
+            command=lambda: self._show_config_named_tab("types"),
+        )
+        self.other_action_creation_menu.add_command(
+            label="Harvest documents…",
+            command=self._show_harvest,
+        )
+        self.other_action_creation_button.configure(
+            menu=self.other_action_creation_menu
+        )
+        self.other_action_creation_button.pack(side=tk.LEFT)
+        self.new_action_button = ttk.Button(
+            header_commands,
+            text="New Action…",
+            command=self._start_action_creation,
+            style="Accent.TButton",
+        )
+        self.new_action_button.pack(side=tk.LEFT, padx=(6, 0))
+
         ttk.Label(
             tab,
             text=(
-                "All action types are editable. Built-in changes alter the "
-                "starter configuration shipped through Git."
+                "My configuration stays on this computer. Built-in changes alter "
+                "the starter configuration tracked through Git."
             ),
             style="Muted.TLabel",
-        ).pack(anchor=tk.W, pady=(0, 6))
-        pins = ttk.LabelFrame(
+        ).pack(anchor=tk.W, pady=(0, 7))
+
+        pins = ttk.Frame(
             tab,
-            text="Pinned slots 1–5 · local to this computer",
+            style="Card.TFrame",
             padding=(8, 5),
         )
         self.pins_frame = pins
         pins.pack(fill=tk.X, pady=(0, 8))
+        pins.columnconfigure(1, weight=1)
+        ttk.Label(
+            pins,
+            text="Pinned slots 1–5",
+            style="Card.TLabel",
+            font=("Segoe UI Semibold", 10),
+        ).grid(row=0, column=0, sticky=tk.W)
+        self.pin_summary_var = tk.StringVar(value="0 assigned on this computer")
+        ttk.Label(
+            pins,
+            textvariable=self.pin_summary_var,
+            style="CardMuted.TLabel",
+        ).grid(row=0, column=1, sticky=tk.W, padx=(10, 0))
+        self.toggle_pins_button = ttk.Button(
+            pins,
+            text="Show pins",
+            command=self._toggle_pins,
+            style="Compact.TButton",
+        )
+        self.toggle_pins_button.grid(row=0, column=2, sticky=tk.E)
+        self.pins_body = ttk.Frame(pins, style="Card.TFrame")
+        self.pins_body.columnconfigure(1, weight=1)
+        self._pins_rendering = False
+        self._pins_dirty = False
         self.pin_vars: list[tk.StringVar] = []
         self.pin_choices: dict[str, str] = {}
         self.pin_pickers: list[ActionPickerField] = []
-        for column in range(5):
-            pins.columnconfigure(column, weight=1)
-            slot = ttk.Frame(pins)
-            slot.grid(row=0, column=column, sticky="ew", padx=(0, 6))
-            ttk.Label(slot, text=f"Slot {column + 1}").pack(anchor=tk.W)
+        for row in range(5):
+            ttk.Label(
+                self.pins_body,
+                text=f"Slot {row + 1}",
+                style="CardMuted.TLabel",
+                width=7,
+            ).grid(row=row, column=0, sticky=tk.W, pady=(3, 0))
             variable = tk.StringVar(value=EMPTY_PIN_LABEL)
             picker = ActionPickerField(
-                slot,
+                self.pins_body,
                 variable=variable,
                 empty_label=EMPTY_PIN_LABEL,
-                title=f"Choose action for slot {column + 1}",
-                entry_width=6,
-                button_text="Find",
-                button_width=4,
+                title=f"Choose action for slot {row + 1}",
+                button_text="Choose…",
             )
-            picker.pack(fill=tk.X, pady=(2, 0))
+            picker.configure(style="Card.TFrame")
+            picker.grid(
+                row=row,
+                column=1,
+                sticky=tk.EW,
+                padx=(8, 0),
+                pady=(3, 0),
+            )
             self.pin_vars.append(variable)
             self.pin_pickers.append(picker)
+            variable.trace_add(
+                "write",
+                lambda *_args: self._mark_pins_dirty(),
+            )
         self.pin_comboboxes = self.pin_pickers
         self.save_pins_button = ttk.Button(
-            pins,
+            self.pins_body,
             text="Save pins",
             command=self._save_pinned_slots,
-            style="Accent.TButton",
         )
-        self.save_pins_button.grid(row=0, column=5, sticky="se")
+        self.save_pins_button.grid(row=5, column=1, sticky=tk.E, pady=(7, 0))
+
         filter_row = ttk.Frame(tab)
         filter_row.pack(fill=tk.X, pady=(0, 6))
-        ttk.Label(filter_row, text="Find actions").pack(side=tk.LEFT)
+        ttk.Label(filter_row, text="Find").pack(side=tk.LEFT)
         self.action_filter_entry = ttk.Entry(
             filter_row,
             textvariable=self.action_filter_var,
@@ -971,21 +1370,21 @@ class ConfigurationWindow:
         ).pack(anchor=tk.W, pady=(0, 5))
         self.action_tree_frame, self.action_tree = scrollable_tree(
             tab,
-            ("type", "contexts", "tags", "source", "state"),
+            ("type", "contexts", "source", "state"),
         )
         for column, label, width in (
-            ("#0", "Action", 170),
-            ("type", "Built-in type", 105),
-            ("contexts", "Contexts", 75),
-            ("tags", "Tags", 100),
-            ("source", "Source", 115),
-            ("state", "State", 55),
+            ("#0", "Action", 250),
+            ("type", "Type", 145),
+            ("contexts", "Contexts", 125),
+            ("source", "Source", 125),
+            ("state", "State", 70),
         ):
             self.action_tree.heading(column, text=label)
             self.action_tree.column(
                 column,
                 width=width,
-                stretch=column in {"#0", "type", "contexts", "tags"},
+                minwidth=90 if column != "#0" else 180,
+                stretch=column == "#0",
             )
         self.action_tree_frame.pack(fill=tk.BOTH, expand=True)
         self.action_tree.bind("<Double-1>", lambda _event: self._edit_action())
@@ -997,44 +1396,118 @@ class ConfigurationWindow:
         self.action_state_filter_var.trace_add(
             "write", lambda *_args: self._render_actions()
         )
-        controls = ttk.Frame(tab)
-        controls.pack(
+
+        selection = ttk.Frame(
+            tab,
+            style="Card.TFrame",
+            padding=(10, 8),
+        )
+        self.action_selection_frame = selection
+        selection.pack(
             side=tk.BOTTOM,
             fill=tk.X,
             pady=(8, 0),
             before=self.action_tree_frame,
         )
-        ttk.Button(
-            controls,
-            text="+ Action",
-            command=self._start_action_creation,
-            style="Accent.TButton",
-        ).pack(side=tk.LEFT)
-        ttk.Button(
-            controls,
-            text="Browse action types…",
-            command=lambda: self._show_config_named_tab("types"),
-        ).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(
-            controls,
-            text="Harvest documents…",
-            command=self._show_harvest,
-        ).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(controls, text="Edit selected", command=self._edit_action).pack(
-            side=tk.LEFT, padx=(6, 0)
+        selection.columnconfigure(0, weight=1)
+        self.action_detail_title_var = tk.StringVar(value="Select an Action")
+        self.action_detail_title_label = ttk.Label(
+            selection,
+            textvariable=self.action_detail_title_var,
+            style="Card.TLabel",
+            font=("Segoe UI Semibold", 10),
+            justify=tk.LEFT,
         )
+        self.action_detail_title_label.grid(row=0, column=0, sticky=tk.EW)
+        self.action_detail_summary_var = tk.StringVar(
+            value="Contexts, tags, ownership, and lifecycle appear here."
+        )
+        self.action_detail_summary_label = ttk.Label(
+            selection,
+            textvariable=self.action_detail_summary_var,
+            style="CardMuted.TLabel",
+            justify=tk.LEFT,
+        )
+        self.action_detail_summary_label.grid(
+            row=1,
+            column=0,
+            sticky=tk.EW,
+            pady=(4, 0),
+        )
+        self.action_commands_frame = ttk.Frame(selection, style="Card.TFrame")
+        self.action_commands_frame.grid(row=0, column=1, rowspan=2, sticky=tk.E)
+        self.action_edit_button = ttk.Button(
+            self.action_commands_frame,
+            text="Edit…",
+            command=self._edit_action,
+            state=tk.DISABLED,
+        )
+        self.action_edit_button.pack(side=tk.LEFT)
         self.action_lifecycle_button = ttk.Button(
-            controls,
-            text="Archive selected...",
+            self.action_commands_frame,
+            text="Archive…",
             command=self._change_action_state,
+            state=tk.DISABLED,
         )
         self.action_lifecycle_button.pack(side=tk.LEFT, padx=(6, 0))
         self.delete_action_button = ttk.Button(
-            controls,
-            text="Delete permanently...",
+            self.action_commands_frame,
+            text="Delete permanently…",
             command=self._delete_action,
+            state=tk.DISABLED,
+            style="Danger.TButton",
         )
         self.delete_action_button.pack(side=tk.LEFT, padx=(6, 0))
+        selection.bind("<Configure>", self._resize_action_summary, add="+")
+
+    def _toggle_pins(self) -> None:
+        if self.pins_body.winfo_manager():
+            self.pins_body.grid_remove()
+            self.toggle_pins_button.configure(text="Show pins")
+            self.toggle_pins_button.focus_set()
+            return
+        self.pins_body.grid(
+            row=1,
+            column=0,
+            columnspan=3,
+            sticky=tk.EW,
+            pady=(7, 0),
+        )
+        self.toggle_pins_button.configure(text="Hide pins")
+
+    def _mark_pins_dirty(self) -> None:
+        if self._pins_rendering:
+            return
+        self._pins_dirty = True
+        self._update_pin_summary()
+
+    def _update_pin_summary(self) -> None:
+        assigned = len(self.palette_state.pinned_action_ids[:5])
+        self.pin_summary_var.set(
+            f"{assigned} saved · unsaved changes"
+            if self._pins_dirty
+            else f"{assigned} assigned on this computer"
+        )
+
+    def _resize_action_summary(self, event: tk.Event) -> None:
+        command_width = self.action_commands_frame.winfo_reqwidth()
+        text_width = max(120, int(event.width) - command_width - 34)
+        self.action_detail_title_label.configure(wraplength=text_width)
+        self.action_detail_summary_label.configure(
+            wraplength=text_width
+        )
+
+    def _resize_context_summary(self, event: tk.Event) -> None:
+        command_width = self.context_commands_frame.winfo_reqwidth()
+        text_width = max(120, int(event.width) - command_width - 34)
+        self.context_detail_title_label.configure(wraplength=text_width)
+        self.context_detail_summary_label.configure(wraplength=text_width)
+
+    def _resize_button_summary(self, event: tk.Event) -> None:
+        command_width = self.button_commands_frame.winfo_reqwidth()
+        text_width = max(120, int(event.width) - command_width - 34)
+        self.button_detail_title_label.configure(wraplength=text_width)
+        self.button_preview_label.configure(wraplength=text_width)
 
     def _show_harvest(self) -> None:
         HarvestWindow(
@@ -1066,9 +1539,9 @@ class ConfigurationWindow:
         self._reload()
         self.on_change()
 
-    def _build_types_tab(self, notebook: ttk.Notebook) -> None:
+    def _build_types_tab(self, notebook: ConfigurationPageStack) -> None:
         tab = ttk.Frame(notebook, padding=10)
-        notebook.add(tab, text="Create action", underline=4)
+        notebook.add(tab, text="Action types", underline=0)
         panes = ttk.Panedwindow(tab, orient=tk.HORIZONTAL)
         panes.pack(fill=tk.BOTH, expand=True)
         self.type_ids = list(CREATABLE_ACTION_TYPES)
@@ -1096,20 +1569,38 @@ class ConfigurationWindow:
         self.type_list.selection_set(0)
         self._show_type()
 
-    def _build_contexts_tab(self, notebook: ttk.Notebook) -> None:
+    def _build_contexts_tab(self, notebook: ConfigurationPageStack) -> None:
         tab = ttk.Frame(notebook, padding=10)
         notebook.add(tab, text="Contexts", underline=0)
+
+        header = ttk.Frame(tab)
+        header.pack(fill=tk.X, pady=(0, 8))
+        heading = ttk.Frame(header)
+        heading.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Label(
-            tab,
+            heading,
+            text="Manage Contexts",
+            style="Title.TLabel",
+        ).pack(anchor=tk.W)
+        ttk.Label(
+            heading,
             text=(
-                f"Choose every action in the context, then up to "
-                f"{MAX_CONTEXT_SLOT_ACTIONS} preferred actions for slots 6–0."
+                "A Context organizes items; Focus is the Context currently "
+                "highlighted in the palette."
             ),
             style="Muted.TLabel",
-        ).pack(anchor=tk.W, pady=(0, 6))
+        ).pack(anchor=tk.W, pady=(2, 0))
+        self.new_context_button = ttk.Button(
+            header,
+            text="New Context…",
+            command=self._add_context,
+            style="Accent.TButton",
+        )
+        self.new_context_button.pack(side=tk.RIGHT, padx=(10, 0))
+
         filter_row = ttk.Frame(tab)
         filter_row.pack(fill=tk.X, pady=(0, 6))
-        ttk.Label(filter_row, text="Find contexts").pack(side=tk.LEFT)
+        ttk.Label(filter_row, text="Find").pack(side=tk.LEFT)
         self.context_filter_entry = ttk.Entry(
             filter_row,
             textvariable=self.context_filter_var,
@@ -1131,44 +1622,112 @@ class ConfigurationWindow:
         )
         self.context_tree.heading("#0", text="Context")
         self.context_tree.heading("source", text="Source")
-        self.context_tree.heading("actions", text="Members / preferred actions")
-        self.context_tree.column("#0", width=160)
-        self.context_tree.column("source", width=115, stretch=False)
-        self.context_tree.column("actions", width=345)
+        self.context_tree.heading("actions", text="Members / Focus shortcuts")
+        self.context_tree.column("#0", width=170, minwidth=140)
+        self.context_tree.column("source", width=105, minwidth=100, stretch=False)
+        self.context_tree.column("actions", width=300, minwidth=190)
         self.context_tree_frame.pack(fill=tk.BOTH, expand=True)
         self.context_tree.bind("<Double-1>", lambda _event: self._edit_context())
         self.context_tree.bind("<Return>", lambda _event: self._edit_context())
+        self.context_tree.bind(
+            "<<TreeviewSelect>>",
+            lambda _event: self._update_context_controls(),
+        )
         self.context_filter_var.trace_add(
             "write",
             lambda *_args: self._render_contexts(),
         )
-        controls = ttk.Frame(tab)
-        controls.pack(
+
+        selection = ttk.Frame(
+            tab,
+            style="Card.TFrame",
+            padding=(10, 8),
+        )
+        self.context_selection_frame = selection
+        selection.pack(
             side=tk.BOTTOM,
             fill=tk.X,
             pady=(8, 0),
             before=self.context_tree_frame,
         )
-        ttk.Button(controls, text="Add context", command=self._add_context).pack(side=tk.LEFT)
-        ttk.Button(controls, text="Edit selected", command=self._edit_context).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(controls, text="Delete selected", command=self._delete_context).pack(
-            side=tk.LEFT, padx=(6, 0)
+        selection.columnconfigure(0, weight=1)
+        self.context_detail_title_var = tk.StringVar(value="Select a Context")
+        self.context_detail_title_label = ttk.Label(
+            selection,
+            textvariable=self.context_detail_title_var,
+            style="Card.TLabel",
+            font=("Segoe UI Semibold", 10),
+            justify=tk.LEFT,
         )
+        self.context_detail_title_label.grid(row=0, column=0, sticky=tk.EW)
+        self.context_detail_summary_var = tk.StringVar(
+            value="Choose a Context to review its members and Focus shortcuts."
+        )
+        self.context_detail_summary_label = ttk.Label(
+            selection,
+            textvariable=self.context_detail_summary_var,
+            style="CardMuted.TLabel",
+            justify=tk.LEFT,
+            wraplength=430,
+        )
+        self.context_detail_summary_label.grid(
+            row=1,
+            column=0,
+            sticky=tk.EW,
+            pady=(3, 0),
+        )
+        context_commands = ttk.Frame(selection, style="Card.TFrame")
+        self.context_commands_frame = context_commands
+        context_commands.grid(row=0, column=1, rowspan=2, sticky=tk.E, padx=(10, 0))
+        self.context_edit_button = ttk.Button(
+            context_commands,
+            text="Edit…",
+            command=self._edit_context,
+            state=tk.DISABLED,
+        )
+        self.context_edit_button.pack(side=tk.LEFT)
+        self.context_delete_button = ttk.Button(
+            context_commands,
+            text="Delete permanently…",
+            command=self._delete_context,
+            state=tk.DISABLED,
+            style="Danger.TButton",
+        )
+        self.context_delete_button.pack(side=tk.LEFT, padx=(6, 0))
+        selection.bind("<Configure>", self._resize_context_summary, add="+")
 
-    def _build_buttons_tab(self, notebook: ttk.Notebook) -> None:
+    def _build_buttons_tab(self, notebook: ConfigurationPageStack) -> None:
         tab = ttk.Frame(notebook, padding=10)
         notebook.add(tab, text="Quick actions", underline=0)
+
+        header = ttk.Frame(tab)
+        header.pack(fill=tk.X, pady=(0, 8))
+        heading = ttk.Frame(header)
+        heading.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Label(
-            tab,
+            heading,
+            text="Manage Quick actions",
+            style="Title.TLabel",
+        ).pack(anchor=tk.W)
+        ttk.Label(
+            heading,
             text=(
-                "Configured groups reference actions. Passwords, Folders, and "
-                "Prompts are automatic; edit their action leaves to organize them."
+                "Arrange custom shortcut menus; Passwords, Folders, and Prompts "
+                "are generated from Actions."
             ),
             style="Muted.TLabel",
-        ).pack(anchor=tk.W, pady=(0, 6))
+        ).pack(anchor=tk.W, pady=(2, 0))
+        self.new_quick_menu_button = ttk.Button(
+            header,
+            text="New menu…",
+            command=self._add_group,
+            style="Accent.TButton",
+        )
+        self.new_quick_menu_button.pack(side=tk.RIGHT, padx=(10, 0))
+
         filter_row = ttk.Frame(tab)
         filter_row.pack(fill=tk.X, pady=(0, 6))
-        ttk.Label(filter_row, text="Find Quick actions").pack(side=tk.LEFT)
+        ttk.Label(filter_row, text="Find").pack(side=tk.LEFT)
         self.button_filter_entry = ttk.Entry(
             filter_row,
             textvariable=self.button_filter_var,
@@ -1188,22 +1747,95 @@ class ConfigurationWindow:
             tab,
             ("source", "actions"),
         )
-        self.button_tree.heading("#0", text="Group / menu level")
-        self.button_tree.heading("source", text="Source")
-        self.button_tree.heading("actions", text="Assigned actions")
-        self.button_tree.column("#0", width=190)
-        self.button_tree.column("source", width=115, stretch=False)
-        self.button_tree.column("actions", width=315)
+        self.button_tree.heading("#0", text="Menu / item")
+        self.button_tree.heading("source", text="Managed by")
+        self.button_tree.heading("actions", text="Targets / contents")
+        self.button_tree.column("#0", width=180, minwidth=150)
+        self.button_tree.column("source", width=105, minwidth=100, stretch=False)
+        self.button_tree.column("actions", width=290, minwidth=190)
         self.button_tree_frame.pack(fill=tk.BOTH, expand=True)
         self.button_preview_var = tk.StringVar(
-            value="Select a group or Quick action to see how it behaves."
+            value="Choose a custom or automatic item to review how it behaves."
         )
-        ttk.Label(
+        self.button_detail_title_var = tk.StringVar(value="Select a Quick action")
+        selection = ttk.Frame(
             tab,
+            style="Card.TFrame",
+            padding=(10, 8),
+        )
+        self.button_selection_frame = selection
+        selection.pack(
+            side=tk.BOTTOM,
+            fill=tk.X,
+            pady=(8, 0),
+            before=self.button_tree_frame,
+        )
+        selection.columnconfigure(0, weight=1)
+        self.button_detail_title_label = ttk.Label(
+            selection,
+            textvariable=self.button_detail_title_var,
+            style="Card.TLabel",
+            font=("Segoe UI Semibold", 10),
+            justify=tk.LEFT,
+        )
+        self.button_detail_title_label.grid(row=0, column=0, sticky=tk.EW)
+        self.button_preview_label = ttk.Label(
+            selection,
             textvariable=self.button_preview_var,
-            style="Muted.TLabel",
-            wraplength=720,
-        ).pack(fill=tk.X, pady=(6, 0))
+            style="CardMuted.TLabel",
+            justify=tk.LEFT,
+            wraplength=380,
+        )
+        self.button_preview_label.grid(
+            row=1,
+            column=0,
+            sticky=tk.EW,
+            pady=(3, 0),
+        )
+        button_commands = ttk.Frame(selection, style="Card.TFrame")
+        self.button_commands_frame = button_commands
+        button_commands.grid(row=0, column=1, rowspan=2, sticky=tk.E, padx=(10, 0))
+        self.new_quick_item_button = ttk.Button(
+            button_commands,
+            text="New Quick action…",
+            command=self._add_button,
+            state=tk.DISABLED,
+        )
+        self.new_quick_item_button.pack(side=tk.LEFT)
+        self.quick_item_edit_button = ttk.Button(
+            button_commands,
+            text="Edit…",
+            command=self._edit_button,
+            state=tk.DISABLED,
+        )
+        self.quick_item_edit_button.pack(side=tk.LEFT, padx=(6, 0))
+        self.quick_item_move_button = ttk.Menubutton(
+            button_commands,
+            text="Move",
+            state=tk.DISABLED,
+        )
+        self.quick_item_move_menu = tk.Menu(
+            self.quick_item_move_button,
+            tearoff=False,
+        )
+        self.quick_item_move_menu.add_command(
+            label="Move up",
+            command=lambda: self._move_button(-1),
+        )
+        self.quick_item_move_menu.add_command(
+            label="Move down",
+            command=lambda: self._move_button(1),
+        )
+        self.quick_item_move_button.configure(menu=self.quick_item_move_menu)
+        self.quick_item_move_button.pack(side=tk.LEFT, padx=(6, 0))
+        self.quick_item_delete_button = ttk.Button(
+            button_commands,
+            text="Delete permanently…",
+            command=self._delete_button,
+            state=tk.DISABLED,
+            style="Danger.TButton",
+        )
+        self.quick_item_delete_button.pack(side=tk.LEFT, padx=(6, 0))
         self.button_tree.bind("<Double-1>", lambda _event: self._edit_button())
         self.button_tree.bind("<Return>", lambda _event: self._edit_button())
         self.button_tree.bind(
@@ -1214,69 +1846,70 @@ class ConfigurationWindow:
             "write",
             lambda *_args: self._render_buttons(),
         )
-        controls = ttk.Frame(tab)
-        controls.pack(
-            side=tk.BOTTOM,
-            fill=tk.X,
-            pady=(8, 0),
-            before=self.button_tree_frame,
-        )
-        ttk.Button(controls, text="Add group", command=self._add_group).pack(side=tk.LEFT)
-        ttk.Button(controls, text="Add menu level", command=self._add_button).pack(
-            side=tk.LEFT, padx=(6, 0)
-        )
-        ttk.Button(controls, text="Edit selected", command=self._edit_button).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(controls, text="Delete selected", command=self._delete_button).pack(
-            side=tk.LEFT, padx=(6, 0)
-        )
-        ttk.Button(
-            controls,
-            text="Up",
-            width=5,
-            command=lambda: self._move_button(-1),
-        ).pack(side=tk.RIGHT, padx=(3, 0))
-        ttk.Button(
-            controls,
-            text="Down",
-            width=6,
-            command=lambda: self._move_button(1),
-        ).pack(side=tk.RIGHT)
+        selection.bind("<Configure>", self._resize_button_summary, add="+")
 
-    def _build_diagnostics_tab(self, notebook: ttk.Notebook) -> None:
+    def _build_diagnostics_tab(self, notebook: ConfigurationPageStack) -> None:
         tab = ttk.Frame(notebook, padding=10)
         notebook.add(tab, text="Diagnostics", underline=0)
         ttk.Label(
             tab,
-            text="Safe summary only. Use Ctrl+Tab to move between Configure tabs.",
-            style="Muted.TLabel",
-        ).pack(anchor=tk.W, pady=(0, 6))
-        self.diagnostics_text = tk.Text(
+            text="Diagnostics",
+            style="Title.TLabel",
+        ).pack(anchor=tk.W)
+        ttk.Label(
             tab,
+            text="Review and copy a privacy-safe summary for troubleshooting.",
+            style="Muted.TLabel",
+        ).pack(anchor=tk.W, pady=(2, 8))
+        diagnostics_frame = ttk.Frame(tab)
+        diagnostics_frame.pack(fill=tk.BOTH, expand=True)
+        self.diagnostics_text = tk.Text(
+            diagnostics_frame,
             wrap=tk.WORD,
             height=18,
             padx=8,
             pady=8,
             takefocus=True,
         )
-        self.diagnostics_text.pack(fill=tk.BOTH, expand=True)
+        diagnostics_scrollbar = ttk.Scrollbar(
+            diagnostics_frame,
+            orient=tk.VERTICAL,
+            command=self.diagnostics_text.yview,
+        )
+        self.diagnostics_text.configure(yscrollcommand=diagnostics_scrollbar.set)
+        self.diagnostics_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        diagnostics_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.diagnostics_scrollbar = diagnostics_scrollbar
         self.diagnostics_text.configure(state=tk.DISABLED)
         controls = ttk.Frame(tab)
-        controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0), before=self.diagnostics_text)
-        ttk.Button(
+        controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0), before=diagnostics_frame)
+        self.refresh_diagnostics_button = ttk.Button(
             controls,
             text="Refresh",
             command=self._refresh_diagnostics,
-            style="Accent.TButton",
-        ).pack(side=tk.LEFT)
-        ttk.Button(
+        )
+        self.refresh_diagnostics_button.pack(side=tk.LEFT)
+        self.copy_diagnostics_button = ttk.Button(
             controls,
             text="Copy safe summary",
             command=self._copy_diagnostics,
-        ).pack(side=tk.LEFT, padx=(6, 0))
+            style="Accent.TButton",
+        )
+        self.copy_diagnostics_button.pack(side=tk.LEFT, padx=(6, 0))
 
-    def _build_backup_restore_tab(self, notebook: ttk.Notebook) -> None:
+    def _build_backup_restore_tab(self, notebook: ConfigurationPageStack) -> None:
         tab = ttk.Frame(notebook, padding=10)
         notebook.add(tab, text="Backup and restore", underline=0)
+        ttk.Label(
+            tab,
+            text="Backup & restore",
+            style="Title.TLabel",
+        ).pack(anchor=tk.W)
+        ttk.Label(
+            tab,
+            text="Create a portable backup or inspect one safely before restoring.",
+            style="Muted.TLabel",
+        ).pack(anchor=tk.W, pady=(2, 8))
         self.backup_restore_panel = BackupRestorePanel(
             tab,
             data_paths=self.data_paths,
@@ -1315,7 +1948,7 @@ class ConfigurationWindow:
 
     def _build_work_items_tab(
         self,
-        notebook: ttk.Notebook,
+        notebook: ConfigurationPageStack,
         sources: tuple[WorkItemSource, ...],
         metadata: dict[str, WorkItemMetadata],
         index: WorkItemIndex,
@@ -1330,8 +1963,10 @@ class ConfigurationWindow:
             sources_path=self.work_item_sources_path,
             metadata_path=self.work_item_metadata_path,
             settings_path=self.work_item_settings_path,
+            contexts_path=self.local_contexts_path,
             on_change=self.on_change,
             feedback=self._set_feedback,
+            refresh_configuration=self._reload,
         )
 
     def _set_feedback(self, message: str, success: bool) -> None:
@@ -1347,6 +1982,7 @@ class ConfigurationWindow:
         return "break"
 
     def _focus_selected_tab(self, _event: tk.Event | None = None) -> None:
+        self._sync_configuration_navigation()
         self.window.after_idle(self._focus_current_tab)
 
     def _focus_current_tab(self) -> None:
@@ -1393,6 +2029,7 @@ class ConfigurationWindow:
         action_type: str,
         *,
         suggestion: ActionCreationSuggestion | None = None,
+        initial_quick_action_path: tuple[str, ...] = (),
     ) -> None:
         """Use the one Action form and save path for catalogue and quick creation."""
         if action_type not in CREATABLE_ACTION_TYPES:
@@ -1425,6 +2062,7 @@ class ConfigurationWindow:
             initial_title=suggestion.title if suggestion is not None else "",
             initial_value=suggestion.value if suggestion is not None else "",
             suggested_from_workspace=suggestion is not None,
+            initial_quick_action_path=initial_quick_action_path,
         )
         self.action_creation_dialog = dialog
         dialog.window.bind(
@@ -1496,10 +2134,16 @@ class ConfigurationWindow:
 
     def _focus_current_filter(self, _event: tk.Event | None = None) -> str:
         selected = self.notebook.index(self.notebook.select())
+        work_item_search = getattr(
+            getattr(self, "work_items_panel", None),
+            "search_entry",
+            None,
+        )
         entry = {
             CONFIGURATION_TAB_INDEXES["actions"]: self.action_filter_entry,
             CONFIGURATION_TAB_INDEXES["contexts"]: self.context_filter_entry,
             CONFIGURATION_TAB_INDEXES["buttons"]: self.button_filter_entry,
+            CONFIGURATION_TAB_INDEXES["work_items"]: work_item_search,
         }.get(selected)
         if entry is None:
             self.notebook.select(CONFIGURATION_TAB_INDEXES["actions"])
@@ -1524,6 +2168,11 @@ class ConfigurationWindow:
             )
             self.local_action_ids = stored_local_ids
             self.palette_state = load_palette_state(self.palette_path)
+            local_contexts = (
+                load_contexts(self.local_contexts_path)
+                if self.local_contexts_path.exists()
+                else []
+            )
             self.contexts = load_combined_contexts(self.contexts_path, self.local_contexts_path)
             self.actions = actions_with_canonical_contexts(
                 self.actions,
@@ -1542,10 +2191,12 @@ class ConfigurationWindow:
             return
         finally:
             self.window.configure(cursor="")
+        self.local_contexts = local_contexts
         self.local_context_names = {
-            item.name.casefold()
-            for item in (load_contexts(self.local_contexts_path) if self.local_contexts_path.exists() else [])
+            item.name.casefold() for item in self.local_contexts
         }
+        if hasattr(self, "work_items_panel"):
+            self.work_items_panel.set_contexts(tuple(self.local_contexts))
         self._refresh_action_views()
 
     def _refresh_action_views(self) -> None:
@@ -1576,12 +2227,18 @@ class ConfigurationWindow:
                 picker_options,
                 empty_label=EMPTY_PIN_LABEL,
             )
-        for index, variable in enumerate(self.pin_vars):
-            label = EMPTY_PIN_LABEL
-            if index < len(self.palette_state.pinned_action_ids):
-                action_id = self.palette_state.pinned_action_ids[index]
-                label = labels_by_id.get(action_id, f"Missing action: {action_id}")
-            variable.set(label)
+        self._pins_rendering = True
+        try:
+            for index, variable in enumerate(self.pin_vars):
+                label = EMPTY_PIN_LABEL
+                if index < len(self.palette_state.pinned_action_ids):
+                    action_id = self.palette_state.pinned_action_ids[index]
+                    label = labels_by_id.get(action_id, f"Missing action: {action_id}")
+                variable.set(label)
+        finally:
+            self._pins_rendering = False
+        self._pins_dirty = False
+        self._update_pin_summary()
 
     def _save_pinned_slots(self) -> None:
         try:
@@ -1643,6 +2300,7 @@ class ConfigurationWindow:
             if query.strip()
             else f"{len(self.contexts)} contexts"
         )
+        self._update_context_controls()
 
     def _render_buttons(self) -> None:
         self.button_tree.delete(*self.button_tree.get_children())
@@ -1713,16 +2371,10 @@ class ConfigurationWindow:
                 "", tk.END, iid=group_iid, text=group.label,
                 values=(
                     LOCAL_DESTINATION if local else PROJECT_DESTINATION,
-                    (
-                        (
-                            f"Nested menu · {command_item_count(group)} levels"
-                            + (
-                                f" · Direct: {', '.join(group_action_labels)}"
-                                if group_action_labels
-                                else ""
-                            )
-                        )
-                        if group.presentation == GROUP_PRESENTATION_NESTED_MENU
+                    f"Browse menu · {command_item_count(group)} item(s)"
+                    + (
+                        f" · At menu root: {', '.join(group_action_labels)}"
+                        if group_action_labels
                         else ""
                     ),
                 ),
@@ -1778,7 +2430,7 @@ class ConfigurationWindow:
         self.button_filter_count_var.set(
             f"{matching_items} of {total_items}"
             if query.strip()
-            else f"{total_items} Quick actions"
+            else f"{total_items} items"
         )
         self._update_button_preview()
 
@@ -1812,7 +2464,7 @@ class ConfigurationWindow:
                 or group_matches
                 or (
                     not action.quick_action_path
-                    and all(term in "unsorted" for term in terms)
+                    and all(term in "menu root" for term in terms)
                 )
                 or action_matches_filter(
                     action,
@@ -1840,6 +2492,42 @@ class ConfigurationWindow:
                 tags=("automatic",),
                 open=True,
             )
+
+            root_action_ids = tuple(
+                action_id
+                for action_id in command_group_action_ids(group)
+                if action_id in visible_action_ids
+            )
+            for action_id in root_action_ids:
+                action = actions_by_id[action_id]
+                action_counter += 1
+                action_iid = f"automatic-action-{action_type}-{action_counter}"
+                self.action_bound_button_records[action_iid] = (
+                    ActionBoundQuickSelection(
+                        group.label,
+                        action_type,
+                        (),
+                        action.id,
+                    )
+                )
+                self.button_tree.insert(
+                    group_iid,
+                    tk.END,
+                    iid=action_iid,
+                    text=action.compact_display_text,
+                    values=(
+                        LOCAL_DESTINATION
+                        if action.id in self.local_action_ids
+                        else PROJECT_DESTINATION,
+                        "At menu root · edit Action to organize",
+                    ),
+                    tags=(
+                        "local"
+                        if action.id in self.local_action_ids
+                        else "shared",
+                    ),
+                )
+                matching_items += 1
 
             def item_has_visible_action(item: CommandItem) -> bool:
                 return any(
@@ -1976,7 +2664,6 @@ class ConfigurationWindow:
                 values=(
                     ACTION_TYPES[action.type].display_label,
                     ", ".join(action.effective_contexts) or "General only",
-                    ", ".join(action.effective_tags),
                     LOCAL_DESTINATION if local else PROJECT_DESTINATION,
                     action.state,
                 ),
@@ -1995,6 +2682,13 @@ class ConfigurationWindow:
                 requested_iid = iid
         self.action_tree.tag_configure("shared", foreground="#666666")
         self.action_tree.tag_configure("archived", foreground="#777777")
+        self.action_tree.configure(
+            displaycolumns=(
+                ("type", "contexts", "source", "state")
+                if state_filter == "All"
+                else ("type", "contexts", "source")
+            )
+        )
         self.action_filter_count_var.set(
             f"{len(matching_iids)} of {len(state_actions)}"
             if query.strip()
@@ -2041,17 +2735,72 @@ class ConfigurationWindow:
             return
         action = self._selected_stored_action()
         if action is None:
+            self.action_detail_title_var.set("Select an Action")
+            self.action_detail_summary_var.set(
+                "Contexts, tags, ownership, and lifecycle appear here."
+            )
+            self.action_edit_button.configure(state=tk.DISABLED)
             self.action_lifecycle_button.configure(state=tk.DISABLED)
             self.delete_action_button.configure(state=tk.DISABLED)
             return
         archived = action.state == "Archived"
+        local = action.id in self.local_action_ids
+        self.action_detail_title_var.set(compact_selection_title(action.title))
+        self.action_detail_summary_var.set(
+            (
+                f"{ACTION_TYPES[action.type].display_label} · {action.state} · "
+                f"{LOCAL_DESTINATION if local else PROJECT_DESTINATION}\n"
+                f"Contexts: {', '.join(action.effective_contexts) or 'General only'}   "
+                f"Tags: {', '.join(action.effective_tags) or '—'}"
+            )
+        )
+        self.action_edit_button.configure(state=tk.NORMAL)
         self.action_lifecycle_button.configure(
-            text="Restore selected" if archived else "Archive selected...",
+            text="Restore…" if archived else "Archive…",
             state=tk.NORMAL,
         )
         self.delete_action_button.configure(
             state=tk.NORMAL if archived else tk.DISABLED
         )
+
+    def _selected_context_record(
+        self,
+    ) -> tuple[ContextDefinition, str] | None:
+        selection = self.context_tree.selection()
+        if not selection:
+            return None
+        context = self.contexts[int(selection[0].split("-")[1])]
+        values = self.context_tree.item(selection[0], "values")
+        source = values[0] if values else PROJECT_DESTINATION
+        return context, source
+
+    def _update_context_controls(self) -> None:
+        if not hasattr(self, "context_edit_button"):
+            return
+        selected = self._selected_context_record()
+        if selected is None:
+            self.context_detail_title_var.set("Select a Context")
+            self.context_detail_summary_var.set(
+                "Choose a Context to review its members and Focus shortcuts."
+            )
+            self.context_edit_button.configure(state=tk.DISABLED)
+            self.context_delete_button.configure(state=tk.DISABLED)
+            return
+        context, source = selected
+        member_count = context_membership_count(context, self.actions)
+        preferred_count = len(context.preferred_items)
+        description = " ".join(context.description.split()) or "No description"
+        self.context_detail_title_var.set(
+            compact_selection_title(context.name)
+        )
+        self.context_detail_summary_var.set(
+            compact_selection_summary(
+                f"{source} · {member_count} member(s) · "
+                f"{preferred_count} Focus shortcut(s) · {description}"
+            )
+        )
+        self.context_edit_button.configure(state=tk.NORMAL)
+        self.context_delete_button.configure(state=tk.NORMAL)
 
     def _edit_action(self) -> None:
         action = self._selected_stored_action()
@@ -2453,14 +3202,11 @@ class ConfigurationWindow:
         )
 
     def _edit_context(self) -> None:
-        selection = self.context_tree.selection()
-        if not selection:
+        selected = self._selected_context_record()
+        if selected is None:
             return
-        context = self.contexts[int(selection[0].split("-")[1])]
-        local = (
-            self.context_tree.item(selection[0], "values")[0]
-            == LOCAL_DESTINATION
-        )
+        context, source = selected
+        local = source == LOCAL_DESTINATION
         if not local and not messagebox.askokcancel(
                 "Edit built-in context?",
                 "This context is part of the built-in starter configuration tracked "
@@ -2575,14 +3321,11 @@ class ConfigurationWindow:
         return True
 
     def _delete_context(self) -> None:
-        selection = self.context_tree.selection()
-        if not selection:
+        selected = self._selected_context_record()
+        if selected is None:
             return
-        context = self.contexts[int(selection[0].split("-")[1])]
-        local = (
-            self.context_tree.item(selection[0], "values")[0]
-            == LOCAL_DESTINATION
-        )
+        context, source = selected
+        local = source == LOCAL_DESTINATION
         destination = self.local_contexts_path if local else self.contexts_path
         membership_count = context_membership_count(context, self.actions)
         membership_label = (
@@ -2594,13 +3337,20 @@ class ConfigurationWindow:
             )
             else "action(s)"
         )
+        shared_warning = (
+            "\n\nThis changes the built-in starter configuration tracked by "
+            "Git and affects other computers after commit, push, and pull."
+            if not local
+            else ""
+        )
         if not messagebox.askyesno(
             "Delete context?",
             f'Delete "{context.name}" permanently?\n\n'
             f"{membership_count} {membership_label} will be moved to General if they have "
             "no other specific context. Saved Focus slots for this context will "
             "also be removed.\n\n"
-            f"Storage: {LOCAL_DESTINATION if local else PROJECT_DESTINATION}",
+            f"Storage: {LOCAL_DESTINATION if local else PROJECT_DESTINATION}"
+            f"{shared_warning}",
             icon=messagebox.WARNING,
             parent=self.window,
         ):
@@ -2669,8 +3419,8 @@ class ConfigurationWindow:
             and local_references
         ):
             messagebox.showerror(
-                "Quick-action group was not saved",
-                "Built-in Quick actions can use only Built-in actions. Remove "
+                "Quick-action menu was not saved",
+                "Built-in Quick actions can use only Built-in Actions. Remove "
                 "the My configuration action assignment and try again.",
                 parent=self.window,
             )
@@ -2691,7 +3441,7 @@ class ConfigurationWindow:
             }
             if group.id.casefold() in other_ids:
                 raise CommandSurfaceError(
-                    "A Quick-action group in the other storage location already "
+                    "A Quick-action menu in the other storage location already "
                     f'uses the name "{group.label}".'
                 )
             save_command_group(
@@ -2701,14 +3451,14 @@ class ConfigurationWindow:
             )
         except (CommandSurfaceError, OSError) as exc:
             messagebox.showerror(
-                "Quick-action group was not saved",
-                f"Context Palette could not save this group.\n\n{exc}",
+                "Quick-action menu was not saved",
+                f"Context Palette could not save this menu.\n\n{exc}",
                 parent=self.window,
             )
             return False
         self.on_change()
         self._reload()
-        self.feedback_var.set(f"Saved Quick-action group: {group.label}")
+        self.feedback_var.set(f"Saved Quick-action menu: {group.label}")
         self.feedback_label.configure(style="Success.TLabel")
         return True
 
@@ -2778,7 +3528,12 @@ class ConfigurationWindow:
     def _add_button(self) -> None:
         action_bound = self._selected_action_bound_button_record()
         if action_bound is not None:
-            self._show_action_bound_quick_guidance(action_bound)
+            if action_bound.action_id:
+                return
+            self.create_action_for_automatic_menu(
+                action_bound.action_type,
+                action_bound.path,
+            )
             return
         selected = self._selected_button_record()
         if selected is None:
@@ -2806,8 +3561,9 @@ class ConfigurationWindow:
         target_path = self._group_target_path(group)
         project = target_path.resolve() == self.command_surface_path.resolve()
         if project and not messagebox.askokcancel(
-            "Add built-in menu level?",
-            "This menu level will become part of the built-in starter "
+            "Add built-in submenu?" if item is not None else "Add built-in Quick action?",
+            ("This submenu" if item is not None else "This Quick action")
+            + " will become part of the built-in starter "
             "configuration tracked by Git and delivered after commit, push, "
             "and pull.\n\nContinue?",
             parent=self.window,
@@ -2825,6 +3581,7 @@ class ConfigurationWindow:
             ),
             shared=project,
             work_items=() if project else self._available_work_items(),
+            creating_submenu=item is not None,
         )
 
     def _edit_button(self) -> None:
@@ -2857,7 +3614,7 @@ class ConfigurationWindow:
         local = target_path.resolve() == self.local_command_surface_path.resolve()
         if not local and not messagebox.askokcancel(
                 "Edit built-in Quick actions?",
-                "This group is part of the built-in starter configuration tracked "
+                "This menu is part of the built-in starter configuration tracked "
                 "by Git.\n\nChanging it alters the defaults delivered after commit, "
                 "push, and pull. "
                 "Context Palette will save the change permanently and keep a backup.\n\n"
@@ -2893,9 +3650,10 @@ class ConfigurationWindow:
         selection: ActionBoundQuickSelection,
     ) -> None:
         query_parts = [ACTION_TYPES[selection.action_type].label]
-        if selection.path and selection.path != ("Unsorted",):
+        if selection.path:
             query_parts.extend(selection.path)
         self.notebook.select(CONFIGURATION_TAB_INDEXES["actions"])
+        self.action_state_filter_var.set("Active")
         self.action_filter_var.set(" ".join(query_parts))
         self.action_filter_entry.focus_set()
         self.action_filter_entry.selection_range(0, tk.END)
@@ -2929,7 +3687,7 @@ class ConfigurationWindow:
         project = destination.resolve() == self.command_surface_path.resolve()
         if project and command_item_work_item_references(item):
             messagebox.showerror(
-                "Menu level was not saved",
+                "Quick-action item was not saved",
                 "Work Items are personal and can be assigned only to My "
                 "configuration Quick actions.",
                 parent=self.window,
@@ -2942,7 +3700,7 @@ class ConfigurationWindow:
         ]
         if project and local_references:
             messagebox.showerror(
-                "Menu level was not saved",
+                "Quick-action item was not saved",
                 "Built-in Quick actions can use only built-in actions. Remove "
                 "the My configuration action assignment and try again.",
                 parent=self.window,
@@ -2965,7 +3723,7 @@ class ConfigurationWindow:
             if group_id.strip().casefold() in other_group_ids:
                 messagebox.showerror(
                     "Context Palette",
-                    "A button group in the other configuration file already uses that stable ID.",
+                    "A Quick-action menu in the other configuration file already uses that stable ID.",
                     parent=self.window,
                 )
                 return False
@@ -2982,8 +3740,8 @@ class ConfigurationWindow:
             )
         except (CommandSurfaceError, OSError) as exc:
             messagebox.showerror(
-                "Menu level was not saved",
-                f"Context Palette could not save this menu level.\n\n{exc}\n\n"
+                "Quick-action item was not saved",
+                f"Context Palette could not save this Quick-action item.\n\n{exc}\n\n"
                 "The existing Quick-action file was left unchanged. Close any program "
                 "that may be locking the file, check that its folder is available, "
                 "and try again.",
@@ -2992,7 +3750,7 @@ class ConfigurationWindow:
             return False
         self.on_change()
         self._reload()
-        self.feedback_var.set(f"Saved menu level: {item.label}")
+        self.feedback_var.set(f"Saved Quick-action item: {item.label}")
         self.feedback_label.configure(style="Success.TLabel")
         return True
 
@@ -3006,10 +3764,11 @@ class ConfigurationWindow:
             return
         group, item, _path = selected
         target_path = self._group_target_path(group)
-        noun = "group" if item is None else "menu level"
+        project = target_path.resolve() == self.command_surface_path.resolve()
+        noun = "menu" if item is None else "Quick-action item"
         label = group.label if item is None else item.label
         detail = (
-            f"All {command_item_count(group)} menu level(s) in this group will be removed."
+            f"All {command_item_count(group)} item(s) in this menu will be removed."
             if item is None and group.items
             else (
                 f"This level and its {command_item_subtree_count(item) - 1} "
@@ -3019,11 +3778,18 @@ class ConfigurationWindow:
             if item is not None and item.items
             else "Its assigned actions remain available elsewhere."
         )
+        shared_warning = (
+            "\n\nThis changes the built-in starter configuration tracked by "
+            "Git and affects other computers after commit, push, and pull."
+            if project
+            else ""
+        )
         if not messagebox.askyesno(
             f"Delete {noun}?",
             f'Delete "{label}" permanently?\n\n{detail}\n\n'
             f"Storage: "
-            f"{LOCAL_DESTINATION if target_path.resolve() == self.local_command_surface_path.resolve() else PROJECT_DESTINATION}",
+            f"{PROJECT_DESTINATION if project else LOCAL_DESTINATION}"
+            f"{shared_warning}",
             icon=messagebox.WARNING,
             parent=self.window,
         ):
@@ -3055,6 +3821,15 @@ class ConfigurationWindow:
             return
         group, item, _path = selected
         target_path = self._group_target_path(group)
+        project = target_path.resolve() == self.command_surface_path.resolve()
+        if project and not messagebox.askokcancel(
+            "Move built-in Quick action?",
+            "This changes the order in the built-in starter configuration "
+            "tracked by Git and affects other computers after commit, push, "
+            "and pull.\n\nContinue?",
+            parent=self.window,
+        ):
+            return
         try:
             moved = (
                 move_command_group(target_path, group.id, offset)
@@ -3076,6 +3851,86 @@ class ConfigurationWindow:
         self.feedback_var.set("Updated Quick-action order.")
         self.feedback_label.configure(style="Success.TLabel")
 
+    def _button_move_availability(
+        self,
+        group: CommandGroup,
+        item: CommandItem | None,
+        path: tuple[int, ...],
+    ) -> tuple[bool, bool]:
+        if item is None:
+            target = self._group_target_path(group).resolve()
+            siblings = [
+                candidate
+                for candidate in self.groups
+                if self._group_target_path(candidate).resolve() == target
+            ]
+            index = next(
+                position
+                for position, candidate in enumerate(siblings)
+                if candidate.id.casefold() == group.id.casefold()
+            )
+        else:
+            if len(path) == 1:
+                siblings = list(group.items)
+            else:
+                parent = command_item_at_path(group, path[:-1])
+                siblings = list(parent.items)
+            index = path[-1]
+        return index > 0, index < len(siblings) - 1
+
+    def _set_button_selection_state(
+        self,
+        *,
+        edit_label: str,
+        edit_enabled: bool,
+        new_label: str,
+        new_enabled: bool,
+        move_up: bool,
+        move_down: bool,
+        delete_enabled: bool,
+    ) -> None:
+        if not hasattr(self, "quick_item_edit_button"):
+            return
+        self.quick_item_edit_button.configure(
+            text=edit_label,
+            state=tk.NORMAL if edit_enabled else tk.DISABLED,
+        )
+        self.new_quick_item_button.configure(
+            text=new_label,
+            state=tk.NORMAL if new_enabled else tk.DISABLED,
+        )
+        self.quick_item_move_menu.entryconfigure(
+            0,
+            state=tk.NORMAL if move_up else tk.DISABLED,
+        )
+        self.quick_item_move_menu.entryconfigure(
+            1,
+            state=tk.NORMAL if move_down else tk.DISABLED,
+        )
+        self.quick_item_move_button.configure(
+            state=tk.NORMAL if move_up or move_down else tk.DISABLED,
+        )
+        self.quick_item_delete_button.configure(
+            state=tk.NORMAL if delete_enabled else tk.DISABLED,
+        )
+        commands = (
+            (self.new_quick_item_button, new_enabled),
+            (self.quick_item_edit_button, edit_enabled),
+            (self.quick_item_move_button, move_up or move_down),
+            (self.quick_item_delete_button, delete_enabled),
+        )
+        for command, _visible in commands:
+            command.pack_forget()
+        first = True
+        for command, visible in commands:
+            if not visible:
+                continue
+            command.pack(
+                side=tk.LEFT,
+                padx=(0, 0) if first else (6, 0),
+            )
+            first = False
+
     def _update_button_preview(self) -> None:
         action_bound = self._selected_action_bound_button_record()
         if action_bound is not None:
@@ -3091,22 +3946,73 @@ class ConfigurationWindow:
                     ),
                     None,
                 )
+                if hasattr(self, "button_detail_title_var"):
+                    self.button_detail_title_var.set(
+                        compact_selection_title(
+                            action.title if action is not None else path
+                        )
+                    )
                 self.button_preview_var.set(
-                    f"Automatic menu: {path} | Action: "
-                    f"{action.title if action is not None else 'Unavailable'} | "
-                    "Edit selected changes the action and its Quick menu path."
+                    compact_selection_summary(
+                        f"Automatic menu: {path} · Action: "
+                        f"{action.title if action is not None else 'Unavailable'} · "
+                        "Edit the Action to change its Quick menu path."
+                    )
+                )
+                self._set_button_selection_state(
+                    edit_label="Edit Action…",
+                    edit_enabled=True,
+                    new_label="New submenu…",
+                    new_enabled=False,
+                    move_up=False,
+                    move_down=False,
+                    delete_enabled=False,
                 )
             else:
+                if hasattr(self, "button_detail_title_var"):
+                    self.button_detail_title_var.set(
+                        compact_selection_title(path)
+                    )
                 self.button_preview_var.set(
-                    f"Automatic menu: {path} | Membership follows Active "
-                    f"{ACTION_TYPES[action_bound.action_type].display_label} actions. "
-                    "Edit selected opens the matching Actions list."
+                    compact_selection_summary(
+                        f"Automatic menu: {path} · Membership follows Active "
+                        f"{ACTION_TYPES[action_bound.action_type].display_label} actions. "
+                        "View Actions opens the matching list."
+                    )
+                )
+                self._set_button_selection_state(
+                    edit_label=(
+                        "Find matching Actions…"
+                        if action_bound.path
+                        else "Find all Actions…"
+                    ),
+                    edit_enabled=True,
+                    new_label=(
+                        f"Add {ACTION_BOUND_QUICK_NOUNS[action_bound.action_type]} here…"
+                        if action_bound.path
+                        else ACTION_BOUND_QUICK_ADD_LABELS[action_bound.action_type]
+                    ),
+                    new_enabled=True,
+                    move_up=False,
+                    move_down=False,
+                    delete_enabled=False,
                 )
             return
         selected = self._selected_button_record()
         if selected is None:
+            if hasattr(self, "button_detail_title_var"):
+                self.button_detail_title_var.set("Select a Quick action")
             self.button_preview_var.set(
-                "Select a group or Quick action to see how it behaves."
+                "Choose a custom or automatic item to review how it behaves."
+            )
+            self._set_button_selection_state(
+                edit_label="Edit…",
+                edit_enabled=False,
+                new_label="New Quick action…",
+                new_enabled=False,
+                move_up=False,
+                move_down=False,
+                delete_enabled=False,
             )
             return
         group, item, path = selected
@@ -3116,17 +4022,38 @@ class ConfigurationWindow:
             == self.local_command_surface_path.resolve()
             else PROJECT_DESTINATION
         )
+        move_up, move_down = self._button_move_availability(
+            group,
+            item,
+            path,
+        )
+        self._set_button_selection_state(
+            edit_label="Edit…",
+            edit_enabled=True,
+            new_label=(
+                "New Quick action…" if item is None else "New submenu…"
+            ),
+            new_enabled=len(path) < MAX_COMMAND_MENU_LEVELS,
+            move_up=move_up,
+            move_down=move_down,
+            delete_enabled=True,
+        )
         if item is None:
-            presentation = GROUP_PRESENTATION_LABELS[group.presentation]
-            direct_labels = action_reference_labels(
+            root_labels = action_reference_labels(
                 command_group_action_ids(group),
                 self.actions,
             )
+            if hasattr(self, "button_detail_title_var"):
+                self.button_detail_title_var.set(
+                    compact_selection_title(group.label)
+                )
             self.button_preview_var.set(
-                f'Group "{group.label}" | {command_item_count(group)} menu '
-                f"level(s) | Direct actions: "
-                f"{', '.join(direct_labels) if direct_labels else 'none'} | "
-                f"{presentation} | {destination}"
+                compact_selection_summary(
+                    f"Browse menu · {command_item_count(group)} item(s) · "
+                    f"Actions at menu root: "
+                    f"{', '.join(root_labels) if root_labels else 'none'} · "
+                    f"{destination}"
+                )
             )
             return
         labels = quick_action_target_labels(
@@ -3140,19 +4067,18 @@ class ConfigurationWindow:
             current = current_items[item_index]
             menu_path.append(current.label)
             current_items = current.items
-        if group.presentation == GROUP_PRESENTATION_NESTED_MENU:
-            self.button_preview_var.set(
-                f"Nested menu: {' > '.join(menu_path)} | "
-                f"Targets: {', '.join(labels) if labels else 'empty'} | "
-                f"Child levels: {len(item.items)} | "
+        if hasattr(self, "button_detail_title_var"):
+            self.button_detail_title_var.set(
+                compact_selection_title(" > ".join(menu_path))
+            )
+        self.button_preview_var.set(
+            compact_selection_summary(
+                f"Targets in menu order: "
+                f"{', '.join(labels) if labels else 'empty'} · "
+                f"Child menus: {len(item.items)} · "
                 f"{destination}"
             )
-        else:
-            self.button_preview_var.set(
-                f"Left click: {labels[0] if labels else 'No target'} | "
-                f"Right-click menu: {', '.join(labels) if labels else 'empty'} | "
-                f"{destination}"
-            )
+        )
 
 
 class ActionDialog:
@@ -3168,6 +4094,7 @@ class ActionDialog:
         initial_title: str = "",
         initial_value: str = "",
         suggested_from_workspace: bool = False,
+        initial_quick_action_path: tuple[str, ...] = (),
     ) -> None:
         self.action_type = action_type
         self.action = action
@@ -3306,7 +4233,11 @@ class ActionDialog:
             value=", ".join(action.effective_tags) if action else ""
         )
         self.quick_action_path_var = tk.StringVar(
-            value=" > ".join(action.quick_action_path) if action else ""
+            value=(
+                " > ".join(action.quick_action_path)
+                if action
+                else " > ".join(initial_quick_action_path)
+            )
         )
         self.arguments_var = tk.StringVar(
             value="\n".join(action.arguments) if action else ""
@@ -3376,7 +4307,8 @@ class ActionDialog:
                 self.quick_action_path_var,
                 help_text=(
                     "Optional nested placement in the fixed Quick-action menu. "
-                    "Separate up to three levels with >. Leave blank for Unsorted."
+                    "Separate up to three levels with >. Leave blank to show "
+                    "the Action at the menu root."
                 ),
             )
         label = {
@@ -3576,7 +4508,7 @@ class ActionDialog:
         controls.pack(fill=tk.X, pady=(6, 0))
         ttk.Button(
             controls,
-            text="Add waitâ€¦",
+            text="Add wait…",
             command=self._add_sequence_wait,
         ).pack(side=tk.LEFT)
         ttk.Button(
@@ -3597,7 +4529,7 @@ class ActionDialog:
         ttk.Label(
             parent,
             text=(
-                "2â€“12 steps. Waits are 100â€“10,000 ms, cannot touch each "
+                "2–12 steps. Waits are 100–10,000 ms, cannot touch each "
                 "other or the ends, and never prove that a program finished."
             ),
             style="Muted.TLabel",
@@ -3657,7 +4589,7 @@ class ActionDialog:
             else:
                 action = actions_by_id.get(step.action_id)
                 label = (
-                    f"{number}. {action.title} Â· {ACTION_TYPES[action.type].label}"
+                    f"{number}. {action.title} · {ACTION_TYPES[action.type].label}"
                     if action is not None
                     else f"{number}. Unavailable Action"
                 )
@@ -3964,19 +4896,25 @@ class ContextDialog:
             if context and shared
             else "Edit context"
             if context
-            else "Add context"
+            else "New context"
         )
         configure_standard_window(self.window, parent)
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
-        _dialog_buttons(outer, self._save, self.window.destroy)
+        self.controls_frame = _dialog_buttons(
+            outer,
+            self._save,
+            self.window.destroy,
+        )
+        self.form_view = _ScrollableDialogBody(self.window, outer)
+        form = self.form_view.content
         self.name = tk.StringVar(value=context.name if context else "")
         self.description = tk.StringVar(value=context.description if context else "")
-        name_entry = _entry(outer, "Context name", self.name)
-        _entry(outer, "Description", self.description)
+        name_entry = _entry(form, "Context name", self.name)
+        _entry(form, "Description", self.description)
         self.destination_var = tk.StringVar(value=LOCAL_DESTINATION)
         if choose_destination:
-            _destination_field(outer, self.destination_var)
+            _destination_field(form, self.destination_var)
         preferred = context.preferred_action_ids if context else ()
         self.action_choices = _action_choices(actions)
         self.action_picker_options = _action_picker_options(
@@ -4022,7 +4960,12 @@ class ContextDialog:
             if reference.action_id
         ]
         ttk.Label(
-            outer,
+            form,
+            text="Members",
+            style="Heading.TLabel",
+        ).pack(anchor=tk.W, pady=(9, 0))
+        ttk.Label(
+            form,
             text=(
                 "Actions in this Built-in context. Only Built-in actions are "
                 "available."
@@ -4031,9 +4974,10 @@ class ContextDialog:
                 "Palette items in this context. My configuration contexts may "
                 "contain built-in Actions, your Actions, and Work Items."
             ),
+            style="Muted.TLabel",
             wraplength=610,
-        ).pack(anchor=tk.W, pady=(9, 2))
-        member_chooser = ttk.Frame(outer)
+        ).pack(anchor=tk.W, pady=(2, 2))
+        member_chooser = ttk.Frame(form)
         member_chooser.pack(fill=tk.X)
         self.member_choice_var = tk.StringVar()
         self.member_choice = ActionPickerField(
@@ -4046,11 +4990,11 @@ class ContextDialog:
         self.member_choice.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(
             member_chooser,
-            text="Add",
+            text="Add Action",
             command=self._add_member_action,
         ).pack(side=tk.LEFT, padx=(6, 0))
         if not shared:
-            work_item_chooser = ttk.Frame(outer)
+            work_item_chooser = ttk.Frame(form)
             work_item_chooser.pack(fill=tk.X, pady=(5, 0))
             self.member_work_item_var = tk.StringVar()
             self.member_work_item_choice = ActionPickerField(
@@ -4078,7 +5022,7 @@ class ContextDialog:
                 text="Add Work Item",
                 command=self._add_member_work_item,
             ).pack(side=tk.LEFT, padx=(6, 0))
-        member_area = ttk.Frame(outer)
+        member_area = ttk.Frame(form)
         member_area.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
         self.member_list = tk.Listbox(
             member_area,
@@ -4094,8 +5038,8 @@ class ContextDialog:
         member_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.member_list.configure(yscrollcommand=member_scrollbar.set)
         ttk.Button(
-            outer,
-            text="Remove selected item",
+            form,
+            text="Remove from Context",
             command=self._remove_member_item,
         ).pack(anchor=tk.W, pady=(5, 0))
         self.item_choices: dict[str, CommandTarget] = {
@@ -4117,12 +5061,22 @@ class ContextDialog:
             self.slots.append(tk.StringVar(value=label))
         self.slot_choices: list[ActionPickerField] = []
         ttk.Label(
-            outer,
-            text="Preferred Actions or Work Items for slots 6–0",
-        ).pack(anchor=tk.W, pady=(9, 2))
+            form,
+            text="Focus shortcuts 6–0 (optional)",
+            style="Heading.TLabel",
+        ).pack(anchor=tk.W, pady=(9, 0))
+        ttk.Label(
+            form,
+            text=(
+                "Choose up to five Context members for the numbered shortcuts "
+                "shown when this Context is the current Focus."
+            ),
+            style="Muted.TLabel",
+            wraplength=610,
+        ).pack(anchor=tk.W, pady=(2, 2))
         for slot, variable in zip(CONTEXT_SLOT_NUMBERS, self.slots):
             slot_label = slot_display_number(slot)
-            row = ttk.Frame(outer)
+            row = ttk.Frame(form)
             row.pack(fill=tk.X, pady=2)
             ttk.Label(row, text=f"Slot {slot_label}", width=8).pack(side=tk.LEFT)
             chooser = ActionPickerField(
@@ -4293,50 +5247,44 @@ class GroupDialog:
         self.window = tk.Toplevel(parent)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
         self.window.title(
-            "Edit Quick-action group" if group else "Add Quick-action group"
+            "Edit Quick-action menu" if group else "New Quick-action menu"
         )
         configure_standard_window(self.window, parent)
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
-        _dialog_buttons(outer, self._save, self.window.destroy)
-        ttk.Label(
+        self.controls_frame = _dialog_buttons(
             outer,
+            self._save,
+            self.window.destroy,
+        )
+        self.form_view = _ScrollableDialogBody(self.window, outer)
+        form = self.form_view.content
+        ttk.Label(
+            form,
             text=(
-                "A group is a visible heading containing one or more Quick actions."
+                "A menu is one visible launcher containing ordered Actions and submenus."
             ),
             style="Muted.TLabel",
             wraplength=560,
         ).pack(anchor=tk.W)
         self.label_var = tk.StringVar(value=group.label if group else "")
         self.id_var = tk.StringVar(value=group.id if group else "")
-        name_entry = _entry(outer, "Group heading", self.label_var)
-        self.presentation_var = tk.StringVar(
-            value=GROUP_PRESENTATION_LABELS[
-                group.presentation if group else GROUP_PRESENTATION_ROWS
-            ]
-        )
-        ttk.Label(outer, text="Presentation").pack(anchor=tk.W, pady=(7, 0))
-        ttk.Combobox(
-            outer,
-            textvariable=self.presentation_var,
-            values=tuple(GROUP_PRESENTATION_LABELS.values()),
-            state="readonly",
-        ).pack(fill=tk.X, pady=(2, 0))
+        name_entry = _entry(form, "Menu name", self.label_var)
         ttk.Label(
-            outer,
+            form,
             text=(
-                "Quick-action rows keep one-click defaults. Nested subject menu "
-                "uses one launcher, then shows each Quick action as a submenu."
+                "Left-click browses this menu. Right-click opens its Add and "
+                "Organize commands."
             ),
             style="Muted.TLabel",
             wraplength=560,
         ).pack(anchor=tk.W, pady=(2, 0))
         self.destination_var = tk.StringVar(value=destination)
         if choose_destination:
-            _destination_field(outer, self.destination_var)
+            _destination_field(form, self.destination_var)
         else:
             ttk.Label(
-                outer,
+                form,
                 text=f"Storage: {destination}",
                 style="Muted.TLabel",
             ).pack(anchor=tk.W, pady=(8, 0))
@@ -4356,19 +5304,17 @@ class GroupDialog:
             else ()
         )
         ttk.Label(
-            outer,
-            text=(
-                "Direct group actions (optional; Nested subject menu only)"
-            ),
+            form,
+            text="Actions at menu root (optional)",
         ).pack(anchor=tk.W, pady=(9, 2))
-        direct_chooser = ttk.Frame(outer)
+        direct_chooser = ttk.Frame(form)
         direct_chooser.pack(fill=tk.X)
         self.direct_action_var = tk.StringVar()
         self.direct_action_choice = ActionPickerField(
             direct_chooser,
             variable=self.direct_action_var,
             options=self.direct_picker_options,
-            title="Choose direct group action",
+            title="Choose Action at menu root",
             scope_note=(
                 BUILT_IN_ACTION_SCOPE_NOTE
                 if destination == PROJECT_DESTINATION and not choose_destination
@@ -4385,7 +5331,7 @@ class GroupDialog:
             text="Add",
             command=self._add_direct_action,
         ).pack(side=tk.LEFT, padx=(6, 0))
-        direct_list_frame = ttk.Frame(outer)
+        direct_list_frame = ttk.Frame(form)
         direct_list_frame.pack(fill=tk.X, pady=(6, 0))
         self.direct_action_list = tk.Listbox(
             direct_list_frame,
@@ -4402,7 +5348,7 @@ class GroupDialog:
         self.direct_action_list.configure(
             yscrollcommand=direct_scrollbar.set
         )
-        direct_controls = ttk.Frame(outer)
+        direct_controls = ttk.Frame(form)
         direct_controls.pack(fill=tk.X, pady=(6, 0))
         ttk.Button(
             direct_controls,
@@ -4414,11 +5360,12 @@ class GroupDialog:
             text="Move up",
             command=lambda: self._move_direct_action(-1),
         ).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(
+        self.direct_move_down_button = ttk.Button(
             direct_controls,
             text="Move down",
             command=lambda: self._move_direct_action(1),
-        ).pack(side=tk.LEFT, padx=(6, 0))
+        )
+        self.direct_move_down_button.pack(side=tk.LEFT, padx=(6, 0))
         self._refresh_direct_actions()
         self.window.transient(parent)
         self.window.grab_set()
@@ -4430,36 +5377,26 @@ class GroupDialog:
         if not label or not group_id:
             messagebox.showerror(
                 "Context Palette",
-                "A Quick-action group needs a visible name.",
+                "A Quick-action menu needs a visible name.",
                 parent=self.window,
             )
             return
-        presentation = GROUP_PRESENTATIONS_BY_LABEL[
-            self.presentation_var.get()
-        ]
         direct_action_ids = tuple(
             dict.fromkeys(getattr(self, "direct_action_ids", ()))
         )
-        if (
-            presentation != GROUP_PRESENTATION_NESTED_MENU
-            and direct_action_ids
-        ):
-            messagebox.showerror(
-                "Context Palette",
-                "Direct group actions require Nested subject menu presentation.",
-                parent=self.window,
-            )
-            return
+        presentation = (
+            self.group.presentation
+            if self.group is not None
+            else GROUP_PRESENTATION_NESTED_MENU
+        )
+        if direct_action_ids:
+            presentation = GROUP_PRESENTATION_NESTED_MENU
         group = CommandGroup(
             group_id,
             label,
             self.group.items if self.group else (),
             presentation=presentation,
-            primary_action_id=(
-                direct_action_ids[0]
-                if direct_action_ids
-                else ""
-            ),
+            primary_action_id="",
             action_ids=direct_action_ids,
         )
         if self.on_save(
@@ -4529,39 +5466,48 @@ class ButtonDialog:
         *,
         shared: bool = False,
         work_items: tuple[DiscoveredWorkItem, ...] = (),
+        creating_submenu: bool = False,
     ) -> None:
         self.original_group_id = group.id if group else ""
         self.original_item_id = item.id if item else ""
         self.child_items = item.items if item else ()
-        self.nested_menu = bool(
-            group
-            and group.presentation == GROUP_PRESENTATION_NESTED_MENU
-        )
         self.project_storage = shared
         self.on_save = on_save
         self.window = tk.Toplevel(parent)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
         self.window.title(
-            "Edit built-in menu level"
+            "Edit built-in Quick-action item"
             if item and shared
-            else "Edit menu level"
+            else "Edit Quick-action item"
             if item
-            else "Add menu level"
+            else "New submenu"
+            if creating_submenu
+            else "New Quick action"
         )
         configure_standard_window(self.window, parent)
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
-        _dialog_buttons(outer, self._save, self.window.destroy)
+        self.controls_frame = _dialog_buttons(
+            outer,
+            self._save,
+            self.window.destroy,
+        )
+        self.form_view = _ScrollableDialogBody(self.window, outer)
+        form = self.form_view.content
         self.group_id = tk.StringVar(value=group.id if group else "")
         self.group_label = tk.StringVar(value=group.label if group else "")
         self.item_id = tk.StringVar(value=item.id if item else "")
         self.item_label = tk.StringVar(value=item.label if item else "")
         ttk.Label(
-            outer,
-            text=f"Group: {group.label if group else 'None'}",
+            form,
+            text=f"Menu: {group.label if group else 'None'}",
             style="Muted.TLabel",
         ).pack(anchor=tk.W)
-        item_entry = _entry(outer, "Menu level name", self.item_label)
+        item_entry = _entry(
+            form,
+            "Submenu name" if creating_submenu else "Quick-action name",
+            self.item_label,
+        )
         self.assigned_targets = list(command_item_targets(item)) if item else []
         self.action_choices = _action_choices(actions)
         self.action_picker_options = _action_picker_options(
@@ -4581,18 +5527,14 @@ class ButtonDialog:
             for label, reference in self.work_item_choices.items()
         }
         ttk.Label(
-            outer,
+            form,
             text=(
-                "Nested-menu actions: shown in this order inside the subject "
-                "submenu. Actions and Work Items can be mixed."
-                if self.nested_menu
-                else
-                "Assigned targets: the first available action or Work Item runs "
-                "on left-click; right-click shows the complete ordered list."
+                "Targets appear in this order when the menu opens. Actions and "
+                "Work Items can be mixed."
             ),
             wraplength=610,
         ).pack(anchor=tk.W, pady=(9, 2))
-        chooser = ttk.Frame(outer)
+        chooser = ttk.Frame(form)
         chooser.pack(fill=tk.X)
         self.action_choice_var = tk.StringVar()
         self.action_choice = ActionPickerField(
@@ -4610,10 +5552,10 @@ class ButtonDialog:
         ).pack(side=tk.LEFT, padx=(6, 0))
         if not shared:
             ttk.Label(
-                outer,
+                form,
                 text="Add a Work Item target",
             ).pack(anchor=tk.W, pady=(9, 2))
-            work_item_chooser = ttk.Frame(outer)
+            work_item_chooser = ttk.Frame(form)
             work_item_chooser.pack(fill=tk.X)
             self.work_item_choice_var = tk.StringVar(
                 value=""
@@ -4644,7 +5586,7 @@ class ButtonDialog:
                 text="Add Work Item",
                 command=self._use_work_item,
             ).pack(side=tk.LEFT, padx=(6, 0))
-        assigned = ttk.Frame(outer)
+        assigned = ttk.Frame(form)
         assigned.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
         self.assignment_list = tk.Listbox(
             assigned,
@@ -4659,7 +5601,7 @@ class ButtonDialog:
         )
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.assignment_list.configure(yscrollcommand=scrollbar.set)
-        assignment_controls = ttk.Frame(outer)
+        assignment_controls = ttk.Frame(form)
         assignment_controls.pack(fill=tk.X, pady=(6, 0))
         ttk.Button(
             assignment_controls,
@@ -4671,18 +5613,20 @@ class ButtonDialog:
             text="Move up",
             command=lambda: self._move_assigned_action(-1),
         ).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(
+        self.assignment_move_down_button = ttk.Button(
             assignment_controls,
             text="Move down",
             command=lambda: self._move_assigned_action(1),
-        ).pack(side=tk.LEFT, padx=(6, 0))
+        )
+        self.assignment_move_down_button.pack(side=tk.LEFT, padx=(6, 0))
         self.assignment_preview_var = tk.StringVar()
-        ttk.Label(
-            outer,
+        self.assignment_preview_label = ttk.Label(
+            form,
             textvariable=self.assignment_preview_var,
             style="Muted.TLabel",
             wraplength=610,
-        ).pack(fill=tk.X, pady=(8, 0))
+        )
+        self.assignment_preview_label.pack(fill=tk.X, pady=(8, 0))
         self._refresh_assignment_list()
         self.window.transient(parent)
         self.window.grab_set()
@@ -4762,14 +5706,7 @@ class ButtonDialog:
             self.assignment_list.see(select)
         self.assignment_preview_var.set(
             (
-                (
-                    f"Nested submenu shows {len(self.assigned_targets)} "
-                    "target(s), starting with the first available target."
-                )
-                if self.nested_menu
-                else
-                f"Left click runs the first available target. Right-click shows "
-                f"{len(self.assigned_targets)} target(s)."
+                f"The menu shows {len(self.assigned_targets)} target(s) in this order."
             )
             if self.assigned_targets
             else "Add at least one action or Work Item."
@@ -4817,21 +5754,15 @@ class ButtonDialog:
             return
         group_id = self.group_id.get().strip() or _stable_id(self.group_label.get())
         item_id = self.item_id.get().strip() or _stable_id(self.item_label.get())
-        action_only_ids = tuple(
-            target.action_id
-            for target in targets
-            if target.action_id
-        )
-        action_only = len(action_only_ids) == len(targets)
         saved = self.on_save(
             group_id,
             self.group_label.get(),
             CommandItem(
                 id=item_id, label=self.item_label.get().strip(),
-                primary_action_id=(action_only_ids[0] if action_only_ids and action_only else ""),
-                action_ids=action_only_ids if action_only else (),
+                primary_action_id="",
+                action_ids=(),
                 items=getattr(self, "child_items", ()),
-                targets=() if action_only else targets,
+                targets=targets,
             ),
             self.original_group_id, self.original_item_id,
         )
@@ -4948,10 +5879,106 @@ def _action_picker_options(
     return tuple(options)
 
 
+class _ScrollableDialogBody:
+    """A monitor-safe dialog body with a fixed footer outside its viewport."""
+
+    def __init__(self, window: tk.Toplevel, parent: ttk.Frame) -> None:
+        self.window = window
+        self.host = ttk.Frame(parent)
+        self.host.pack(fill=tk.BOTH, expand=True)
+        self.canvas = tk.Canvas(
+            self.host,
+            borderwidth=0,
+            highlightthickness=0,
+            background=window.cget("background"),
+            takefocus=False,
+        )
+        self.scrollbar = ttk.Scrollbar(
+            self.host,
+            orient=tk.VERTICAL,
+            command=self.canvas.yview,
+        )
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.content = ttk.Frame(self.canvas)
+        self.content_window_id = self.canvas.create_window(
+            (0, 0),
+            window=self.content,
+            anchor=tk.NW,
+        )
+        self.content.bind("<Configure>", self._update_scrollregion, add="+")
+        self.canvas.bind("<Configure>", self._resize_content, add="+")
+        window.bind("<MouseWheel>", self._on_mousewheel, add="+")
+        window.bind("<FocusIn>", self._on_focus_in, add="+")
+
+    def _update_scrollregion(self, _event: tk.Event | None = None) -> None:
+        bounds = self.canvas.bbox("all")
+        self.canvas.configure(scrollregion=bounds or (0, 0, 0, 0))
+
+    def _resize_content(self, event: tk.Event) -> None:
+        self.canvas.itemconfigure(
+            self.content_window_id,
+            width=max(1, int(event.width)),
+        )
+
+    def _pointer_is_over_canvas(self) -> bool:
+        x, y = self.window.winfo_pointerxy()
+        left = self.canvas.winfo_rootx()
+        top = self.canvas.winfo_rooty()
+        return (
+            left <= x < left + self.canvas.winfo_width()
+            and top <= y < top + self.canvas.winfo_height()
+        )
+
+    def _on_mousewheel(self, event: tk.Event) -> str | None:
+        if isinstance(event.widget, (tk.Text, tk.Listbox, ttk.Combobox)):
+            return None
+        if not self._pointer_is_over_canvas():
+            return None
+        delta = int(getattr(event, "delta", 0) or 0)
+        if delta:
+            self.canvas.yview_scroll(-1 if delta > 0 else 1, "units")
+            return "break"
+        return None
+
+    def _on_focus_in(self, event: tk.Event) -> None:
+        self.ensure_visible(event.widget)
+
+    def ensure_visible(self, widget: tk.Misc) -> None:
+        current: tk.Misc | None = widget
+        while current is not None and current is not self.content:
+            parent_name = current.winfo_parent()
+            if not parent_name:
+                current = None
+                break
+            current = current.nametowidget(parent_name)
+        if current is not self.content:
+            return
+        self.window.update_idletasks()
+        content_height = max(1, self.content.winfo_reqheight())
+        viewport_top = float(self.canvas.canvasy(0))
+        viewport_bottom = viewport_top + self.canvas.winfo_height()
+        widget_top = widget.winfo_rooty() - self.content.winfo_rooty()
+        widget_bottom = widget_top + widget.winfo_height()
+        margin = 6
+        if widget_top < viewport_top:
+            self.canvas.yview_moveto(max(0.0, (widget_top - margin) / content_height))
+        elif widget_bottom > viewport_bottom:
+            self.canvas.yview_moveto(
+                min(
+                    1.0,
+                    (widget_bottom + margin - self.canvas.winfo_height())
+                    / content_height,
+                )
+            )
+
+
 def _dialog_buttons(
     parent: ttk.Frame, save: Callable[[], None], cancel: Callable[[], None]
-) -> None:
+) -> ttk.Frame:
     controls = ttk.Frame(parent)
     controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
     ttk.Button(controls, text="Save", command=save, style="Accent.TButton").pack(side=tk.LEFT)
     ttk.Button(controls, text="Cancel", command=cancel).pack(side=tk.RIGHT)
+    return controls

@@ -318,7 +318,10 @@ class ActionDeletionTests(unittest.TestCase):
             self.assertEqual(report.references_removed, 4)
             self.assertEqual(report.buttons_removed, 1)
             self.assertEqual(self._read(contexts)["contexts"][0]["action_ids"], [])
-            self.assertEqual(self._read(commands)["groups"], [])
+            self.assertEqual(
+                self._read(commands)["groups"],
+                [{"id": "tools", "label": "Tools", "items": []}],
+            )
             self.assertEqual(self._read(palette)["pinned_action_ids"], [])
             self.assertEqual(self._read(palette)["context_slots"], {"Work": []})
 
@@ -326,7 +329,10 @@ class ActionDeletionTests(unittest.TestCase):
 
             self.assertEqual(self._read(actions)["actions"][0], original)
             self.assertEqual(self._read(contexts)["contexts"][0]["action_ids"], [])
-            self.assertEqual(self._read(commands)["groups"], [])
+            self.assertEqual(
+                self._read(commands)["groups"],
+                [{"id": "tools", "label": "Tools", "items": []}],
+            )
             self.assertEqual(self._read(palette)["pinned_action_ids"], [])
 
     def test_deletion_preserves_neighboring_work_item_in_mixed_targets(self) -> None:
@@ -551,9 +557,19 @@ class ActionDeletionTests(unittest.TestCase):
                                             "action_ids": ["delete-me"],
                                         }
                                     ],
-                                }
+                                },
+                                {
+                                    "id": "empty-sibling",
+                                    "label": "Empty sibling",
+                                    "items": [],
+                                },
                             ],
-                        }
+                        },
+                        {
+                            "id": "empty-menu",
+                            "label": "Intentionally empty",
+                            "items": [],
+                        },
                     ]
                 },
             )
@@ -568,10 +584,18 @@ class ActionDeletionTests(unittest.TestCase):
 
             self.assertEqual(report.references_removed, 4)
             self.assertEqual(report.buttons_removed, 2)
-            group = self._read(commands)["groups"][0]
+            saved_groups = self._read(commands)["groups"]
+            self.assertEqual(
+                [group["id"] for group in saved_groups],
+                ["nested", "empty-menu"],
+            )
+            group = saved_groups[0]
             self.assertEqual(group["primary_action_id"], "keep")
             self.assertEqual(group["action_ids"], ["keep"])
-            self.assertEqual(group["items"], [])
+            self.assertEqual(
+                [item["id"] for item in group["items"]],
+                ["empty-sibling"],
+            )
 
     @staticmethod
     def _write(path: Path, value: object) -> None:

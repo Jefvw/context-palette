@@ -14,6 +14,7 @@ from context_palette.command_surface import (
     CommandGroup,
     CommandItem,
     CommandTarget,
+    CommandSurfaceError,
     GROUP_PRESENTATION_NESTED_MENU,
     load_command_groups,
 )
@@ -34,6 +35,30 @@ from context_palette.work_items import WorkItemReference
 
 
 class ConfigurationDataTests(unittest.TestCase):
+    def test_rejects_legacy_action_and_work_item_combination_before_write(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_command_surface.json"
+            reference = WorkItemReference("product-work", "ISS-ABC-example")
+
+            with self.assertRaisesRegex(
+                CommandSurfaceError,
+                "cannot combine an Action with a legacy Work Item",
+            ):
+                save_command_item(
+                    path,
+                    group_id="work",
+                    group_label="Work",
+                    item=CommandItem(
+                        "invalid",
+                        "Invalid",
+                        primary_action_id="open-docs",
+                        action_ids=("open-docs",),
+                        work_item_ref=reference,
+                    ),
+                )
+
+            self.assertFalse(path.exists())
+
     def test_work_item_quick_action_round_trips_without_file_or_folder_action(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "local_command_surface.json"

@@ -212,6 +212,33 @@
       ]
     },
     {
+      "id": "developing-uat-sequence",
+      "title": "UAT: Run a harmless sequence",
+      "description": "Test sequence preview, confirmation, progress, and Stop remaining by dispatching the Context Palette project folder twice with a five-second wait. Windows may reuse one Explorer window.",
+      "type": "sequence",
+      "value": "sequence-v1",
+      "steps": [
+        {
+          "kind": "action",
+          "action_id": "developing-open-project-folder"
+        },
+        {
+          "kind": "wait",
+          "milliseconds": 5000
+        },
+        {
+          "kind": "action",
+          "action_id": "developing-open-project-folder"
+        }
+      ],
+      "state": "Active",
+      "tags": [
+        "uat",
+        "sequence",
+        "develop context palette"
+      ]
+    },
+    {
       "id": "draft-8ed62547f42e",
       "title": "w11 shortuts",
       "type": "copy_text",

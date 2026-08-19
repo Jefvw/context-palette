@@ -11,6 +11,8 @@ The roadmap describes ordered product outcomes, not commitments or implemented b
 - Validate the new Input → Effect previews through repeated use without exposing
   technical IDs or captured content.
 - Complete manual Windows accessibility and responsive-layout checks.
+- Validate the implemented optional local OCR workflow and footprint on a
+  second standard-user, offline Windows environment.
 - Continue reducing `launcher.py` responsibilities through behavior-preserving extraction.
 
 ## Next — deepen safe context workflows
@@ -29,7 +31,9 @@ The roadmap describes ordered product outcomes, not commitments or implemented b
 ## Later — richer actions
 
 - Application-aware context suggestions that never switch focus silently.
-- Rich text, HTML, image, and character-picker actions with explicit clipboard behavior.
+- Rich text, HTML, persistent image, and character-picker actions with explicit
+  clipboard behavior; local image-to-text extraction is already the bounded
+  first image workflow.
 - A guarded action-ID automation API only after explicit authorization,
   confirmation policy, structured results, and security tests exist.
 

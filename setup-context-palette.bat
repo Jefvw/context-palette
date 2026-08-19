@@ -6,6 +6,12 @@ set "PYTHONPATH=%CD%\src"
 echo Context Palette setup
 echo =====================
 
+if defined CONTEXT_PALETTE_WHEELHOUSE if not exist "!CONTEXT_PALETTE_WHEELHOUSE!\." (
+    echo ERROR: The offline package folder does not exist:
+    echo !CONTEXT_PALETTE_WHEELHOUSE!
+    exit /b 1
+)
+
 if not exist ".python-version" (
     echo ERROR: The tracked .python-version file is missing.
     exit /b 1
@@ -91,7 +97,12 @@ if exist "requirements.txt" (
         echo Project dependencies are unchanged.
     ) else (
         echo Installing project dependencies...
-        ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -r requirements.txt
+        if defined CONTEXT_PALETTE_WHEELHOUSE (
+            echo Using offline packages from !CONTEXT_PALETTE_WHEELHOUSE!
+            ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -r requirements.txt --no-index --find-links "!CONTEXT_PALETTE_WHEELHOUSE!"
+        ) else (
+            ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -r requirements.txt
+        )
         if errorlevel 1 (
             echo ERROR: Could not install project dependencies.
             exit /b 1

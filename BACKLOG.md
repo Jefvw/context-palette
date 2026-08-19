@@ -4,6 +4,24 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Now
 
+- Manually verify native Quick-action menu right-click delivery on Windows at
+  100%, 125%, and 150%: launcher left-click/Enter/Space browses without
+  execution; launcher right-click offers Add/Organize; Action right-click opens
+  the exact editor without execution; submenu right-click targets the exact
+  branch; and normal Action left-click still runs. Include configured,
+  Passwords, Folders, Prompts, Work Item, disabled, and three-level cases.
+- Manually validate the complete newly implemented Configure page batch at
+  normal/minimum sizes on real Windows 100%, 125%, and 150% display scaling.
+  Actions and Work Items already passed the user's 125%/150% review; repeat the
+  matrix for Contexts, Quick actions, Backup & restore, and Diagnostics. Check
+  long names, empty/selected states, automatic versus custom Quick actions,
+  scrollbars, and every command edge against the accepted
+  [real-Tk baseline](docs/UI_MOCKUPS.md).
+- Manually validate optional local OCR on a second standard-user Windows PC,
+  including a Snipping Tool bitmap, copied browser image, exact image-file
+  path, non-empty workspace, no-text image, accented Latin text, offline use,
+  and an environment where optional package downloads are blocked. Record
+  startup, first-run, recognition, memory, and installed-size measurements.
 - Complete and record the Phase 5 manual Windows verification matrix from the
   reviewed [backup and restore plan](docs/BACKUP_RESTORE_PLAN.md). The Configure
   UI and automated coverage are implemented; native dialogs, keyboard access,
@@ -37,6 +55,9 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Next
 
+- Design a prebuilt portable application bundle that includes Python and an
+  optional OCR pack so a locked-down PC needs no installer, pip command,
+  administrator rights, or first-use network access.
 - Validate the task-oriented main-window toolbar at 100%, 125%, and 150%
   display scaling and refine bitmap contrast only if real Windows themes expose
   a problem.
@@ -67,7 +88,9 @@ This file contains actionable future work. Completed user-visible work belongs i
   remote crawling implicitly.
 - Add reusable prompted forms with field validation.
 - Add rich HTML content with plain-text fallback.
-- Add image/visual-asset clipboard actions.
+- Add persistent image/visual-asset actions only after the implemented
+  image-to-text workspace workflow establishes explicit source, preview, and
+  clipboard semantics.
 - Add a character picker and explicit clipboard slots.
 - Investigate safe browser-specific URL discovery without focus or clipboard manipulation.
 - Add optional application-aware context suggestions; never switch automatically.

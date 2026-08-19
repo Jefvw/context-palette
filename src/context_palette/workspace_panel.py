@@ -14,7 +14,72 @@ from .actions import (
 )
 from .style import COLORS
 from .ui_icons import load_ui_icons
+from .window_geometry import place_child_window
 from .workspace_transforms import WORKSPACE_TRANSFORM_GROUPS, WorkspaceTransform
+
+
+class OcrPlacementDialog:
+    """Explicit Replace / Append / Cancel choice for a completed OCR result."""
+
+    def __init__(self, parent: tk.Misc, message: str) -> None:
+        self.result: str | None = None
+        self.window = tk.Toplevel(parent)
+        self.window.title("Place extracted text")
+        self.window.transient(parent)
+        self.window.protocol("WM_DELETE_WINDOW", self._cancel)
+        outer = ttk.Frame(self.window, padding=14)
+        outer.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(
+            outer,
+            text=message,
+            wraplength=470,
+            justify=tk.LEFT,
+        ).pack(anchor=tk.W)
+        ttk.Label(
+            outer,
+            text="Choose exactly how Input / Output should change.",
+            style="Muted.TLabel",
+        ).pack(anchor=tk.W, pady=(6, 12))
+        controls = ttk.Frame(outer)
+        controls.pack(fill=tk.X)
+        self.cancel_button = ttk.Button(
+            controls,
+            text="Cancel",
+            command=self._cancel,
+        )
+        self.cancel_button.pack(side=tk.RIGHT)
+        self.append_button = ttk.Button(
+            controls,
+            text="Append",
+            command=lambda: self._choose("append"),
+        )
+        self.append_button.pack(side=tk.RIGHT, padx=(0, 6))
+        self.replace_button = ttk.Button(
+            controls,
+            text="Replace",
+            command=lambda: self._choose("replace"),
+            style="Accent.TButton",
+        )
+        self.replace_button.pack(side=tk.RIGHT, padx=(0, 6))
+        self.window.bind("<Escape>", lambda _event: self._cancel())
+        place_child_window(self.window, parent)
+        self.window.grab_set()
+        self.replace_button.focus_set()
+
+    def show(self) -> str | None:
+        self.window.wait_window()
+        return self.result
+
+    def _choose(self, result: str) -> None:
+        self.result = result
+        self.window.destroy()
+
+    def _cancel(self) -> None:
+        self.window.destroy()
+
+
+def ask_ocr_placement(parent: tk.Misc, message: str) -> str | None:
+    return OcrPlacementDialog(parent, message).show()
 
 
 class TransformParametersDialog(simpledialog.Dialog):
@@ -71,6 +136,7 @@ class WorkspacePanel:
         status_setter: Callable[[str], None],
         tooltip_adder: Callable[[tk.Widget, str], None],
         create_action: Callable[[str], None] | None = None,
+        extract_text: Callable[[str], None] | None = None,
         capture: Callable[[], None] | None = None,
         show_inbox: Callable[[], None] | None = None,
         text_change_callback: Callable[[], None] | None = None,
@@ -79,13 +145,14 @@ class WorkspacePanel:
         self.clipboard_setter = clipboard_setter
         self.status_setter = status_setter
         self.create_action = create_action
+        self.extract_text = extract_text
         self.text_change_callback = text_change_callback
 
         self.frame = ttk.Frame(parent)
         self.frame.pack(fill=tk.BOTH, expand=True)
         self.ui_icons = load_ui_icons(
             self.frame,
-            ("capture", "inbox", "create_from_input", "text_tools"),
+            ("capture", "inbox", "create_from_input", "ocr", "text_tools"),
             foreground=COLORS["text"],
         )
         header = ttk.Frame(self.frame)
@@ -97,6 +164,14 @@ class WorkspacePanel:
             takefocus=True,
         )
         self.text_tools_button.pack(side=tk.RIGHT)
+        self.ocr_button = ttk.Button(
+            header,
+            image=self.ui_icons["ocr"],
+            command=self._extract_text,
+            state=tk.NORMAL if extract_text is not None else tk.DISABLED,
+            style="Icon.TButton",
+        )
+        self.ocr_button.pack(side=tk.RIGHT, padx=(0, 4))
         self.create_action_button = ttk.Button(
             header,
             image=self.ui_icons["create_from_input"],
@@ -179,6 +254,13 @@ class WorkspacePanel:
             "Text tools — Transform selected text, or the complete field when nothing is selected. Results are copied.",
         )
         tooltip_adder(
+            self.ocr_button,
+            (
+                "Extract text — Read text from a selected image file or clipboard image. "
+                "Processing stays on this computer."
+            ),
+        )
+        tooltip_adder(
             self.create_action_button,
             (
                 "Create from Input — Prefill a reviewed Action from one clear website, file, folder, "
@@ -223,6 +305,59 @@ class WorkspacePanel:
     def _create_action(self) -> None:
         if self.create_action is not None:
             self.create_action(self.selected_or_full_text())
+
+    def _extract_text(self) -> None:
+        if self.extract_text is not None:
+            self.extract_text(self.selected_or_full_text())
+
+    def set_ocr_running(self, running: bool) -> None:
+        self.ocr_button.configure(
+            state=(
+                tk.DISABLED
+                if running or self.extract_text is None
+                else tk.NORMAL
+            )
+        )
+
+    def apply_ocr_text(
+        self,
+        value: str,
+        *,
+        source_label: str,
+        expected_text: str,
+    ) -> str | None:
+        """Place an OCR result as one undoable edit without overwriting silently."""
+
+        if not value.strip():
+            return None
+        current = self.raw_text()
+        placement = "replace"
+        if current:
+            changed_note = (
+                "\n\nInput / Output changed while extraction was running."
+                if current != expected_text
+                else ""
+            )
+            placement = ask_ocr_placement(
+                self.text.winfo_toplevel(),
+                f"Text was extracted from {source_label}.{changed_note}\n\n"
+                "Replace discards the current Input / Output text. Append keeps "
+                "it and adds the extracted text below.",
+            )
+            if placement is None:
+                return None
+
+        self.clear_file_preview()
+        self.text.edit_separator()
+        if placement == "replace":
+            self.text.delete("1.0", tk.END)
+            self.text.insert("1.0", value)
+        else:
+            separator = "" if current.endswith(("\n", "\r")) else "\n\n"
+            self.text.insert("end-1c", f"{separator}{value}")
+        self.text.edit_separator()
+        self._sync_create_action_state()
+        return placement
 
     def _build_context_menu(self) -> None:
         for label, event_name in (

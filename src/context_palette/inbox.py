@@ -70,6 +70,18 @@ def update_inbox_item_state(path: Path, item_id: str, state: str) -> None:
     atomic_write_json(path, data)
 
 
+def delete_inbox_item(path: Path, item_id: str) -> None:
+    """Permanently remove one local capture without touching created Actions."""
+
+    data = _load_inbox_data(path)
+    for index, raw_item in enumerate(data["items"]):
+        if isinstance(raw_item, dict) and raw_item.get("id") == item_id:
+            del data["items"][index]
+            atomic_write_json(path, data)
+            return
+    raise InboxError(f"Inbox item was not found: {item_id}")
+
+
 def load_inbox_items(path: Path) -> list[InboxItem]:
     data = _load_inbox_data(path)
     return [_item_from_dict(raw_item, index) for index, raw_item in enumerate(data["items"], start=1)]

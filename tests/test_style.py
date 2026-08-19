@@ -69,6 +69,18 @@ class StyleTests(unittest.TestCase):
         self.assertEqual(style.configurations["Heading.TLabel"]["font"], ("Segoe UI Semibold", 11))
         self.assertEqual(style.configurations["Accent.TButton"]["background"], COLORS["accent"])
         self.assertEqual(
+            style.configurations["ConfigureNav.TButton"]["anchor"],
+            "w",
+        )
+        self.assertEqual(
+            style.configurations["ConfigureNavSelected.TButton"]["background"],
+            COLORS["accent"],
+        )
+        self.assertEqual(
+            style.configurations["Danger.TButton"]["foreground"],
+            COLORS["error"],
+        )
+        self.assertEqual(
             style.configurations["RailAccent.TButton"]["padding"],
             (6, 3),
         )

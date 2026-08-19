@@ -211,6 +211,7 @@ class MarkdownRenderingTests(unittest.TestCase):
         self.assertIn("[Architecture](ARCHITECTURE.md)", help_markdown)
         self.assertIn("[Decisions](DECISIONS.md)", help_markdown)
         self.assertIn("[Multi-PC development](MULTI_PC_DEVELOPMENT.md)", help_markdown)
+        self.assertIn("[OCR setup](OCR_SETUP.md)", help_markdown)
         self.assertIn("[Power Automate integration](../integrations/README.md)", help_markdown)
 
     def test_real_text_link_click_opens_local_markdown_document(self):

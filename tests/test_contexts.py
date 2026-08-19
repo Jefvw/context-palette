@@ -8,12 +8,54 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from context_palette.contexts import ContextError, load_combined_contexts, load_contexts
+from context_palette.contexts import (
+    ContextDefinition,
+    ContextError,
+    load_combined_contexts,
+    load_contexts,
+    update_work_item_context_memberships,
+)
 from context_palette.palette_items import PaletteItemReference
 from context_palette.work_items import WorkItemReference
 
 
 class ContextTests(unittest.TestCase):
+    def test_work_item_memberships_can_be_replaced_across_personal_contexts(self):
+        reference = WorkItemReference("work", "ISS-example")
+        other = WorkItemReference("work", "ISS-other")
+        contexts = [
+            ContextDefinition(
+                "Current",
+                work_item_refs=(reference, other),
+                preferred_item_refs=(
+                    PaletteItemReference(work_item_ref=reference),
+                    PaletteItemReference(work_item_ref=other),
+                ),
+            ),
+            ContextDefinition("New"),
+        ]
+
+        updated = update_work_item_context_memberships(
+            contexts,
+            reference,
+            ("New",),
+        )
+
+        self.assertEqual(updated[0].work_item_refs, (other,))
+        self.assertEqual(
+            updated[0].preferred_item_refs,
+            (PaletteItemReference(work_item_ref=other),),
+        )
+        self.assertEqual(updated[1].work_item_refs, (reference,))
+
+    def test_work_item_membership_rejects_unknown_personal_context(self):
+        with self.assertRaisesRegex(ContextError, "existing My configuration"):
+            update_work_item_context_memberships(
+                [ContextDefinition("Known")],
+                WorkItemReference("work", "ISS-example"),
+                ("Missing",),
+            )
+
     def test_only_shipped_specific_context_is_developing_context_palette(self):
         contexts = load_contexts(ROOT / "data" / "contexts.json")
         action_ids = {

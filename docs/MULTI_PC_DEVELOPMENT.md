@@ -48,6 +48,16 @@ No open-source license has been selected yet. Keep the repository private, or ch
    run-context-palette.bat
    ```
 
+7. To enable local image-to-text extraction, run:
+
+   ```text
+   setup-ocr-context-palette.bat
+   ```
+
+   Then restart Context Palette. If package downloads are blocked on the target
+   PC, follow [OCR setup and other-PC handoff](OCR_SETUP.md) to prepare and use
+   an offline package folder.
+
 The development entry point creates or repairs `.venv`, copies safe local-data
 templates when needed, verifies Tkinter, and
 runs the canonical configuration, compilation, and test checks.
@@ -63,10 +73,17 @@ The project uses this contract:
 - `.python-version`: tracked declaration of the supported Python family.
 - `.venv`: ignored, disposable, and local to one computer.
 - `requirements.txt`: tracked in Git and shared by every computer.
+- `requirements-ocr.txt`: tracked, pinned contract for the optional local OCR
+  engine and models.
 - `setup-context-palette.bat`: creates or repairs the local environment and
   installs everything declared in `requirements.txt`.
 - `develop-context-palette.bat`: performs setup and then runs the complete
   project check; use this as the normal development entry point.
+- `setup-ocr-context-palette.bat`: prepares the optional OCR component online
+  or from `CONTEXT_PALETTE_WHEELHOUSE`.
+- `prepare-offline-context-palette.bat` and
+  `setup-offline-context-palette.bat`: build and consume an ignored local
+  package folder for a package-blocked compatible Windows PC.
 - Python and Tcl/Tk: installed separately on each Windows computer and used as the base for its local environment.
 
 Context Palette has two direct, pinned runtime dependencies for its critical
@@ -74,6 +91,11 @@ in-app documentation viewer: `markdown-it-py` for standards-based Markdown
 parsing and `tkinterweb` for HTML/CSS presentation inside Tkinter.
 `requirements.txt` is the shared dependency contract; setup also installs their
 transitive packages into each computer's own `.venv`.
+
+The offline package route still requires compatible Python, pip, and Tcl/Tk on
+the target. It cannot turn the source repository into a self-contained app.
+Never copy `.venv` between computers; a Python-free locked PC needs a future
+portable build that bundles the interpreter and all runtime components.
 
 ### Adding a third-party library
 

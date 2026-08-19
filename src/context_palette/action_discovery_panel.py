@@ -898,7 +898,7 @@ class ActionDiscoveryPanel:
             menu.add_separator()
         menu.add_command(
             label="Filter by context…",
-            command=self._show_context_picker,
+            command=self._queue_context_picker,
         )
         menu.add_command(label="Filter by tag…", command=self._show_tag_picker)
         self.scope_options_menu = menu
@@ -942,6 +942,11 @@ class ActionDiscoveryPanel:
             empty_label=self._tag_empty_label,
         )
         return "break" if _event is not None else None
+
+    def _queue_context_picker(self) -> None:
+        # Let the menu invocation return before the grabbed popup can process
+        # pending layout work that may rebuild the same options menu.
+        self.scope_options_button.after_idle(self._show_context_picker)
 
     def _show_context_picker(self) -> None:
         existing_popup = getattr(self, "context_picker_popup", None)

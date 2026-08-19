@@ -190,9 +190,12 @@ Important principles:
 Builds the shared Passwords, Folders, and Prompts `CommandGroup` hierarchies
 directly from Active actions and their optional `quick_action_path`. Both the
 launcher and Configure consume this builder, so displayed membership, nesting,
-and **Unsorted** placement cannot diverge. Configure adds presentation-only
+and menu-root placement cannot diverge. An empty path becomes a group-root
+Action; a non-empty path creates only the named branches. Configure adds
+presentation-only
 selection records: generated action leaves delegate to the normal action
-editor, while generated groups and levels route to a filtered Actions list.
+editor, while generated groups and levels offer a typed full Action form plus
+the matching Actions list.
 The generated hierarchy is never written as a second assignment store.
 
 ### `palette_items.py`
@@ -240,7 +243,7 @@ Pure transformation algorithms and validation remain in `actions.py`.
 ### `workspace_panel.py`
 
 Owns the complete Input / Output UI component: text widget, edit menu, visible
-Capture, Inbox, **Create from Input**, and **Text tools** bitmap controls;
+Capture, Inbox, **Create from Input**, **Extract text**, and **Text tools** bitmap controls;
 selection-first source choice and replacement; undo boundaries; prompting;
 clipboard copy and replacement, transformation feedback, and file-transform
 preview provenance. A file preview exposes explicit replace, save-as, and
@@ -249,6 +252,28 @@ depends on small injected callbacks for Action suggestion orchestration,
 clipboard access, status messages, and tooltip registration. `launcher.py`
 retains compatibility delegates for action execution and integration flows,
 but no longer owns workspace widget mechanics.
+
+### `ocr.py`
+
+Defines the optional local image-to-text boundary. Pure source validation
+accepts one exact absolute PNG, JPEG, BMP, GIF, TIFF, or WebP file subject to a
+50 MiB input limit. Clipboard acquisition lazily uses Pillow to snapshot one
+bitmap as PNG bytes without clearing or replacing any clipboard format and
+rejects images above 40 million pixels. `RapidOcrProvider` lazily imports and
+initializes the pinned RapidOCR/ONNX Runtime stack only after a request; normal
+launcher startup and non-OCR tests do not load it. `OcrCoordinator` serializes
+one daemon worker and delivers results through the launcher's existing
+main-thread polling pattern. Extracted text, source metadata, duration, and
+aggregate confidence are transient and are never written to logs or persistent
+configuration.
+
+`launcher.py` owns source priority, file-picker fallback, progress, and safe
+error presentation. `workspace_panel.py` owns result placement as one undoable
+Replace or Append edit and presents a dedicated modal with literal **Replace**,
+**Append**, and **Cancel** buttons. A non-empty or concurrently changed workspace
+is never overwritten without an attended choice. No-text and failed results change
+nothing. OCR does not copy its result automatically, persist the source image,
+upload content, or join the current launch-only Action sequence model.
 
 ### `action_suggestions.py`
 
@@ -539,8 +564,8 @@ Action-only. Quick-action groups remain global and have no Context visibility
 field; the shared reference boundary permits, but does not imply, that future
 feature.
 
-Action creation starts from the educational **Create action** catalogue, the
-launcher/Actions-tab **+ Action** searchable type chooser, or a conservative
+Action creation starts from the educational **Action types** catalogue, the
+launcher **+ Action** or Configure **New Action** searchable type chooser, or a conservative
 **Create from Input** suggestion beside Input / Output. The suggestion route uses
 selected text first, requires one clear supported target, and prepopulates
 the existing form with a visible review notice. It does not change the general
@@ -562,7 +587,13 @@ fields change, handles mouse-wheel input without stealing scrolling from
 multiline text widgets or comboboxes, and brings a newly focused field into
 view for keyboard traversal.
 
-Configure's first tab is a navigation-only **Start** page. It owns no domain
+Configure uses a persistent left-hand task navigator and an internal
+`ConfigurationPageStack` content host. The stack preserves the existing stable
+section indexes and direct navigation routes without creating a native tab
+strip that Windows themes can render unexpectedly. The navigator visually
+groups frequent **Set up** destinations above lower-frequency **Support**
+destinations while retaining all eight stable routes and shortcuts.
+The first section is a navigation-only **Start** page. It owns no domain
 state and performs no persistence: its six primary task buttons either invoke
 the existing Action chooser or select Actions, Contexts, Quick actions, Work
 Items, or Backup and restore. Secondary buttons select the Action-type
@@ -570,30 +601,69 @@ catalogue and Diagnostics. Explicit launcher routes bypass Start and retain
 their exact tab, selected-record, focus, singleton-window, and save behavior.
 
 Configure list tables use the shared `treeview_utils.py` scrollable-tree
-builder. Actions, contexts, Quick actions, Work Item sources, and discovered
-Work Items retain visible final columns and consistent vertical scrolling at
-the supported minimum window size.
+builder. Actions, contexts, Quick actions, and discovered Work Items retain
+visible final columns and consistent vertical scrolling at the supported
+minimum window size.
+
+The Actions page keeps its single primary **New Action** command in the page
+header and moves the type catalogue and Harvest behind **Other ways to
+create**. Machine-local pins are summarized in a collapsed card; expanding it
+reveals the same five live searchable pickers in vertical rows, so hiding the
+card neither discards edits nor changes persistence. Its summary explicitly
+marks unsaved hidden choices. Selection titles are display-bounded so arbitrary
+names cannot displace lifecycle commands at minimum width. Tags remain searchable
+and appear in the selected-Action strip instead of consuming a permanent table
+column. The lifecycle filter controls which records are listed; the State
+column appears only when Active and Archived records are mixed.
+
+The Contexts and Quick actions pages use the same visual hierarchy without
+introducing shared domain state: a page title and purpose, one primary creation
+command, Find, a dominant scrollable table, and a selection-aware card. The
+Contexts card preserves the existing Context-ID lookup and deletion boundary.
+Its editor presents membership before optional Focus shortcuts 6–0. The Quick
+actions card derives enabled commands from the selected record's ownership and
+depth: configured records may be edited, moved, or deleted; automatic groups
+route to filtered Actions and automatic leaves route to their owning Action.
+All existing command-surface persistence and ownership validation remains in
+the original callbacks.
+
+The Work Items page selects one current source and keeps **Refresh** visible.
+**Manage sources…** exposes Add, Edit, Remove, and creation-template commands
+through their existing persistence paths. Edit and Remove are disabled when no
+source exists, while Add and template setup remain reachable. The complete
+folder path, availability, Work Item / Type / Project table, and selected-item
+details remain visible in the main page.
+
+Backup & restore remains the same background-worker and recovery boundary, but
+its visible stages are literal: **Create backup…**, **Choose backup to
+inspect…**, then the disabled-until-inspected destructive **Apply inspected
+changes…**. Diagnostics renders the same privacy-safe summary in a read-only
+scrollable text widget; Refresh is secondary and **Copy safe summary** is the
+primary outcome.
 
 Every Configure field that references an existing action uses the shared
 searchable action picker. Its readonly field keeps the selected human-readable
 label visible; **Find…** opens a keyboard-operable filtered list with a result
-count. The five pin fields use the same behavior in a compact layout that
-preserves the supported minimum window width.
+count. The five pin fields use the same behavior in a default-collapsed
+vertical layout that preserves the supported minimum window width and daily
+table height.
 
-New actions, contexts, and Quick-action groups explicitly choose **My
+New Actions, Contexts, and Quick-action menus explicitly choose **My
 configuration** or **Built-in** and default to My configuration. The
-Quick-actions tab is a hierarchical editor. Persisted groups and menu levels
-can be added, renamed, deleted, and reordered. The same tree also shows the
+Quick actions section is a hierarchical editor. Persisted menus, Quick actions,
+and submenus can be added, renamed, deleted, and reordered. The same tree also shows the
 generated Passwords, Folders, and Prompts hierarchies with editable action
 leaves; those generated records are reorganized through the owning action's
 `quick_action_path`, not through `command_surface.json`.
-A group chooses direct Quick-action rows or one nested subject-menu launcher.
-Nested groups and their menu levels may each own ordered actions; levels recurse
-to a validated maximum depth of three below the group. Selecting a group or
-level establishes the parent for **Add menu level**, while stable IDs remain
-unique across the complete group tree. In row presentation, a visible
-top-level item's first available target remains its left-click default; its
-context menu can expose every ordered action and Work Item plus descendants.
+A menu always contributes one launcher. Menus and their items may each own
+ordered Actions; submenus recurse
+to a validated maximum depth of three below the menu. Selecting a menu or item
+establishes the parent for **New Quick action…** or **New submenu…**, while stable IDs remain
+unique across the complete group tree. Left-click/Enter/Space browses; launcher
+right-click exposes related Add/Organize commands. Inside a posted native menu,
+left-click executes the exact Action entry and right-click dismisses the menu
+before opening that exact Action for editing. Submenu right-click routes back
+to the same stable Configure branch.
 Personal items store mixed targets in one ordered list. Each Work Item target
 uses a stable source/folder reference. Execution resolves those references
 against the current immutable index and delegates to the same
@@ -605,6 +675,19 @@ records or Work Items; My configuration Quick actions may reference either
 action storage location or a Work Item.
 The configuration checker enforces the same boundary recursively for manually
 edited JSON.
+
+Context, Quick-action menu, and Quick-action item dialogs keep Save/Cancel in a
+fixed footer and place their forms in a vertically scrollable canvas. This
+keeps storage, membership, Focus shortcuts, assignments, and summaries
+reachable at 125%/150% scaling and on short monitor work areas. Focus entering
+an off-screen field scrolls it into view; text, list, and combobox controls keep
+their own native wheel behavior.
+
+Automatic-menu Add commands reuse the ordinary `ActionDialog` and persistence
+path. They constrain only the Action type and prefill `quick_action_path`; the
+normal storage, name, description, Contexts, tags, target, validation, and
+review fields remain present. Saving one Active Action then rebuilds both the
+launcher menu and Configure tree from the single Action source of truth.
 
 ### `context_deletion.py`
 
@@ -625,9 +708,9 @@ without recreating former assignments. Permanent deletion uses the same
 reference-cleanup boundary before removing the record. This ordering makes an
 interrupted multi-file update more likely to leave an unused Active Action than
 an invalid reference to an Archived or missing Action. Every changed file still
-uses atomic replacement and its local backup behavior. A Quick-action button
-with no remaining target is removed; a removed primary Action falls back to
-the button's next configured Action.
+uses atomic replacement and its local backup behavior. A Quick-action item
+with no remaining target is removed; removing a legacy primary Action preserves
+the remaining menu order without creating a new launcher default.
 
 `actions.py` exposes separate combined projections for this boundary: stored
 loading includes Active and Archived records with cross-owner duplicate-ID
@@ -644,15 +727,16 @@ Stores and calculates launcher organization.
 - Slots 6–0: top five Actions or Work Items for the Focus Context; internal slot 10 is
   displayed and invoked with the physical `0` key.
 - Duplicate actions across both groups are intentional.
-- Unfilled context slots prefer other actions belonging to the active Focus,
-  then fall back to remaining globally available actions.
+- Unfilled context slots use only other Actions or Work Items belonging to the
+  active Focus and otherwise remain empty. General continues to treat all
+  Actions as global members; a specific Focus never borrows unrelated Actions.
 
 ### `command_surface.py`
 
 Loads and validates global quick-action groups and their compact items from
-shared and local JSON. A validated presentation flag selects direct subject
-rows or one nested group launcher; omitted presentation remains row-based for
-backward compatibility. A group and each recursive item retain ordered actions;
+shared and local JSON. Legacy `rows` and `nested_menu` presentation values remain
+valid for old files and backups, but both render as menu launchers. A group and
+each recursive item retain ordered actions;
 items may contain child items to a maximum depth of three. Traversal helpers
 provide stable index/ID paths, recursive counts, and complete action-reference
 enumeration to rendering, Configure, deletion, and validation. Groups reference
@@ -664,7 +748,10 @@ rather than defining a second execution language. Duplicate
 group IDs and duplicate item IDs anywhere within one group are rejected
 case-insensitively.
 
-The module also owns the canonical primary-first, duplicate-free action ordering used by execution, menus, Configure, and configuration validation.
+The module also owns the canonical legacy-primary-first, duplicate-free action
+ordering used by menus, Configure, and configuration validation. “Primary” is
+an ordering compatibility field only; launcher controls never execute it
+implicitly.
 `CommandTarget` remains a compatibility export of `PaletteItemReference`.
 Command groups do not currently store Context visibility or membership.
 
@@ -675,6 +762,18 @@ Owns delayed tooltip behaviour for ordinary widgets and individual listbox rows.
 ### `style.py`
 
 Owns the shared native ttk theme, Segoe UI font policy, grey/teal/aqua palette, and hover/focus state maps. Classic Tk widget defaults are applied through the root option database. The module changes presentation only; widget construction, layout, geometry, and action behaviour remain in their existing owners.
+
+### `ui_mockups.py`
+
+Owns a standalone, inert real-Tk gallery used to validate proposed visual
+structure before production UI batches. It reuses only the shared theme and
+embedded bitmap icons, renders frozen fictional Actions and Work Items, and
+keeps search, selection, Focus/filter, sequence-state, source, page, and pin
+interactions in memory. It does not import launcher orchestration, persistence,
+clipboard, OCR, target inspection, or operating-system dispatch boundaries.
+`run-ui-mockups.bat` launches the gallery separately from the resident app;
+`tests/test_ui_mockups.py` exercises its supported size and simulated scaling
+matrix. The mockups are review evidence, not production behavior.
 
 ### `help_window.py`
 
@@ -735,8 +834,10 @@ override configured defaults.
 
 Owns pure runtime Focus policy independently of Tk and persistence. It discovers
 available Focus names, resolves Action-only legacy slots and typed mixed slots,
-handles unavailable-Focus fallbacks, and selects canonical visible Action plus
-configured Work Item membership. The launcher uses that same membership for
+reconciles saved slots against current explicit membership, handles
+unavailable-Focus fallbacks, and selects canonical visible Action plus configured
+Work Item membership. Stale references are ignored in memory rather than
+rewriting personal configuration during reload. The launcher uses that same membership for
 **Focus items** and deterministic Focus-first grouping in **All items**.
 This remains the replacement boundary for future Context-model changes.
 
@@ -777,10 +878,19 @@ no evidence that a private persistent cache is warranted.
 
 ### `work_item_configuration.py`
 
-Owns the guided **Work Items** Configure panel and its source/tag dialogs. It
+Owns the guided **Work Items** Configure panel and its source/details dialogs. It
 validates existing absolute source folders, generates stable local IDs, reports
 availability, performs explicit bounded refreshes, and persists edits through
-`work_item_storage.py`. Configure scans use the existing background coordinator;
+`work_item_storage.py`. One source selector drives a full-width discovered-item
+table; the selected source's complete path and availability remain visible,
+while a compact selected-item strip exposes folder, Context, tag, edit, and
+open-folder actions. Search is local to the chosen source and includes those
+same visible identity facets. The editor shows both personal tags and
+membership in existing personal Contexts. Context membership remains
+owned by `local_contexts.json`; the Work Item route updates the same records,
+removes stale preferred placement when membership is removed, and restores the
+previous Context bytes if the paired metadata write fails. Configure scans use
+the existing background coordinator;
 concurrent requests coalesce into one subsequent latest-state refresh. The panel
 uses a weak completion callback and ignores late results after its Tk container
 is destroyed. Existing-source management never modifies work folders or files;
@@ -871,10 +981,17 @@ Capture Inbox domain model and persistence.
 - Creates clipboard captures.
 - Loads and validates Inbox JSON.
 - Updates maturity state.
+- Permanently removes one explicitly selected capture through the same atomic
+  JSON write boundary.
 - Keeps captured material separate from actions until conversion.
 
 The Inbox creation UI supports guided permanent `copy_text` and URL-builder
-actions. URL templates are validated through the same domain function used at
+actions. It also exposes a confirmed **Delete capture…** command. Deletion
+removes only the Capture Inbox record; a converted Action contains copied,
+independent data and is never deleted with its source capture. Ask AI and
+Harvest remain available under **Other ways to create**. Work Item workbook
+Inbox rows are a separate Excel-owned surface and are not deleted here.
+URL templates are validated through the same domain function used at
 execution, and the dialog keeps its action footer outside the expandable form
 so buttons remain visible at smaller window sizes.
 
@@ -1047,28 +1164,28 @@ two-column grid. The
 tracked command surface contributes one **Standard** group containing every
 active Built-in action exactly once across subject menus. Standard's nested
 presentation renders one **Standard** launcher without a duplicate group
-heading. Direct group actions become root commands; recursive menu levels
+heading. Group actions become root commands; recursive menu levels
 become native cascades; and actions assigned at any level appear before that
-level's child cascades. Every configured nested group uses the same compact
-group-labelled launcher. A direct group with one row also lets that row
-represent the group without a duplicate heading; direct groups with multiple
-rows retain their visible heading.
+level's child cascades. Every configured group uses the same compact
+group-labelled launcher, including legacy groups stored with `rows`.
 Ignored local groups load after it and occupy the remaining editable positions.
-They retain direct rows unless configured for nested presentation.
 Three application-owned action-bound groups remain separate from stored
 command-surface configuration. **Passwords**, **Folders**, and **Prompts**
 derive their complete membership from Active `paste_credential`,
 `open_folder`, and `ai_prompt` actions. Their position is fixed beside
 **Standard**, and each action's optional `quick_action_path` produces as many
-as three native submenu levels. An empty path is projected into **Unsorted**.
-Shift/Ctrl+click on a configured group opens its menu and action files;
-Shift/Ctrl+click on an action-bound group opens action configuration. The data
-model places no numeric limit on a node's ordered actions, but supports at most
+as three native submenu levels. An empty path places the Action at the menu
+root. The data model places no numeric limit on a node's ordered actions, but supports at most
 group → level 1 → level 2 → level 3 → action and provides no search or
 app-managed scrolling inside native menus.
 
-Quick-action labels participate in keyboard focus. Enter or Space executes a
-row's first available primary action or opens a nested group at its launcher.
+Quick-action labels participate in keyboard focus. Left-click, Enter, or Space
+opens the menu and executes nothing. Launcher right-click opens the same
+menu's Add/Organize commands. Each posted menu and submenu keeps an entry-index
+to stable target/branch mapping: left-clicking an Action executes that exact
+entry; right-clicking it dismisses the native menu and schedules exact guided
+editing. Work Item entries use the same live-reference opener and route their
+right-click to the selected Work Item in Configure.
 Empty search, Inbox, cheat-sheet, and command-surface states contain recovery
 guidance rather than blank widgets. Reloads use a short busy cursor/status
 state; local loading is intentionally not animated.
@@ -1079,10 +1196,9 @@ without expanding the fixed-size main-window layout. They prefer the space
 below a control, move above it near the bottom edge, and remain inside the
 virtual desktop, including secondary monitors with negative coordinates.
 
-Configured Quick-action rows, nested group launchers, and action-bound
-launchers share one mouse/keyboard binding contract for left click, right
-click, Enter, and Space. Every action leaf still uses the ordinary constrained
-action executor.
+Configured and action-bound launchers share one mouse/keyboard contract. Every
+Action leaf still uses the ordinary constrained executor; management callbacks
+never invoke it.
 
 ## Supported action types
 
@@ -1145,7 +1261,9 @@ before any effect.
 The Action editor adds, removes, and reorders existing Actions and bounded
 waits without displaying technical IDs. The launcher resolves every reference,
 shows one complete confirmation, and schedules each step through Tk so the UI
-remains responsive. **Stop remaining** cancels only the pending callback;
+remains responsive. While a sequence is active, FocusOut auto-hide is suspended
+and the palette remains above launched windows so step progress and the attended
+**Stop remaining** control stay accessible. **Stop remaining** cancels only the pending callback;
 already opened targets or started processes are not rolled back or terminated.
 Archive/delete treats sequence references as blocking semantic dependencies,
 not removable placements. Built-in sequences may reference Built-in Actions
@@ -1345,14 +1463,14 @@ Logging setup failure does not prevent application startup. Clipboard and Input
 warnings include safe per-stage durations, but never file paths or configured
 content.
 
-The Configure Diagnostics tab uses `diagnostics.py` to render a separate safe
+The Configure Diagnostics section uses `diagnostics.py` to render a separate safe
 summary rather than exposing the raw log. It reports loaded configuration
 counts, error count and last-error timestamp, and allow-listed automatic-paste
 category/outcome/reason events. Unknown or malformed event values are ignored.
 The rendered and copied summary never includes raw error messages, action
 values, clipboard content, credential fields, paths, or window titles.
-The main launcher routes `Ctrl+Shift+D` directly to this tab. Configure enables
-native `Ctrl+Tab` notebook traversal, then moves focus into the selected tab's
+The main launcher routes `Ctrl+Shift+D` directly to this section. Configure enables
+`Ctrl+Tab` traversal through its internal page stack, then moves focus into the selected section's
 primary interactive or readable control. The Diagnostics summary remains
 read-only but participates in keyboard focus for selection and screen-reader
 access. Configure routes `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, `Alt+D`, and

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
+import gc
 import sys
 import tempfile
 import threading
@@ -89,6 +90,10 @@ def backup_result(destination: Path) -> SimpleNamespace:
 @unittest.skipUnless(sys.platform == "win32", "The Configure UI requires Windows Tk.")
 class BackupRestorePanelTests(unittest.TestCase):
     def setUp(self) -> None:
+        # Collect widgets from earlier Tk tests on the main thread before this
+        # panel starts a worker. Tk variables cannot be finalized safely by a
+        # worker after their owning interpreter has been destroyed.
+        gc.collect()
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.paths = AppDataPaths.from_root(Path(self.temporary.name) / "app")
@@ -123,6 +128,33 @@ class BackupRestorePanelTests(unittest.TestCase):
             time.sleep(0.01)
         self.root.update()
         self.assertFalse(self.panel.busy, "background UI operation did not finish")
+
+    def test_guarded_stages_use_literal_labels_and_roles(self) -> None:
+        self.assertEqual(
+            self.panel.create_backup_button.cget("text"),
+            "Create backup…",
+        )
+        self.assertEqual(
+            self.panel.create_backup_button.cget("style"),
+            "Accent.TButton",
+        )
+        self.assertEqual(
+            self.panel.inspect_restore_button.cget("text"),
+            "Choose backup to inspect…",
+        )
+        self.assertEqual(
+            self.panel.commit_restore_button.cget("text"),
+            "Apply inspected changes…",
+        )
+        self.assertEqual(
+            self.panel.commit_restore_button.cget("style"),
+            "Danger.TButton",
+        )
+        self.assertIn("disabled", self.panel.commit_restore_button.state())
+        self.assertIn(
+            "Nothing is changed during inspection",
+            self.panel.preview_text.get("1.0", tk.END),
+        )
 
     def test_backup_defaults_and_exclusions_are_visible_and_forwarded(self) -> None:
         destination = Path(self.temporary.name) / "portable.zip"

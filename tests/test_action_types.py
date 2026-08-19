@@ -34,6 +34,13 @@ class ActionTypeCatalogueTests(unittest.TestCase):
         self.assertNotIn("transform_list_csv", CREATABLE_ACTION_TYPES)
         self.assertNotIn("transform_slashes", CREATABLE_ACTION_TYPES)
 
+    def test_sequence_uses_the_intended_single_character_icon(self):
+        sequence = ACTION_TYPES["sequence"]
+
+        self.assertEqual(sequence.icon, "⇥")
+        self.assertEqual(sequence.display_label, "⇥ Run a sequence")
+        self.assertNotIn("â", sequence.display_label)
+
     def test_every_definition_has_user_and_ai_adaptation_metadata(self):
         for action_type, definition in ACTION_TYPES.items():
             with self.subTest(action_type=action_type):

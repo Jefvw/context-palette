@@ -82,7 +82,9 @@ The first family, constrained window preparation, and reference-based launch
 sequences are implemented. Protected credential paste provides the first
 text-only clipboard transaction; sequence paste/key steps, other clipboard
 effects, and rich formats remain proposals until their recovery and trust
-behavior is designed.
+behavior is designed. Optional local OCR now provides the first bounded
+image-derived text workflow without treating images as persistent Actions or
+forcing image data through the launch-sequence model.
 
 ## Knowledge and cheat sheets
 

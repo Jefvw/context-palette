@@ -36,7 +36,8 @@
               "primary_action_id": "developing-open-project-folder",
               "action_ids": [
                 "developing-open-project-folder",
-                "developing-open-vscode"
+                "developing-open-vscode",
+                "developing-uat-sequence"
               ]
             },
             {

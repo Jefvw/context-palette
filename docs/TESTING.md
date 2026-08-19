@@ -55,6 +55,17 @@ path, so application modules work consistently from the repository root. It
 distinguishes an unusable Python environment (repair with setup) from a project
 import error (investigate with the complete check).
 
+The inert real-Tk visual baselines have a focused size/scaling stress check:
+
+```powershell
+.\python-context-palette.bat -m unittest tests.test_ui_mockups
+```
+
+It constructs the main palette, Configure Work Items, and Configure Actions at
+their normal and minimum sizes under simulated 100%, 125%, and 150% text
+scaling. This protects geometry and state contracts but does not replace the
+actual Windows display-scale review in [Real-Tk UI mockups](UI_MOCKUPS.md).
+
 Do not document a fixed test count; it changes as coverage grows.
 
 ## Why GitHub runs the tests again
@@ -100,7 +111,8 @@ editing. The isolated check created no personal action store. The remaining
 bindings, action-preview Close control, and focus-restoration callbacks are
 covered by real-Tk and focused unit tests.
 
-1. Press `Ctrl+,`, open **Actions**, choose **Harvest documents...**, and select
+1. Press `Ctrl+,`, open **Actions**, choose **Other ways to create → Harvest
+   documents…**, and select
    several representative `.md`, `.txt`, `.docx`, and `.xlsx` files.
 2. Confirm progress remains responsive, Cancel stops safely, and a corrupt or
    unavailable file reports its own failure without hiding successful sources.
@@ -149,8 +161,8 @@ configuration. A second clean-PC integration creates the first personal action,
 context, and Quick action through the real Configure save boundaries, then
 constructs a fresh launcher and verifies all three reload while unrelated
 private files remain absent.
-It also verifies that the real Configure notebook exposes Diagnostics with a
-read-only rendered summary plus keyboard-reachable Refresh and Copy controls.
+It also verifies that the real Configure page stack exposes Diagnostics with a
+read-only scrollable summary plus keyboard-reachable Refresh and Copy controls.
 `tests.test_diagnostics` protects the allow-listed parser and privacy boundary;
 `tests.test_configuration_window` verifies exact safe-summary copying and
 honest failure feedback when the Windows clipboard is unavailable.
@@ -207,7 +219,7 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    **Create an Action...** opens the existing type chooser, while direct Edit,
    Manage focuses, Work Item, and Diagnostics routes bypass Start. In the chooser,
    verify typing filters types, arrows and Enter choose one, and Escape or
-   Cancel changes nothing. Repeat with **+ Action** and `Ctrl+N` on Configure
+   Cancel changes nothing. Repeat with **New Action…** and `Ctrl+N` on Configure
    → Actions; confirm a non-General Focus is offered as the initial Context,
    an existing Configure workspace is reused, and backup/restore busy state
    refuses the request.
@@ -221,7 +233,7 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    none is guessed. Try an unavailable absolute document path and verify the
    review form appears immediately without waiting for the drive.
    Cancel each form and confirm nothing is created or run. Finally verify the
-   existing **+ Action** control still opens its normal unprefilled type chooser.
+   existing launcher **+ Action** control still opens its normal unprefilled type chooser.
    On initial display, verify the command console occupies about 40% of the
    width, Input / Output occupies about 60% and nearly the full height, Find is
    no wider than its result list, and about ten result rows are visible. Verify
@@ -264,7 +276,7 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    usernames, passwords, and window titles are absent from every event.
 6. Right-click a personal action in ordinary results and in Focus items.
    Verify Configure opens on Actions with the clicked row highlighted and its
-   name, contexts, and tags editable after choosing **Edit selected**. From the
+   name, contexts, and tags editable after choosing **Edit…**. From the
    main palette, select the same Action and choose **Edit**; verify its editor
    opens directly in the reused Configure workspace. Repeat with a disposable Built-in action,
    verify the Git/private-data warning appears, cancel once, then accept and
@@ -276,6 +288,13 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    verify it returns to normal search without recreating former assignments.
    Archive and permanently delete it. Repeat archive cancellation with a
    disposable Built-in Action and verify the Git/multi-computer warning.
+   In Configure, confirm **Set up** and **Support** are visually separate and no
+   horizontal tab strip appears. On Actions, verify pins start collapsed, then
+   expand **Show pins** at the 900 x 520 minimum and confirm all five choices,
+   Save pins, the Action table, and selection commands remain readable. On Work
+   Items, verify **Manage sources…** contains Add, Edit, Remove, and Creation
+   template while Refresh remains visible; with no sources, Add and template
+   stay available while Edit, Remove, and Refresh are disabled.
 7. Select a specific Focus while **All items** is active. Verify matching
    shortcut rows remain first, remaining Focus members follow, and **All other
    matches** separates the remaining global results. Arrow, Page, Home, and End
@@ -291,8 +310,9 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    use two readable columns without clipping beneath discovery. Narrow the
    command console until one column is genuinely necessary, then verify stable
    row-major order returns. Tab through the visible rail order, Find/results,
-   Quick actions, **Text tools**, and Input / Output. Run a Quick action with
-   Enter or Space. Open every Text tools group and verify it matches the
+   Quick actions, **Text tools**, and Input / Output. Press Enter or Space on a
+   Quick-action launcher and verify it opens the menu without running an
+   Action. Open every Text tools group and verify it matches the
    right-click Transform catalogue. Exercise a text-file preview and verify its
    provenance, Replace original, Save as, and Dismiss strip remains usable.
    In **Lists**, transform separate `alpha`, `42`, and `O'Brien` values with
@@ -308,12 +328,14 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    verify `Shift+6` opens its workbook/folder, disconnect its source, and verify
    the unavailable reference remains visible and recoverable. Confirm pins 1–5
    still offer Actions only. Create
-   two Quick-action groups, add more than four ordered actions to one item,
-   change its default, move the item and groups, and verify left-click and
-   right-click match the preview. Rename and delete an item and group. Delete a
+   two Quick-action groups, add more than four ordered Actions to one item,
+   move the item and groups, and verify launcher left-click browses while
+   launcher right-click offers Add/Organize. Inside the menu, verify Action
+   left-click runs only the selected Action and Action right-click opens only
+   its editor. Rename and delete an item and group. Delete a
    disposable context and verify its action memberships and Focus state clear.
    Assign an action to a pin, Focus slot, context preference, and Quick action.
-   Choose **Delete selected**, verify the
+   Choose **Delete permanently…**, verify the
    confirmation reports its references, cancel once, then accept and verify the
    action and all references disappear. Repeat the warning check with a
    disposable Built-in action, revert tracked test changes, and remove the
@@ -347,7 +369,8 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
     the icons in All items or Focus items.
 12. With at least one disposable local Work Item source configured, choose
     **Configure**, then **Work Items**. Add and edit a source using Browse,
-    confirm its state and item summary, edit a discovered item's personal tags,
+    confirm its state and item summary, edit a discovered item's personal tags
+    and existing My configuration Context memberships in the same dialog,
     and use Refresh index. Confirm removing the source clearly states that no
     folders or files will be deleted. Re-add it for the opening checks. Choose
     **Work** and verify Find, Projects, and Tags combine correctly. Press Enter
@@ -358,14 +381,32 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
     and verify other sources refresh while its last successful rows remain.
     Open **Configure**, choose **Quick actions**, add a My configuration level,
     choose an action and at least two Work Items, reorder them together, and verify the resulting
-    Quick action uses the first available target. Confirm its menu preserves the
+    Quick-action menu preserves the
     mixed order, the Work Item opens the exact workbook, and it falls back to the folder when that workbook is
     absent, and remains configured with a clear unavailable message while its
     source is disconnected. Confirm a Built-in Quick action does not offer a
     Work Item assignment.
+    Right-click Passwords, Folders, and Prompts. Confirm each offers its typed
+    Add command and Organize/Find commands. Create one disposable Action inside
+    a branch and verify the normal form still includes storage, name,
+    description, Contexts, tags, target, and the prefilled menu location. Clear
+    the location and verify the Action appears at the menu root with no
+    **Unsorted** submenu. Archive/delete the disposable Action afterward.
+    Select a specific Focus with fewer than five genuine members and confirm
+    slots 6–0 remain empty after its final member instead of showing unrelated
+    global Actions.
+    Run **UAT: Run a harmless sequence**, inspect its two project-folder steps
+    and five-second wait, cancel once, then confirm and use **Stop remaining**
+    during the wait. Verify the in-app step progress; Explorer may reuse one
+    window. Confirm no script runs and no file or clipboard changes.
 13. Trigger a validation error and confirm the message identifies the field without losing the form contents.
 14. Capture an Inbox item, confirm conversion, and verify the resulting Active
-    action is immediately editable and persists after restart.
+    action is immediately editable and persists after restart. Return to Inbox,
+    select that capture, and cancel **Delete capture…** once; confirm it remains.
+    Delete it after confirmation and verify only the captured copy disappears
+    while the created Action remains. Confirm **Other ways to create** still
+    exposes Ask AI and Harvest documents. Do not use this check to delete a Work
+    Item workbook Inbox row; those remain Excel-managed.
 15. Open Help, verify in-document search, resize it, maximize it, restore it,
     and confirm responsive tables remain readable.
 16. Open Configure → Diagnostics. Verify configuration counts are current,
@@ -374,15 +415,24 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
     sample action values, pasted text, credential fields, paths, and window
     titles are absent. Open it directly with `Ctrl+Shift+D` from the focused
     main palette and cycle with `Ctrl+Tab`; verify focus enters the Diagnostics
-    summary and each other tab's primary control. On QWERTY and AZERTY, verify
+    summary and each other section's primary control. On QWERTY and AZERTY, verify
     `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, and `Alt+D` directly select their
-    corresponding tabs—including **Quick actions** for `Alt+Q`—without closing Configure. With the main palette focused,
+    corresponding sections—including **Quick actions** for `Alt+Q`—without closing Configure. With the main palette focused,
     verify `Ctrl+2` and `Ctrl+3` neither close/hide it nor execute action slots;
     plain `2` and `3` must retain their existing slot behavior.
 
 ## Platform-effect checks
 
 Perform only when relevant:
+
+- With the optional OCR component prepared, copy a Snipping Tool bitmap and
+  choose **Extract text**. Verify the UI stays responsive, useful text appears
+  in Input / Output, the original image remains on the clipboard, and Undo
+  restores the prior workspace. Repeat with one exact selected image path, the
+  file-picker fallback, non-empty and concurrently edited workspace text, a
+  no-text image, an oversized image, accented Latin text, and networking
+  disabled. On a copy without the component, verify the command explains local
+  setup and leaves Input / Output unchanged.
 
 - Run the real Windows keyboard path with
   `$env:CONTEXT_PALETTE_PHYSICAL_KEY_TEST='1'; .\python-context-palette.bat -m unittest tests.test_physical_keyboard_shortcuts`.

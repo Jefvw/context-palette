@@ -23,6 +23,8 @@ This directory separates current behavior, durable direction, historical rationa
 - [Quick actions](COMMAND_SURFACE_CONFIGURATION.md) — guided configuration and JSON record reference.
 - [Cheat-sheet format](CHEATSHEET_FORMAT.md) — sheet authoring and promotion.
 - [Multi-PC use](MULTI_PC_DEVELOPMENT.md) — cloning and private-data boundaries.
+- [OCR setup and other-PC handoff](OCR_SETUP.md) — online/offline preparation,
+  use, configuration transfer, troubleshooting, and developer checks.
 - [Power Automate integration](../integrations/README.md) — attended show,
   context, and search integration.
 
@@ -44,6 +46,10 @@ This directory separates current behavior, durable direction, historical rationa
 - [Product vision](PRODUCT_VISION.md) — durable direction; proposals are labeled.
 - [Roadmap](ROADMAP.md) — ordered outcomes.
 - [Backlog](../BACKLOG.md) — actionable work items.
+- [UI/UX audit (2026-08-18)](UI_UX_AUDIT_2026-08-18.md) — whole-product
+  screen evaluation, Tk-native visual rules, and ordered implementation batches.
+- [Real-Tk UI mockups](UI_MOCKUPS.md) — inert visual baselines, review
+  scenarios, reconciled layout decisions, and Windows scaling checklist.
 - [Work Items discovery plan](WORK_ITEMS_PLAN.md) — implemented phases and
   remaining cross-machine verification.
 - [Decisions](DECISIONS.md) — append-only rationale.

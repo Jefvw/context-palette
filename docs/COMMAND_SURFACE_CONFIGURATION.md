@@ -1,41 +1,62 @@
-# Right-side button configuration
+# Quick-action menu configuration
 
-The right pane is a global quick-action surface that remains visible when Focus or Find changes.
+Quick actions are compact global navigation menus that remain available when
+Focus or Find changes.
 
 ## Recommended: Configure window
 
-Choose **Configure**, or press `Ctrl+,`, then open **Quick actions** to manage
-the complete right-side surface.
-The form:
+Choose **Configure**, or press `Ctrl+,`, then open **Quick actions**. The tree
+shows configured menus and the automatic Passwords, Folders, and Prompts menus
+in one place.
 
-- creates, renames, deletes, and reorders groups and Quick actions;
-- assigns an unlimited ordered list of actions by human-readable name;
-- uses the first assigned action for left-click and the complete list for the
-  right-click menu;
-- previews both behaviors before saving;
-- generates stable group and Quick-action IDs;
-- explicitly stores new groups in **My configuration** or **Built-in**;
-- keeps existing Built-in groups editable after a developer-impact warning;
-- limits Built-in groups to Built-in actions so starter configuration never
-  depends on one PC. My configuration groups may use either kind of action.
+Configured menus can:
+
+- contain ordered Actions and personal Work Items;
+- place Actions at the menu root or under as many as three submenu levels;
+- add, rename, move, and delete their own saved structure;
+- stay in **My configuration**, or deliberately change **Built-in** starter
+  data after its Git/multi-computer warning.
+
+Automatic menus are live projections of Active credential, folder, and prompt
+Actions. Select an automatic menu or branch to create a correctly typed Action
+with the normal full form. Contexts, tags, target, storage, and validation all
+remain available; only the Action type and selected **Quick menu** branch are
+prefilled. Select a leaf to edit that Action. The generated tree itself is not
+saved or reordered separately.
+
+## Interaction contract
+
+- Left-click a menu launcher, or press Enter/Space on it, to browse. Nothing
+  executes merely because the launcher was opened.
+- Right-click the launcher to add or organize that same menu.
+- Inside the open menu, left-click an Action to run exactly that Action.
+- Right-click an Action to edit that exact record without running it.
+- Right-click a submenu to add or organize within that exact branch.
+- Work Item entries open through the existing workbook-first constrained
+  opener; right-click selects the Work Item in Configure.
+
+All Action execution still uses the same constrained executor as search
+results. Quick actions never interpret command strings.
 
 ## Advanced JSON files
 
-- `data/command_surface.json`: Built-in starter groups tracked through Git.
-- `data/local_command_surface.json`: personal or machine-specific groups ignored by Git.
-- `data/local_command_surface.example.json`: safe template copied by setup.
+- `data/command_surface.json`: Built-in starter menus tracked through Git.
+- `data/local_command_surface.json`: personal or machine-specific menus ignored
+  by Git.
+- `data/local_command_surface.example.json`: safe setup template.
 
-Shared and local group IDs must be unique case-insensitively. Button IDs must be unique within their group.
+Shared and local group IDs must be unique case-insensitively. Item IDs must be
+unique within their complete group tree.
 
 ```json
 {
   "id": "reference-sites",
   "label": "Reference sites",
+  "presentation": "nested_menu",
   "items": [
     {
       "id": "python-documentation",
       "label": "Python documentation",
-      "primary_action_id": "general-open-python-docs",
       "action_ids": [
         "general-open-python-docs"
       ]
@@ -46,34 +67,33 @@ Shared and local group IDs must be unique case-insensitively. Button IDs must be
 
 | Field | Meaning |
 | --- | --- |
-| Group `id` | Stable internal reference |
-| Group `label` | Visible heading |
-| `items` | Ordered buttons in the group |
+| Group `id` | Stable internal menu reference |
+| Group `label` | Visible launcher label |
+| Group `items` | Ordered submenu tree |
 | Item `id` | Stable internal reference within the group |
-| Item `label` | Visible compact label |
-| `primary_action_id` | Optional action used by Enter/Space |
-| `action_ids` | Actions offered by the right-click menu |
+| Item `label` | Visible submenu label |
+| `primary_action_id` | Legacy first-in-menu Action reference; never an implicit launcher execution |
+| `action_ids` | Ordered Action references |
+| `targets` | Ordered mixed Action/Work Item references used by newer personal items |
 
-Every action ID must resolve to an available action. A Built-in group may refer
-only to actions in `data/actions.json`; otherwise another computer would receive
-the button without its local-only action. A My configuration group may refer to both
-Built-in and local actions. The configuration checker reports missing and
-non-portable references with the owning group and button.
+The loader still accepts the historical `rows` and `nested_menu` presentation
+values and legacy target fields so old personal files and backups remain valid.
+Both presentations now render as menu launchers. Existing files are not
+rewritten merely because they were loaded.
 
-## Interaction
+Every Action ID must resolve to an available Action. A Built-in menu may refer
+only to Built-in Actions; otherwise another computer would receive a menu
+without its private target. My configuration may refer to either Action
+storage and to personal Work Items. The configuration checker reports invalid
+references with their owning menu and item.
 
-- Left-click runs the primary available action.
-- Right-click opens the button’s assigned action menu.
-- Shift+click or Ctrl+click opens the owning JSON configuration and corresponding action file.
-- Enter or Space runs the first available primary action when the button has focus.
-
-All routes use the same constrained executor as search results. Buttons never execute command strings.
-
-After an external JSON edit, return to or reopen the palette. Changed files are detected by signature and reloaded; a restart is normally unnecessary.
+After an external JSON edit, return to or reopen the palette. File-signature
+monitoring normally reloads the change without restarting.
 
 ## Limitations
 
-Groups are global, not context-conditional. Ordering uses explicit Move up and
-Move down controls rather than drag-and-drop. Application-owned editor and Work
-Item context menus remain fixed program controls rather than stored Quick-action
-configuration.
+Menus are global, not Context-conditional. Ordering uses explicit Move up and
+Move down controls rather than drag-and-drop. Native Windows/Tk menus do not
+provide app-managed search or scrolling, so organize large collections into
+short, meaningful branches and use **Find matching Actions…** as the escape
+route.

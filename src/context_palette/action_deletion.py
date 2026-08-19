@@ -340,10 +340,8 @@ def _remove_command_references(
         raise ActionDeletionError(f"{path.name} must contain a 'groups' list.")
     removed_references = 0
     removed_buttons = 0
-    retained_groups: list[object] = []
     for group in groups:
         if not isinstance(group, dict) or not isinstance(group.get("items"), list):
-            retained_groups.append(group)
             continue
         group_removed, group_buttons_removed = _clean_command_node(
             group,
@@ -351,14 +349,6 @@ def _remove_command_references(
         )
         removed_references += group_removed
         removed_buttons += group_buttons_removed
-        if (
-            group.get("primary_action_id")
-            or group.get("action_ids")
-            or group.get("targets")
-            or group.get("items")
-        ):
-            retained_groups.append(group)
-    data["groups"] = retained_groups
     return removed_references, removed_buttons
 
 
@@ -407,13 +397,15 @@ def _clean_command_node(
         )
         removed_references += child_removed
         removed_items += descendants_removed
-        if (
+        has_content = bool(
             child.get("primary_action_id")
             or child.get("action_ids")
             or child.get("work_item_ref")
             or child.get("targets")
             or child.get("items")
-        ):
+        )
+        changed_by_cleanup = bool(child_removed or descendants_removed)
+        if has_content or not changed_by_cleanup:
             retained_children.append(child)
         else:
             removed_items += 1

@@ -7,10 +7,11 @@ import queue
 import time
 import tkinter as tk
 import tkinter.font as tkfont
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Callable
 
 from .actions import (
+    ACTION_BOUND_QUICK_MENU_SPECS,
     Action,
     ActionError,
     execute_action,
@@ -56,10 +57,11 @@ from .command_surface import (
     CommandTarget,
     CommandSurfaceError,
     GROUP_PRESENTATION_NESTED_MENU,
-    command_configuration_paths,
+    MAX_COMMAND_MENU_LEVELS,
     command_group_action_ids,
     command_group_launcher_count,
-    command_item_action_ids,
+    command_item_at_path,
+    command_item_id_path,
     command_item_targets,
     load_combined_command_groups,
 )
@@ -88,6 +90,16 @@ from .contexts import ContextDefinition, ContextError, load_combined_contexts
 from .data_catalog import AppDataPaths
 from .inbox import InboxError, append_inbox_item, create_clipboard_item, load_inbox_items
 from .inbox_window import ActionCreator, InboxWindow, suggest_url_template
+from .ocr import (
+    OcrCoordinator,
+    OcrError,
+    OcrResult,
+    OcrSourceError,
+    OcrUnavailableError,
+    clipboard_image_source,
+    image_source_from_path,
+    image_source_from_text,
+)
 from .single_instance import SingleInstanceServer
 from .style import COLORS, configure_theme
 from .tooltips import WidgetTooltip
@@ -165,6 +177,16 @@ MINIMUM_COMMAND_CONSOLE_WIDTH = 280
 MINIMUM_WORKSPACE_WIDTH = 350
 TWO_COLUMN_QUICK_ACTIONS_WIDTH = 250
 STANDARD_QUICK_GROUP_ID = "standard"
+ACTION_BOUND_QUICK_ADD_LABELS = {
+    "paste_credential": "Add credential shortcut…",
+    "open_folder": "Add folder shortcut…",
+    "ai_prompt": "Add prompt…",
+}
+ACTION_BOUND_QUICK_NOUNS = {
+    "paste_credential": "credential",
+    "open_folder": "folder",
+    "ai_prompt": "prompt",
+}
 
 
 def bounded_sash_position(
@@ -259,6 +281,8 @@ class LauncherApp:
         self.work_item_refresh = WorkItemRefreshCoordinator()
         self.work_item_file_copy = WorkItemFileCopyCoordinator()
         self.work_item_inbox = WorkItemInboxCoordinator()
+        self.ocr = OcrCoordinator()
+        self.ocr_after_id: str | None = None
         self.work_item_refresh_pending = False
         self.discovery_scope = DISCOVERY_ALL
         self.work_items_mode = False
@@ -865,6 +889,7 @@ class LauncherApp:
             status_setter=self.status_var.set,
             tooltip_adder=self._tooltip,
             create_action=self._create_action_from_workspace,
+            extract_text=self._extract_text_from_image,
             capture=self._capture_clipboard,
             show_inbox=self._show_inbox,
             text_change_callback=self._update_preview,
@@ -878,6 +903,7 @@ class LauncherApp:
         self.workspace_transform_button = self.workspace_component.transform_button
         self.text_tools_button = self.workspace_component.text_tools_button
         self.create_action_button = self.workspace_component.create_action_button
+        self.ocr_button = self.workspace_component.ocr_button
         self.capture_button = self.workspace_component.capture_button
         self.inbox_button = self.workspace_component.inbox_button
         self.footer_action_buttons = [
@@ -1094,6 +1120,12 @@ class LauncherApp:
 
     def hide_window(self) -> None:
         self._cancel_scheduled_hide()
+        if getattr(self, "sequence_run_plan", None) is not None:
+            self.status_var.set(
+                "A sequence is running. Choose Stop remaining before hiding."
+            )
+            self._set_sequence_attention(True)
+            return
         if not self.hotkey_available:
             self.status_var.set("Cannot hide because no global shortcut is available.")
             return
@@ -1101,9 +1133,16 @@ class LauncherApp:
         self.root.withdraw()
 
     def quit_app(self) -> None:
+        ocr = getattr(self, "ocr", None)
+        ocr_operations = (
+            ("image text extraction",)
+            if ocr is not None and ocr.running
+            else ()
+        )
         active_operations = (
             self._active_work_item_writes()
             + self._active_configuration_operations()
+            + ocr_operations
         )
         if active_operations:
             operation_text = " and ".join(active_operations)
@@ -1189,18 +1228,25 @@ class LauncherApp:
         return "break"
 
     def _schedule_hide_when_inactive(self, _event: tk.Event) -> None:
-        if not self.hotkey_available:
+        if (
+            not self.hotkey_available
+            or getattr(self, "sequence_run_plan", None) is not None
+        ):
             return
         self._cancel_scheduled_hide()
         self.hide_after_id = self.root.after(200, self._hide_if_inactive)
 
     def _cancel_scheduled_hide(self, _event: tk.Event | None = None) -> None:
-        if self.hide_after_id is not None:
-            self.root.after_cancel(self.hide_after_id)
+        hide_after_id = getattr(self, "hide_after_id", None)
+        if hide_after_id is not None:
+            self.root.after_cancel(hide_after_id)
             self.hide_after_id = None
 
     def _hide_if_inactive(self) -> None:
         self.hide_after_id = None
+        if getattr(self, "sequence_run_plan", None) is not None:
+            self._set_sequence_attention(True)
+            return
         focus = self.root.focus_get()
         if focus is None:
             self.root.withdraw()
@@ -1385,6 +1431,15 @@ class LauncherApp:
         except tk.TclError:
             return
 
+    def _poll_ocr(self) -> None:
+        self.ocr_after_id = None
+        try:
+            self.ocr.drain()
+            if self.ocr.running:
+                self.ocr_after_id = self.root.after(100, self._poll_ocr)
+        except tk.TclError:
+            return
+
     def _accept_work_item_index(self, index: WorkItemIndex) -> None:
         configured_source_ids = {
             source.id.casefold() for source in self.work_item_sources
@@ -1552,65 +1607,26 @@ class LauncherApp:
         row: int,
         column: int,
     ) -> None:
-        compact_group = (
-            group.presentation == GROUP_PRESENTATION_NESTED_MENU
-            or len(group.items) == 1
-        )
-        area = (
-            ttk.Frame(self.command_tiles_frame, padding=4)
-            if compact_group
-            else ttk.LabelFrame(
-                self.command_tiles_frame,
-                text=group.label,
-                padding=4,
-            )
-        )
+        area = ttk.Frame(self.command_tiles_frame, padding=4)
         area.grid(row=row, column=column, sticky=tk.NSEW, padx=2, pady=2)
         area.columnconfigure(0, weight=1)
-        if group.presentation == GROUP_PRESENTATION_NESTED_MENU:
-            control = self._surface_menu_label(area, group.label)
-            self._command_surface_tooltip(
+        control = self._surface_menu_label(area, group.label)
+        self._command_surface_tooltip(
+            control,
+            f"Left-click: browse {group.label}. Right-click: add or organize.",
+        )
+        self._bind_surface_menu_control(
+            control,
+            on_click=lambda event: self._show_group_menu(event, group),
+            on_menu=lambda event: self._show_configured_group_management(
+                event,
+                group,
+            ),
+            on_keyboard=lambda _event: self._show_group_menu_at_control(
                 control,
-                "Open the nested subject menus. Shift/Ctrl+click edits configuration.",
-            )
-            self._bind_surface_menu_control(
-                control,
-                on_click=lambda event: self._show_group_menu(event, group),
-                on_menu=lambda event: self._show_group_menu(event, group),
-                on_keyboard=lambda _event: self._show_group_menu_at_control(
-                    control,
-                    group,
-                ),
-            )
-            return
-        for item_index, item in enumerate(group.items):
-            control = self._surface_menu_label(
-                area,
-                item.label,
-                row=item_index,
-                dropdown=False,
-            )
-            self._command_surface_tooltip(
-                control,
-                "Left-click or Enter opens the assigned target. Right-click shows "
-                "its target menu. Shift/Ctrl+click edits configuration.",
-            )
-            self._bind_surface_menu_control(
-                control,
-                on_click=lambda event, selected_item=item: self._handle_command_item_left_click(
-                    event,
-                    group,
-                    selected_item,
-                ),
-                on_menu=lambda event, selected_item=item: self._show_item_menu(
-                    event,
-                    selected_item,
-                ),
-                on_keyboard=lambda _event, selected_item=item, anchor=control: self._activate_item_at_control(
-                    anchor,
-                    selected_item,
-                ),
-            )
+                group,
+            ),
+        )
 
     def _render_action_bound_quick_group(
         self,
@@ -1623,19 +1639,29 @@ class LauncherApp:
         area.grid(row=row, column=column, sticky=tk.NSEW, padx=2, pady=2)
         area.columnconfigure(0, weight=1)
         control = self._surface_menu_label(area, group.label)
+        action_type = self._action_bound_type_for_group(group)
         self._command_surface_tooltip(
             control,
-            f"{group.label} — Active matching actions appear automatically. "
-            "Edit an action's Quick menu path to organize it.",
+            f"Left-click: browse {group.label}. Right-click: add or organize. "
+            "Active matching Actions appear automatically.",
         )
         self._bind_surface_menu_control(
             control,
-            on_click=lambda event: self._show_action_bound_group_menu(event, group),
-            on_menu=lambda event: self._show_action_bound_group_menu(event, group),
+            on_click=lambda event: self._show_action_bound_group_menu(
+                event,
+                group,
+                action_type,
+            ),
+            on_menu=lambda event: self._show_action_bound_group_management(
+                event,
+                group,
+                action_type,
+            ),
             on_keyboard=lambda _event: self._post_group_menu(
                 group,
                 control.winfo_rootx(),
                 control.winfo_rooty() + control.winfo_height(),
+                automatic_action_type=action_type,
             ),
         )
 
@@ -1663,90 +1689,14 @@ class LauncherApp:
         self,
         event: tk.Event,
         group: CommandGroup,
+        action_type: str,
     ) -> str:
-        if event.state & (0x0001 | 0x0004):
-            self._show_configuration(initial_tab="actions")
-            return "break"
-        return self._post_group_menu(group, event.x_root, event.y_root)
-
-    def _execute_item_primary(self, item: CommandItem) -> str:
-        target_result = self._execute_first_available_item_target(item)
-        if target_result is not None:
-            return "break"
-        self.status_var.set(
-            f"{item.label} has no available action or Work Item. "
-            "Open Configure to assign one."
+        return self._post_group_menu(
+            group,
+            event.x_root,
+            event.y_root,
+            automatic_action_type=action_type,
         )
-        return "break"
-
-    def _handle_command_item_left_click(
-        self,
-        event: tk.Event,
-        group: CommandGroup,
-        item: CommandItem,
-    ) -> str:
-        # Shift/Ctrl click preserves the direct path to menu and action JSON configuration.
-        if event.state & (0x0001 | 0x0004):
-            self._open_command_configuration(group)
-            return "break"
-        target_result = self._execute_first_available_item_target(item)
-        if target_result is not None:
-            return "break"
-        if item.items:
-            return self._show_item_menu(event, item)
-        self.status_var.set(f"No available actions configured for {item.label}.")
-        return "break"
-
-    def _activate_item_at_control(
-        self,
-        control: tk.Widget,
-        item: CommandItem,
-    ) -> str:
-        target_result = self._execute_first_available_item_target(item)
-        if target_result is not None:
-            return "break"
-        if item.items:
-            return self._post_item_menu(
-                item,
-                control.winfo_rootx(),
-                control.winfo_rooty() + control.winfo_height(),
-            )
-        self.status_var.set(
-            f"{item.label} has no available action or Work Item. "
-            "Open Configure to assign one."
-        )
-        return "break"
-
-    def _execute_first_available_item_target(
-        self,
-        item: CommandItem,
-    ) -> bool | None:
-        targets = command_item_targets(item)
-        if not targets:
-            return None
-        actions_by_id = {action.id: action for action in self.actions}
-        first_unavailable_work_item: WorkItemReference | None = None
-        for target in targets:
-            if target.action_id:
-                action = actions_by_id.get(target.action_id)
-                if action is not None:
-                    self._execute_action(action)
-                    return True
-                continue
-            reference = target.work_item_ref
-            if reference is None:
-                continue
-            if self._work_item_for_reference(reference) is not None:
-                return self._execute_work_item_reference(item.label, reference)
-            if first_unavailable_work_item is None:
-                first_unavailable_work_item = reference
-        if first_unavailable_work_item is not None:
-            self._execute_work_item_reference(item.label, first_unavailable_work_item)
-        else:
-            self.status_var.set(
-                f"{item.label} has no available action or Work Item."
-            )
-        return False
 
     def _work_item_for_reference(
         self,
@@ -1791,39 +1741,220 @@ class LauncherApp:
         )
         return True
 
-    def _primary_action_for_item(self, item: CommandItem) -> Action | None:
-        actions_by_id = {action.id: action for action in self.actions}
-        for action_id in command_item_action_ids(item):
-            action = actions_by_id.get(action_id)
-            if action is not None:
-                return action
-        return None
+    def _action_bound_type_for_group(self, group: CommandGroup) -> str:
+        for group_id, _label, action_type in ACTION_BOUND_QUICK_MENU_SPECS:
+            if group.id.casefold() == f"action-bound-{group_id}".casefold():
+                return action_type
+        raise ValueError(f"Unknown automatic Quick-action group: {group.id}")
 
-    def _open_command_configuration(self, group: CommandGroup) -> None:
-        surface_path, actions_path = command_configuration_paths(
+    def _show_configured_group_management(
+        self,
+        event: tk.Event,
+        group: CommandGroup,
+    ) -> str:
+        return self._post_configured_quick_management(
             group,
-            self.command_surface_path,
-            self.local_command_surface_path,
-            self.actions_path,
-            self.local_actions_path,
+            (),
+            event.x_root,
+            event.y_root,
         )
-        for path, title in (
-            (surface_path, "Edit command-surface menus"),
-            (actions_path, "Edit command-surface actions"),
-        ):
-            self._execute_action(
-                Action(
-                    id=f"configure-{path.stem}",
-                    title=title,
-                    context="Configuration",
-                    type="open_file",
-                    value=str(path.resolve()),
-                    state="Active",
-                    contexts=("Configuration",),
-                    tags=("json", "configure quick actions"),
+
+    def _show_action_bound_group_management(
+        self,
+        event: tk.Event,
+        group: CommandGroup,
+        action_type: str,
+    ) -> str:
+        return self._post_action_bound_quick_management(
+            group,
+            action_type,
+            (),
+            event.x_root,
+            event.y_root,
+        )
+
+    def _post_configured_quick_management(
+        self,
+        group: CommandGroup,
+        item_path: tuple[int, ...],
+        x_root: int,
+        y_root: int,
+    ) -> str:
+        item_ids = command_item_id_path(group, item_path) if item_path else ()
+        label = (
+            command_item_at_path(group, item_path).label
+            if item_path
+            else group.label
+        )
+        commands: list[tuple[str, Callable[[], None]] | None] = []
+        if len(item_path) < MAX_COMMAND_MENU_LEVELS:
+            add_label = (
+                "New submenu here…"
+                if item_path
+                else f"Add Quick action to {group.label}…"
+            )
+            commands.extend(
+                (
+                    (
+                        add_label,
+                        lambda: self._open_configured_quick_manager(
+                            group.id,
+                            item_ids,
+                            start_add=True,
+                        ),
+                    ),
+                    None,
                 )
             )
-        self.status_var.set(f"Opened menu and action configuration for {group.label}.")
+        commands.append(
+            (
+                f"Organize {label}…",
+                lambda: self._open_configured_quick_manager(
+                    group.id,
+                    item_ids,
+                ),
+            )
+        )
+        return self._post_quick_management_menu(
+            tuple(commands),
+            x_root,
+            y_root,
+        )
+
+    def _post_action_bound_quick_management(
+        self,
+        group: CommandGroup,
+        action_type: str,
+        path: tuple[str, ...],
+        x_root: int,
+        y_root: int,
+    ) -> str:
+        noun = ACTION_BOUND_QUICK_NOUNS[action_type]
+        add_label = (
+            f"Add {noun} here…"
+            if path
+            else ACTION_BOUND_QUICK_ADD_LABELS[action_type]
+        )
+        selection_label = " > ".join((group.label, *path))
+        return self._post_quick_management_menu(
+            (
+                (
+                    add_label,
+                    lambda: self._open_automatic_quick_creator(
+                        action_type,
+                        path,
+                    ),
+                ),
+                None,
+                (
+                    f"Organize {selection_label}…",
+                    lambda: self._open_automatic_quick_manager(
+                        action_type,
+                        path,
+                    ),
+                ),
+                (
+                    "Find matching Actions…",
+                    lambda: self._find_automatic_quick_actions(
+                        group.label,
+                        action_type,
+                        path,
+                    ),
+                ),
+            ),
+            x_root,
+            y_root,
+        )
+
+    def _post_quick_management_menu(
+        self,
+        commands: tuple[tuple[str, Callable[[], None]] | None, ...],
+        x_root: int,
+        y_root: int,
+    ) -> str:
+        menu = tk.Menu(self.root, tearoff=False)
+        for command in commands:
+            if command is None:
+                menu.add_separator()
+                continue
+            label, callback = command
+            menu.add_command(label=label, command=callback)
+        self._active_quick_management_menu = menu
+        try:
+            menu.tk_popup(x_root, y_root)
+        finally:
+            menu.grab_release()
+        return "break"
+
+    def _open_configured_quick_manager(
+        self,
+        group_id: str,
+        item_ids: tuple[str, ...] = (),
+        *,
+        start_add: bool = False,
+    ) -> None:
+        self._show_configuration(initial_tab="buttons")
+        workspace = getattr(self, "configuration_window", None)
+        if workspace is None:
+            return
+        if workspace.select_configured_quick_action(group_id, item_ids) and start_add:
+            workspace.add_quick_action_to_selection()
+
+    def _open_automatic_quick_manager(
+        self,
+        action_type: str,
+        path: tuple[str, ...] = (),
+    ) -> None:
+        self._show_configuration(initial_tab="buttons")
+        workspace = getattr(self, "configuration_window", None)
+        if workspace is not None:
+            workspace.select_automatic_quick_action(action_type, path)
+
+    def _open_automatic_quick_creator(
+        self,
+        action_type: str,
+        path: tuple[str, ...] = (),
+    ) -> None:
+        self._show_configuration(initial_tab="buttons")
+        workspace = getattr(self, "configuration_window", None)
+        if workspace is None:
+            return
+        workspace.select_automatic_quick_action(action_type, path)
+        workspace.create_action_for_automatic_menu(action_type, path)
+
+    def _find_automatic_quick_actions(
+        self,
+        group_label: str,
+        action_type: str,
+        path: tuple[str, ...] = (),
+    ) -> None:
+        self._show_configuration(initial_tab="buttons")
+        workspace = getattr(self, "configuration_window", None)
+        if workspace is not None:
+            workspace.show_automatic_quick_actions(
+                group_label,
+                action_type,
+                path,
+            )
+
+    def _edit_action_from_quick_menu(self, action_id: str) -> None:
+        self._show_configuration(
+            initial_tab="actions",
+            initial_action_id=action_id,
+            start_action_edit=True,
+        )
+
+    def _manage_work_item_from_quick_menu(
+        self,
+        reference: WorkItemReference,
+    ) -> None:
+        self._show_configuration(
+            initial_tab="work_items",
+            initial_work_item_key=work_item_metadata_key(
+                reference.source_id,
+                reference.relative_folder,
+            ),
+        )
 
     def _show_item_menu(self, event: tk.Event, item: CommandItem) -> str:
         return self._post_item_menu(item, event.x_root, event.y_root)
@@ -1856,8 +1987,17 @@ class LauncherApp:
         targets: tuple[CommandTarget, ...],
         child_items: tuple[CommandItem, ...],
         submenus: list[tk.Menu],
+        *,
+        item_path: tuple[int, ...] = (),
+        label_path: tuple[str, ...] = (),
+        manage_branch: Callable[
+            [CommandItem, tuple[int, ...], tuple[str, ...], int, int],
+            None,
+        ]
+        | None = None,
     ) -> None:
         actions_by_id = {action.id: action for action in self.actions}
+        entry_managers: dict[int, Callable[[int, int], None]] = {}
         added_targets = False
         for target in targets:
             if target.action_id:
@@ -1868,6 +2008,13 @@ class LauncherApp:
                     label=action.compact_display_text,
                     command=lambda selected_action=action: self._execute_action(selected_action),
                 )
+                entry_index = menu.index(tk.END)
+                if entry_index is not None:
+                    entry_managers[int(entry_index)] = (
+                        lambda _x, _y, action_id=action.id: self._edit_action_from_quick_menu(
+                            action_id
+                        )
+                    )
                 added_targets = True
                 continue
             work_item_ref = target.work_item_ref
@@ -1887,10 +2034,19 @@ class LauncherApp:
                         WorkItemReference(selected_item.source_id, selected_item.relative_folder),
                     ),
                 )
+                entry_index = menu.index(tk.END)
+                if entry_index is not None:
+                    entry_managers[int(entry_index)] = (
+                        lambda _x, _y, reference=work_item_ref: self._manage_work_item_from_quick_menu(
+                            reference
+                        )
+                    )
             added_targets = True
         if added_targets and child_items:
             menu.add_separator()
-        for child in child_items:
+        for child_index, child in enumerate(child_items):
+            child_item_path = (*item_path, child_index)
+            child_label_path = (*label_path, child.label)
             submenu = tk.Menu(menu, tearoff=False)
             submenus.append(submenu)
             self._populate_menu_node(
@@ -1898,15 +2054,84 @@ class LauncherApp:
                 command_item_targets(child),
                 child.items,
                 submenus,
+                item_path=child_item_path,
+                label_path=child_label_path,
+                manage_branch=manage_branch,
             )
             menu.add_cascade(label=child.label, menu=submenu)
+            entry_index = menu.index(tk.END)
+            if entry_index is not None and manage_branch is not None:
+                entry_managers[int(entry_index)] = (
+                    lambda x, y, selected_item=child, selected_path=child_item_path,
+                    selected_labels=child_label_path: manage_branch(
+                        selected_item,
+                        selected_path,
+                        selected_labels,
+                        x,
+                        y,
+                    )
+                )
         if menu.index(tk.END) is None:
             menu.add_command(label="No available actions", state=tk.DISABLED)
+        self._bind_command_menu_management(menu, entry_managers)
+
+    def _bind_command_menu_management(
+        self,
+        menu: tk.Menu,
+        entry_managers: dict[int, Callable[[int, int], None]],
+    ) -> None:
+        if not entry_managers:
+            return
+        menu._context_palette_entry_managers = entry_managers  # type: ignore[attr-defined]
+        menu.bind(
+            "<Button-3>",
+            lambda event: self._handle_command_menu_right_click(
+                menu,
+                entry_managers,
+                event,
+            ),
+            add="+",
+        )
+
+    def _handle_command_menu_right_click(
+        self,
+        menu: tk.Menu,
+        entry_managers: dict[int, Callable[[int, int], None]],
+        event: tk.Event,
+    ) -> str:
+        try:
+            entry_index = menu.index(f"@{event.y}")
+        except tk.TclError:
+            entry_index = None
+        callback = (
+            entry_managers.get(int(entry_index))
+            if entry_index is not None
+            else None
+        )
+        if callback is None:
+            return "break"
+        x_root = int(getattr(event, "x_root", 0))
+        y_root = int(getattr(event, "y_root", 0))
+        self._dismiss_active_command_menu()
+        self.root.after_idle(
+            lambda: callback(x_root, y_root)
+        )
+        return "break"
+
+    def _dismiss_active_command_menu(self) -> None:
+        menu = getattr(self, "_active_command_menu", None)
+        if menu is None:
+            return
+        try:
+            menu.unpost()
+        except tk.TclError:
+            pass
+        try:
+            menu.grab_release()
+        except tk.TclError:
+            pass
 
     def _show_group_menu(self, event: tk.Event, group: CommandGroup) -> str:
-        if event.state & (0x0001 | 0x0004):
-            self._open_command_configuration(group)
-            return "break"
         return self._post_group_menu(group, event.x_root, event.y_root)
 
     def _show_group_menu_at_control(
@@ -1925,9 +2150,31 @@ class LauncherApp:
         group: CommandGroup,
         x_root: int,
         y_root: int,
+        *,
+        automatic_action_type: str | None = None,
     ) -> str:
         menu = tk.Menu(self.root, tearoff=False)
         submenus: list[tk.Menu] = []
+        manage_branch = (
+            (
+                lambda _item, path, _labels, x, y: self._post_configured_quick_management(
+                    group,
+                    path,
+                    x,
+                    y,
+                )
+            )
+            if automatic_action_type is None
+            else (
+                lambda _item, _path, labels, x, y: self._post_action_bound_quick_management(
+                    group,
+                    automatic_action_type,
+                    labels,
+                    x,
+                    y,
+                )
+            )
+        )
         self._populate_menu_node(
             menu,
             tuple(
@@ -1936,6 +2183,7 @@ class LauncherApp:
             ),
             group.items,
             submenus,
+            manage_branch=manage_branch,
         )
         self._active_command_menu = menu
         self._active_command_submenus = tuple(submenus)
@@ -2982,6 +3230,8 @@ class LauncherApp:
         self.sequence_run_plan = plan
         self.sequence_run_index = 0
         self.sequence_started_actions = 0
+        self._cancel_scheduled_hide()
+        self._set_sequence_attention(True)
         panel = getattr(self, "action_discovery_panel", None)
         if panel is not None:
             panel.render_control_state(sequence_running=True)
@@ -3005,8 +3255,10 @@ class LauncherApp:
         step = plan.steps[self.sequence_run_index]
         self.sequence_run_index += 1
         if isinstance(step, ResolvedWaitStep):
+            seconds = step.milliseconds / 1000
             self.status_var.set(
-                f"Sequence step {step_number}: waiting {step.milliseconds} ms."
+                f"Sequence step {step_number}/{len(plan.steps)}: waiting "
+                f"{seconds:g} seconds. Choose Stop remaining to cancel pending steps."
             )
             self.sequence_after_id = self.root.after(
                 step.milliseconds,
@@ -3032,8 +3284,9 @@ class LauncherApp:
             )
             return
         self.sequence_started_actions += 1
+        self._set_sequence_attention(True)
         self.status_var.set(
-            f"Sequence started Action {self.sequence_started_actions} at step {step_number}."
+            f'Sequence step {step_number}/{len(plan.steps)}: dispatched "{step.title}".'
         )
         self.sequence_after_id = self.root.after(0, self._run_next_sequence_step)
 
@@ -3055,6 +3308,7 @@ class LauncherApp:
         self.sequence_run_plan = None
         self.sequence_after_id = None
         self.sequence_run_index = 0
+        self._set_sequence_attention(False)
         panel = getattr(self, "action_discovery_panel", None)
         if panel is not None:
             panel.render_control_state(sequence_running=False)
@@ -3063,6 +3317,17 @@ class LauncherApp:
         self.status_var.set(message)
         if error:
             messagebox.showerror("Action sequence stopped", message, parent=self.root)
+
+    def _set_sequence_attention(self, active: bool) -> None:
+        """Keep an attended sequence and its Stop control visible."""
+
+        try:
+            if active:
+                self.root.deiconify()
+                self.root.lift()
+            self.root.attributes("-topmost", active)
+        except (AttributeError, tk.TclError):
+            pass
 
     def _open_action_target(self, action: Action) -> None:
         """Open Markdown actions in-app and delegate every other safe target."""
@@ -3516,6 +3781,104 @@ class LauncherApp:
 
     def _copy_workspace_to_clipboard(self) -> None:
         self.workspace_component.copy_all()
+
+    def _extract_text_from_image(self, candidate: str) -> None:
+        if self.ocr.running:
+            self.status_var.set("Image text extraction is already running.")
+            return
+
+        try:
+            source = image_source_from_text(candidate)
+            if source is None:
+                source = clipboard_image_source()
+        except OcrError as exc:
+            self._show_ocr_error(exc)
+            return
+
+        if source is None:
+            selected = filedialog.askopenfilename(
+                parent=self.root,
+                title="Choose an image to extract text from",
+                filetypes=(
+                    ("Image files", "*.png *.jpg *.jpeg *.bmp *.gif *.tif *.tiff *.webp"),
+                    ("All files", "*.*"),
+                ),
+            )
+            if not selected:
+                self.status_var.set("Image text extraction cancelled.")
+                return
+            try:
+                source = image_source_from_path(Path(selected))
+            except OcrSourceError as exc:
+                self._show_ocr_error(exc)
+                return
+
+        expected_text = self.workspace_component.raw_text()
+        started = self.ocr.start(
+            source,
+            lambda result, error: self._accept_ocr_result(
+                source.label,
+                expected_text,
+                result,
+                error,
+            ),
+        )
+        if not started:
+            self.status_var.set("Image text extraction is already running.")
+            return
+        self.workspace_component.set_ocr_running(True)
+        self.status_var.set(f"Extracting text from {source.label}…")
+        if getattr(self, "ocr_after_id", None) is None:
+            self.ocr_after_id = self.root.after(100, self._poll_ocr)
+
+    def _accept_ocr_result(
+        self,
+        source_label: str,
+        expected_text: str,
+        result: OcrResult | None,
+        error: OcrError | None,
+    ) -> None:
+        self.workspace_component.set_ocr_running(False)
+        if error is not None:
+            self._show_ocr_error(error)
+            return
+        if result is None or not result.text.strip():
+            self.status_var.set("No readable text was found; Input / Output was unchanged.")
+            messagebox.showinfo(
+                "No text found",
+                "Context Palette did not find readable text in the image.\n\n"
+                "Input / Output and the clipboard were left unchanged.",
+                parent=self.root,
+            )
+            return
+        placement = self.workspace_component.apply_ocr_text(
+            result.text,
+            source_label=source_label,
+            expected_text=expected_text,
+        )
+        if placement is None:
+            self.status_var.set("Extracted text was not placed; Input / Output was unchanged.")
+            return
+        verb = "Replaced" if placement == "replace" else "Appended to"
+        self.status_var.set(
+            f"{verb} Input / Output with {result.line_count} extracted line(s) "
+            f"in {result.elapsed_seconds:.1f} seconds."
+        )
+
+    def _show_ocr_error(self, error: OcrError) -> None:
+        message = str(error)
+        if isinstance(error, OcrUnavailableError):
+            message += (
+                "\n\nOCR is an optional local component. Run "
+                "setup-ocr-context-palette.bat from the Context Palette folder. "
+                "It installs only into that folder and does not require administrator rights."
+            )
+        self.status_var.set("Image text extraction could not start.")
+        messagebox.showerror(
+            "Could not extract text",
+            message,
+            parent=self.root,
+        )
 
     def _set_clipboard(self, value: str) -> None:
         self.root.clipboard_clear()

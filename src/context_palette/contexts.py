@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 from pathlib import Path
 
@@ -47,6 +47,41 @@ class ContextDefinition:
             if reference not in members:
                 members.append(reference)
         return tuple(dict.fromkeys(members))
+
+
+def update_work_item_context_memberships(
+    contexts: list[ContextDefinition] | tuple[ContextDefinition, ...],
+    reference: WorkItemReference,
+    selected_names: tuple[str, ...],
+) -> list[ContextDefinition]:
+    """Return personal contexts with one Work Item's memberships replaced."""
+
+    names_by_key = {context.name.casefold(): context.name for context in contexts}
+    selected_keys = {name.strip().casefold() for name in selected_names if name.strip()}
+    unknown = sorted(selected_keys - set(names_by_key))
+    if unknown:
+        raise ContextError(
+            "Unknown personal context. Choose an existing My configuration context."
+        )
+    updated: list[ContextDefinition] = []
+    for context in contexts:
+        selected = context.name.casefold() in selected_keys
+        work_items = [item for item in context.work_item_refs if item != reference]
+        if selected:
+            work_items.append(reference)
+        preferred_items = tuple(
+            item
+            for item in context.preferred_item_refs
+            if selected or item.work_item_ref != reference
+        )
+        updated.append(
+            replace(
+                context,
+                work_item_refs=tuple(dict.fromkeys(work_items)),
+                preferred_item_refs=preferred_items,
+            )
+        )
+    return updated
 
 
 def load_contexts(path: Path) -> list[ContextDefinition]:

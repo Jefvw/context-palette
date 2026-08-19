@@ -168,17 +168,6 @@ def palette_item_slots(
         PaletteItemReference(action_id=action.id)
         for action in context_fallbacks[: MAX_CONTEXT_SLOT_ACTIONS - len(context_items)]
     )
-    if len(context_items) < MAX_CONTEXT_SLOT_ACTIONS:
-        used_ids = {
-            reference.action_id
-            for reference in context_items
-            if reference.action_id
-        }
-        fallbacks = [action for action in actions if action.id not in used_ids]
-        context_items.extend(
-            PaletteItemReference(action_id=action.id)
-            for action in fallbacks[: MAX_CONTEXT_SLOT_ACTIONS - len(context_items)]
-        )
     for slot, reference in zip(
         CONTEXT_SLOT_NUMBERS,
         context_items[:MAX_CONTEXT_SLOT_ACTIONS],

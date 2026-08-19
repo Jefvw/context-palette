@@ -46,10 +46,35 @@ from context_palette.actions import (
     validate_http_url,
 )
 from context_palette.action_types import ACTION_TYPES
-from context_palette.action_sequences import SequenceStep
+from context_palette.action_sequences import (
+    ResolvedWaitStep,
+    SequenceStep,
+    resolve_sequence_steps,
+)
 
 
 class ActionTests(unittest.TestCase):
+    def test_built_in_uat_sequence_is_bounded_and_opens_only_the_project_folder(self):
+        actions = load_actions(ROOT / "data" / "actions.json")
+        sequence = next(
+            action for action in actions if action.id == "developing-uat-sequence"
+        )
+
+        plan = resolve_sequence_steps(
+            sequence.sequence_steps,
+            actions,
+            sequence_id=sequence.id,
+        )
+
+        self.assertEqual(len(plan.steps), 3)
+        self.assertEqual(
+            [step.action_id for step in plan.steps if hasattr(step, "action_id")],
+            ["developing-open-project-folder", "developing-open-project-folder"],
+        )
+        self.assertEqual(plan.steps[0].value, "%PROJECT_ROOT%")
+        self.assertEqual(plan.steps[2].value, "%PROJECT_ROOT%")
+        self.assertEqual(plan.steps[1], ResolvedWaitStep(5000))
+
     def test_sequence_steps_round_trip_as_structured_data(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "actions.json"

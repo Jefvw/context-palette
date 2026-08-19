@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import json
 from pathlib import Path
 import sys
@@ -29,22 +30,28 @@ from context_palette.action_types import ACTION_TYPES, CREATABLE_ACTION_TYPES
 from context_palette.command_surface import (
     CommandGroup,
     CommandItem,
-    GROUP_PRESENTATION_NESTED_MENU,
 )
 from context_palette.configuration_window import (
     ConfigurationWindow,
     LOCAL_DESTINATION,
+    compact_selection_title,
 )
 from context_palette.contexts import ContextDefinition
 from context_palette.data_catalog import AppDataPaths
 from context_palette.focus_model import palette_items_for_context
 from context_palette.palette_state import PaletteState
 from context_palette.workspace_transforms import WORKSPACE_TRANSFORM_GROUPS
-from context_palette.workspace_panel import WorkspacePanel
+from context_palette.workspace_panel import OcrPlacementDialog, WorkspacePanel
 
 
 @unittest.skipUnless(sys.platform == "win32", "The launcher smoke test requires Windows Tk.")
 class LauncherSmokeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # Tk variables can otherwise be finalized only after a later test has
+        # created a new interpreter, leaking stale callbacks and native grabs
+        # across these intentionally large Windows smoke scenarios.
+        gc.collect()
+
     def test_workspace_create_action_uses_selection_then_full_text_without_clipboard(self):
         root = tk.Tk()
         root.withdraw()
@@ -78,6 +85,68 @@ class LauncherSmokeTests(unittest.TestCase):
                 "Notes before https://example.com/report after",
             )
             clipboard_getter.assert_not_called()
+        finally:
+            root.destroy()
+
+    def test_workspace_ocr_control_uses_selection_and_places_result_safely(self):
+        root = tk.Tk()
+        root.withdraw()
+        host = ttk.Frame(root)
+        host.pack(fill=tk.BOTH, expand=True)
+        sources: list[str] = []
+        panel = WorkspacePanel(
+            host,
+            clipboard_getter=lambda: "",
+            clipboard_setter=lambda _value: None,
+            status_setter=lambda _value: None,
+            tooltip_adder=lambda _widget, _text: None,
+            extract_text=sources.append,
+        )
+        try:
+            panel.set_text("C:\\images\\capture.png")
+            panel.text.tag_add(tk.SEL, "1.0", "end-1c")
+            panel.ocr_button.invoke()
+            self.assertEqual(sources, ["C:\\images\\capture.png"])
+            self.assertTrue(panel.ocr_button.cget("image"))
+
+            panel.set_text("")
+            self.assertEqual(
+                panel.apply_ocr_text(
+                    "First line\nSecond line",
+                    source_label="clipboard image",
+                    expected_text="",
+                ),
+                "replace",
+            )
+            self.assertEqual(panel.raw_text(), "First line\nSecond line")
+
+            with patch(
+                "context_palette.workspace_panel.ask_ocr_placement",
+                return_value="append",
+            ):
+                self.assertEqual(
+                    panel.apply_ocr_text(
+                        "Third line",
+                        source_label="clipboard image",
+                        expected_text="First line\nSecond line",
+                    ),
+                    "append",
+                )
+            self.assertEqual(
+                panel.raw_text(),
+                "First line\nSecond line\n\nThird line",
+            )
+
+            dialog = OcrPlacementDialog(root, "Text was extracted.")
+            self.assertEqual(dialog.replace_button.cget("text"), "Replace")
+            self.assertEqual(dialog.append_button.cget("text"), "Append")
+            self.assertEqual(dialog.cancel_button.cget("text"), "Cancel")
+            dialog.cancel_button.invoke()
+
+            panel.set_ocr_running(True)
+            self.assertEqual(str(panel.ocr_button.cget("state")), "disabled")
+            panel.set_ocr_running(False)
+            self.assertEqual(str(panel.ocr_button.cget("state")), "normal")
         finally:
             root.destroy()
 
@@ -260,23 +329,17 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     self.assertEqual(
                         len(
-                            trees_by_heading[
-                                "Group / menu level"
-                            ].get_children()
+                            trees_by_heading["Menu / item"].get_children()
                         ),
                         len(app.command_groups) + 3,
                     )
                     configure_windows[0].geometry("700x480")
                     root.update()
-                    configure_notebook = next(
-                        child
-                        for child in self._descendants(configure_windows[0])
-                        if isinstance(child, ttk.Notebook)
-                    )
+                    configure_notebook = app.configuration_window.notebook
                     for tab_index, heading, last_column in (
-                        (1, "Action", "state"),
+                        (1, "Action", "source"),
                         (3, "Context", "actions"),
-                        (4, "Group / menu level", "actions"),
+                        (4, "Menu / item", "actions"),
                     ):
                         configure_notebook.select(tab_index)
                         root.update()
@@ -425,11 +488,92 @@ class LauncherSmokeTests(unittest.TestCase):
                     root.update()
 
                     self.assertEqual(len(configuration.pin_comboboxes), 5)
+                    self.assertEqual(
+                        configuration.pin_summary_var.get(),
+                        "0 assigned on this computer",
+                    )
+                    self.assertTrue(configuration.toggle_pins_button.winfo_ismapped())
+                    self.assertFalse(configuration.save_pins_button.winfo_ismapped())
+                    self.assertEqual(
+                        configuration.toggle_pins_button.cget("text"),
+                        "Show pins",
+                    )
+                    configuration.window.geometry("900x520")
+                    root.update()
+                    configuration.toggle_pins_button.invoke()
+                    root.update()
                     self.assertTrue(configuration.save_pins_button.winfo_ismapped())
+                    self.assertEqual(
+                        configuration.toggle_pins_button.cget("text"),
+                        "Hide pins",
+                    )
                     self.assertLessEqual(
                         configuration.pins_frame.winfo_reqwidth(),
                         configuration.window.winfo_width(),
                     )
+                    pins_right = (
+                        configuration.pins_body.winfo_rootx()
+                        + configuration.pins_body.winfo_width()
+                    )
+                    for picker in configuration.pin_pickers:
+                        self.assertLessEqual(
+                            picker.winfo_rootx() + picker.winfo_width(),
+                            pins_right,
+                        )
+                    self.assertGreater(configuration.action_tree.winfo_height(), 70)
+                    configuration.pin_vars[0].set("Temporary unsaved pin choice")
+                    root.update()
+                    self.assertIn(
+                        "unsaved changes",
+                        configuration.pin_summary_var.get(),
+                    )
+                    configuration.toggle_pins_button.invoke()
+                    root.update()
+                    self.assertFalse(configuration.save_pins_button.winfo_ismapped())
+                    self.assertEqual(
+                        configuration.pin_vars[0].get(),
+                        "Temporary unsaved pin choice",
+                    )
+                    self.assertIn(
+                        "unsaved changes",
+                        configuration.pin_summary_var.get(),
+                    )
+                    configuration.toggle_pins_button.invoke()
+                    root.update()
+                    self.assertEqual(
+                        configuration.pin_vars[0].get(),
+                        "Temporary unsaved pin choice",
+                    )
+                    configuration._render_pinned_slots()
+                    self.assertEqual(
+                        configuration.pin_summary_var.get(),
+                        "0 assigned on this computer",
+                    )
+                    configuration.toggle_pins_button.invoke()
+                    root.update()
+                    self.assertFalse(configuration.save_pins_button.winfo_ismapped())
+
+                    configuration.action_detail_title_var.set(
+                        compact_selection_title(
+                            "A deliberately long Action name " * 24
+                        )
+                    )
+                    root.update()
+                    selection_right = (
+                        configuration.action_selection_frame.winfo_rootx()
+                        + configuration.action_selection_frame.winfo_width()
+                    )
+                    for button in (
+                        configuration.action_edit_button,
+                        configuration.action_lifecycle_button,
+                        configuration.delete_action_button,
+                    ):
+                        self.assertLessEqual(
+                            button.winfo_rootx() + button.winfo_width(),
+                            selection_right,
+                        )
+                    self.assertGreater(configuration.action_tree.winfo_height(), 70)
+                    configuration._update_action_controls()
                     for index, definition in enumerate(CREATABLE_ACTION_TYPES.values()):
                         self.assertTrue(
                             configuration.type_list.get(index).startswith(
@@ -761,6 +905,21 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertFalse(app.type_filter.winfo_manager())
                     self.assertEqual(app.run_button.cget("text"), "Run")
                     self.assertFalse(app.work_item_folder_button.winfo_manager())
+                    app.action_discovery_panel.render_control_state(
+                        sequence_running=True,
+                    )
+                    app.action_discovery_panel.set_selected_item_kind(
+                        work_item=None,
+                    )
+                    root.update_idletasks()
+                    self.assertEqual(app.run_button.cget("text"), "Stop remaining")
+                    self.assertEqual(str(app.run_button.cget("state")), "normal")
+                    self.assertTrue(app.run_button.winfo_manager())
+                    app.action_discovery_panel.render_control_state(
+                        work_item=False,
+                        has_selection=True,
+                        sequence_running=False,
+                    )
                     self.assertTrue(app.action_help_button.cget("image"))
                     self.assertTrue(app.scope_options_button.cget("image"))
                     self.assertIs(
@@ -839,17 +998,15 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app.actions_heading_var.get(), "All items · Focus first")
                     self.assertEqual(app.results_count_var.get(), "5 items")
                     self.assertNotIn(divider_row, app.focus_tree_items)
-                    self.assertEqual(divider_index, 4)
+                    self.assertEqual(divider_index, 2)
                     self.assertEqual(
                         [
                             reference.action_id
                             or reference.work_item_ref.relative_folder
                             for reference in app.focus_tree_items.values()
-                        ][:4],
+                        ][:2],
                         [
                             "database-only",
-                            "general-first",
-                            "general-second",
                             "QST-CAP40-question",
                         ],
                     )
@@ -1102,6 +1259,9 @@ class LauncherSmokeTests(unittest.TestCase):
                     context_popup._selection_changed()
                     context_popup.apply()
                     self.assertEqual(app.item_context_filter, "Review")
+                    work_tools_menu = root.nametowidget(
+                        app.scope_options_button.cget("menu")
+                    )
                     work_tools_menu.invoke(context_filter_index)
                     root.update()
                     context_popup = app.action_discovery_panel.context_picker_popup
@@ -1388,30 +1548,17 @@ class LauncherSmokeTests(unittest.TestCase):
                             int(area.grid_info()["column"]),
                             expected_column,
                         )
-                        if (
-                            group.presentation == GROUP_PRESENTATION_NESTED_MENU
-                            or len(group.items) == 1
-                        ):
-                            self.assertIsInstance(area, ttk.Frame)
-                            self.assertNotIsInstance(area, ttk.LabelFrame)
-                        else:
-                            self.assertIsInstance(area, ttk.LabelFrame)
-                            self.assertEqual(area.cget("text"), group.label)
+                        self.assertIsInstance(area, ttk.Frame)
+                        self.assertNotIsInstance(area, ttk.LabelFrame)
                         menu_launchers = [
                             child
                             for child in area.winfo_children()
                             if isinstance(child, ttk.Label)
                             and child.cget("style") == "SurfaceMenu.TLabel"
                         ]
-                        expected_launcher_labels = (
-                            [f"{group.label} ▾"]
-                            if group.presentation
-                            == GROUP_PRESENTATION_NESTED_MENU
-                            else [item.label for item in group.items]
-                        )
                         self.assertEqual(
                             [control.cget("text") for control in menu_launchers],
-                            expected_launcher_labels,
+                            [f"{group.label} ▾"],
                         )
                         for row, control in enumerate(menu_launchers):
                             self.assertEqual(int(control.grid_info()["row"]), row)
@@ -1503,6 +1650,7 @@ class LauncherSmokeTests(unittest.TestCase):
                         self.assertTrue(tooltips[button].startswith(f"{name} —"))
                     self.assertTrue(tooltips[app.more_button].startswith("More —"))
                     self.assertTrue(app.text_tools_button.cget("image"))
+                    self.assertTrue(app.ocr_button.cget("image"))
                     workspace_header = app.workspace_component.frame.winfo_children()[0]
                     self.assertFalse(
                         any(
@@ -1681,11 +1829,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     ]
                     self.assertEqual(len(diagnostic_windows), 1)
                     diagnostic_window = diagnostic_windows[0]
-                    diagnostic_notebook = next(
-                        child
-                        for child in self._descendants(diagnostic_window)
-                        if isinstance(child, ttk.Notebook)
-                    )
+                    diagnostic_notebook = app.configuration_window.notebook
                     self.assertEqual(
                         diagnostic_notebook.tab(
                             diagnostic_notebook.select(),
@@ -1708,11 +1852,11 @@ class LauncherSmokeTests(unittest.TestCase):
 
                     for keysym, expected_tab in (
                         ("a", "Actions"),
-                        ("t", "Create action"),
+                        ("t", "Action types"),
                         ("c", "Contexts"),
                         ("q", "Quick actions"),
-                        ("d", "Diagnostics"),
                         ("b", "Backup and restore"),
+                        ("d", "Diagnostics"),
                     ):
                         diagnostic_window.event_generate(
                             "<KeyPress>",
@@ -1769,11 +1913,7 @@ class LauncherSmokeTests(unittest.TestCase):
                                 configuration_windows[0],
                                 reused_configuration_window,
                             )
-                        notebook = next(
-                            child
-                            for child in self._descendants(configuration_windows[0])
-                            if isinstance(child, ttk.Notebook)
-                        )
+                        notebook = app.configuration_window.notebook
                         self.assertEqual(
                             notebook.tab(notebook.select(), "text"),
                             expected_tab,
@@ -1782,8 +1922,77 @@ class LauncherSmokeTests(unittest.TestCase):
                             notebook.tab(tab_id, "text")
                             for tab_id in notebook.tabs()
                         ]
-                        self.assertEqual(tab_names[0], "Start")
-                        self.assertIn("Diagnostics", tab_names)
+                        self.assertEqual(
+                            tab_names,
+                            [
+                                "Start",
+                                "Actions",
+                                "Action types",
+                                "Contexts",
+                                "Quick actions",
+                                "Work Items",
+                                "Backup and restore",
+                                "Diagnostics",
+                            ],
+                        )
+                        self.assertEqual(
+                            [
+                                button.cget("text")
+                                for button in app.configuration_window.configuration_navigation_buttons.values()
+                            ],
+                            [
+                                "Start",
+                                "Actions",
+                                "Action types",
+                                "Contexts",
+                                "Quick actions",
+                                "Work Items",
+                                "Backup & restore",
+                                "Diagnostics",
+                            ],
+                        )
+                        self.assertEqual(
+                            list(
+                                app.configuration_window.configuration_navigation_group_labels
+                            ),
+                            ["SET UP", "SUPPORT"],
+                        )
+                        self.assertTrue(
+                            all(
+                                label.winfo_ismapped()
+                                for label in app.configuration_window.configuration_navigation_group_labels.values()
+                            )
+                        )
+                        selected_index = notebook.index(notebook.select())
+                        self.assertEqual(
+                            app.configuration_window.configuration_navigation_buttons[
+                                selected_index
+                            ].cget("style"),
+                            "ConfigureNavSelected.TButton",
+                        )
+                        self.assertTrue(
+                            all(
+                                button.cget("style") == "ConfigureNav.TButton"
+                                for index, button in app.configuration_window.configuration_navigation_buttons.items()
+                                if index != selected_index
+                            )
+                        )
+                        self.assertFalse(
+                            any(
+                                isinstance(child, ttk.Notebook)
+                                for child in self._descendants(configuration_windows[0])
+                            )
+                        )
+                        mapped_pages = [
+                            notebook.nametowidget(page_id)
+                            for page_id in notebook.tabs()
+                            if notebook.nametowidget(page_id).winfo_ismapped()
+                        ]
+                        self.assertEqual(len(mapped_pages), 1)
+                        self.assertIs(
+                            mapped_pages[0],
+                            notebook.nametowidget(notebook.select()),
+                        )
                         start_tab = notebook.nametowidget(notebook.tabs()[0])
                         start_buttons = {
                             child.cget("text"): child
@@ -1851,36 +2060,277 @@ class LauncherSmokeTests(unittest.TestCase):
                         app.configuration_window._launcher_restore_complete,
                         app._reload,
                     )
+                    action_page = notebook.nametowidget(notebook.tabs()[1])
+                    action_labels = {
+                        child.cget("text")
+                        for child in self._descendants(action_page)
+                        if isinstance(child, ttk.Label)
+                    }
+                    self.assertIn("Manage Actions", action_labels)
+                    self.assertEqual(
+                        app.configuration_window.new_action_button.cget("style"),
+                        "Accent.TButton",
+                    )
+                    self.assertEqual(
+                        [
+                            app.configuration_window.other_action_creation_menu.entrycget(
+                                index,
+                                "label",
+                            )
+                            for index in (0, 1)
+                        ],
+                        ["Browse Action types…", "Harvest documents…"],
+                    )
+                    reused_configuration_window.geometry("900x520")
+                    app.configuration_window.notebook.select(3)
+                    root.update()
+                    context_page = notebook.nametowidget(notebook.tabs()[3])
+                    context_labels = {
+                        child.cget("text")
+                        for child in self._descendants(context_page)
+                        if isinstance(child, ttk.Label)
+                    }
+                    self.assertIn("Manage Contexts", context_labels)
+                    self.assertIn(
+                        "A Context organizes items; Focus is the Context currently highlighted in the palette.",
+                        context_labels,
+                    )
+                    self.assertEqual(
+                        app.configuration_window.new_context_button.cget("style"),
+                        "Accent.TButton",
+                    )
+                    self.assertEqual(
+                        app.configuration_window.context_delete_button.cget("style"),
+                        "Danger.TButton",
+                    )
+                    self.assertGreater(
+                        app.configuration_window.context_tree.winfo_height(),
+                        70,
+                    )
+                    app.configuration_window.context_detail_summary_var.set(
+                        "Maximum bounded Context selection detail " * 4
+                    )
+                    root.update()
+                    self.assertGreater(
+                        app.configuration_window.context_tree.winfo_height(),
+                        70,
+                    )
+                    context_right = (
+                        app.configuration_window.context_selection_frame.winfo_rootx()
+                        + app.configuration_window.context_selection_frame.winfo_width()
+                    )
+                    self.assertLessEqual(
+                        app.configuration_window.context_delete_button.winfo_rootx()
+                        + app.configuration_window.context_delete_button.winfo_width(),
+                        context_right,
+                    )
+
+                    app.configuration_window.notebook.select(4)
+                    root.update()
+                    quick_page = notebook.nametowidget(notebook.tabs()[4])
+                    quick_labels = {
+                        child.cget("text")
+                        for child in self._descendants(quick_page)
+                        if isinstance(child, ttk.Label)
+                    }
+                    self.assertIn("Manage Quick actions", quick_labels)
+                    self.assertEqual(
+                        app.configuration_window.new_quick_menu_button.cget("style"),
+                        "Accent.TButton",
+                    )
+                    self.assertEqual(
+                        app.configuration_window.quick_item_delete_button.cget("style"),
+                        "Danger.TButton",
+                    )
+                    self.assertGreater(
+                        app.configuration_window.button_tree.winfo_height(),
+                        70,
+                    )
+                    app.configuration_window.button_preview_var.set(
+                        "Maximum bounded Quick-action selection detail " * 4
+                    )
+                    root.update()
+                    self.assertGreater(
+                        app.configuration_window.button_tree.winfo_height(),
+                        70,
+                    )
+                    automatic_iid = next(
+                        iter(
+                            app.configuration_window.action_bound_button_records
+                        )
+                    )
+                    app.configuration_window.button_tree.selection_set(
+                        automatic_iid
+                    )
+                    app.configuration_window._update_button_preview()
+                    root.update()
+                    self.assertTrue(
+                        app.configuration_window.quick_item_edit_button.winfo_ismapped()
+                    )
+                    self.assertTrue(
+                        app.configuration_window.new_quick_item_button.winfo_ismapped()
+                    )
+                    self.assertIn(
+                        app.configuration_window.new_quick_item_button.cget("text"),
+                        {
+                            "Add credential shortcut…",
+                            "Add folder shortcut…",
+                            "Add prompt…",
+                        },
+                    )
+                    self.assertFalse(
+                        app.configuration_window.quick_item_move_button.winfo_ismapped()
+                    )
+                    self.assertFalse(
+                        app.configuration_window.quick_item_delete_button.winfo_ismapped()
+                    )
+
+                    app.configuration_window.button_tree.selection_set("group-0")
+                    app.configuration_window._update_button_preview()
+                    root.update()
+                    self.assertTrue(
+                        app.configuration_window.new_quick_item_button.winfo_ismapped()
+                    )
+                    self.assertTrue(
+                        app.configuration_window.quick_item_edit_button.winfo_ismapped()
+                    )
+                    self.assertTrue(
+                        app.configuration_window.quick_item_delete_button.winfo_ismapped()
+                    )
+                    quick_right = (
+                        app.configuration_window.button_selection_frame.winfo_rootx()
+                        + app.configuration_window.button_selection_frame.winfo_width()
+                    )
+                    self.assertLessEqual(
+                        app.configuration_window.quick_item_delete_button.winfo_rootx()
+                        + app.configuration_window.quick_item_delete_button.winfo_width(),
+                        quick_right,
+                    )
+
+                    app.configuration_window.notebook.select(6)
+                    root.update()
+                    self.assertEqual(
+                        app.configuration_window.backup_restore_panel.create_backup_button.cget(
+                            "text"
+                        ),
+                        "Create backup…",
+                    )
+                    self.assertEqual(
+                        app.configuration_window.backup_restore_panel.inspect_restore_button.cget(
+                            "text"
+                        ),
+                        "Choose backup to inspect…",
+                    )
+                    self.assertEqual(
+                        app.configuration_window.backup_restore_panel.commit_restore_button.cget(
+                            "style"
+                        ),
+                        "Danger.TButton",
+                    )
+
+                    app.configuration_window.notebook.select(7)
+                    root.update()
+                    self.assertTrue(
+                        app.configuration_window.diagnostics_scrollbar.winfo_ismapped()
+                    )
+                    self.assertEqual(
+                        app.configuration_window.copy_diagnostics_button.cget("style"),
+                        "Accent.TButton",
+                    )
+                    self.assertNotEqual(
+                        app.configuration_window.refresh_diagnostics_button.cget("style"),
+                        "Accent.TButton",
+                    )
                     reused_configuration_window.geometry("700x480")
                     app.configuration_window.notebook.select(5)
                     root.update()
-                    work_item_trees = {
-                        tree.heading("#0", "text"): tree
-                        for tree in self._descendants(
+                    work_item_labels = {
+                        child.cget("text")
+                        for child in self._descendants(
                             app.configuration_window.work_items_panel.parent
                         )
-                        if isinstance(tree, ttk.Treeview)
+                        if isinstance(child, ttk.Label)
                     }
-                    for heading, last_column in (
-                        ("Source", "state"),
-                        ("Work Item", "opens"),
-                    ):
-                        tree = work_item_trees[heading]
-                        self.assertTrue(
-                            any(
-                                isinstance(child, ttk.Scrollbar)
-                                for child in tree.master.winfo_children()
-                            ),
-                            f"{heading} list has no visible scrollbar",
+                    self.assertIn("Manage Work Items", work_item_labels)
+                    self.assertEqual(
+                        app.configuration_window.work_items_panel.create_button.cget(
+                            "style"
+                        ),
+                        "Accent.TButton",
+                    )
+                    self.assertNotEqual(
+                        app.configuration_window.work_items_panel.edit_details_button.cget(
+                            "style"
+                        ),
+                        "Accent.TButton",
+                    )
+                    work_item_tree = app.configuration_window.work_items_panel.item_tree
+                    self.assertEqual(
+                        work_item_tree.heading("#0", "text"),
+                        "Work Item",
+                    )
+                    self.assertEqual(
+                        work_item_tree.heading("projects", "text"),
+                        "Project",
+                    )
+                    self.assertTrue(
+                        any(
+                            isinstance(child, ttk.Scrollbar)
+                            for child in work_item_tree.master.winfo_children()
                         )
-                        first_item = tree.get_children()[0]
-                        bounds = tree.bbox(first_item, last_column)
-                        self.assertTrue(bounds)
-                        self.assertLessEqual(
-                            bounds[0] + bounds[2],
-                            tree.winfo_width(),
-                            f"{heading} list clips its final column",
-                        )
+                    )
+                    first_item = work_item_tree.get_children()[0]
+                    bounds = work_item_tree.bbox(first_item, "projects")
+                    self.assertTrue(bounds)
+                    self.assertLessEqual(
+                        bounds[0] + bounds[2],
+                        work_item_tree.winfo_width(),
+                        "Work Item list clips its final column",
+                    )
+                    self.assertEqual(
+                        app.configuration_window.work_items_panel.source_path_var.get(),
+                        str(app.work_item_sources[0].workitems_path),
+                    )
+                    self.assertEqual(
+                        app.configuration_window.work_items_panel.manage_sources_button.cget(
+                            "text"
+                        ),
+                        "Manage sources…",
+                    )
+                    source_menu = (
+                        app.configuration_window.work_items_panel.manage_sources_menu
+                    )
+                    self.assertEqual(
+                        [
+                            source_menu.entrycget(index, "label")
+                            for index in (0, 1, 2, 4)
+                        ],
+                        [
+                            "Add source…",
+                            "Edit selected source…",
+                            "Remove selected source…",
+                            "Creation template…",
+                        ],
+                    )
+                    self.assertEqual(source_menu.entrycget(1, "state"), "normal")
+                    self.assertEqual(source_menu.entrycget(2, "state"), "normal")
+                    self.assertTrue(
+                        app.configuration_window.work_items_panel.refresh_button.winfo_ismapped()
+                    )
+                    self.assertEqual(
+                        app.configuration_window.work_items_panel.edit_details_button.cget(
+                            "text"
+                        ),
+                        "Tags & contexts…",
+                    )
+                    self.assertGreater(
+                        int(
+                            app.configuration_window.work_items_panel.source_path_label.cget(
+                                "wraplength"
+                            )
+                        ),
+                        0,
+                    )
                     requested_action = app.actions[-1]
                     app.configuration_window.action_filter_var.set(
                         "query that hides every action"

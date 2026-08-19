@@ -187,7 +187,7 @@ class CommandSurfaceTests(unittest.TestCase):
             with self.assertRaisesRegex(CommandSurfaceError, "Built-in Quick actions"):
                 load_combined_command_groups(shared, local)
 
-    def test_group_launcher_count_follows_presentation(self):
+    def test_every_group_contributes_one_menu_launcher(self):
         items = (
             CommandItem("one", "One"),
             CommandItem("two", "Two"),
@@ -197,7 +197,7 @@ class CommandSurfaceTests(unittest.TestCase):
             command_group_launcher_count(
                 CommandGroup("rows", "Rows", items)
             ),
-            2,
+            1,
         )
         self.assertEqual(
             command_group_launcher_count(

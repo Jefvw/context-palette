@@ -26,7 +26,7 @@ class DocumentationNavigationTests(unittest.TestCase):
         self.assertIn("press `Ctrl+,`, then open **Actions**", help_document)
         self.assertIn("Choose **Configure**", help_document)
         self.assertIn(
-            "Press `Ctrl+,`, then choose **Create action",
+            "Press `Ctrl+,`, then choose **Action types",
             help_document,
         )
         self.assertNotIn("Configure >", help_document)
@@ -66,6 +66,29 @@ class DocumentationNavigationTests(unittest.TestCase):
         for shortcut in ("F9", "Ctrl+Alt+P", "Ctrl+,", "Alt+A", "Alt+C", "F4"):
             self.assertIn(shortcut, shortcuts)
         self.assertIn("AZERTY", shortcuts)
+
+    def test_ocr_handoff_is_linked_and_covers_supported_setup_routes(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        documentation_index = (ROOT / "docs" / "README.md").read_text(
+            encoding="utf-8"
+        )
+        multi_pc = (ROOT / "docs" / "MULTI_PC_DEVELOPMENT.md").read_text(
+            encoding="utf-8"
+        )
+        ocr_setup = (ROOT / "docs" / "OCR_SETUP.md").read_text(encoding="utf-8")
+
+        self.assertIn("docs/OCR_SETUP.md", readme)
+        self.assertIn("OCR_SETUP.md", documentation_index)
+        self.assertIn("OCR_SETUP.md", multi_pc)
+        for required in (
+            "setup-ocr-context-palette.bat",
+            "prepare-offline-context-palette.bat",
+            "setup-offline-context-palette.bat",
+            "Configure → Backup and restore",
+            "Do not copy `.venv`",
+            "No compatible Python",
+        ):
+            self.assertIn(required, ocr_setup)
 
 
 if __name__ == "__main__":

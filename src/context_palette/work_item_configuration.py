@@ -1,12 +1,26 @@
 from __future__ import annotations
 
+import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
 from typing import Callable
 import weakref
 
-from .work_items import DiscoveredWorkItem, WorkItemDiscoveryError, WorkItemSource
+from .configuration_data import save_contexts
+from .context_membership_field import ContextMembershipField
+from .contexts import (
+    ContextDefinition,
+    ContextError,
+    update_work_item_context_memberships,
+)
+from .persistence import atomic_replace_bytes
+from .work_items import (
+    DiscoveredWorkItem,
+    WorkItemDiscoveryError,
+    WorkItemReference,
+    WorkItemSource,
+)
 from .work_item_creation import (
     WorkItemCreationError,
     create_work_item_from_template,
@@ -39,8 +53,10 @@ class WorkItemsConfigurationPanel:
         sources_path: Path,
         metadata_path: Path,
         settings_path: Path,
+        contexts_path: Path,
         on_change: Callable[[], None],
         feedback: Callable[[str, bool], None],
+        refresh_configuration: Callable[[], None] | None = None,
     ) -> None:
         self.parent = parent
         self.sources = list(sources)
@@ -49,8 +65,11 @@ class WorkItemsConfigurationPanel:
         self.sources_path = sources_path
         self.metadata_path = metadata_path
         self.settings_path = settings_path
+        self.contexts_path = contexts_path
+        self.contexts: list[ContextDefinition] = []
         self.on_change = on_change
         self.feedback = feedback
+        self.refresh_configuration = refresh_configuration
         self.refresh_coordinator = WorkItemRefreshCoordinator()
         self.refresh_pending = False
         self.disposed = False
@@ -61,93 +80,216 @@ class WorkItemsConfigurationPanel:
         except WorkItemStorageError:
             self.creation_settings = WorkItemCreationSettings()
 
-        template_row = ttk.Frame(parent)
-        template_row.pack(fill=tk.X, pady=(0, 8))
-        ttk.Label(template_row, text="Generic Excel template").pack(side=tk.LEFT)
         self.template_var = tk.StringVar(
             value=str(self.creation_settings.template_path or "")
         )
-        self.template_entry = ttk.Entry(template_row, textvariable=self.template_var)
-        self.template_entry.pack(
-            side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 6)
-        )
-        ttk.Button(template_row, text="Browse…", command=self.choose_template).pack(side=tk.LEFT)
-        ttk.Button(template_row, text="Save", command=self.save_template).pack(side=tk.LEFT, padx=(6, 0))
+        self.template_entry: ttk.Entry | None = None
+        self.selected_source_id = self.sources[0].id if self.sources else None
+        self.source_labels: dict[str, str] = {}
 
+        header = ttk.Frame(parent)
+        header.pack(fill=tk.X, pady=(0, 8))
+        heading = ttk.Frame(header)
+        heading.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Label(
-            parent,
-            text="Sources are stored only on this computer. Missing folders remain configured so they can recover later.",
+            heading,
+            text="Manage Work Items",
+            style="Title.TLabel",
+        ).pack(anchor=tk.W)
+        ttk.Label(
+            heading,
+            text="Find, create, and organize Work Items from a configured folder.",
             style="Muted.TLabel",
-        ).pack(anchor=tk.W, pady=(0, 6))
-        self.source_tree_frame, self.source_tree = scrollable_tree(
-            parent,
-            ("folder", "state"),
-            height=6,
-        )
-        self.source_tree.heading("#0", text="Source")
-        self.source_tree.heading("folder", text="Workitems folder")
-        self.source_tree.heading("state", text="State")
-        self.source_tree.column("#0", width=150)
-        self.source_tree.column("folder", width=370)
-        self.source_tree.column("state", width=100, stretch=False)
-        self.source_tree_frame.pack(fill=tk.X)
-        self.source_tree.bind("<Double-1>", lambda _event: self.edit_source())
-        self.source_tree.bind("<Return>", lambda _event: self.edit_source())
-        self.source_tree.bind("<Insert>", lambda _event: self._add_source_from_key())
-        self.source_tree.bind("<Delete>", lambda _event: self._remove_source_from_key())
-        self.source_tree.bind("<F5>", lambda _event: self._refresh_from_key())
-        self.source_tree.bind("<F6>", self._focus_other_list)
-
-        source_controls = ttk.Frame(parent)
-        source_controls.pack(fill=tk.X, pady=(6, 10))
-        self.add_source_button = ttk.Button(
-            source_controls,
-            text="Add source",
-            command=self.add_source,
-        )
-        self.add_source_button.pack(side=tk.LEFT)
+        ).pack(anchor=tk.W, pady=(2, 0))
         self.create_button = ttk.Button(
-            source_controls,
-            text="Create Work Item",
+            header,
+            text="New Work Item…",
             command=self.create_work_item,
             style="Accent.TButton",
         )
-        self.create_button.pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(source_controls, text="Edit selected", command=self.edit_source).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(source_controls, text="Remove selected", command=self.remove_source).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(source_controls, text="Refresh index", command=self.refresh).pack(side=tk.RIGHT)
+        self.create_button.pack(side=tk.RIGHT)
 
-        ttk.Label(parent, text="Discovered Work Items", style="Heading.TLabel").pack(anchor=tk.W)
+        source_panel = ttk.LabelFrame(parent, text="Current source", padding=(10, 8))
+        source_panel.pack(fill=tk.X, pady=(0, 9))
+        source_controls = ttk.Frame(source_panel)
+        source_controls.pack(fill=tk.X)
+        ttk.Label(source_controls, text="Source").pack(side=tk.LEFT, padx=(0, 8))
+        self.source_var = tk.StringVar()
+        self.source_combo = ttk.Combobox(
+            source_controls,
+            textvariable=self.source_var,
+            state="readonly",
+            width=26,
+        )
+        self.source_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.source_combo.bind("<<ComboboxSelected>>", self._source_selected)
+        self.source_combo.bind("<F5>", lambda _event: self._refresh_from_key())
+        self.source_combo.bind("<F6>", self._focus_other_list)
+        self.manage_sources_button = ttk.Menubutton(
+            source_controls,
+            text="Manage sources…",
+        )
+        self.manage_sources_menu = tk.Menu(
+            self.manage_sources_button,
+            tearoff=False,
+        )
+        self.manage_sources_menu.add_command(
+            label="Add source…",
+            command=self.add_source,
+        )
+        self._add_source_menu_index = int(
+            self.manage_sources_menu.index(tk.END)
+        )
+        self.manage_sources_menu.add_command(
+            label="Edit selected source…",
+            command=self.edit_source,
+        )
+        self._edit_source_menu_index = int(
+            self.manage_sources_menu.index(tk.END)
+        )
+        self.manage_sources_menu.add_command(
+            label="Remove selected source…",
+            command=self.remove_source,
+        )
+        self._remove_source_menu_index = int(
+            self.manage_sources_menu.index(tk.END)
+        )
+        self.manage_sources_menu.add_separator()
+        self.manage_sources_menu.add_command(
+            label="Creation template…",
+            command=self.configure_template,
+        )
+        self._creation_template_menu_index = int(
+            self.manage_sources_menu.index(tk.END)
+        )
+        self.manage_sources_button.configure(menu=self.manage_sources_menu)
+        self.manage_sources_button.pack(side=tk.LEFT, padx=(6, 0))
+        self.refresh_button = ttk.Button(
+            source_controls,
+            text="Refresh",
+            command=self.refresh,
+        )
+        self.refresh_button.pack(side=tk.LEFT, padx=(6, 0))
+
+        path_row = ttk.Frame(source_panel)
+        path_row.pack(fill=tk.X, pady=(8, 0))
+        ttk.Label(path_row, text="Folder", style="Heading.TLabel").pack(
+            side=tk.LEFT,
+            anchor=tk.N,
+        )
+        self.source_path_var = tk.StringVar(value="—")
+        self.source_path_label = ttk.Label(
+            path_row,
+            textvariable=self.source_path_var,
+            wraplength=560,
+            justify=tk.LEFT,
+        )
+        self.source_path_label.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(10, 0))
+        source_panel.bind("<Configure>", self._resize_source_path, add="+")
+        self.source_status_var = tk.StringVar()
+        self.source_status_label = ttk.Label(
+            source_panel,
+            textvariable=self.source_status_var,
+            style="Muted.TLabel",
+        )
+        self.source_status_label.pack(
+            anchor=tk.W,
+            padx=(54, 0),
+            pady=(5, 0),
+        )
+
+        list_panel = ttk.Frame(parent)
+        list_panel.pack(fill=tk.BOTH, expand=True)
+        search_row = ttk.Frame(list_panel)
+        search_row.pack(fill=tk.X, pady=(0, 5))
+        ttk.Label(search_row, text="Find").pack(side=tk.LEFT, padx=(0, 6))
+        self.search_var = tk.StringVar()
+        self.search_entry = ttk.Entry(search_row, textvariable=self.search_var)
+        self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.search_entry.bind("<KeyRelease>", lambda _event: self.render_items())
+        self.count_var = tk.StringVar()
+        ttk.Label(search_row, textvariable=self.count_var, style="Muted.TLabel").pack(
+            side=tk.RIGHT,
+            padx=(8, 0),
+        )
         self.item_tree_frame, self.item_tree = scrollable_tree(
-            parent,
-            ("source", "projects", "tags", "opens"),
+            list_panel,
+            ("type", "projects"),
         )
         for column, label, width in (
-            ("#0", "Work Item", 190),
-            ("source", "Source", 105),
-            ("projects", "Projects", 85),
-            ("tags", "Personal tags", 155),
-            ("opens", "Default", 75),
+            ("#0", "Work Item", 340),
+            ("type", "Type", 90),
+            ("projects", "Project", 90),
         ):
             self.item_tree.heading(column, text=label)
-            self.item_tree.column(column, width=width, stretch=column in {"#0", "tags"})
-        self.item_tree_frame.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
+            self.item_tree.column(
+                column,
+                width=width,
+                minwidth=(220 if column == "#0" else 84),
+                stretch=column == "#0",
+            )
+        self.item_tree_frame.pack(fill=tk.BOTH, expand=True)
         self.item_tree.bind("<Double-1>", lambda _event: self.edit_tags())
         self.item_tree.bind("<Return>", lambda _event: self.edit_tags())
+        self.item_tree.bind("<<TreeviewSelect>>", self._item_selected)
         self.item_tree.bind("<F5>", lambda _event: self._refresh_from_key())
         self.item_tree.bind("<F6>", self._focus_other_list)
-        item_controls = ttk.Frame(parent)
-        item_controls.pack(fill=tk.X, pady=(6, 0))
-        ttk.Button(item_controls, text="Edit personal tags", command=self.edit_tags).pack(side=tk.LEFT)
-        self.summary_var = tk.StringVar()
-        ttk.Label(item_controls, textvariable=self.summary_var, style="Muted.TLabel").pack(side=tk.RIGHT)
+
+        detail = ttk.Frame(
+            parent,
+            padding=(10, 8),
+            style="Card.TFrame",
+        )
+        detail.pack(fill=tk.X, pady=(9, 0))
+        detail_top = ttk.Frame(detail, style="Card.TFrame")
+        detail_top.pack(fill=tk.X)
+        self.detail_title_var = tk.StringVar(value="Select a Work Item")
+        ttk.Label(
+            detail_top,
+            textvariable=self.detail_title_var,
+            style="Card.TLabel",
+            font=("Segoe UI Semibold", 10),
+        ).pack(side=tk.LEFT)
+        self.detail_kind_var = tk.StringVar()
+        ttk.Label(
+            detail_top,
+            textvariable=self.detail_kind_var,
+            style="CardMuted.TLabel",
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        self.open_folder_button = ttk.Button(
+            detail_top,
+            text="Open folder",
+            command=self.open_folder,
+            state=tk.DISABLED,
+        )
+        self.open_folder_button.pack(side=tk.RIGHT)
+        self.edit_details_button = ttk.Button(
+            detail_top,
+            text="Tags & contexts…",
+            command=self.edit_tags,
+            state=tk.DISABLED,
+        )
+        self.edit_details_button.pack(side=tk.RIGHT, padx=(0, 6))
+        self.detail_summary_var = tk.StringVar(
+            value="Folder, Contexts, and personal tags appear here."
+        )
+        self.detail_summary_label = ttk.Label(
+            detail,
+            textvariable=self.detail_summary_var,
+            style="CardMuted.TLabel",
+            wraplength=650,
+            justify=tk.LEFT,
+        )
+        self.detail_summary_label.pack(fill=tk.X, pady=(6, 0))
+        detail.bind("<Configure>", self._resize_detail_summary, add="+")
+        self.summary_var = self.count_var
         self.render()
 
     def focus(self) -> None:
-        self.source_tree.focus_set()
+        self.search_entry.focus_set()
 
     def _focus_other_list(self, event: tk.Event) -> str:
-        target = self.item_tree if event.widget == self.source_tree else self.source_tree
+        target = self.item_tree if event.widget == self.source_combo else self.source_combo
         target.focus_set()
         return "break"
 
@@ -168,43 +310,243 @@ class WorkItemsConfigurationPanel:
             self.disposed = True
 
     def select_item(self, key: str) -> None:
+        item = self._item_for_key(key)
+        if item is not None and item.source_id != self.selected_source_id:
+            self.selected_source_id = item.source_id
+            self.render()
         if self.item_tree.exists(key):
             self.item_tree.selection_set(key)
             self.item_tree.focus(key)
             self.item_tree.see(key)
             self.item_tree.focus_set()
+            self._sync_item_details()
+
+    def set_contexts(self, contexts: tuple[ContextDefinition, ...]) -> None:
+        """Refresh the personal Context choices owned by Configure."""
+
+        self.contexts = list(contexts)
+        if hasattr(self, "item_tree"):
+            self.render()
 
     def render(self) -> None:
-        self.source_tree.delete(*self.source_tree.get_children())
-        source_states = {result.source.id: result for result in self.index.sources}
-        for source in self.sources:
-            result = source_states.get(source.id)
-            if result is not None and result.error:
-                state = "Unavailable"
-            elif not source.workitems_path.is_dir():
-                state = "Missing"
-            elif result is None:
-                state = "Not refreshed"
-            else:
-                state = "Ready"
-            self.source_tree.insert("", tk.END, iid=source.id, text=source.name, values=(str(source.workitems_path), state))
+        current_selection = self.item_tree.selection()
+        selected_key = current_selection[0] if current_selection else None
+        self._render_source_selector()
+        self.render_items(selected_key=selected_key)
 
+    def _render_source_selector(self) -> None:
+        if self.selected_source_id not in {source.id for source in self.sources}:
+            self.selected_source_id = self.sources[0].id if self.sources else None
+        counts: dict[str, int] = {}
+        for source in self.sources:
+            counts[source.name.casefold()] = counts.get(source.name.casefold(), 0) + 1
+        self.source_labels = {
+            (
+                source.name
+                if counts[source.name.casefold()] == 1
+                else f"{source.name} [{source.id}]"
+            ): source.id
+            for source in self.sources
+        }
+        self.source_combo.configure(values=tuple(self.source_labels))
+        selected_source = self._selected_source()
+        selected_label = next(
+            (
+                label
+                for label, source_id in self.source_labels.items()
+                if source_id == self.selected_source_id
+            ),
+            "",
+        )
+        self.source_var.set(selected_label)
+        has_source = selected_source is not None
+        state = tk.NORMAL if has_source else tk.DISABLED
+        self.manage_sources_button.configure(state=tk.NORMAL)
+        self.manage_sources_menu.entryconfigure(
+            self._add_source_menu_index,
+            state=tk.NORMAL,
+        )
+        self.manage_sources_menu.entryconfigure(
+            self._edit_source_menu_index,
+            state=state,
+        )
+        self.manage_sources_menu.entryconfigure(
+            self._remove_source_menu_index,
+            state=state,
+        )
+        self.manage_sources_menu.entryconfigure(
+            self._creation_template_menu_index,
+            state=tk.NORMAL,
+        )
+        self.refresh_button.configure(state=state)
+        if selected_source is None:
+            self.source_path_var.set("No Work Item source configured.")
+            self.source_status_var.set("Add a source to discover Work Items.")
+            self.source_status_label.configure(style="Muted.TLabel")
+            return
+        self.source_path_var.set(str(selected_source.workitems_path))
+        result = next(
+            (
+                candidate
+                for candidate in self.index.sources
+                if candidate.source.id.casefold() == selected_source.id.casefold()
+            ),
+            None,
+        )
+        if result is not None and result.error:
+            suffix = (
+                f" · showing {len(result.items)} last-known Work Items"
+                if result.using_last_known_good
+                else ""
+            )
+            self.source_status_var.set(f"Unavailable{suffix} · {result.error}")
+            self.source_status_label.configure(style="Error.TLabel")
+        elif result is None:
+            self.source_status_var.set("Not refreshed yet.")
+            self.source_status_label.configure(style="Muted.TLabel")
+        else:
+            self.source_status_var.set(
+                f"Available · {len(result.items)} Work Items discovered"
+            )
+            self.source_status_label.configure(style="Success.TLabel")
+
+    def render_items(self, *, selected_key: str | None = None) -> None:
         self.item_tree.delete(*self.item_tree.get_children())
-        workbook_count = 0
-        for item in self.index.items:
+        query = self.search_var.get().strip().casefold()
+        shown = 0
+        for item in self._selected_source_items():
             key = work_item_metadata_key(item.source_id, item.relative_folder)
             tags = self.metadata.get(key, WorkItemMetadata()).tags
-            opens = "Workbook" if item.matching_workbook_path else "Folder"
-            workbook_count += item.matching_workbook_path is not None
+            reference = WorkItemReference(item.source_id, item.relative_folder)
+            contexts = tuple(
+                context.name
+                for context in self.contexts
+                if reference in context.work_item_refs
+            )
+            searchable = " ".join(
+                (
+                    item.display_name,
+                    item.kind_name or item.kind_code or "",
+                    *item.project_codes,
+                    *contexts,
+                    *tags,
+                )
+            ).casefold()
+            if query and not all(term in searchable for term in query.split()):
+                continue
             self.item_tree.insert(
                 "",
                 tk.END,
                 iid=key,
                 text=item.display_name,
-                values=(item.source_name, ", ".join(item.project_codes) or "—", ", ".join(tags) or "—", opens),
+                values=(
+                    item.kind_name or item.kind_code or "—",
+                    ", ".join(item.project_codes) or "—",
+                ),
             )
-        count = len(self.index.items)
-        self.summary_var.set(f"{count} items · {workbook_count} workbooks · {count - workbook_count} folder fallbacks")
+            shown += 1
+        self.count_var.set(f"{shown} shown")
+        if selected_key and self.item_tree.exists(selected_key):
+            self.item_tree.selection_set(selected_key)
+            self.item_tree.focus(selected_key)
+        elif shown:
+            first = self.item_tree.get_children()[0]
+            self.item_tree.selection_set(first)
+            self.item_tree.focus(first)
+        self._sync_item_details()
+
+    def _source_selected(self, _event: tk.Event | None = None) -> None:
+        self.selected_source_id = self.source_labels.get(self.source_var.get())
+        self.search_var.set("")
+        self.render()
+        self.item_tree.focus_set()
+
+    def _selected_source(self) -> WorkItemSource | None:
+        selected_source_id = getattr(
+            self,
+            "selected_source_id",
+            self.sources[0].id if self.sources else None,
+        )
+        return next(
+            (
+                source
+                for source in self.sources
+                if source.id == selected_source_id
+            ),
+            None,
+        )
+
+    def _selected_source_items(self) -> tuple[DiscoveredWorkItem, ...]:
+        if self.selected_source_id is None:
+            return ()
+        source_id = self.selected_source_id.casefold()
+        return tuple(
+            item
+            for item in self.index.items
+            if item.source_id.casefold() == source_id
+        )
+
+    def _item_for_key(self, key: str) -> DiscoveredWorkItem | None:
+        return next(
+            (
+                item
+                for item in self.index.items
+                if work_item_metadata_key(item.source_id, item.relative_folder) == key
+            ),
+            None,
+        )
+
+    def _selected_item(self) -> tuple[str, DiscoveredWorkItem] | None:
+        selection = self.item_tree.selection()
+        if not selection:
+            return None
+        item = self._item_for_key(selection[0])
+        return (selection[0], item) if item is not None else None
+
+    def _item_selected(self, _event: tk.Event | None = None) -> None:
+        self._sync_item_details()
+
+    def _sync_item_details(self) -> None:
+        selected = self._selected_item()
+        if selected is None:
+            self.detail_title_var.set("Select a Work Item")
+            self.detail_kind_var.set("")
+            self.detail_summary_var.set(
+                "Folder, Contexts, and personal tags appear here."
+            )
+            self.edit_details_button.configure(state=tk.DISABLED)
+            self.open_folder_button.configure(state=tk.DISABLED)
+            return
+        key, item = selected
+        tags = self.metadata.get(key, WorkItemMetadata()).tags
+        reference = WorkItemReference(item.source_id, item.relative_folder)
+        contexts = tuple(
+            context.name
+            for context in self.contexts
+            if reference in context.work_item_refs
+        )
+        self.detail_title_var.set(item.display_name)
+        detail_kind = item.kind_name or item.kind_code or "Work Item"
+        if item.project_codes:
+            detail_kind += f" · {', '.join(item.project_codes)}"
+        self.detail_kind_var.set(detail_kind)
+        self.detail_summary_var.set(
+            "   ".join(
+                (
+                    f"Folder: {item.relative_folder}",
+                    f"Contexts: {', '.join(contexts) or '—'}",
+                    f"Tags: {', '.join(tags) or '—'}",
+                )
+            )
+        )
+        self.edit_details_button.configure(state=tk.NORMAL)
+        self.open_folder_button.configure(state=tk.NORMAL)
+
+    def _resize_source_path(self, event: tk.Event) -> None:
+        self.source_path_label.configure(wraplength=max(180, int(event.width) - 90))
+
+    def _resize_detail_summary(self, event: tk.Event) -> None:
+        self.detail_summary_label.configure(wraplength=max(240, int(event.width) - 24))
 
     def add_source(self) -> None:
         SourceDialog(
@@ -222,6 +564,14 @@ class WorkItemsConfigurationPanel:
         if selected:
             self.template_var.set(selected)
 
+    def configure_template(self) -> None:
+        """Choose and immediately save the creation template."""
+
+        previous = self.template_var.get()
+        self.choose_template()
+        if self.template_var.get() != previous:
+            self.save_template()
+
     def save_template(self) -> bool:
         raw_path = self.template_var.get().strip()
         template = Path(raw_path) if raw_path else None
@@ -235,7 +585,8 @@ class WorkItemsConfigurationPanel:
                 "Choose an existing .xlsx generic template.",
                 parent=self.parent,
             )
-            self.template_entry.focus_set()
+            if self.template_entry is not None:
+                self.template_entry.focus_set()
             return False
         settings = WorkItemCreationSettings(template)
         try:
@@ -250,20 +601,27 @@ class WorkItemsConfigurationPanel:
     def create_work_item(self) -> None:
         if not self.sources:
             self.feedback("Add a Work Item source before creating an item.", False)
-            self.add_source_button.focus_set()
+            self.manage_sources_button.focus_set()
             return
         if not self.template_var.get().strip():
             self.feedback(
                 "Choose a generic Excel template before creating a Work Item.",
                 False,
             )
-            self.template_entry.focus_set()
+            self.configure_template()
             return
         if not self.save_template() or self.creation_settings.template_path is None:
             return
+        selected_source = self._selected_source()
+        ordered_sources = tuple(
+            sorted(
+                self.sources,
+                key=lambda source: source.id != getattr(selected_source, "id", None),
+            )
+        )
         CreateWorkItemDialog(
             self.parent.winfo_toplevel(),
-            tuple(self.sources),
+            ordered_sources,
             self.creation_settings.template_path,
             self._created_work_item,
         )
@@ -304,11 +662,10 @@ class WorkItemsConfigurationPanel:
         return True
 
     def edit_source(self) -> None:
-        selected = self.source_tree.selection()
-        if not selected:
+        source = self._selected_source()
+        if source is None:
             self.feedback("Select a Work Item source first.", False)
             return
-        source = next(item for item in self.sources if item.id == selected[0])
         SourceDialog(
             self.parent.winfo_toplevel(),
             source,
@@ -331,6 +688,7 @@ class WorkItemsConfigurationPanel:
             messagebox.showerror("Work Items", str(exc), parent=self.parent)
             return False
         self.sources = updated
+        self.selected_source_id = source.id
         self._prune_index()
         self.feedback(f'Saved Work Item source “{source.name}”. Refreshing…', True)
         self.on_change()
@@ -339,12 +697,11 @@ class WorkItemsConfigurationPanel:
         return True
 
     def remove_source(self) -> None:
-        selected = self.source_tree.selection()
-        if not selected:
+        source = self._selected_source()
+        if source is None:
             self.feedback("Select a Work Item source first.", False)
             return
-        source_id = selected[0]
-        source = next(item for item in self.sources if item.id == source_id)
+        source_id = source.id
         if not messagebox.askyesno(
             "Remove Work Item source?",
             f'Remove “{source.name}” from Context Palette?\n\nNo folders or files will be deleted.',
@@ -358,6 +715,7 @@ class WorkItemsConfigurationPanel:
             messagebox.showerror("Work Items", str(exc), parent=self.parent)
             return
         self.sources = list(remaining)
+        self.selected_source_id = remaining[0].id if remaining else None
         self._prune_index()
         self.feedback(
             f'Removed Work Item source “{source.name}”. Its private tags were retained for reuse.',
@@ -368,22 +726,120 @@ class WorkItemsConfigurationPanel:
         self._start_refresh()
 
     def edit_tags(self) -> None:
-        selected = self.item_tree.selection()
-        if not selected:
+        selected = self._selected_item()
+        if selected is None:
             self.feedback("Select a discovered Work Item first.", False)
             return
-        key = selected[0]
-        item = next(
-            candidate
-            for candidate in self.index.items
-            if work_item_metadata_key(candidate.source_id, candidate.relative_folder) == key
-        )
+        key, item = selected
+        reference = WorkItemReference(item.source_id, item.relative_folder)
         TagDialog(
             self.parent.winfo_toplevel(),
             item,
             self.metadata.get(key, WorkItemMetadata()).tags,
-            lambda tags: self._save_tags(key, tags),
+            tuple(context.name for context in self.contexts),
+            tuple(
+                context.name
+                for context in self.contexts
+                if reference in context.work_item_refs
+            ),
+            lambda tags, contexts: self._save_details(
+                key,
+                reference,
+                tags,
+                contexts,
+            ),
         )
+
+    def open_folder(self) -> None:
+        selected = self._selected_item()
+        if selected is None:
+            self.feedback("Select a discovered Work Item first.", False)
+            return
+        _key, item = selected
+        try:
+            os.startfile(item.folder_path)  # type: ignore[attr-defined]
+        except OSError as exc:
+            messagebox.showerror(
+                "Work Item folder could not be opened",
+                str(exc),
+                parent=self.parent,
+            )
+            return
+        self.feedback(f'Opened folder for “{item.display_name}”.', True)
+
+    def _save_details(
+        self,
+        key: str,
+        reference: WorkItemReference,
+        tags: tuple[str, ...],
+        context_names: tuple[str, ...],
+    ) -> bool:
+        updated_metadata = dict(self.metadata)
+        if tags:
+            updated_metadata[key] = WorkItemMetadata(tags)
+        else:
+            updated_metadata.pop(key, None)
+        try:
+            updated_contexts = update_work_item_context_memberships(
+                self.contexts,
+                reference,
+                context_names,
+            )
+        except ContextError as exc:
+            messagebox.showerror("Work Items", str(exc), parent=self.parent)
+            return False
+
+        contexts_changed = updated_contexts != self.contexts
+        previous_context_bytes: bytes | None = None
+        context_file_existed = self.contexts_path.exists()
+        try:
+            if contexts_changed:
+                if self.contexts_path.exists():
+                    previous_context_bytes = self.contexts_path.read_bytes()
+                save_contexts(self.contexts_path, updated_contexts)
+            save_work_item_metadata(self.metadata_path, updated_metadata)
+        except (OSError, ContextError, WorkItemStorageError) as exc:
+            if contexts_changed and previous_context_bytes is not None:
+                try:
+                    atomic_replace_bytes(
+                        self.contexts_path,
+                        previous_context_bytes,
+                        preserve_previous=False,
+                    )
+                except OSError:
+                    messagebox.showerror(
+                        "Work Items need recovery",
+                        "Tags could not be saved and the previous Context file could "
+                        "not be restored. Close Configure without making more changes, "
+                        "then restore the adjacent .bak file.",
+                        parent=self.parent,
+                    )
+                    return False
+            elif contexts_changed and not context_file_existed:
+                try:
+                    self.contexts_path.unlink(missing_ok=True)
+                except OSError:
+                    messagebox.showerror(
+                        "Work Items need recovery",
+                        "Tags could not be saved and the newly created Context file "
+                        "could not be removed. Close Configure and review the file.",
+                        parent=self.parent,
+                    )
+                    return False
+            messagebox.showerror(
+                "Work Items",
+                f"Work Item changes could not be saved. Existing settings were restored.\n\n{exc}",
+                parent=self.parent,
+            )
+            return False
+        self.metadata = updated_metadata
+        self.contexts = updated_contexts
+        self.feedback("Saved Work Item tags and contexts.", True)
+        self.on_change()
+        self.render()
+        if contexts_changed and self.refresh_configuration is not None:
+            self.refresh_configuration()
+        return True
 
     def _save_tags(self, key: str, tags: tuple[str, ...]) -> bool:
         updated = dict(self.metadata)
@@ -545,10 +1001,18 @@ class SourceDialog:
 
 
 class TagDialog:
-    def __init__(self, parent: tk.Misc, item: DiscoveredWorkItem, tags: tuple[str, ...], on_save: Callable[[tuple[str, ...]], bool]) -> None:
+    def __init__(
+        self,
+        parent: tk.Misc,
+        item: DiscoveredWorkItem,
+        tags: tuple[str, ...],
+        context_names: tuple[str, ...],
+        selected_contexts: tuple[str, ...],
+        on_save: Callable[[tuple[str, ...], tuple[str, ...]], bool],
+    ) -> None:
         self.on_save = on_save
         self.window = tk.Toplevel(parent)
-        self.window.title("Edit Work Item tags")
+        self.window.title("Work Item tags and contexts")
         self.window.transient(parent)
         self.window.grab_set()
         outer = ttk.Frame(self.window, padding=14)
@@ -559,10 +1023,25 @@ class TagDialog:
         self.tags = tk.StringVar(value=", ".join(tags))
         entry = ttk.Entry(outer, textvariable=self.tags, width=60)
         entry.pack(fill=tk.X, pady=(3, 10))
-        ttk.Label(outer, text="Tags stay in Context Palette; the Work Item folder is not modified.", style="Muted.TLabel").pack(anchor=tk.W, pady=(0, 8))
+        self.contexts = tk.StringVar(value=", ".join(selected_contexts))
+        self.context_field = ContextMembershipField(
+            outer,
+            self.contexts,
+            context_names,
+            label="Contexts",
+        )
+        ttk.Label(
+            outer,
+            text=(
+                "Tags and Context membership stay in Context Palette; the Work "
+                "Item folder is not modified. Create new Contexts in Configure first."
+            ),
+            style="Muted.TLabel",
+            wraplength=520,
+        ).pack(anchor=tk.W, pady=(8, 8))
         controls = ttk.Frame(outer)
         controls.pack(fill=tk.X)
-        ttk.Button(controls, text="Save tags", command=self._save, style="Accent.TButton").pack(side=tk.RIGHT)
+        ttk.Button(controls, text="Save changes", command=self._save, style="Accent.TButton").pack(side=tk.RIGHT)
         ttk.Button(controls, text="Cancel", command=self.window.destroy).pack(side=tk.RIGHT, padx=(0, 6))
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
         self.window.bind("<Return>", lambda _event: self._save())
@@ -571,7 +1050,14 @@ class TagDialog:
 
     def _save(self) -> None:
         tags = tuple(dict.fromkeys(" ".join(value.strip().split()).casefold() for value in self.tags.get().split(",") if value.strip()))
-        if self.on_save(tags):
+        contexts = tuple(
+            dict.fromkeys(
+                value.strip()
+                for value in self.contexts.get().split(",")
+                if value.strip()
+            )
+        )
+        if self.on_save(tags, contexts):
             self.window.destroy()
 
 

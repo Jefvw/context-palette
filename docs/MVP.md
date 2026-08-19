@@ -20,6 +20,7 @@ and retrieve it quickly in a chosen focus context.
 | Explicit action execution | Implemented | Fifteen allow-listed types with standard icons and current-state Input → Effect previews, including two copy-and-open URL builders, user-owned Windows targets, and preview-first text-file transformations |
 | Protected credential paste | Implemented with limitations | Exact standard Windows or generic credential target; confirmed, hotkey-originated paste only |
 | Input / Output transformations | Implemented | Selection or full field; result copied; includes filtering, delimiters, explicit comma-list quote variants, naming styles, JSON, URL/SQL encoding, file URIs, and path slashes |
+| Local image-to-text extraction | Implemented with optional component | Exact selected image path, clipboard bitmap, or reviewed file choice; background RapidOCR; local-only; Replace/Append/Cancel; clipboard image preserved; optional runtime adds about 270 MB and currently requires separate local setup |
 | Text-file transformations | Implemented | One configured existing local text source; result is reviewed in Input / Output; guarded explicit replace or save-as preserves encoding and refuses stale overwrites |
 | Cheat sheets and promotion | Implemented | Structured local JSON sheets |
 | Attended AI assistance | Partial | Reviewable stored prompt templates and manual clipboard handoff; `copy_text` and `open_url` proposals only |
@@ -31,8 +32,8 @@ and retrieve it quickly in a chosen focus context.
 | Bulk action harvesting | Implemented | Attended local extraction of HTTP/HTTPS candidates from selected `.md`, `.txt`, `.docx`, and `.xlsx` files; review and atomic permanent creation |
 | External automation | Partial by design | Show/context/search only; no action execution API |
 | Clipboard transactions | Partial | Protected credential paste atomically captures and conditionally restores prior plain text; non-text-only content stops safely; ordinary saved text and rich/image formats are not preserved |
-| Safe action sequences | Implemented with limits | 2â€“12 references to reviewed launch/open Actions, bounded waits, complete confirmation, Stop remaining, and dependency-safe lifecycle; no paste/keys, loops, conditions, inline commands, completion checks, retry, or rollback |
-| Rich clipboard/image actions | Deferred | Plain-text workspace only |
+| Safe action sequences | Implemented with limits | 2–12 references to reviewed launch/open Actions, bounded waits, complete confirmation, Stop remaining, and dependency-safe lifecycle; no paste/keys, loops, conditions, inline commands, completion checks, retry, or rollback |
+| Rich clipboard/image actions | Partial | Image content is not persisted as an Action, but a local clipboard or file image can produce editable Input / Output text; rich HTML, reusable image Actions, and typed image pipelines remain deferred |
 | Automatic context inference | Deferred | The user chooses focus explicitly |
 
 ## Acceptance criteria
@@ -41,9 +42,11 @@ The MVP baseline is satisfied when:
 
 1. A fresh clone can be set up on supported Windows with user-level permissions.
 2. The resident palette opens, searches, and runs constrained actions predictably.
-3. Actions, contexts, Quick-action groups, ordered items, defaults, and menu
-   assignments can be configured without editing technical IDs.
-4. Captured material can enter the Inbox and become an Active action after confirmation.
+3. Actions, contexts, Quick-action menus, ordered targets, and menu assignments
+   can be configured without editing technical IDs.
+4. Captured material can enter the Inbox, become an Active action after
+   confirmation, and be deleted independently when its captured copy is no
+   longer needed.
 5. Active actions of every supported type can be edited and saved permanently.
 6. Built-in starter data and My configuration data remain separated and recoverable from interrupted writes.
 7. Invalid configuration and action inputs fail with actionable messages.

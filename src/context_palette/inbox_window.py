@@ -17,7 +17,13 @@ from .ai_guidance_window import AIGuidanceWindow
 from .context_membership import append_actions_with_context_memberships
 from .context_membership_field import ContextMembershipField, TagSelectionField
 from .contexts import ContextError
-from .inbox import InboxError, InboxItem, load_inbox_items, update_inbox_item_state
+from .inbox import (
+    InboxError,
+    InboxItem,
+    delete_inbox_item,
+    load_inbox_items,
+    update_inbox_item_state,
+)
 from .style import COLORS
 from .window_geometry import configure_standard_window
 
@@ -75,13 +81,33 @@ class InboxWindow:
             style="Accent.TButton",
         )
         self.convert_button.pack(side=tk.LEFT)
-        self.ai_button = ttk.Button(controls, text="Ask AI", command=self._ask_ai_for_selected)
-        self.ai_button.pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(
+        self.other_creation_button = ttk.Menubutton(
             controls,
-            text="Harvest documents…",
+            text="Other ways to create",
+        )
+        self.other_creation_menu = tk.Menu(
+            self.other_creation_button,
+            tearoff=False,
+        )
+        self.other_creation_menu.add_command(
+            label="Ask AI…",
+            command=self._ask_ai_for_selected,
+        )
+        self._ask_ai_menu_index = int(self.other_creation_menu.index(tk.END))
+        self.other_creation_menu.add_command(
+            label="Harvest documents…",
             command=self.on_harvest or (lambda: None),
-        ).pack(side=tk.LEFT, padx=(6, 0))
+        )
+        self.other_creation_button.configure(menu=self.other_creation_menu)
+        self.other_creation_button.pack(side=tk.LEFT, padx=(6, 0))
+        self.delete_button = ttk.Button(
+            controls,
+            text="Delete capture…",
+            command=self._delete_selected,
+            state=tk.DISABLED,
+            style="Danger.TButton",
+        )
+        self.delete_button.pack(side=tk.LEFT, padx=(6, 0))
         ttk.Button(
             controls,
             text="Close",
@@ -90,15 +116,16 @@ class InboxWindow:
         ).pack(side=tk.RIGHT)
 
         ttk.Label(outer, text="Capture Inbox", style="Title.TLabel").pack(anchor=tk.W)
+        self.summary_var = tk.StringVar()
         ttk.Label(
             outer,
-            text=f"{len(items)} captured item{'s' if len(items) != 1 else ''} · turn useful material into an action",
+            textvariable=self.summary_var,
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(2, 8))
 
         self.listbox = tk.Listbox(outer, activestyle="dotbox", height=8)
         self.listbox.pack(fill=tk.BOTH, expand=True, pady=(4, 8))
-        self.listbox.bind("<<ListboxSelect>>", lambda _event: self._update_preview())
+        self.listbox.bind("<<ListboxSelect>>", lambda _event: self._selection_changed())
 
         ttk.Label(outer, text="Preview").pack(anchor=tk.W)
         self.preview = tk.Text(outer, height=8, wrap=tk.WORD)
@@ -109,13 +136,21 @@ class InboxWindow:
 
     def _load_items(self) -> None:
         self.listbox.delete(0, tk.END)
+        self.summary_var.set(
+            f"{len(self.items)} captured item"
+            f"{'s' if len(self.items) != 1 else ''} · turn useful material into an action"
+        )
         for item in self.items:
             self.listbox.insert(tk.END, f"{item.title} ({item.created_at})")
         if self.items:
             self.listbox.selection_set(0)
             self.listbox.activate(0)
             self.convert_button.configure(state=tk.NORMAL)
-            self.ai_button.configure(state=tk.NORMAL)
+            self.delete_button.configure(state=tk.NORMAL)
+            self.other_creation_menu.entryconfigure(
+                self._ask_ai_menu_index,
+                state=tk.NORMAL,
+            )
         else:
             self.listbox.insert(
                 tk.END,
@@ -123,7 +158,22 @@ class InboxWindow:
             )
             self.listbox.itemconfigure(0, foreground=COLORS["muted_text"])
             self.convert_button.configure(state=tk.DISABLED)
-            self.ai_button.configure(state=tk.DISABLED)
+            self.delete_button.configure(state=tk.DISABLED)
+            self.other_creation_menu.entryconfigure(
+                self._ask_ai_menu_index,
+                state=tk.DISABLED,
+            )
+        self._update_preview()
+
+    def _selection_changed(self) -> None:
+        selected = self._selected_item() is not None
+        state = tk.NORMAL if selected else tk.DISABLED
+        self.convert_button.configure(state=state)
+        self.delete_button.configure(state=state)
+        self.other_creation_menu.entryconfigure(
+            self._ask_ai_menu_index,
+            state=state,
+        )
         self._update_preview()
 
     def _update_preview(self) -> None:
@@ -184,6 +234,30 @@ class InboxWindow:
             contexts,
             self._save_ai_actions,
         )
+
+    def _delete_selected(self) -> None:
+        item = self._selected_item()
+        if item is None:
+            return
+        if not messagebox.askyesno(
+            "Delete Inbox capture?",
+            (
+                f'Delete “{item.title}” permanently?\n\n'
+                "This removes only the captured Inbox copy. Any Action already "
+                "created from it remains available."
+            ),
+            icon=messagebox.WARNING,
+            parent=self.window,
+        ):
+            return
+        try:
+            delete_inbox_item(self.inbox_path, item.id)
+            self.items = load_inbox_items(self.inbox_path)
+        except (InboxError, OSError) as exc:
+            messagebox.showerror("Context Palette", str(exc), parent=self.window)
+            return
+        self._load_items()
+        self.on_change()
 
     def _save_ai_actions(self, item: InboxItem, actions: list[Action]) -> None:
         try:

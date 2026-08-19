@@ -5,7 +5,7 @@ import gc
 import sys
 import tempfile
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 import weakref
 
 
@@ -16,7 +16,10 @@ from context_palette.work_item_configuration import (
     WorkItemsConfigurationPanel,
     _stable_source_id,
 )
-from context_palette.work_item_refresh import WorkItemIndex
+from context_palette.configuration_data import save_contexts
+from context_palette.contexts import ContextDefinition, load_contexts
+from context_palette.palette_items import PaletteItemReference
+from context_palette.work_item_refresh import SourceRefreshResult, WorkItemIndex
 from context_palette.work_item_storage import (
     WorkItemCreationSettings,
     WorkItemMetadata,
@@ -25,15 +28,129 @@ from context_palette.work_item_storage import (
     save_work_item_metadata,
     save_work_item_sources,
 )
-from context_palette.work_items import WorkItemSource
+from context_palette.work_items import (
+    DiscoveredWorkItem,
+    WorkItemReference,
+    WorkItemSource,
+)
 
 
 class WorkItemConfigurationTests(unittest.TestCase):
+    def test_work_item_editor_saves_tags_and_replaces_context_membership(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metadata_path = root / "metadata.json"
+            contexts_path = root / "contexts.json"
+            reference = WorkItemReference("cap40", "ISS-CAP40-example")
+            other = WorkItemReference("cap40", "ISS-CAP40-other")
+            contexts = [
+                ContextDefinition(
+                    "Old",
+                    work_item_refs=(reference, other),
+                    preferred_item_refs=(
+                        PaletteItemReference(work_item_ref=reference),
+                    ),
+                ),
+                ContextDefinition("New"),
+            ]
+            save_contexts(contexts_path, contexts)
+            panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)
+            panel.parent = None
+            panel.metadata = {}
+            panel.metadata_path = metadata_path
+            panel.contexts = contexts
+            panel.contexts_path = contexts_path
+            panel.on_change = Mock()
+            panel.feedback = Mock()
+            panel.render = Mock()
+            panel.refresh_configuration = Mock()
+
+            saved = panel._save_details(
+                "cap40/ISS-CAP40-example",
+                reference,
+                ("urgent",),
+                ("New",),
+            )
+
+            self.assertTrue(saved)
+            self.assertEqual(
+                load_work_item_metadata(metadata_path)["cap40/ISS-CAP40-example"],
+                WorkItemMetadata(("urgent",)),
+            )
+            loaded = {item.name: item for item in load_contexts(contexts_path)}
+            self.assertEqual(loaded["Old"].work_item_refs, (other,))
+            self.assertEqual(loaded["Old"].preferred_item_refs, ())
+            self.assertEqual(loaded["New"].work_item_refs, (reference,))
+            panel.on_change.assert_called_once_with()
+            panel.refresh_configuration.assert_called_once_with()
+
+    def test_work_item_editor_rejects_unknown_context_without_writes(self) -> None:
+        panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)
+        panel.parent = None
+        panel.metadata = {}
+        panel.metadata_path = Path("metadata.json")
+        panel.contexts = [ContextDefinition("Known")]
+        panel.contexts_path = Path("contexts.json")
+        panel.on_change = Mock()
+        panel.feedback = Mock()
+
+        with patch(
+            "context_palette.work_item_configuration.messagebox.showerror"
+        ) as error:
+            saved = panel._save_details(
+                "cap40/ISS-example",
+                WorkItemReference("cap40", "ISS-example"),
+                (),
+                ("Missing",),
+            )
+
+        self.assertFalse(saved)
+        error.assert_called_once()
+        panel.on_change.assert_not_called()
+
+    def test_work_item_editor_rolls_back_contexts_when_tag_write_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            contexts_path = root / "contexts.json"
+            reference = WorkItemReference("cap40", "ISS-example")
+            contexts = [ContextDefinition("Known")]
+            save_contexts(contexts_path, contexts)
+            original = contexts_path.read_bytes()
+            panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)
+            panel.parent = None
+            panel.metadata = {}
+            panel.metadata_path = root / "metadata.json"
+            panel.contexts = contexts
+            panel.contexts_path = contexts_path
+            panel.on_change = Mock()
+            panel.feedback = Mock()
+
+            with (
+                patch(
+                    "context_palette.work_item_configuration.save_work_item_metadata",
+                    side_effect=PermissionError("locked"),
+                ),
+                patch(
+                    "context_palette.work_item_configuration.messagebox.showerror"
+                ),
+            ):
+                saved = panel._save_details(
+                    "cap40/ISS-example",
+                    reference,
+                    ("urgent",),
+                    ("Known",),
+                )
+
+            self.assertFalse(saved)
+            self.assertEqual(contexts_path.read_bytes(), original)
+            self.assertEqual(panel.contexts, contexts)
+            panel.on_change.assert_not_called()
+
     def test_create_work_item_focuses_source_setup_when_none_exists(self) -> None:
         panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)
         panel.sources = []
         panel.feedback = Mock()
-        panel.add_source_button = Mock()
+        panel.manage_sources_button = Mock()
 
         panel.create_work_item()
 
@@ -41,7 +158,43 @@ class WorkItemConfigurationTests(unittest.TestCase):
             "Add a Work Item source before creating an item.",
             False,
         )
-        panel.add_source_button.focus_set.assert_called_once_with()
+        panel.manage_sources_button.focus_set.assert_called_once_with()
+
+    def test_source_management_stays_available_without_a_source(self) -> None:
+        panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)
+        panel.sources = []
+        panel.selected_source_id = None
+        panel.source_combo = Mock()
+        panel.source_var = Mock()
+        panel.manage_sources_button = Mock()
+        panel.manage_sources_menu = Mock()
+        panel._add_source_menu_index = 0
+        panel._edit_source_menu_index = 1
+        panel._remove_source_menu_index = 2
+        panel._creation_template_menu_index = 4
+        panel.refresh_button = Mock()
+        panel.source_path_var = Mock()
+        panel.source_status_var = Mock()
+        panel.source_status_label = Mock()
+
+        panel._render_source_selector()
+
+        panel.manage_sources_button.configure.assert_called_once_with(
+            state="normal"
+        )
+        self.assertEqual(
+            panel.manage_sources_menu.entryconfigure.call_args_list,
+            [
+                call(0, state="normal"),
+                call(1, state="disabled"),
+                call(2, state="disabled"),
+                call(4, state="normal"),
+            ],
+        )
+        panel.refresh_button.configure.assert_called_once_with(state="disabled")
+        panel.source_path_var.set.assert_called_once_with(
+            "No Work Item source configured."
+        )
 
     def test_create_work_item_focuses_missing_template_setup(self) -> None:
         panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)
@@ -49,7 +202,7 @@ class WorkItemConfigurationTests(unittest.TestCase):
         panel.template_var = Mock()
         panel.template_var.get.return_value = " "
         panel.feedback = Mock()
-        panel.template_entry = Mock()
+        panel.configure_template = Mock()
         panel.save_template = Mock()
 
         panel.create_work_item()
@@ -58,11 +211,50 @@ class WorkItemConfigurationTests(unittest.TestCase):
             "Choose a generic Excel template before creating a Work Item.",
             False,
         )
-        panel.template_entry.focus_set.assert_called_once_with()
+        panel.configure_template.assert_called_once_with()
         panel.save_template.assert_not_called()
 
     def test_stable_source_id_is_generated_from_friendly_name(self) -> None:
         self.assertEqual(_stable_source_id(" CAP40 Product & Support "), "cap40-product-support")
+
+    def test_selected_source_items_excludes_other_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_a = WorkItemSource("alpha", "Alpha", root / "alpha")
+            source_b = WorkItemSource("beta", "Beta", root / "beta")
+            item_a = DiscoveredWorkItem(
+                "alpha", "Alpha", "ISS-ALPHA-one", root / "alpha" / "ISS-ALPHA-one",
+                "Alpha one", "ISS", "Issue", "ALPHA", "one", (), None,
+            )
+            item_b = DiscoveredWorkItem(
+                "beta", "Beta", "ISS-BETA-two", root / "beta" / "ISS-BETA-two",
+                "Beta two", "ISS", "Issue", "BETA", "two", (), None,
+            )
+            panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)
+            panel.selected_source_id = "beta"
+            panel.index = WorkItemIndex(
+                (
+                    SourceRefreshResult(source_a, (item_a,)),
+                    SourceRefreshResult(source_b, (item_b,)),
+                )
+            )
+
+            self.assertEqual(panel._selected_source_items(), (item_b,))
+
+    def test_open_folder_uses_selected_work_item_folder(self) -> None:
+        item = Mock()
+        item.folder_path = Path(r"C:\Work\Selected")
+        item.display_name = "Selected"
+        panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)
+        panel.parent = None
+        panel._selected_item = Mock(return_value=("source/selected", item))
+        panel.feedback = Mock()
+
+        with patch("context_palette.work_item_configuration.os.startfile") as startfile:
+            panel.open_folder()
+
+        startfile.assert_called_once_with(item.folder_path)
+        panel.feedback.assert_called_once_with('Opened folder for “Selected”.', True)
 
     def test_created_work_item_copies_template_saves_tags_and_requests_selection(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -98,11 +290,11 @@ class WorkItemConfigurationTests(unittest.TestCase):
 
     def test_f6_switches_between_work_item_lists(self) -> None:
         panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)
-        panel.source_tree = Mock()
+        panel.source_combo = Mock()
         panel.item_tree = Mock()
 
         self.assertEqual(
-            panel._focus_other_list(Mock(widget=panel.source_tree)),
+            panel._focus_other_list(Mock(widget=panel.source_combo)),
             "break",
         )
         panel.item_tree.focus_set.assert_called_once_with()
@@ -111,7 +303,7 @@ class WorkItemConfigurationTests(unittest.TestCase):
             panel._focus_other_list(Mock(widget=panel.item_tree)),
             "break",
         )
-        panel.source_tree.focus_set.assert_called_once_with()
+        panel.source_combo.focus_set.assert_called_once_with()
 
     def test_work_item_list_shortcut_helpers_run_one_command(self) -> None:
         panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)
@@ -222,8 +414,7 @@ class WorkItemConfigurationTests(unittest.TestCase):
             panel.index = WorkItemIndex()
             panel.sources_path = sources_path
             panel.metadata_path = metadata_path
-            panel.source_tree = Mock()
-            panel.source_tree.selection.return_value = (source.id,)
+            panel.selected_source_id = source.id
             panel.on_change = Mock()
             panel.feedback = Mock()
             panel.render = Mock()

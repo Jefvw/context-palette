@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from tkinter import font as tkfont
 from tkinter import ttk
 
 
@@ -137,6 +138,76 @@ def configure_theme(root: tk.Misc, style: ttk.Style | None = None) -> ttk.Style:
         "Accent.TButton",
         background=[("active", COLORS["accent_hover"]), ("pressed", COLORS["focus"])],
         foreground=[("disabled", COLORS["muted_text"]), ("!disabled", COLORS["white"])],
+        bordercolor=[("focus", COLORS["focus"])],
+    )
+    style.configure(
+        "ConfigureNav.TButton",
+        anchor=tk.W,
+        background=COLORS["background"],
+        foreground=COLORS["text"],
+        borderwidth=0,
+        relief=tk.FLAT,
+        padding=(10, 6),
+    )
+    style.map(
+        "ConfigureNav.TButton",
+        background=[("active", COLORS["row_aqua"])],
+        foreground=[("disabled", COLORS["muted_text"])],
+        bordercolor=[("focus", COLORS["focus"])],
+    )
+    style.configure(
+        "ConfigureNavSelected.TButton",
+        anchor=tk.W,
+        background=COLORS["accent"],
+        foreground=COLORS["white"],
+        borderwidth=0,
+        font=("Segoe UI Semibold", 10),
+        padding=(10, 6),
+    )
+    style.map(
+        "ConfigureNavSelected.TButton",
+        background=[("active", COLORS["accent_hover"])],
+        foreground=[("!disabled", COLORS["white"])],
+        bordercolor=[("focus", COLORS["focus"])],
+    )
+    style.configure(
+        "ConfigureNavGroup.TLabel",
+        foreground=COLORS["muted_text"],
+        font=("Segoe UI Semibold", 9),
+        padding=(4, 0, 0, 4),
+    )
+    style.configure(
+        "Card.TFrame",
+        background=COLORS["surface"],
+        bordercolor=COLORS["border"],
+        relief=tk.SOLID,
+        borderwidth=1,
+    )
+    style.configure(
+        "Card.TLabel",
+        background=COLORS["surface"],
+        foreground=COLORS["text"],
+    )
+    style.configure(
+        "CardMuted.TLabel",
+        background=COLORS["surface"],
+        foreground=COLORS["muted_text"],
+        font=CAPTION_FONT,
+    )
+    style.configure(
+        "Danger.TButton",
+        background=COLORS["surface"],
+        foreground=COLORS["error"],
+        bordercolor=COLORS["error"],
+        padding=(8, 5),
+    )
+    style.map(
+        "Danger.TButton",
+        background=[("active", "#fde8e7")],
+        foreground=[
+            ("disabled", COLORS["muted_text"]),
+            ("!disabled", COLORS["error"]),
+        ],
         bordercolor=[("focus", COLORS["focus"])],
     )
     style.configure(
@@ -277,12 +348,19 @@ def configure_theme(root: tk.Misc, style: ttk.Style | None = None) -> ttk.Style:
         background=[("selected", COLORS["surface"]), ("active", COLORS["row_light"])],
         foreground=[("selected", COLORS["text"])],
     )
+    try:
+        body_font = tkfont.Font(root=root, font=DEFAULT_FONT)
+        tree_row_height = max(25, body_font.metrics("linespace") + 8)
+    except (AttributeError, tk.TclError):
+        # Lightweight style tests and embedders may provide a theme host without
+        # a complete Tcl font interpreter. Real Tk roots take the measured path.
+        tree_row_height = 25
     style.configure(
         "Treeview",
         background=COLORS["surface"],
         fieldbackground=COLORS["surface"],
         foreground=COLORS["text"],
-        rowheight=25,
+        rowheight=tree_row_height,
         bordercolor=COLORS["border"],
     )
     style.layout(

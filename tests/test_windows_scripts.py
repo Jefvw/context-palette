@@ -452,6 +452,51 @@ class WindowsScriptTests(unittest.TestCase):
         self.assertIn('cd /d "%~dp0"', script)
         self.assertLess(script.index(setup), script.index(check))
 
+    def test_optional_ocr_setup_stays_local_and_uses_pinned_requirements(self) -> None:
+        script = (ROOT / "setup-ocr-context-palette.bat").read_text(
+            encoding="utf-8"
+        )
+        requirements = (ROOT / "requirements-ocr.txt").read_text(encoding="utf-8")
+
+        self.assertIn("rapidocr==3.9.2", requirements)
+        self.assertIn("onnxruntime==1.27.0", requirements)
+        self.assertIn("call setup-context-palette.bat --skip-tests", script)
+        self.assertIn('".venv\\Scripts\\python.exe" -m pip install', script)
+        self.assertIn("-r requirements-ocr.txt", script)
+        self.assertIn(".context-palette-ocr-requirements.sha256", script)
+        self.assertIn("OCR dependencies are unchanged", script)
+        self.assertIn("does not require administrator rights", script)
+        self.assertNotIn("runas", script.casefold())
+
+    def test_setup_supports_a_strict_offline_package_folder(self) -> None:
+        base = (ROOT / "setup-context-palette.bat").read_text(encoding="utf-8")
+        ocr = (ROOT / "setup-ocr-context-palette.bat").read_text(
+            encoding="utf-8"
+        )
+
+        for script in (base, ocr):
+            self.assertIn("CONTEXT_PALETTE_WHEELHOUSE", script)
+            self.assertIn("--no-index", script)
+            self.assertIn("--find-links", script)
+        self.assertIn("offline package folder does not exist", base)
+
+    def test_offline_helpers_prepare_and_consume_all_pinned_dependencies(self) -> None:
+        prepare = (ROOT / "prepare-offline-context-palette.bat").read_text(
+            encoding="utf-8"
+        )
+        setup = (ROOT / "setup-offline-context-palette.bat").read_text(
+            encoding="utf-8"
+        )
+        ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+
+        self.assertIn("call setup-ocr-context-palette.bat", prepare)
+        self.assertIn("-m pip wheel", prepare)
+        self.assertIn("-r requirements.txt -r requirements-ocr.txt", prepare)
+        self.assertIn('set "CONTEXT_PALETTE_WHEELHOUSE=', setup)
+        self.assertIn("call setup-ocr-context-palette.bat", setup)
+        self.assertIn("call check-context-palette.bat", setup)
+        self.assertIn("/offline-packages/", ignore)
+
     def test_ci_runs_the_same_three_validation_phases_as_local_check(self) -> None:
         local = (ROOT / "check-context-palette.bat").read_text(encoding="utf-8")
         workflow = (ROOT / ".github" / "workflows" / "tests.yml").read_text(
@@ -534,6 +579,17 @@ class WindowsScriptTests(unittest.TestCase):
         )
         self.assertIn('".venv\\Scripts\\python.exe" %*', script)
         self.assertIn("exit /b %errorlevel%", script)
+
+    def test_ui_mockup_launcher_is_inert_and_uses_pythonw(self) -> None:
+        script = (ROOT / "run-ui-mockups.bat").read_text(encoding="utf-8")
+
+        self.assertIn('set "PYTHONPATH=%CD%\\src"', script)
+        self.assertIn("import sys, tkinter, context_palette.ui_mockups", script)
+        self.assertIn(
+            'start "" ".\\.venv\\Scripts\\pythonw.exe" -m context_palette.ui_mockups',
+            script,
+        )
+        self.assertNotIn("context_palette.main", script)
 
 
 if __name__ == "__main__":

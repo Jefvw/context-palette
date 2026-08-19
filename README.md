@@ -61,6 +61,20 @@ in-app documentation viewer uses pinned Markdown and HTML-rendering libraries;
 `setup-context-palette.bat` installs the declared dependencies into the local
 `.venv`.
 
+Image-to-text extraction is an optional local component because its OCR models
+and native runtime add about 270 MB. Prepare it inside the same user-writable
+folder with no administrator rights:
+
+```powershell
+.\setup-ocr-context-palette.bat
+```
+
+After setup, restart Context Palette. Recognition is local and does not need
+network access; the setup download itself does. A future prebuilt portable
+bundle must include Python and the OCR pack for PCs where package downloads are
+blocked. See [OCR setup, offline handoff, and use](docs/OCR_SETUP.md) for
+step-by-step instructions for normal, package-blocked, and developer PCs.
+
 ## Quick start
 
 From the repository root:
@@ -73,6 +87,10 @@ From the repository root:
 `develop-context-palette.bat` is the single development entry point. It creates
 or repairs this computer's `.venv`, installs declared dependencies, initializes
 missing personal data from safe examples, and runs the complete project check.
+
+To review proposed real-Tk layouts without reading configuration or running
+anything, open `run-ui-mockups.bat`. The inert gallery and its Windows scaling
+checklist are documented in [Real-Tk UI mockups](docs/UI_MOCKUPS.md).
 
 ## Command-line backup
 
@@ -120,6 +138,8 @@ repair. Existing environments are adopted by writing an ignored
 repository-location marker on their first successful setup.
 See
 [Multi-PC development](docs/MULTI_PC_DEVELOPMENT.md) for the complete workflow.
+For an OCR-enabled target without package-download access, use the prepared
+local package workflow in [OCR setup](docs/OCR_SETUP.md).
 
 Setup finds Python through the `py` launcher, `PATH`, and the standard
 python.org per-user and system installation folders. For a custom installation,
@@ -159,8 +179,8 @@ changes. The starter Quick actions occupy one **Standard** group; additional
 editable groups can remain personal while still assigning both Built-in and
 My configuration actions. Standard uses one compact launcher with nested
 subject menus up to three levels deep, with actions allowed at the group or any
-level. Personal groups can choose the same presentation or retain direct
-one-click rows.
+level. Every Quick-action control is a menu: left-click browses it, right-click
+manages it, and only choosing an Action inside the menu runs that Action.
 
 Close, `Esc`, and **Hide** keep the process resident. **Quit** stops it.
 
@@ -205,8 +225,17 @@ Personal and runtime files are ignored by Git:
 | `data/palette.json` | Focus, pins, and per-machine slot choices |
 | `data/context-palette.log*` | Bounded local diagnostics |
 
+Captured Inbox material can be removed without editing JSON: open **Inbox**,
+select the capture, and choose **Delete capture…**. This deletes only the local
+captured copy; an Action already created from it remains. A Work Item workbook's
+Excel **Inbox** sheet is separate and is still edited in Excel.
+
 Choose **Configure**, or press `Ctrl+,`, to open the complete guided
-configuration workspace. The
+configuration workspace. Its single left navigator separates **Set up** from
+**Support**. Actions keeps optional pins collapsed until needed; Work Items
+keeps Refresh visible and consolidates source setup under **Manage sources…**.
+Contexts and Quick actions use the same find/table/selection-card structure;
+Backup & restore and Diagnostics use explicit support-task labels. The
 JSON guides are intended for advanced editing, review, and automation:
 
 - [Action types](docs/ACTION_TYPES.md)

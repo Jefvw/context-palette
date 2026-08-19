@@ -155,10 +155,12 @@ def command_group_all_action_ids(group: CommandGroup) -> tuple[str, ...]:
 
 
 def command_group_launcher_count(group: CommandGroup) -> int:
-    """Return the number of visible launchers contributed by a group."""
-    if group.presentation == GROUP_PRESENTATION_NESTED_MENU:
-        return 1
-    return len(group.items)
+    """Return the one visible menu launcher contributed by a group.
+
+    ``rows`` remains a supported persisted value for older configuration and
+    backups, but presentation no longer changes the launcher's behavior.
+    """
+    return 1
 
 
 def load_command_groups(path: Path) -> list[CommandGroup]:

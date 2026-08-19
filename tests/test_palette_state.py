@@ -103,14 +103,14 @@ class PaletteStateTests(unittest.TestCase):
             ):
                 load_palette_state(path)
 
-    def test_context_slots_are_filled_with_general_fallbacks(self):
+    def test_context_slots_do_not_borrow_unrelated_global_actions(self):
         slots = action_slots(self.actions, PaletteState((), "Mail", {}))
 
         self.assertEqual(slots[6].id, "a")
         self.assertEqual(slots[7].id, "b")
-        self.assertEqual(slots[8].id, "c")
+        self.assertNotIn(8, slots)
 
-    def test_preferred_slots_fill_with_context_members_before_global_actions(self):
+    def test_preferred_slots_fill_only_with_context_members(self):
         actions = [
             Action("preferred", "Preferred", "Mail", "copy_text", "a"),
             Action("unrelated", "Unrelated", "Database", "copy_text", "b"),
@@ -130,8 +130,17 @@ class PaletteStateTests(unittest.TestCase):
         )
 
         self.assertEqual(
+            [slots[number].id for number in (6, 7)],
+            ["preferred", "member"],
+        )
+        self.assertNotIn(8, slots)
+
+    def test_general_focus_can_still_fill_slots_from_global_actions(self):
+        slots = action_slots(self.actions, PaletteState((), "General", {}))
+
+        self.assertEqual(
             [slots[number].id for number in (6, 7, 8)],
-            ["preferred", "member", "unrelated"],
+            ["a", "b", "c"],
         )
 
     def test_resolved_mixed_case_slot_key_is_used_by_action_slots(self):

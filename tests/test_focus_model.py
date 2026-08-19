@@ -104,6 +104,51 @@ class FocusModelTests(unittest.TestCase):
             },
         )
 
+    def test_empty_explicit_context_drops_stale_saved_slot_references(self):
+        greeting = Action(
+            "greeting",
+            "Professional greeting",
+            "General",
+            "copy_text",
+            "Hello",
+        )
+        stale_work_item = WorkItemReference("work", "ISS-old")
+
+        resolved = resolve_focus_state(
+            [greeting],
+            [ContextDefinition("Empty", action_ids=())],
+            PaletteState(
+                focus_context="Empty",
+                context_slots={"Empty": ("greeting",)},
+                context_item_slots={
+                    "Empty": (
+                        PaletteItemReference(action_id="greeting"),
+                        PaletteItemReference(work_item_ref=stale_work_item),
+                    )
+                },
+            ),
+        )
+
+        self.assertNotIn("Empty", resolved.palette_state.context_slots)
+        self.assertNotIn("Empty", resolved.palette_state.context_item_slots)
+
+    def test_saved_slots_preserve_only_current_explicit_context_members(self):
+        actions = [
+            Action("kept", "Kept", "General", "copy_text", "1"),
+            Action("stale", "Stale", "General", "copy_text", "2"),
+        ]
+
+        resolved = resolve_focus_state(
+            actions,
+            [ContextDefinition("Work", action_ids=("kept",))],
+            PaletteState(
+                focus_context="Work",
+                context_slots={"Work": ("stale", "kept")},
+            ),
+        )
+
+        self.assertEqual(resolved.palette_state.context_slots["Work"], ("kept",))
+
     def test_context_actions_use_membership_and_canonical_order(self):
         actions = [
             Action("one", "First", "General", "copy_text", "1", technology="Text", task="Copy"),

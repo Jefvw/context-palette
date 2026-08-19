@@ -12,6 +12,7 @@ from context_palette.inbox import (
     InboxError,
     append_inbox_item,
     create_clipboard_item,
+    delete_inbox_item,
     load_inbox_items,
     update_inbox_item_state,
 )
@@ -57,6 +58,32 @@ class InboxTests(unittest.TestCase):
             loaded = load_inbox_items(path)
 
         self.assertEqual(loaded[0].state, "Converted")
+
+    def test_delete_inbox_item_removes_only_the_selected_capture(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "inbox.json"
+            keep = create_clipboard_item(title="Keep", content="One")
+            remove = create_clipboard_item(title="Remove", content="Two")
+            append_inbox_item(path, keep)
+            append_inbox_item(path, remove)
+
+            delete_inbox_item(path, remove.id)
+
+            loaded = load_inbox_items(path)
+
+        self.assertEqual(loaded, [keep])
+
+    def test_delete_unknown_inbox_item_preserves_the_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "inbox.json"
+            item = create_clipboard_item(title="Keep", content="One")
+            append_inbox_item(path, item)
+            original = path.read_bytes()
+
+            with self.assertRaisesRegex(InboxError, "was not found"):
+                delete_inbox_item(path, "missing")
+
+            self.assertEqual(path.read_bytes(), original)
 
 
 if __name__ == "__main__":

@@ -243,13 +243,6 @@ class BackupRestorePanel(ttk.Frame):
         self._worker.close()
 
     def _build_widgets(self) -> None:
-        ttk.Label(
-            self,
-            text="Create a complete configuration backup or inspect one before restoring.",
-            style="Muted.TLabel",
-            wraplength=720,
-        ).pack(anchor=tk.W, pady=(0, 8))
-
         backup = ttk.LabelFrame(self, text="Create backup", padding=8)
         backup.pack(fill=tk.X, pady=(0, 8))
         ttk.Checkbutton(
@@ -275,27 +268,27 @@ class BackupRestorePanel(ttk.Frame):
         ).pack(anchor=tk.W, pady=(6, 6))
         self.create_backup_button = ttk.Button(
             backup,
-            text="Create backup...",
+            text="Create backup…",
             command=self._choose_backup_destination,
             style="Accent.TButton",
         )
         self.create_backup_button.pack(anchor=tk.W)
 
-        restore = ttk.LabelFrame(self, text="Restore backup", padding=8)
+        restore = ttk.LabelFrame(self, text="Inspect and restore", padding=8)
         restore.pack(fill=tk.BOTH, expand=True)
         controls = ttk.Frame(restore)
         controls.pack(fill=tk.X, pady=(0, 6))
         self.inspect_restore_button = ttk.Button(
             controls,
-            text="Restore backup...",
+            text="Choose backup to inspect…",
             command=self._choose_restore_archive,
         )
         self.inspect_restore_button.pack(side=tk.LEFT)
         self.commit_restore_button = ttk.Button(
             controls,
-            text="Apply inspected restore...",
+            text="Apply inspected changes…",
             command=self._confirm_restore,
-            style="Accent.TButton",
+            style="Danger.TButton",
         )
         self.commit_restore_button.pack(side=tk.LEFT, padx=(6, 0))
         self.commit_restore_button.state(["disabled"])
@@ -319,7 +312,7 @@ class BackupRestorePanel(ttk.Frame):
         self.preview_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self._set_preview(
-            "Choose Restore backup... to inspect an archive. Nothing is changed during inspection."
+            "Choose a backup to inspect. Nothing is changed during inspection."
         )
 
         ttk.Label(

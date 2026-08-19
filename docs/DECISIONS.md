@@ -1,5 +1,179 @@
 # Decisions
 
+## 2026-08-18 - Extend the Configure hierarchy and make Inbox cleanup explicit
+
+**Decision:** Apply the accepted title/purpose, one-primary-command, dominant
+table, and selection-card hierarchy to Contexts and Quick actions. Keep
+generated Quick-action records in the same tree, but derive their commands from
+ownership: automatic groups open matching Actions and automatic leaves edit the
+owning Action; generated structure is never moved or deleted there. Label
+Backup & restore's guarded inspection and application stages literally, make
+Copy the primary Diagnostics outcome, and add confirmed permanent deletion of
+one selected Capture Inbox record.
+
+**Reason:** These pages still used dense always-active button rows even after
+Actions and Work Items established a clearer visual system. Generic restore
+labels obscured the existing inspect-before-apply safety boundary. Capture
+Inbox conversion copies data into an independent Action, yet obsolete captures
+had no supported cleanup route and accumulated indefinitely.
+
+**Consequences:** Context, Quick-action, backup, diagnostics, and conversion
+storage rules are unchanged. Inbox deletion uses the existing atomic JSON write
+boundary, removes only the selected local capture, and explicitly states that
+created Actions remain. Work Item workbook Inbox rows are unrelated and remain
+Excel-managed. Context and Quick-action dialog bodies scroll beneath a fixed
+Save/Cancel footer, so short work areas and 125%/150% scaling do not hide
+fields. Built-in Move/Delete paths disclose their Git/multi-computer impact.
+Automated Tk checks cover minimum-size containment, high-scaling forms, and
+command states; real Windows 100%, 125%, and 150% visual review remains required
+for the new pages.
+
+## 2026-08-18 - Implement the approved Configure baseline in one focused batch
+
+**Decision:** Adopt the accepted real-Tk Configure shell without changing
+domain behavior. Group the persistent navigator into **Set up** and
+**Support**. Give Actions one primary **New Action…** route, put the catalogue
+and Harvest under **Other ways to create**, simplify the table and selection
+strip, and collapse the five machine-local pin pickers by default. In Work
+Items, replace separate Add/Edit/options controls with **Manage sources…** while
+keeping Refresh visible. Retain Action types as a direct navigation destination
+for this batch so existing routes and `Alt+T` remain stable.
+
+**Reason:** The accepted mockup showed that source administration and rare pin
+setup were permanently consuming the space needed for daily lists. Grouped
+navigation clarifies task frequency without removing a capability. A menu is
+enough to consolidate source commands because the current source selector
+already owns source choice; a second management dialog would duplicate state.
+
+**Consequences:** Source Add, Edit, Remove, template, refresh, and persistence
+paths are unchanged. Pin fields remain live while hidden and expand as five
+scalable vertical rows; a hidden dirty choice is labelled as unsaved, and
+disclosure state is not persisted. Action tags remain
+searchable and move to the selection strip, while State appears as a table
+column only for the mixed All view. Production checks cover the 900 x 520
+minimum, but actual Windows 100%, 125%, and 150% visual acceptance remains a
+manual task.
+
+## 2026-08-18 - Validate broad UI changes through inert real-Tk baselines
+
+**Decision:** Reconcile the whole-screen design in a standalone real-Tk mockup
+gallery before another broad production UI batch. Use frozen fictional data and
+the shared theme/icons, but import no launcher, persistence, clipboard, OCR, or
+dispatch behavior. Keep the current 780 x 600 / 700 x 480 main and 960 x 680 /
+900 x 520 Configure boundaries in the mockups instead of enlarging windows to
+hide crowding. At the harshest simulated minimum-size scaling, preserve result
+rows by reducing the visible Quick-action viewport while keeping every shortcut
+scrollable.
+
+**Reason:** The previous native Notebook regression passed widget-metadata
+tests while Windows still drew duplicate tabs. The user also repeatedly found
+clipped controls and lost list space only after seeing the real Tk screen.
+HTML approximations and isolated style edits cannot validate Tk geometry,
+Windows scaling, or dynamic states. The current supported sizes make crowding
+visible early.
+
+**Consequences:** `run-ui-mockups.bat` opens safe, reusable Main, Work Items,
+and Actions proposals with Normal/Minimum and System/100%/125%/150% choices.
+Automated geometry tests are a stress check; actual Windows display scaling and
+visual quality remain manual acceptance. Mockup approval does not itself change
+production navigation, labels, source management, pins, or execution behavior.
+
+## 2026-08-18 - Use stable Configure navigation and one source-focused Work Items table
+
+**Decision:** Replace Configure's visible tab strip with a persistent left-hand
+section navigator backed by an internal frame stack. Do not rely on a styled
+native notebook because Windows themes may still render its tabs. In Work
+Items, select one source at a time, show its complete path and
+refresh state, devote the central space to one Work Item / Type / Project
+table, and show the selected item's folder, Contexts, tags, Edit, and Open
+folder commands in a compact strip. Keep infrequent source removal and generic
+template setup under **Source options**.
+
+**Reason:** The accepted mockup and prior UAT showed that eight horizontal tabs,
+two simultaneous trees, long source paths, and six Work Item columns competed
+for the same limited space. The source tree was a configuration mechanism, not
+the user's main task; choosing a source and then working with its items is more
+direct and leaves both names and selection details readable.
+
+**Consequences:** Direct routes, Alt shortcuts, Ctrl+Tab, singleton reuse, and
+all persistence boundaries remain unchanged. The Configure window normally
+opens wider and uses a larger supported minimum when the monitor permits it.
+Work Item search is source-local, `Ctrl+F` targets it, and source management,
+creation, refresh, context/tag editing, and folder opening remain available.
+
+## 2026-08-18 - Reconcile Focus shortcuts and keep attended sequences visible
+
+**Decision:** Resolve saved slots 6–0 only when their Action or Work Item is
+still a member of the current explicit Context. Ignore stale saved references
+in memory without rewriting personal configuration during reload. While an
+Action sequence is active, suspend FocusOut auto-hide, keep the palette above
+launched windows, show ordered step progress, and keep **Stop remaining**
+available. Give the Built-in UAT sequence a five-second stop window.
+
+**Reason:** UAT found a green professional-greeting shortcut in a newly empty
+Focus and could not reach **Stop remaining** after Explorer took foreground.
+The former behavior preserved stale per-context palette slots after Context
+membership changed. The normal 200 ms FocusOut auto-hide then hid an otherwise
+correct sequence controller. Explorer may also reuse an existing folder window,
+so visible window count cannot prove how many safe dispatches were attempted.
+
+**Consequences:** General still fills global shortcuts, and valid preferred
+members retain their saved order. Empty specific Contexts remain visibly empty.
+Sequence execution remains attended and nonblocking; the palette reports each
+dispatch and wait, but still makes no process-completion claim. Manual and
+automatic hiding resume after the sequence finishes or is stopped.
+
+## 2026-08-17 - Make Focus slots truthful and close the Work Item/OCR UAT gaps
+
+**Decision:** Let a specific Focus fill slots 6–0 only with configured or
+canonical members and leave remaining slots empty. Add personal Context
+membership to the existing Work Item details editor while keeping Context
+records as the only membership source. Replace OCR's generic Yes/No prompt with
+literal **Replace / Append / Cancel** controls. Ship one Built-in UAT sequence
+that opens only the local project folder twice around a bounded wait.
+
+**Reason:** UAT showed that unrelated global fallbacks implied relevance that
+did not exist, and assigning a Work Item required leaving its editor for the
+Context editor. The OCR behavior was safe but its native button labels forced
+users to translate Yes and No into operations. Sequence safety and Stop
+behavior could not be accepted without a known harmless plan.
+
+**Consequences:** General retains global slots, while a specific Focus may show
+fewer than five shortcuts. Work Item edits update personal Context records and
+roll back them if paired tag persistence fails; Built-in Contexts remain unable
+to reference personal Work Items. OCR placement semantics are visible on the
+buttons. The UAT sequence has only reviewed `open_folder` references and a
+1.5-second wait; it performs no clipboard, script, or file mutation.
+
+## 2026-08-17 - Make local OCR optional and keep it outside launch sequences
+
+**Decision:** Add one icon-only **Extract text** command to Input / Output. Use
+one exact selected image path when present, otherwise snapshot a clipboard
+bitmap without changing it, and fall back to an attended local file picker.
+Run a lazily initialized RapidOCR provider with the ONNX Runtime CPU engine on
+one background worker. Put recognized text into the existing workspace only
+after an explicit Replace / Append / Cancel choice when it is non-empty.
+
+**Reason:** The requested outcome is image-to-editable-text, not launching a
+program. Existing Action sequences dispatch reviewed open/run effects and
+cannot carry typed data between steps; forcing OCR through PowerShell, batch,
+or that sequence model would hide image and text boundaries. Microsoft now
+documents `Windows.Media.Ocr` for desktop apps as requiring package identity,
+which conflicts with the unpackaged portable application. RapidOCR worked
+offline against a real Context Palette screenshot on Python 3.12, recognizing
+34 lines in about 3.2 seconds, but its complete installed Python stack measured
+about 269 MB.
+
+**Consequences:** OCR is a separate pinned optional component installed into
+the app-local `.venv`; normal startup and normal tests do not import it. The
+feature never uploads content, changes the clipboard, logs recognized text,
+silently overwrites the workspace, or persists image data. It accepts bounded
+local files and clipboard bitmaps only. Setup requires no administrator rights
+but currently requires package-download access and a compatible Python
+installation. A truly no-preparation restricted-PC experience requires a
+future prebuilt bundle containing Python and the OCR pack. Typed image-to-text
+pipelines may follow only after this direct workflow is validated.
+
 ## 2026-08-16 - Use task-oriented toolbars instead of a command rail
 
 **Decision:** Keep the Focus selector and All items / Actions / Work Items
@@ -2243,3 +2417,32 @@ persistence. The existing category tabs remain useful once the task is known.
 Manage focuses, Work Item creation/configuration, Diagnostics, **+ Action**, and
 Input / Output Action suggestions retain their direct routes. The new page owns
 no saved state and introduces no alternative save path.
+
+## 2026-08-19 - Make every Quick-action control a menu
+
+**Decision:** Give configured and automatic Quick actions one interaction
+model. Every visible launcher represents a menu: left-click, Enter, and Space
+browse it without executing; right-click offers Add and Organize commands for
+that same menu. Inside a posted menu, left-click runs the exact selected Action
+and right-click opens that Action for editing without running it. Submenu
+right-click targets the same branch. Passwords, Folders, and Prompts create
+typed Actions through the ordinary full Action form, prefilled only with type
+and menu path. An empty automatic path places the Action at the menu root.
+
+**Reason:** A visible control that sometimes executed a hidden default and
+sometimes opened a tree made the same visual element carry incompatible
+meanings. It also made “primary,” “direct,” root Actions, and the difference
+between automatic and configured menus hard to explain. The product's durable
+value here is quick, organized navigation; pins and Focus slots already provide
+explicit muscle-memory execution.
+
+**Consequences:** The historical `rows` and `nested_menu` values and legacy
+`primary_action_id` fields remain loadable for old configurations and backups,
+but runtime launchers do not execute them implicitly. Primary retains only
+first-in-menu ordering. Existing files are not bulk-migrated. The Configure
+tree is the guided manager; automatic membership still has one source of truth
+in Active Actions. This supersedes the 2026-07-17 direct-button interaction,
+2026-07-19 primary-first execution, 2026-07-23 configurable defaults,
+2026-07-27 dual launcher presentations, 2026-07-30 **Unsorted** projection, and
+2026-08-03 first-available launcher execution while retaining their persisted
+data compatibility.

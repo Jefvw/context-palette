@@ -284,7 +284,7 @@ def _validate_group(group: CommandGroup) -> None:
         and command_group_action_ids(group)
     ):
         raise CommandSurfaceError(
-            "Direct group actions require Nested subject menu presentation."
+            "Actions at a menu root require the nested_menu compatibility value."
         )
     item_ids: set[str] = set()
 
@@ -315,6 +315,13 @@ def _validate_group(group: CommandGroup) -> None:
             ):
                 raise CommandSurfaceError(
                     "A Quick action cannot combine targets with legacy target fields."
+                )
+            if item.work_item_ref is not None and (
+                item.primary_action_id or item.action_ids
+            ):
+                raise CommandSurfaceError(
+                    "A Quick action cannot combine an Action with a legacy "
+                    "Work Item target."
                 )
             command_item_targets(item)
             validate_items(item.items, depth + 1)

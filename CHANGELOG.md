@@ -4,6 +4,79 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Replaced Quick-action default/direct execution with one consistent menu
+  interaction. Every launcher now opens its menu on left-click, Enter, or
+  Space; right-click offers Add/Organize commands for that same menu. Inside a
+  native menu, left-click runs the chosen Action while right-click opens that
+  exact Action for editing without running it; submenu right-click manages the
+  same branch. Legacy `rows`, `nested_menu`, and primary fields remain readable
+  without a bulk data migration, with primary retained only as menu order.
+  Passwords, Folders, and Prompts now offer typed Add commands backed by the
+  complete Action form, including Contexts and tags, and blank Quick-menu paths
+  appear at the menu root instead of under an extra **Unsorted** level. Empty
+  configured menus survive unrelated Action cleanup, and reopening Configure
+  from a menu no longer discards unsaved pin choices.
+- Applied the approved Configure layout system to Contexts, Quick actions,
+  Backup & restore, and Diagnostics. Contexts and Quick actions now use a clear
+  page title, one primary creation command, a dominant searchable table, and a
+  selection-aware command card. Automatic Quick-action menus clearly route
+  back to their owning Actions instead of offering unavailable structure edits.
+  Backup and restore now names its guarded stages **Choose backup to inspect…**
+  and **Apply inspected changes…**; Diagnostics adds a scrollable privacy-safe
+  report with **Copy safe summary** as its primary outcome. Context and
+  Quick-action forms keep Save/Cancel fixed while their body scrolls, preserving
+  every field at normal, 125%, and 150% Tk scaling. Automatic-menu navigation
+  resets Actions to Active, long selection summaries are bounded, and Built-in
+  Move/Delete paths now explain their Git and multi-computer impact.
+- Added explicit Capture Inbox cleanup. Select a capture and choose **Delete
+  capture…** to permanently remove only that local Inbox copy after
+  confirmation. Any Action already created from it remains unchanged. The
+  command is deliberately separate from Work Item workbook Inbox rows, which
+  continue to be managed in Excel.
+- Implemented the first approved Configure mockup batch. The single left
+  navigator now separates **Set up** from **Support**; Actions has one clear
+  **New Action…** command, an **Other ways to create** menu, a simplified table
+  and selected-Action strip, and default-collapsed machine-local pins. Work
+  Items now keeps one source selector, **Manage sources…**, and visible Refresh
+  above its Work Item / Type / Project table. Add, Edit, Remove, template,
+  lifecycle, and pin persistence behavior is unchanged. Hidden unsaved pin
+  choices remain live and are called out in the collapsed summary; long Action
+  names cannot push lifecycle commands off-screen. Tables measure row
+  height from the active Tk font so scaled text is not clipped.
+- Added a safe real-Tk UI mockup gallery for reviewing the next main-palette
+  and Configure redesign before production changes. It uses fictional in-memory
+  data, supports normal/minimum windows plus system or simulated 100%/125%/150%
+  text scaling, and cannot read configuration or the clipboard, open targets,
+  run Actions, or save anything. Focus/filter truthfulness, bounded Quick
+  actions, one Configure navigator, Work Item source management, collapsed
+  Action pins, and lifecycle states can be compared interactively.
+- Replaced Configure's crowded tab strip with a stable left-hand navigator and
+  internal frame stack, so Windows themes cannot draw a second horizontal
+  navigation row. The wider Work Items section now selects one source,
+  shows its complete folder path and availability, searches a full-width
+  Work Item / Type / Project table, and keeps folder, Context, tags, Edit, and
+  Open folder in a compact selected-item strip. The selected-item editor is
+  labelled **Tags & contexts…** so it remains readable at minimum size. Source
+  addition, editing, removal, and creation-template setup are now consolidated
+  under **Manage sources…**.
+- Work Item details now edit both personal tags and membership in existing My
+  configuration Contexts, using the same Context-owned records shown by the
+  Context editor. Specific Focus slots no longer borrow unrelated global
+  Actions when genuine members run out, and stale saved shortcuts are ignored
+  after membership changes; unused slots remain empty. A Built-in harmless UAT
+  sequence dispatches only the project folder twice around a five-second wait.
+  The palette stays visible above launched windows with step progress and
+  **Stop remaining**, while explaining that Explorer may reuse one window.
+- Replaced OCR's generic Yes / No / Cancel placement prompt with explicit
+  **Replace / Append / Cancel** buttons.
+- Added optional, fully local image-to-text extraction in Input / Output. The
+  new icon-only control reads one exact selected image path, otherwise a
+  clipboard image, and falls back to a file picker. RapidOCR runs on a
+  background thread; the original clipboard image is never replaced, empty or
+  failed results leave the workspace unchanged, and non-empty workspace text
+  receives an explicit Replace / Append / Cancel choice. The OCR component is
+  prepared separately inside the application folder without administrator
+  rights because its native runtime adds about 270 MB.
 - Replaced the main command rail with the validated task-oriented layout.
   Focus and **All items / Actions / Work Items** remain readable above Find;
   one bitmap-icon Filters menu and a removable active-filter chip replace the
@@ -21,7 +94,7 @@ This project has not published a versioned release. Changes are recorded under *
   an explicit searchable Context chooser; selecting or clearing a Context is
   covered through the real menu route instead of relying on a fragile submenu.
 - Added guided, previewable **Run a sequence** Actions. A sequence references
-  2â€“12 existing reviewed website, file, folder, application, or Windows-target
+  2–12 existing reviewed website, file, folder, application, or Windows-target
   Actions and may place bounded waits between them. Every live target and
   argument is confirmed before nonblocking ordered dispatch; **Stop remaining**
   skips only steps not yet started. Referenced Actions cannot be archived or

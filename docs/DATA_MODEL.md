@@ -133,7 +133,10 @@ exactly one of:
 - a Work Item reference by stable `source_id` plus `relative_folder`.
 
 Legacy action-only fields and the initial single-Work-Item field remain
-readable. New mixed records use `targets`. Built-in groups may reference only
+readable. Legacy `primary_action_id` values now preserve first-in-menu order;
+they do not imply execution from the launcher. New mixed records use `targets`.
+The legacy `rows` and `nested_menu` presentation values also remain readable,
+but both project to menu launchers. Built-in groups may reference only
 Built-in Actions; Work Item targets are permitted only in My configuration.
 `CommandTarget` is a compatibility name for the shared immutable
 `PaletteItemReference`; Quick-action groups themselves currently have no
@@ -141,7 +144,8 @@ Context visibility or grouping rule.
 
 Password, Folder, and Prompt menus are different: they are runtime projections
 generated from active Actions of matching types and their `quick_action_path`.
-They are not additional persisted Command Groups.
+An empty path places the Action at the generated menu root; a non-empty path
+creates only those branches. They are not additional persisted Command Groups.
 
 ### Work Items
 

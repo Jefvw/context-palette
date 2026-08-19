@@ -4,8 +4,8 @@ This overview is generated from `context_palette.action_types`, the shared sourc
 
 AI prompt, folder, and credential actions also accept an optional **Quick
 menu** path of up to three levels. Their fixed Prompts, Folders, and Passwords
-menus include every Active matching action automatically; an empty path appears
-under **Unsorted**.
+menus include every Active matching action automatically; an empty path shows
+the Action at that menu's root.
 
 | Action type | Icon | User label | Family | Input | Output | Portability | AI proposals |
 |---|---|---|---|---|---|---|---|
@@ -17,7 +17,7 @@ under **Unsorted**.
 | `open_file` | ▧ | Open a file | Open target | No runtime input. | Opens the configured file. | Machine-local unless the path uses a supported portable placeholder. | Not yet |
 | `open_folder` | 📁 | Open a folder | Open target | No runtime input. | Opens the configured folder. | Machine-local unless the path uses a supported portable placeholder. | Not yet |
 | `launch_app` | ▶ | Run an application | Open target | Uses fixed reviewed arguments and working directory. | Starts the validated .exe target. | Usually machine-local; requires an installed executable. | Not yet |
-| `sequence` | â‡¥ | Run a sequence | Action sequence | Uses configured Actions only; no clipboard or typed input. | Confirms every resolved step, then starts them in order. | Started effects cannot be undone. Waits are delays, not completion checks. | Not yet |
+| `sequence` | ⇥ | Run a sequence | Action sequence | Uses configured Actions only; no clipboard or typed input. | Confirms every resolved step, then starts them in order. | Started effects cannot be undone. Waits are delays, not completion checks. | Not yet |
 | `paste_credential` | 🔑 | Paste a Windows credential | Protected credential | Requires a fresh F9 or Ctrl+Alt+P invocation from the destination field. | Confirms the destination, pastes through a no-history/no-cloud clipboard item, then clears it conditionally. | Windows-only and machine-local; the action stores only the credential target name. | Not yet |
 | `build_url_open` | ⇱ | Build and open a URL from a prompt | URL builder | Prompts for an identifier or value. | Copies and opens the complete URL. | Portable when the URL template is suitable for sharing. | Not yet |
 | `build_url_selection_open` | ⇗ | Build and open a URL from selection | URL builder | Reads selected text, Input / Output, or clipboard text. | Copies and opens the complete URL. | Portable when the URL template is suitable for sharing. | Not yet |

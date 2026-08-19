@@ -45,6 +45,52 @@ def resolve_focus_state(
             configured_item_slots[canonical_context] = references
     known_action_ids = {action.id for action in actions}
     for definition in definitions:
+        if definition.name.casefold() == "general":
+            continue
+        if definition.action_ids is None:
+            member_action_ids = {
+                action.id
+                for action in actions
+                if action.belongs_to_context(definition.name)
+            }
+        else:
+            member_action_ids = set(definition.action_ids)
+        member_action_ids.update(definition.preferred_action_ids)
+        member_references = {
+            *(
+                PaletteItemReference(action_id=action_id)
+                for action_id in member_action_ids
+                if action_id in known_action_ids
+            ),
+            *(definition.member_items),
+        }
+        saved_actions = configured_slots.get(definition.name)
+        if saved_actions is not None:
+            current_actions = tuple(
+                action_id
+                for action_id in saved_actions
+                if action_id in member_action_ids and action_id in known_action_ids
+            )
+            if current_actions:
+                configured_slots[definition.name] = current_actions
+            else:
+                configured_slots.pop(definition.name, None)
+        saved_items = configured_item_slots.get(definition.name)
+        if saved_items is not None:
+            current_items = tuple(
+                reference
+                for reference in saved_items
+                if reference in member_references
+                and (
+                    not reference.action_id
+                    or reference.action_id in known_action_ids
+                )
+            )
+            if current_items:
+                configured_item_slots[definition.name] = current_items
+            else:
+                configured_item_slots.pop(definition.name, None)
+    for definition in definitions:
         default_action_ids = tuple(
             dict.fromkeys(
                 (
