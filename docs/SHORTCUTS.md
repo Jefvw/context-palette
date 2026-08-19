@@ -1,7 +1,7 @@
 # Keyboard shortcuts
 
 This is the authoritative keyboard-shortcut reference for Context Palette.
-Open it from **More → Keyboard shortcuts** in the main command rail.
+Open it from **More → Keyboard shortcuts** in the main palette.
 
 ## Show or hide Context Palette
 
@@ -23,9 +23,8 @@ Open it from **More → Keyboard shortcuts** in the main command rail.
 | `F1` | Open complete Help. |
 | `F5` | Reset transient screen state without changing saved actions, Focus, pins, or slots. |
 | `Up`, `Down`, `Page Up`, `Page Down`, `Home`, `End` | Navigate action results. |
-| `Enter` | Run the selected action. |
-| `Enter` in the Work Items scope | Open the selected Work Item's exact matching `.xlsx` workbook, or its folder when no exact workbook exists. |
-| `Shift+Enter` in the Work Items scope | Open the selected Work Item folder instead of its workbook. |
+| `Enter` | Run the selected Action, or open the selected Work Item's exact matching `.xlsx` workbook with folder fallback. |
+| `Shift+Enter` with a Work Item selected | Open the selected Work Item folder instead of its workbook. |
 | `Shift` + physical top-row `1`–`0` while Find is focused | Run the corresponding slot. This uses key positions and works on AZERTY and QWERTY. |
 | Plain number-row or numpad `1`–`0` | Enter text in Find; do not run an item. |
 
@@ -37,13 +36,14 @@ AltGr-, plain number-row, and numpad input never execute action slots.
 | Shortcut | Result |
 | --- | --- |
 | `Alt+A` | Open Actions. |
-| `Alt+T` | Open Create action. |
+| `Alt+T` | Open Action types. |
 | `Alt+C` | Open Contexts. |
 | `Alt+Q` | Open Quick actions. |
 | `Alt+W` | Open Work Items. |
+| `Alt+B` | Open Backup & restore. |
 | `Alt+D` | Open Diagnostics. |
-| `Ctrl+Tab` | Select the next tab. |
-| `Ctrl+Shift+Tab` | Select the previous tab. |
+| `Ctrl+Tab` | Select the next Configure section. |
+| `Ctrl+Shift+Tab` | Select the previous Configure section. |
 | `Ctrl+F` | Focus Find items. |
 | `Ctrl+N` | Choose a type and start a new Action. |
 | `Enter` | Edit the selected action, context, or Quick action. |
@@ -76,7 +76,7 @@ AltGr-, plain number-row, and numpad input never execute action slots.
 | Shortcut | Result |
 | --- | --- |
 | `Tab` / `Shift+Tab` | Move between controls. |
-| `Tab` / `Shift+Tab` in the launcher | Traverse the command rail, Find/results, Quick actions, Text tools, and Input / Output in visible order. |
+| `Tab` / `Shift+Tab` in the launcher | Traverse the visible main-palette controls, Find/results, Quick actions, Text tools, and Input / Output in order. |
 | `Enter` / `Space` | Activate a focused Quick action. |
 | `Ctrl+A` | Select all text in Input / Output. |
 | `Ctrl+F` | Focus search in Help. |

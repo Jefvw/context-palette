@@ -211,7 +211,7 @@ Portable, reviewed examples are tracked:
 | --- | --- |
 | `data/actions.json` | Built-in starter actions |
 | `data/contexts.json` | Built-in context definitions; currently only Developing Context Palette |
-| `data/command_surface.json` | Built-in Quick-action button records |
+| `data/command_surface.json` | Built-in Quick-action menu records |
 | `data/cheatsheets/*.json` | Shared reference sheets |
 
 Personal and runtime files are ignored by Git:
@@ -220,7 +220,7 @@ Personal and runtime files are ignored by Git:
 | --- | --- |
 | `data/local_actions.json` | Personal or machine-specific actions |
 | `data/local_contexts.json` | Personal contexts |
-| `data/local_command_surface.json` | Personal Quick-action button records |
+| `data/local_command_surface.json` | Personal Quick-action menu records |
 | `data/inbox.json` | Captured material |
 | `data/palette.json` | Focus, pins, and per-machine slot choices |
 | `data/context-palette.log*` | Bounded local diagnostics |
@@ -240,7 +240,7 @@ JSON guides are intended for advanced editing, review, and automation:
 
 - [Action types](docs/ACTION_TYPES.md)
 - [Context configuration](docs/CONTEXT_CONFIGURATION.md)
-- [Right-side button configuration](docs/COMMAND_SURFACE_CONFIGURATION.md)
+- [Quick-action menu configuration](docs/COMMAND_SURFACE_CONFIGURATION.md)
 - [Cheat-sheet format](docs/CHEATSHEET_FORMAT.md)
 - [Complete file-based configuration](docs/CONFIGURE_WITH_FILES.md)
 - [Application data model](docs/DATA_MODEL.md)

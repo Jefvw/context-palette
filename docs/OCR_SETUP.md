@@ -87,8 +87,8 @@ application check.
 
 2. Choose the **Extract text** icon in the Input / Output header.
 3. Wait for the local background recognition to finish.
-4. If Input / Output already contains text, choose **Yes** to replace it,
-   **No** to append the result, or **Cancel** to preserve it.
+4. If Input / Output already contains text, choose **Replace**, **Append**, or
+   **Cancel**. Cancel preserves the existing text.
 5. Review the result. One normal Undo restores the previous Input / Output edit.
 
 Supported source formats are PNG, JPEG, BMP, GIF, TIFF, and WebP. Context

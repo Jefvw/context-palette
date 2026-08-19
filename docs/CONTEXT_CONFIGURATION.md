@@ -101,5 +101,7 @@ files, then run:
 Return to or reopen the palette after editing. It reloads files whose signatures
 changed; a restart is normally unnecessary.
 
-Direct paste/key sequences, clipboard transactions, context activation bundles,
-and automatic context inference are not implemented.
+Protected credential paste can temporarily replace plain-text clipboard content
+and conditionally restore the previous plain text. General multi-format
+clipboard transactions, sequence paste/Tab/Enter steps, context activation
+bundles, and automatic context inference are not implemented.

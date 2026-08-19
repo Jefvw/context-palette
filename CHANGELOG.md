@@ -4,6 +4,13 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Corrected current guides to match the Active/Archived lifecycle, Context-owned
+  membership, menu-only Quick actions, all eight Configure sections, protected
+  clipboard restoration, offline OCR setup, and the redesigned main palette.
+  Added semantic documentation tests that compare the data-asset table and
+  Action-type count with executable catalogues, verify Configure shortcut
+  destinations, validate file-configuration examples, reject retired UI terms,
+  and require every production module to remain represented in Architecture.
 - Replaced Quick-action default/direct execution with one consistent menu
   interaction. Every launcher now opens its menu on left-click, Enter, or
   Space; right-click offers Add/Organize commands for that same menu. Inside a

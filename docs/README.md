@@ -17,10 +17,14 @@ This directory separates current behavior, durable direction, historical rationa
 
 - [Help](HELP.md) — complete operation and troubleshooting.
 - [Keyboard shortcuts](SHORTCUTS.md) — authoritative shortcut reference,
-  also available from the app's **⌨** button.
+  also available from **More → Keyboard shortcuts** in the app.
 - [Action types](ACTION_TYPES.md) — generated catalogue of supported actions.
 - [Context configuration](CONTEXT_CONFIGURATION.md) — guided configuration and JSON reference.
 - [Quick actions](COMMAND_SURFACE_CONFIGURATION.md) — guided configuration and JSON record reference.
+- [Complete file-based configuration](CONFIGURE_WITH_FILES.md) — advanced
+  editing of the related JSON files.
+- [Application data model](DATA_MODEL.md) — persisted ownership, references,
+  and executable asset catalogue.
 - [Cheat-sheet format](CHEATSHEET_FORMAT.md) — sheet authoring and promotion.
 - [Multi-PC use](MULTI_PC_DEVELOPMENT.md) — cloning and private-data boundaries.
 - [OCR setup and other-PC handoff](OCR_SETUP.md) — online/offline preparation,
@@ -52,6 +56,8 @@ This directory separates current behavior, durable direction, historical rationa
   scenarios, reconciled layout decisions, and Windows scaling checklist.
 - [Work Items discovery plan](WORK_ITEMS_PLAN.md) — implemented phases and
   remaining cross-machine verification.
+- [Backup and restore plan](BACKUP_RESTORE_PLAN.md) — implemented transaction
+  model and remaining manual verification.
 - [Decisions](DECISIONS.md) — append-only rationale.
 - [Changelog](../CHANGELOG.md) — user-visible history.
 - [Technical review](TECHNICAL_REVIEW.md) and [performance audit](PERFORMANCE_AUDIT.md) — dated audits, including completed findings.

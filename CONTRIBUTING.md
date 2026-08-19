@@ -34,7 +34,8 @@ owning module, focused tests, and documentation that normally changes with it.
   structured arguments to ShellExecute; do not invent or parse a compound
   command language.
 - Keep effects constrained, visible, previewable, and testable.
-- Preserve Capture → Draft → Test → Refine → Trusted.
+- Preserve the permanent Active/Archived Action lifecycle. Confirmed creation
+  and edits save immediately; do not reintroduce Draft or Trusted states.
 - Keep Tk widget access on the main thread.
 - Treat loaded configuration, captured text, and AI output as untrusted data.
 

@@ -44,7 +44,10 @@ Recommended first flows:
 2. Show and search for `Open agenda`.
 3. At the end of an existing flow, show a context-specific set of follow-up actions.
 
-Do not automate clicks by row position: search results and numbered context slots can change. A future explicit action-ID API should require Trusted state, confirmation policy, result reporting, and tests before unattended execution is enabled.
+Do not automate clicks by row position: search results and numbered context
+slots can change. A future explicit action-ID API must define authorization,
+confirmation policy, result reporting, and tests before unattended execution
+is enabled.
 
 ## Manual integration check
 

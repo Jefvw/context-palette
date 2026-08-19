@@ -47,9 +47,10 @@ Image-to-text extraction uses an optional local OCR component. From the Context
 Palette folder, run `setup-ocr-context-palette.bat`, then restart the app. It
 stays inside that folder, needs no administrator rights, and adds about 270 MB.
 Recognition works offline after setup; the initial setup download requires
-package access. On a PC where downloads and software preparation are blocked,
-use Context Palette without OCR until a prebuilt OCR-enabled portable bundle is
-available.
+package access. If compatible Python and Tk are installed but package downloads
+are blocked, prepare `offline-packages` on a connected compatible PC and run
+`setup-offline-context-palette.bat` on the target. If compatible Python itself
+cannot be installed, the current source distribution cannot run there.
 
 Power Automate Desktop setup is documented in
 [Power Automate integration](../integrations/README.md).
@@ -393,8 +394,8 @@ For safety:
 
 ## Quick-action surface
 
-The wider right side of the action console contains global configurable
-menus and stays visible when Focus changes. Every visible control is one menu
+Quick actions appear below discovery on the left side of the main palette and
+stay visible when Focus changes. Every visible control is one menu
 launcher; no launcher silently runs a default Action.
 
 - Left-click a menu, or focus it and press Enter or Space, to browse its
@@ -1183,7 +1184,7 @@ does not recreate those assignments.
 - `data/inbox.json`: ignored captures.
 - `data/palette.json`: ignored per-machine focus context, pins, and context slots.
 - `data/local_contexts.json`: ignored personal context definitions.
-- `data/local_command_surface.json`: ignored personal Quick-action button records.
+- `data/local_command_surface.json`: ignored personal Quick-action menu records.
 - `data/local_work_item_sources.json`: ignored machine-local Work Item sources.
 - `data/local_work_item_metadata.json`: ignored personal Work Item tags.
 - `data/local_work_item_settings.json`: ignored generic Excel template path.

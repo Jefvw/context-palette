@@ -205,20 +205,20 @@ attempt to prove safety one file at a time.
 ## Storage ownership and backup classification
 
 `src/context_palette/data_catalog.py` is the executable source for this table.
-Required means that absence is not valid for the current loader. Schema `1` is
-a logical loader/adapter contract in the catalog; it is not a new JSON field
-and does not change any stored format.
+Required means that absence is not valid for the current loader. The logical
+schema value comes directly from the catalogue's loader/adapter contract; it is
+not a new JSON field and does not itself change any stored format.
 
 | Storage or constrained pattern | Stable asset ID | Ownership | Required | Sensitivity | Backup policy | Logical schema |
 | --- | --- | --- | --- | --- | --- | --- |
 | `data/actions.json` | `built-in-actions` | Built-in/shared | Required | Configuration | Complete-configuration addition | 1 |
-| `data/contexts.json` | `built-in-contexts` | Built-in/shared | Required | Configuration | Complete-configuration addition | 1 |
+| `data/contexts.json` | `built-in-contexts` | Built-in/shared | Required | Configuration | Complete-configuration addition | 2 |
 | `data/command_surface.json` | `built-in-command-surface` | Built-in/shared | Optional | Configuration | Complete-configuration addition | 1 |
 | `data/cheatsheets/*.json` | `built-in-cheat-sheets` | Built-in/shared | Optional | Configuration | Complete-configuration addition | 1 |
 | `data/local_actions.json` | `personal-actions` | Personal/local | Optional | Configuration | Core configuration | 1 |
-| `data/local_contexts.json` | `personal-contexts` | Personal/local | Optional | Configuration | Core configuration | 1 |
+| `data/local_contexts.json` | `personal-contexts` | Personal/local | Optional | Configuration | Core configuration | 2 |
 | `data/local_command_surface.json` | `personal-command-surface` | Personal/local | Optional | Configuration | Core configuration | 1 |
-| `data/palette.json` | `palette-state` | Machine-local | Optional | Configuration | Core configuration | 1 |
+| `data/palette.json` | `palette-state` | Machine-local | Optional | Configuration | Core configuration | 2 |
 | `data/local_work_item_sources.json` | `work-item-sources` | Machine-local | Optional | Private paths | Core configuration | 1 |
 | `data/local_work_item_metadata.json` | `work-item-metadata` | Personal/local | Optional | Configuration | Core configuration | 1 |
 | `data/local_work_item_settings.json` | `work-item-settings` | Machine-local | Optional | Private paths | Core configuration | 1 |

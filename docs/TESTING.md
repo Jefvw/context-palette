@@ -236,17 +236,18 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    existing launcher **+ Action** control still opens its normal unprefilled type chooser.
    On initial display, verify the command console occupies about 40% of the
    width, Input / Output occupies about 60% and nearly the full height, Find is
-   no wider than its result list, and about ten result rows are visible. Verify
+   no wider than its result list, and up to seven result rows are visible at
+   normal scaling, with fewer retained at increased scaling. Verify
    there is no separate top toolbar or bottom command bar. Confirm **All items**
    contains both Actions and Work Items. Select one of
    each and verify the primary command changes between Run and Open. Choose one
    Context and one tag that each belong to both kinds and verify both remain in
-   the mixed results. Switch to Actions, then Work Items, and back; verify
-   **Action tools** contains Passwords/Types and **Work tools** contains the
-   project and Work Item commands. Confirm the result width and every common
-   rail-control position remain unchanged. Verify Configure remains visible in
-   the rail. Resize to the supported minimum and verify every rail control and
-   all three scope labels remain available. Drag
+   the mixed results. Switch to Actions, then Work Items, and back; verify the
+   filter menu changes between Action type tools and Work Item/project tools
+   without moving Find, the result list, or the stable `+A`/Edit/Pin/Run toolbar.
+   Verify Configure, Help, and More remain below Quick actions. Resize to the
+   supported minimum and verify the filter control, item toolbar, app controls,
+   and all three scope labels remain available. Drag
    the vertical divider and verify both sides remain bounded and the manual
    balance remains adjustable for the session.
    While moving through representative Actions and Work Items, verify the
@@ -309,8 +310,9 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
 8. At the standard `780x600` size and supported minimum, verify Quick actions
    use two readable columns without clipping beneath discovery. Narrow the
    command console until one column is genuinely necessary, then verify stable
-   row-major order returns. Tab through the visible rail order, Find/results,
-   Quick actions, **Text tools**, and Input / Output. Press Enter or Space on a
+   row-major order returns. Tab through the visible Focus/scope controls,
+   Find/filter/results, item toolbar, Quick actions, app controls, workspace
+   header controls, and Input / Output. Press Enter or Space on a
    Quick-action launcher and verify it opens the menu without running an
    Action. Open every Text tools group and verify it matches the
    right-click Transform catalogue. Exercise a text-file preview and verify its
@@ -350,12 +352,12 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    focuses Tags. From each field, verify `Alt+Down` or `F4` opens **Choose…**,
    arrow keys move through the checklist, Space toggles an item, and `Esc`
    closes it without losing typed values.
-11. Verify the compact rail symbols remain fully visible and their
-    tooltips begin with the semantic command names: `C`, `#`, `+A`, `⌖`, `⇩`,
-    `▣`, `✎`, `⚙`, `?`, and `⋯`. Switch views and verify those controls never
-    move. Verify Action tools and Work tools expose the corresponding
-    scope-specific commands without inserting rail rows.
-    Open `⋯` and verify the searchable Keyboard Shortcuts page appears. With
+11. Verify compact bitmap controls remain fully visible and their tooltips begin
+    with semantic command names for Filter, Edit, Pin, Capture, Inbox, Extract
+    text, Text tools, Configure, Help, and More. Switch views and verify the
+    stable item toolbar does not move while scope-specific commands change in
+    the filter menu. Open More and verify the searchable Keyboard Shortcuts page
+    appears. With
     Find focused on an AZERTY keyboard, press Shift plus
     each physical top-row number key and verify the corresponding populated
     slots execute. Verify plain number-row and numpad digits filter Find, and
@@ -363,7 +365,7 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
     Confirm result labels have no numeric prefixes, pinned shortcut rows are
     blue, Focus shortcut rows are green, ordinary results are neutral, and a
     shortcut-row tooltip reports its exact Shift+number binding. Confirm the
-    tighter rail still shows every label and symbol without clipping.
+    compact controls remain visible without clipping.
     Confirm row icons share one aligned column, names start at one aligned
     position without a dash, and no blank tree-expansion gutter remains before
     the icons in All items or Focus items.
@@ -416,7 +418,7 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
     titles are absent. Open it directly with `Ctrl+Shift+D` from the focused
     main palette and cycle with `Ctrl+Tab`; verify focus enters the Diagnostics
     summary and each other section's primary control. On QWERTY and AZERTY, verify
-    `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, and `Alt+D` directly select their
+    `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, `Alt+W`, `Alt+B`, and `Alt+D` directly select their
     corresponding sections—including **Quick actions** for `Alt+Q`—without closing Configure. With the main palette focused,
     verify `Ctrl+2` and `Ctrl+3` neither close/hide it nor execute action slots;
     plain `2` and `3` must retain their existing slot behavior.

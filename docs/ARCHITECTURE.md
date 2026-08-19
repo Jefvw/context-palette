@@ -74,7 +74,7 @@ Presentation and application orchestration.
 - Exposes the complete configuration workspace through one direct
   **Configure** button. Its ordinary route opens a task-oriented Start page;
   the Focus selector retains a direct **Manage focuses…** route to the Contexts
-  tab. All Configure routes reuse one live editor and retarget its tab or
+  section. All Configure routes reuse one live editor and retarget its section or
   selected record; a new editor is created only after the previous one closes.
 - Renders color-coded shortcut rows, a normal mixed global projection of Actions
   and Work Items with selected-Focus members grouped first, kind-specific
@@ -123,7 +123,7 @@ Office or evaluating formulas.
 `harvest_window.py` owns the attended review workflow: multi-file selection,
 progress and cancellation, source and candidate filters, provenance, individual
 and bulk edits, preview, and one atomic append to the personal action store.
-The launcher exposes the window from Inbox, while the Actions configuration tab
+The launcher exposes the window from Inbox, while the Actions configuration section
 is the primary route. No harvested candidate enters persistent data before the
 final confirmation.
 
@@ -213,7 +213,7 @@ Defines the machine-readable catalogue for every supported action type: icon,
 user label, family, description, required fields, input/output effects,
 portability, new-action visibility, AI eligibility, and type-specific AI
 guidance. Supported legacy types can remain loadable and editable while the
-Create action catalogue omits them. `actions.py`
+Action type chooser omits them. `actions.py`
 derives its supported-type set and compact row icon from this catalogue, and AI
 prompt generation consumes the same definitions.
 
@@ -360,6 +360,12 @@ menus. The picker matches all entered terms against the action's readable
 label and the canonical action search document, while callers continue to
 persist stable action IDs. Restricted Built-in pickers display their storage
 scope and an explicit empty-result explanation.
+
+### `action_type_picker.py`
+
+Provides the keyboard-first searchable chooser for creatable Action types.
+It returns one reviewed type selection to the owning form and performs no
+persistence or execution.
 
 ### `configuration_mutation.py` and `persistence.py`
 
@@ -598,7 +604,7 @@ state and performs no persistence: its six primary task buttons either invoke
 the existing Action chooser or select Actions, Contexts, Quick actions, Work
 Items, or Backup and restore. Secondary buttons select the Action-type
 catalogue and Diagnostics. Explicit launcher routes bypass Start and retain
-their exact tab, selected-record, focus, singleton-window, and save behavior.
+their exact section, selected-record, focus, singleton-window, and save behavior.
 
 Configure list tables use the shared `treeview_utils.py` scrollable-tree
 builder. Actions, contexts, Quick actions, and discovered Work Items retain
@@ -762,6 +768,11 @@ Owns delayed tooltip behaviour for ordinary widgets and individual listbox rows.
 ### `style.py`
 
 Owns the shared native ttk theme, Segoe UI font policy, grey/teal/aqua palette, and hover/focus state maps. Classic Tk widget defaults are applied through the root option database. The module changes presentation only; widget construction, layout, geometry, and action behaviour remain in their existing owners.
+
+### `ui_icons.py`
+
+Creates and retains portable 16×16 Tk bitmap icons for compact controls. It is
+presentation-only and owns no application behavior or persisted state.
 
 ### `ui_mockups.py`
 
@@ -1380,7 +1391,7 @@ are implemented as described in the [backup and restore plan](BACKUP_RESTORE_PLA
 
 Reviewed portable action records shared through Git.
 
-Action IDs are unique case-insensitively within a file and across shared/local files. This keeps pins, context slots, command-surface references, edits, and trust promotion unambiguous.
+Action IDs are unique case-insensitively within a file and across shared/local files. This keeps pins, context slots, command-surface references, and edits unambiguous.
 New records store optional `tags`; specific context membership is stored only
 in context definitions. Legacy `context` and `contexts` fields remain readable
 for migration. Omitting them does not remove canonical membership because the
@@ -1473,8 +1484,8 @@ The main launcher routes `Ctrl+Shift+D` directly to this section. Configure enab
 `Ctrl+Tab` traversal through its internal page stack, then moves focus into the selected section's
 primary interactive or readable control. The Diagnostics summary remains
 read-only but participates in keyboard focus for selection and screen-reader
-access. Configure routes `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, `Alt+D`, and
-`Alt+B` through
+access. Configure routes `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, `Alt+W`, `Alt+D`,
+and `Alt+B` through
 one generic key-event handler instead of Tk's unreliable symbolic Alt bindings.
 This uses semantic letters and remains independent of QWERTY/AZERTY number-row
 differences. The main launcher's global slot handler accepts only unmodified
@@ -1506,7 +1517,7 @@ Detailed help is stored once in `docs/HELP.md` and displayed by the in-app searc
 - Keep API keys out of version-controlled files.
 - Never enumerate or write Windows credentials. Credential actions store only
   exact target names and are unavailable to AI proposal and external execution paths.
-- Require explicit user action for launches and trust promotion.
+- Require explicit user action for launches and other external effects.
 - Treat captured text and AI responses as untrusted data. AI requests are
   previewed and copied manually; responses must remain within the bounded size
   limit and pass the versioned proposal schema and existing action validation
@@ -1527,7 +1538,7 @@ External UI and Windows behavior also require documented manual tests.
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest discover tests
+.\python-context-palette.bat -m unittest discover tests
 ```
 
 For the complete configuration, compilation, and test check, run:

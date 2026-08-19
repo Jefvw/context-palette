@@ -25,23 +25,16 @@ organization, private URLs, local paths, and machine-specific behavior.
 
 ## 2. Safe edit cycle
 
-1. Stop Context Palette if it is running.
-2. Edit only the relevant JSON files.
-3. Run the validation check:
+1. Edit only the relevant JSON files.
+2. Run the validation check:
 
 ```powershell
 .\check-context-palette.bat
 ```
 
-4. Start Context Palette again:
-
-```powershell
-.\run-context-palette.bat
-```
-
-Return to or reopen the palette after file edits. Changed definitions are
-detected by file signature and reloaded automatically; a restart is normally
-unnecessary.
+3. Return to or reopen the palette after file edits. Changed definitions are
+   detected by file signature and reloaded automatically; a restart is
+   normally unnecessary.
 
 ## 3. Define contexts
 
@@ -85,7 +78,6 @@ Example `copy_text` action:
   "id": "db-copy-default-query",
   "title": "Default DQ query",
   "description": "Copy the standard seven-day data-quality issue query",
-  "contexts": ["Database"],
   "tags": ["sql", "data quality"],
   "type": "copy_text",
   "value": "select * from dq_issues where created_at >= current_date - interval '7 day';",
@@ -100,7 +92,6 @@ Example URL-builder action from selected/copied text:
   "id": "db-open-dashboard",
   "title": "Dashboard by ID",
   "description": "Open a database dashboard using selected or copied text",
-  "contexts": ["Database"],
   "tags": ["dashboard", "lookup"],
   "type": "build_url_selection_open",
   "value": "https://example.company/dashboards/{id_url}",
@@ -114,8 +105,11 @@ Notes:
 - `title` is the required short name shown in action lists.
 - `description` is optional longer searchable text. It appears in hover help
   and Action info, not in the compact list row.
-- `contexts` is optional. Each value should match a defined context name.
-- Every action is automatically available in General; do not add General to `contexts`.
+- Specific Context membership is owned by the Context record's `action_ids`.
+  Every Action is automatically available in General; add its ID to one or
+  more Context definitions only when it belongs there.
+- Legacy Action-side `context` and `contexts` fields remain readable for
+  migration, but do not use them for new file-based configuration.
 - `tags` is optional and can contain any reusable discovery terms.
 - Use only supported `type` values.
 
@@ -135,10 +129,15 @@ Example:
     {
       "id": "dashboard",
       "label": "Dashboard",
-      "primary_action_id": "db-open-dashboard",
-      "action_ids": [
-        "db-open-dashboard",
-        "db-copy-default-query"
+      "targets": [
+        {
+          "type": "action",
+          "action_id": "db-open-dashboard"
+        },
+        {
+          "type": "action",
+          "action_id": "db-copy-default-query"
+        }
       ]
     }
   ]
@@ -149,25 +148,28 @@ Notes:
 
 - Group IDs must be unique across shared and local files.
 - Item IDs must be unique within their group.
-- `action_ids` must refer to existing action IDs.
+- Action targets must refer to existing Action IDs. Personal menus may also
+  contain reviewed Work Item targets; use the complete format reference below.
+- Legacy `primary_action_id`, `action_ids`, and single-Work-Item fields remain
+  readable for existing files and backups; use `targets` for new items.
 
 Full format: `docs/COMMAND_SURFACE_CONFIGURATION.md`.
 
 ## 6. Recommended file-first workflow
 
-1. Create/update context in context JSON.
-2. Create/update actions that reference that context.
-3. Optionally expose key actions in command-surface JSON.
+1. Create or update Actions in the appropriate Action JSON file.
+2. Create or update Contexts and add the relevant Action IDs to `action_ids`.
+3. Optionally expose key Actions in command-surface JSON.
 4. Validate with `check-context-palette.bat`.
-5. Restart the app and test the Active actions.
+5. Return to or reopen the palette and test the Active Actions.
 
 ## 7. Troubleshooting
 
 - New action does not appear:
   - Check for duplicate IDs and invalid JSON.
-  - Verify `context` names match exactly.
+  - Verify the Action ID is present in the intended Context's `action_ids`.
   - Run `check-context-palette.bat` and read reported owner references.
-- Slots `6-9` are not what you expected:
+- Slots `6-0` are not what you expected:
   - Check `preferred_action_ids` in contexts.
   - Check whether `data/palette.json` contains explicit context slot overrides.
 - Quick-action label menu is empty:
