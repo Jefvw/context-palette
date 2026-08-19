@@ -23,6 +23,8 @@ from context_palette.action_discovery_panel import (
 )
 from context_palette.command_surface import CommandGroup, CommandItem
 from context_palette.contexts import ContextDefinition, ContextError
+from context_palette.drop_adapter import DropProblem, DropResult
+from context_palette.drop_extraction import DropItem
 from context_palette.launcher import (
     LauncherApp,
     bounded_sash_position,
@@ -1313,6 +1315,76 @@ class LauncherInteractionTests(unittest.TestCase):
         app._handle_external_request({"command": "show"})
 
         self.assertIsNone(app.source_foreground_handle)
+
+    def test_drop_reveal_never_synchronizes_clipboard(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app._configuration_recovery_required = False
+        app.root = Mock()
+        app.search_var = FakeVariable()
+        app._cancel_scheduled_hide = Mock()
+        app._reload_if_changed = Mock()
+        app._sync_workspace_from_clipboard_if_safe = Mock()
+        app.focus_search = Mock()
+
+        self.assertTrue(
+            app._reveal_window(
+                sync_workspace=False,
+                focus_search=False,
+                temporary_attention=False,
+            )
+        )
+
+        app._sync_workspace_from_clipboard_if_safe.assert_not_called()
+        app.root.attributes.assert_called_once_with("-topmost", False)
+        app.root.after.assert_not_called()
+
+    def test_drop_result_clears_stale_capture_and_places_exact_order(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.captured_selection = "stale selection"
+        app.source_foreground_handle = 123
+        app.status_var = FakeVariable()
+        app.root = Mock()
+        app._reveal_window = Mock(return_value=True)
+        app.workspace_component = Mock()
+        app.workspace_component.apply_incoming_text.return_value = "replace"
+        result = DropResult(
+            items=(
+                DropItem("path", r"C:\First File.txt"),
+                DropItem("url", "https://example.test/second"),
+            )
+        )
+
+        app._accept_drop_result(result)
+
+        self.assertIsNone(app.captured_selection)
+        self.assertIsNone(app.source_foreground_handle)
+        app._reveal_window.assert_called_once_with(
+            sync_workspace=False,
+            focus_search=False,
+            temporary_attention=False,
+        )
+        app.workspace_component.apply_incoming_text.assert_called_once_with(
+            "C:\\First File.txt\nhttps://example.test/second",
+            source_label="the drop target",
+        )
+        self.assertIn("2 dropped item(s)", app.status_var.value)
+
+    def test_failed_drop_does_not_reveal_or_replace_workspace(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.captured_selection = "still valid"
+        app.source_foreground_handle = 123
+        app.status_var = FakeVariable()
+        app._reveal_window = Mock()
+        app.workspace_component = Mock()
+
+        app._accept_drop_result(
+            DropResult(error=DropProblem("payload", "Drop could not be decoded."))
+        )
+
+        app._reveal_window.assert_not_called()
+        app.workspace_component.apply_incoming_text.assert_not_called()
+        self.assertEqual(app.captured_selection, "still valid")
+        self.assertEqual(app.source_foreground_handle, 123)
 
     def test_every_action_attempt_consumes_captured_destination(self):
         app = LauncherApp.__new__(LauncherApp)

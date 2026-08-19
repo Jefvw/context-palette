@@ -464,12 +464,18 @@ class WindowsScriptTests(unittest.TestCase):
         self.assertIn('".venv\\Scripts\\python.exe" -m pip install', script)
         self.assertIn("-r requirements-ocr.txt", script)
         self.assertIn(".context-palette-ocr-requirements.sha256", script)
+
         self.assertIn("OCR dependencies are unchanged", script)
         self.assertIn("does not require administrator rights", script)
         self.assertIn("Core Context Palette setup completed", script)
         self.assertIn("remains available", script)
         self.assertIn("Only Extract text is unavailable", script)
         self.assertNotIn("runas", script.casefold())
+
+    def test_core_drag_and_drop_dependency_is_pinned(self) -> None:
+        requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+
+        self.assertIn("tkinterdnd2==0.6.2", requirements.splitlines())
 
     def test_setup_supports_a_strict_offline_package_folder(self) -> None:
         base = (ROOT / "setup-context-palette.bat").read_text(encoding="utf-8")

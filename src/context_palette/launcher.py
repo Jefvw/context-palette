@@ -88,6 +88,8 @@ from .help_window import HelpWindow
 from .harvest_window import HarvestWindow
 from .contexts import ContextDefinition, ContextError, load_combined_contexts
 from .data_catalog import AppDataPaths
+from .drop_adapter import DropResult
+from .drop_target_window import DropTargetWindow
 from .inbox import InboxError, append_inbox_item, create_clipboard_item, load_inbox_items
 from .inbox_window import ActionCreator, InboxWindow, suggest_url_template
 from .ocr import (
@@ -342,6 +344,7 @@ class LauncherApp:
         self.command_surface_tooltips: list[WidgetTooltip] = []
         self.command_surface_columns = 1
         self.configuration_window: ConfigurationWindow | None = None
+        self.drop_target_window: DropTargetWindow | None = None
         self.action_info_full = (
             "Select an Action or Work Item to see what it will do."
         )
@@ -361,6 +364,11 @@ class LauncherApp:
         if not self.instance_server.start():
             self.root.after(0, self.root.destroy)
             return
+        self.drop_target_window = DropTargetWindow(
+            self.root,
+            self._accept_drop_result,
+        )
+        self.root.after_idle(self._start_drop_target)
         self.hotkey_available = self.hotkey.start()
         if self.hotkey_available:
             shortcuts = " or ".join(reversed(self.hotkey.available_shortcuts))
@@ -687,6 +695,11 @@ class LauncherApp:
             discovery.pin_button,
         ]
         self.more_menu = discovery.more_menu
+        self.more_menu.insert_command(
+            1,
+            label="Show drop target",
+            command=self._show_drop_target,
+        )
         self.more_button = discovery.more_button
         self.actions_list_frame = discovery.list_frame
         self.results_scrollbar = discovery.scrollbar
@@ -776,7 +789,7 @@ class LauncherApp:
         self._tooltip(discovery.help_button, lambda: discovery.mode_help_text)
         self._tooltip(
             discovery.more_button,
-            "More — Open keyboard shortcuts, hide Context Palette, or quit.",
+            "More — Show the drop target, open keyboard shortcuts, hide Context Palette, or quit.",
         )
         surface_body.pack(fill=tk.X)
         self.configure_button = discovery.configure_button
@@ -1096,6 +1109,19 @@ class LauncherApp:
         self.show_requests.put(request)
 
     def show_window(self) -> None:
+        self._reveal_window(
+            sync_workspace=True,
+            focus_search=True,
+            temporary_attention=True,
+        )
+
+    def _reveal_window(
+        self,
+        *,
+        sync_workspace: bool,
+        focus_search: bool,
+        temporary_attention: bool,
+    ) -> bool:
         if getattr(self, "_configuration_recovery_required", False):
             messagebox.showerror(
                 "Restart required for recovery",
@@ -1105,18 +1131,85 @@ class LauncherApp:
                 ),
                 parent=self.root,
             )
-            return
+            return False
         self._cancel_scheduled_hide()
         self.root.deiconify()
         self.root.state("normal")
         self.root.lift()
-        self.root.attributes("-topmost", True)
-        self.root.after(100, lambda: self.root.attributes("-topmost", False))
+        if temporary_attention:
+            self.root.attributes("-topmost", True)
+            self.root.after(100, lambda: self.root.attributes("-topmost", False))
+        else:
+            self.root.attributes("-topmost", False)
         self.root.focus_force()
         self.search_var.set("")
         self._reload_if_changed()
-        self._sync_workspace_from_clipboard_if_safe()
-        self.root.after(80, self.focus_search)
+        if sync_workspace:
+            self._sync_workspace_from_clipboard_if_safe()
+        if focus_search:
+            self.root.after(80, self.focus_search)
+        return True
+
+    def _start_drop_target(self) -> None:
+        target = getattr(self, "drop_target_window", None)
+        if target is not None and not target.start():
+            LOGGER.warning("Always-on-top drop target is unavailable")
+
+    def _show_drop_target(self) -> None:
+        target = getattr(self, "drop_target_window", None)
+        if target is not None and target.show():
+            self.status_var.set("Drop target is ready for files, links, or text.")
+            return
+        self.status_var.set("Drop target is unavailable; Context Palette remains usable.")
+        messagebox.showwarning(
+            "Drop target unavailable",
+            "The optional Windows drag-and-drop component could not be loaded. "
+            "Run setup-context-palette.bat to repair the local environment. "
+            "All other Context Palette features remain available.",
+            parent=self.root,
+        )
+
+    def _accept_drop_result(self, result: DropResult) -> None:
+        if result.error is not None:
+            self.status_var.set(
+                f"Drop was not accepted: {result.error.message}"
+            )
+            return
+        if not result.items:
+            self.status_var.set("Drop contained no supported content.")
+            return
+
+        value = "\n".join(item.value for item in result.items)
+        # A drop is a new explicit intake event, never material captured for an
+        # earlier window. Invalidate both sources before showing the palette.
+        self.captured_selection = None
+        self.source_foreground_handle = None
+        if not self._reveal_window(
+            sync_workspace=False,
+            focus_search=False,
+            temporary_attention=False,
+        ):
+            return
+        placement = self.workspace_component.apply_incoming_text(
+            value,
+            source_label="the drop target",
+        )
+        if placement is None:
+            self.status_var.set(
+                "Dropped content was not placed; Input / Output was unchanged."
+            )
+            return
+        verb = "Replaced" if placement == "replace" else "Appended to"
+        warning_note = (
+            f" {len(result.warnings)} shortcut warning(s); unresolved paths were kept."
+            if result.warnings
+            else ""
+        )
+        self.status_var.set(
+            f"{verb} Input / Output with {len(result.items)} dropped item(s)."
+            f"{warning_note}"
+        )
+        self.root.after_idle(self.workspace_component.text.focus_set)
 
     def hide_window(self) -> None:
         self._cancel_scheduled_hide()

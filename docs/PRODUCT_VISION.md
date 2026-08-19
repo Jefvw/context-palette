@@ -16,8 +16,8 @@ The intended experience has two equally important modes:
 
 - **Use:** choose a focus, find an Action or Work Item, understand its effect,
   and invoke it quickly.
-- **Build:** capture useful material during real work, confirm a constrained
-  action, and edit it directly whenever the workflow changes.
+- **Build:** capture or drop useful material during real work, confirm a
+  constrained action, and edit it directly whenever the workflow changes.
 
 ```text
 Capture or configure → Confirm → Active → Archived

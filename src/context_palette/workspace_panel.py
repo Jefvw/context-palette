@@ -18,13 +18,13 @@ from .window_geometry import place_child_window
 from .workspace_transforms import WORKSPACE_TRANSFORM_GROUPS, WorkspaceTransform
 
 
-class OcrPlacementDialog:
-    """Explicit Replace / Append / Cancel choice for a completed OCR result."""
+class TextPlacementDialog:
+    """Explicit Replace / Append / Cancel choice for incoming workspace text."""
 
-    def __init__(self, parent: tk.Misc, message: str) -> None:
+    def __init__(self, parent: tk.Misc, message: str, *, title: str) -> None:
         self.result: str | None = None
         self.window = tk.Toplevel(parent)
-        self.window.title("Place extracted text")
+        self.window.title(title)
         self.window.transient(parent)
         self.window.protocol("WM_DELETE_WINDOW", self._cancel)
         outer = ttk.Frame(self.window, padding=14)
@@ -78,8 +78,23 @@ class OcrPlacementDialog:
         self.window.destroy()
 
 
+class OcrPlacementDialog(TextPlacementDialog):
+    """Compatibility wrapper for the OCR-specific placement title."""
+
+    def __init__(self, parent: tk.Misc, message: str) -> None:
+        super().__init__(parent, message, title="Place extracted text")
+
+
 def ask_ocr_placement(parent: tk.Misc, message: str) -> str | None:
     return OcrPlacementDialog(parent, message).show()
+
+
+def ask_text_placement(parent: tk.Misc, message: str) -> str | None:
+    return TextPlacementDialog(
+        parent,
+        message,
+        title="Place dropped content",
+    ).show()
 
 
 class TransformParametersDialog(simpledialog.Dialog):
@@ -346,6 +361,40 @@ class WorkspacePanel:
             )
             if placement is None:
                 return None
+
+        return self._apply_text_placement(value, placement, current)
+
+    def apply_incoming_text(
+        self,
+        value: str,
+        *,
+        source_label: str,
+    ) -> str | None:
+        """Place dropped text without reading or changing the clipboard."""
+
+        if not value.strip():
+            return None
+        current = self.raw_text()
+        placement = "replace"
+        if current:
+            placement = ask_text_placement(
+                self.text.winfo_toplevel(),
+                f"Content was received from {source_label}.\n\n"
+                "Replace discards the current Input / Output text. Append keeps "
+                "it and adds the dropped content below.",
+            )
+            if placement is None:
+                return None
+
+        return self._apply_text_placement(value, placement, current)
+
+    def _apply_text_placement(
+        self,
+        value: str,
+        placement: str,
+        current: str,
+    ) -> str:
+        """Apply one already-approved incoming value as one undoable edit."""
 
         self.clear_file_preview()
         self.text.edit_separator()

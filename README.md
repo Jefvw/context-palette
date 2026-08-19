@@ -28,6 +28,10 @@ actions remain editable there but stay outside normal retrieval. See
   items, and local pinned slots 1–5 through a guided window without exposing
   technical IDs.
 - Captures clipboard material into an Inbox and converts it into permanent actions.
+- Keeps a separate always-on-top drop target for files, folders, shortcuts,
+  links, and text. A successful drop reveals the ordinary non-topmost palette
+  and offers the normalized result to Input / Output without changing the
+  clipboard.
 - Turns one clear website or absolute file, folder, or application path in
   Input / Output into a prefilled, review-before-save Action without probing a
   mapped drive or changing the general Action type chooser.
@@ -57,9 +61,10 @@ actions remain editable there but stay outside normal retrieval. See
 - A user-writable folder; administrator rights are not required.
 
 The application primarily uses the Python standard library and Tkinter. Its
-in-app documentation viewer uses pinned Markdown and HTML-rendering libraries;
-`setup-context-palette.bat` installs the declared dependencies into the local
-`.venv`.
+in-app documentation viewer uses pinned Markdown and HTML-rendering libraries,
+and its Windows drop target uses the pinned `tkinterdnd2` adapter with bundled
+TkDND binaries. `setup-context-palette.bat` installs the declared dependencies
+into the local `.venv`; offline preparation includes the same pinned wheel.
 
 Image-to-text extraction is an optional local component because its OCR models
 and native runtime add about 270 MB. Prepare it inside the same user-writable
@@ -168,6 +173,8 @@ After the application starts:
 
 1. Press `F9` to capture selected text and show the palette. Use `Ctrl+Alt+P` as the fallback shortcut.
 2. Type in **Find**, select an action, and press `Enter`.
+3. Drag a useful file, folder, browser link, desktop shortcut, or text object
+   onto **Drop into Context Palette** when clipboard capture is inconvenient.
 3. Choose a **Focus** Context to change mixed Action/Work Item slots 6–0.
 4. Choose **Configure**, or press `Ctrl+,`, to add personal actions, contexts,
    or Quick actions. **Manage focuses…** in the Focus selector opens the

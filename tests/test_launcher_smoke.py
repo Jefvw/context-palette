@@ -150,6 +150,62 @@ class LauncherSmokeTests(unittest.TestCase):
         finally:
             root.destroy()
 
+    def test_workspace_places_dropped_text_without_touching_clipboard(self):
+        root = tk.Tk()
+        root.withdraw()
+        host = ttk.Frame(root)
+        host.pack(fill=tk.BOTH, expand=True)
+        clipboard_getter = Mock(side_effect=AssertionError("clipboard must not be read"))
+        clipboard_setter = Mock(side_effect=AssertionError("clipboard must not be written"))
+        panel = WorkspacePanel(
+            host,
+            clipboard_getter=clipboard_getter,
+            clipboard_setter=clipboard_setter,
+            status_setter=lambda _value: None,
+            tooltip_adder=lambda _widget, _text: None,
+        )
+        try:
+            self.assertEqual(
+                panel.apply_incoming_text(
+                    r"C:\Dropped\first.txt",
+                    source_label="the drop target",
+                ),
+                "replace",
+            )
+            with patch(
+                "context_palette.workspace_panel.ask_text_placement",
+                return_value="append",
+            ) as ask:
+                self.assertEqual(
+                    panel.apply_incoming_text(
+                        "https://example.test/second",
+                        source_label="the drop target",
+                    ),
+                    "append",
+                )
+            self.assertIn("Replace", ask.call_args.args[1])
+            self.assertIn("Append", ask.call_args.args[1])
+            self.assertEqual(
+                panel.raw_text(),
+                "C:\\Dropped\\first.txt\n\nhttps://example.test/second",
+            )
+            unchanged = panel.raw_text()
+            with patch(
+                "context_palette.workspace_panel.ask_text_placement",
+                return_value=None,
+            ):
+                self.assertIsNone(
+                    panel.apply_incoming_text(
+                        "cancelled",
+                        source_label="the drop target",
+                    )
+                )
+            self.assertEqual(panel.raw_text(), unchanged)
+            clipboard_getter.assert_not_called()
+            clipboard_setter.assert_not_called()
+        finally:
+            root.destroy()
+
     def test_file_transform_preview_exposes_guarded_replace_and_clears_on_new_input(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             source = Path(temporary_directory) / "source.txt"
@@ -1584,7 +1640,11 @@ class LauncherSmokeTests(unittest.TestCase):
                     visible_buttons = [
                         widget
                         for widget in self._descendants(root)
-                        if isinstance(widget, ttk.Button) and widget.winfo_ismapped()
+                        if (
+                            isinstance(widget, ttk.Button)
+                            and widget.winfo_ismapped()
+                            and widget.winfo_toplevel() is root
+                        )
                     ]
                     self.assertTrue(visible_buttons)
                     for button in visible_buttons:
@@ -1634,10 +1694,22 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(
                         [
                             app.more_menu.entrycget(index, "label")
-                            for index in (0, 2, 3)
+                            for index in (0, 1, 3, 4)
                         ],
-                        ["Keyboard shortcuts", "Hide", "Quit"],
+                        [
+                            "Keyboard shortcuts",
+                            "Show drop target",
+                            "Hide",
+                            "Quit",
+                        ],
                     )
+                    self.assertIsNotNone(app.drop_target_window)
+                    self.assertIsNotNone(app.drop_target_window.window)
+                    self.assertEqual(app.drop_target_window.window.transient(), "")
+                    self.assertTrue(
+                        bool(app.drop_target_window.window.attributes("-topmost"))
+                    )
+                    self.assertFalse(bool(root.attributes("-topmost")))
                     tooltips = {
                         tooltip.widget: tooltip.text
                         for tooltip in app.widget_tooltips

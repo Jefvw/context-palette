@@ -1,5 +1,33 @@
 # Decisions
 
+## 2026-08-19 - Add one isolated always-on-top drop intake surface
+
+**Decision:** Add a singleton non-transient drop-target `Toplevel` to the
+existing resident Tk process. Only that small surface remains permanently
+topmost and it stays mapped while the main root is withdrawn. Decode file
+payloads with Tcl `splitlist`, keep text payloads intact, normalize into typed
+path/URL/text items, resolve only bounded `.url` and `.lnk` targets, and return
+the completed result to launcher-owned placement. The launcher reveals the
+ordinary palette without clipboard synchronization, clears stale captured
+selection/destination state, and reuses Replace/Append/Cancel.
+
+**Reason:** Explorer, browser, OneNote, and desktop dragging provides a fast
+intake route when clipboard capture is awkward. Native Tk has no sufficient
+cross-source drop protocol; Explorer-only `WM_DROPFILES` would not cover the
+required browser/text cases. `tkinterdnd2==0.6.2` supplies a maintained
+existing-root API and bundled user-level TkDND binaries, so no administrator
+installation, second Tk root, helper process, or change to root construction is
+needed.
+
+**Consequences:** The pinned wheel joins required normal/offline setup, but its
+import and native load stay behind a feature boundary so a broken component
+does not prevent non-drop startup. Drops never write the clipboard, open or
+execute targets, persist data, create Actions or Inbox items, transfer shortcut
+arguments, or log dropped content. Shortcut reads run in one bounded daemon
+worker; all Tk and placement work remains on the main thread. Manual Windows
+Explorer/browser/OneNote/desktop validation remains required in addition to
+native registration, parser, lifecycle, placement, and regression tests.
+
 ## 2026-08-19 - Keep optional OCR failure outside core setup
 
 **Decision:** Install and validate required application dependencies before

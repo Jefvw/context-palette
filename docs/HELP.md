@@ -93,9 +93,11 @@ Per-file failures do not discard successful results from other files, and
 size, compression, worksheet, cell, occurrence, and candidate limits keep
 scans bounded.
 
-Folder scanning, drag and drop, OneNote extraction, PDF/HTML/email parsing,
-recursive crawling, remote fetching, and automatic trust are not part of this
-version.
+Folder scanning or source drag-and-drop inside Harvest, OneNote document
+extraction, PDF/HTML/email parsing, recursive crawling, remote fetching, and
+automatic trust are not part of this version. The separate general drop target
+can place dropped paths, links, or text in Input / Output; it does not add a
+Harvest source automatically.
 
 ## Open and close the palette
 
@@ -111,10 +113,13 @@ version.
   area of the monitor containing the main palette. Moving the main palette to
   another monitor before opening a window moves that window policy with it.
 - Press `Esc`, click `Hide`, or close the window to hide it.
+- The small **Drop into Context Palette** window is separate and stays visible
+  when the main palette hides. Its own **Hide** command hides only that target.
 - Press `Ctrl+L` or `Ctrl+K` to return keyboard focus to Find.
 - Press `Ctrl+I` to capture clipboard text, `Ctrl+,` to open Configure, or `F1` to open Help.
 - Press `Ctrl+Shift+D` to open Configure directly on the safe Diagnostics tab.
-- Open **More → Keyboard shortcuts** for the authoritative shortcut page.
+- Open **More → Show drop target** to restore a hidden drop target, or
+  **More → Keyboard shortcuts** for the authoritative shortcut page.
 - Press `F5` while the main palette is focused to clear transient screen state
   and return to the startup view. Find, scope, Context/tag filters, Action type,
   Work Item project filter, Focus items mode, captured selection, and Input /
@@ -693,6 +698,10 @@ The bottom communication line always stays one row high. Hover over it for the c
 
 - A text selection captured with `Ctrl+Alt+P` appears here.
 - `Ctrl+V` pastes at the cursor; the right-click command `Replace with clipboard` replaces everything.
+- Drop files, folders, shortcuts, links, or text onto the separate drop target.
+  Empty Input / Output is replaced directly; existing content gets explicit
+  **Replace**, **Append**, and **Cancel** choices. The drop path does not read,
+  replace, or copy the clipboard.
 - Type or edit text directly.
 - The right-click command `Clear` empties it.
 - The right-click menu also provides Undo, Redo, Cut, Copy, Paste, Select all, and Copy all.
@@ -937,9 +946,34 @@ action first. To assign or reorder all five slots directly, open
 
 Opens this document inside Context Palette.
 
+### Drop target
+
+**Drop into Context Palette** is a small movable intake window owned by the
+same resident process. It alone is permanently always on top. The ordinary
+palette remains non-topmost and retains its existing auto-hide behavior.
+
+Drop one or more Explorer files or folders, a desktop `.url` or `.lnk`
+shortcut, an HTTP/HTTPS or `file:` link from a browser or OneNote, or a text
+object. Context Palette uses Tcl's native file-list decoder, normalizes useful
+paths and links in their original order, removes duplicates, and resolves only
+the target of a shortcut. It never imports shortcut arguments.
+
+After a useful drop, the palette appears without synchronizing from the
+clipboard. Any stale hotkey-captured selection or destination is discarded so
+it cannot replace or receive the dropped material. Input / Output placement is
+one Undo step. The target remains ready for later drops. Choose its **Hide**
+button to put it away and **More → Show drop target** to restore it.
+
+Dropping does not open or execute anything, save configuration, create an
+Action or Inbox item, write a log containing the dropped value, or modify the
+clipboard. An unreadable `.url` or unresolved `.lnk` remains as its original
+path with a warning. If TkDND cannot load, the target is unavailable but the
+resident launcher and every non-drop feature continue to work.
+
 ### Hide
 
-Hides the palette but keeps it resident. Reopen with `Ctrl+Alt+P`.
+Hides the ordinary palette but keeps it resident. Reopen with `Ctrl+Alt+P`.
+The separate drop target remains visible unless you hide it independently.
 
 ### Quit
 

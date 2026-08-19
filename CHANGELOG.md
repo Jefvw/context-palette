@@ -4,6 +4,17 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Added a separate singleton **Drop into Context Palette** window for bounded
+  Explorer, browser, OneNote, and desktop intake. Only that small non-transient
+  Toplevel remains always on top while the ordinary palette keeps its existing
+  non-topmost/auto-hide lifecycle. It normalizes Windows and UNC paths,
+  HTTP(S), file URIs, percent encoding, `.url`, `.lnk`, and text in stable
+  order; reveals the palette without clipboard synchronization; clears stale
+  capture/destination state; and uses explicit Replace/Append/Cancel placement.
+  It never writes the clipboard, opens or executes a target, persists a drop,
+  or creates an Action/Inbox item. The pinned `tkinterdnd2==0.6.2` wheel is part
+  of normal and offline core setup, while a native-load failure leaves every
+  other feature usable.
 - Decoupled optional OCR preparation from core application readiness. Online
   setup now establishes the core first, while offline setup also runs the full
   core check; OCR installation or initialization failure leaves Context Palette

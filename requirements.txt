@@ -1,3 +1,4 @@
 # Reviewed, pinned runtime dependencies installed by setup-context-palette.bat.
 markdown-it-py==4.2.0
 tkinterweb==4.25.3
+tkinterdnd2==0.6.2

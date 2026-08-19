@@ -4,6 +4,13 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Now
 
+- Manually validate the always-on-top drop target on a second standard-user
+  Windows PC and at 100%, 125%, and 150% display scaling. Cover Explorer files,
+  folders, multiple items, UNC and percent-encoded paths, `.url`, `.lnk`, a
+  browser link, OneNote link/text, and a desktop shortcut; verify empty,
+  Replace, Append, and Cancel placement, unchanged clipboard content, ordinary
+  palette auto-hide/non-topmost behavior, target Hide/Show, and fallback when
+  TkDND cannot load.
 - Manually verify native Quick-action menu right-click delivery on Windows at
   100%, 125%, and 150%: launcher left-click/Enter/Space browses without
   execution; launcher right-click offers Add/Organize; Action right-click opens
@@ -81,8 +88,9 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Later
 
-- Consider drag-and-drop and folder selection for Harvest actions after the
-  explicit multi-file workflow has real-use feedback.
+- Consider direct source drag-and-drop and folder selection inside Harvest
+  after its explicit multi-file workflow has real-use feedback. The implemented
+  general intake drop target intentionally does not add Harvest sources.
 - Evaluate OneNote, PDF, HTML, and email harvesting only with format-specific
   safety, provenance, and bounded-extraction designs; do not add recursive or
   remote crawling implicitly.

@@ -44,6 +44,7 @@ pythonw.exe -> context_palette.main
                 +-- load actions, contexts, command surface, palette state, Inbox, and cheat sheets
                 +-- start localhost single-instance listener
                 +-- register F9 and Ctrl+Alt+P on a background message thread
+                +-- register one non-transient topmost drop-target Toplevel
                 `-- run the Tk main loop
 ```
 
@@ -86,6 +87,10 @@ Presentation and application orchestration.
   40% initially and the full-height Input / Output workspace about 60%.
 - Owns the communication line, systematic widget tooltips, Inbox, sheets, Help,
   and action editors; `WorkspacePanel` owns the Input / Output presentation.
+- Owns the safe drop-result handoff: it clears stale captured-selection and
+  source-window state, reveals the ordinary palette without clipboard
+  synchronization or permanent topmost state, and asks `WorkspacePanel` to
+  place the completed normalized text.
 - Connects platform-independent action execution to Windows-specific callbacks.
 - Ensures Tk operations stay on the Tk main thread.
 - Resets transient presentation state through the main-window `F5` shortcut
@@ -246,12 +251,51 @@ Owns the complete Input / Output UI component: text widget, edit menu, visible
 Capture, Inbox, **Create from Input**, **Extract text**, and **Text tools** bitmap controls;
 selection-first source choice and replacement; undo boundaries; prompting;
 clipboard copy and replacement, transformation feedback, and file-transform
-preview provenance. A file preview exposes explicit replace, save-as, and
+preview provenance. It also owns the shared undoable incoming-text placement
+boundary used by OCR and drag-and-drop, including explicit Replace, Append,
+and Cancel for a non-empty workspace. A file preview exposes explicit replace, save-as, and
 dismiss commands; ordinary workspace replacement clears that provenance. It
 depends on small injected callbacks for Action suggestion orchestration,
 clipboard access, status messages, and tooltip registration. `launcher.py`
 retains compatibility delegates for action execution and integration flows,
 but no longer owns workspace widget mechanics.
+
+### `drop_extraction.py`
+
+Defines immutable typed `path`, `url`, and `text` items plus pure bounded
+normalization. It accepts already decoded values, recognizes Windows drive and
+UNC paths, HTTP(S), Windows `file:` URIs, and percent encoding, preserves
+first-seen order, and performs type-aware deduplication. It never imports Tk,
+reads a file, resolves a shortcut, touches the clipboard, starts a process,
+logs dropped values, or persists data. It also provides the pure bounded parser
+for decoded `.url` Internet Shortcut content.
+
+### `drop_adapter.py`
+
+Owns the narrow platform adapter between TkDND events and the pure extraction
+core. `DND_Files` payloads are decoded only through the originating widget's
+Tcl `splitlist`; `DND_Text` remains one library-native payload. Raw values,
+counts, text length, shortcut bytes, subprocess duration, and output are
+bounded. `.url` files are read with a small encoding-aware limit. `.lnk`
+resolution invokes a fixed hidden PowerShell/WScript.Shell target-only query
+with separate arguments and discards the shortcut argument string; an error,
+timeout, or unusable target keeps the original shortcut path and a structured
+warning. The single-flight daemon coordinator performs those reads off the Tk
+thread and exposes immutable completion through polling. It never executes the
+resolved target or writes application state.
+
+### `drop_target_window.py`
+
+Owns one lazily enabled, non-transient `Toplevel` under the existing ordinary
+`tk.Tk` root. It uses the maintained `TkinterDnD.require(existing_root)` API,
+creates no second root, registers `DND_Files` and `DND_Text`, and returns the
+required TkDND copy/refuse actions. Only this small movable window has permanent
+`-topmost`; closing it withdraws and later Show reuses the same instance. It
+remains mapped when the main root is withdrawn and stays available after a
+drop. Its callback returns only a completed structured result to `LauncherApp`;
+the component cannot modify Input / Output, clipboard, persistence, Actions,
+Inbox, or external applications. Dependency import/native-load failures are
+caught at this feature boundary so ordinary startup remains usable.
 
 ### `ocr.py`
 
@@ -276,8 +320,9 @@ nothing. OCR does not copy its result automatically, persist the source image,
 upload content, or join the current launch-only Action sequence model.
 
 OCR deployment remains independent of core setup. `requirements.txt` contains
-only required application packages; `requirements-ocr.txt` contains the pinned
-optional engine. Online setup establishes the core environment before
+required application packages, including pinned `tkinterdnd2==0.6.2` and its
+bundled architecture-specific TkDND libraries; `requirements-ocr.txt` contains
+the pinned optional engine. Online setup establishes the core environment before
 attempting OCR; offline setup additionally runs the complete core check after
 the optional attempt. An OCR installation or initialization failure leaves the
 core environment and non-OCR launcher behavior available.
@@ -1152,6 +1197,12 @@ screen-aware `780x600` default and `700x480` minimum as other full screens.
 Hotkey placement still reduces an oversized user-resized window before
 clamping it into the cursor monitor's work area.
 
+The drop target is deliberately outside those full-screen presets. It is a
+small non-transient Toplevel positioned near the lower-right screen edge,
+movable by the user, and independently hideable. With the main root withdrawn,
+Windows/Tk keeps this non-transient child mapped; the main palette is never made
+permanently topmost to achieve that lifecycle.
+
 The main content is one user-adjustable horizontal split. It starts at
 approximately 40% for the command console and 60% for Input / Output, while
 guaranteeing at least half of the default width to the workspace. The bounded
@@ -1249,13 +1300,15 @@ password in configuration.
 ## Input and output flow
 
 ```text
-External selected text
-        |
-        | Ctrl+Alt+P -> Ctrl+C before focus changes
-        v
-captured_selection
-        |
-        v
+topmost drop target -> typed normalization --+
+                                             |
+External selected text                       |
+        |                                    |
+        | Ctrl+Alt+P -> Ctrl+C before focus  |
+        v                                    |
+captured_selection                           |
+        |                                    |
+        v                                    v
 Input / Output workspace <---- Paste / manual edit
         |
         +-- transformation -> replace workspace + copy result
@@ -1299,7 +1352,7 @@ credential targets, usernames, passwords, or window titles. Successful and
 clipboard-only outcomes use informational logging, unavailable destinations use
 warning logging, and dispatch failures retain their exception at error level.
 
-Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `workspace_panel.py` owns selection ranges, one-step Undo grouping, clipboard updates, and menus. The launcher injects clipboard, status, and content-change callbacks and retains orchestration delegates. A selected item places its current-state **Input → Effect** summary in the slim bottom communication line; progress, success, and errors temporarily replace it. Hovering or clicking that line exposes the full structured explanation and current operational message.
+Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown normally and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. A successful drop uses a separate reveal path that deliberately skips clipboard synchronization, invalidates stale captured selection/destination state, and places only the normalized result. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `workspace_panel.py` owns selection ranges, one-step Undo grouping, clipboard updates, and menus. The launcher injects clipboard, status, and content-change callbacks and retains orchestration delegates. A selected item places its current-state **Input → Effect** summary in the slim bottom communication line; progress, success, and errors temporarily replace it. Hovering or clicking that line exposes the full structured explanation and current operational message.
 
 The legacy generic `transform_text` action persists one catalogue operation key
 and only that operation's ordered parameters. It remains loadable and editable
@@ -1443,6 +1496,9 @@ Tkinter widgets are only accessed from the main thread.
 
 - The hotkey message loop runs in a daemon thread and writes a lightweight queue message.
 - The single-instance listener also signals through a queue.
+- Shortcut reads and target-only `.lnk` resolution use one read-only daemon
+  worker. The Tk thread polls its completed immutable result; the worker never
+  calls Tk or launcher callbacks.
 - The Tk main loop polls requests every 100 ms.
 - No database, network service, web frontend, or heavy UI framework is initialized.
 

@@ -427,6 +427,20 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
 
 Perform only when relevant:
 
+- Start the app with an empty clipboard and verify **Drop into Context
+  Palette** is the only permanently topmost window. Hide the ordinary palette
+  and confirm the target remains mapped; show the palette with F9/Ctrl+Alt+P
+  and confirm its existing auto-hide and temporary-attention behavior are
+  unchanged. Hide and restore the target through **More → Show drop target**.
+  Drop Explorer files, a folder, multiple ordered items, a UNC path, a
+  percent-encoded path, `.url`, `.lnk`, a browser URL, OneNote link/text, and a
+  desktop shortcut. With empty Input / Output, verify direct placement. With
+  existing text, independently verify Replace, Append, and Cancel. Confirm the
+  target remains visible, stale captured selection/destination state never
+  wins, the clipboard is byte-for-byte unchanged, and no target opens or runs.
+  Repeat the window/layout checks at 100%, 125%, and 150%. Finally simulate an
+  unavailable TkDND component and confirm only the drop target is unavailable.
+
 - With the optional OCR component prepared, copy a Snipping Tool bitmap and
   choose **Extract text**. Verify the UI stays responsive, useful text appears
   in Input / Output, the original image remains on the clipboard, and Undo
