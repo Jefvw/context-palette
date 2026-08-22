@@ -16,8 +16,10 @@ from context_palette.action_sequences import SequenceStep
 from context_palette.action_suggestions import ActionCreationSuggestion
 from context_palette.action_types import ACTION_TYPES
 from context_palette.action_discovery_panel import (
+    CONTEXT_SCOPE_EVERYWHERE,
+    CONTEXT_SCOPE_THIS,
+    DISCOVERY_ALL,
     FOCUS_SLOT_ROW_TAG,
-    PINNED_SLOT_ROW_TAG,
     slot_row_tag,
     visible_result_row_count,
 )
@@ -28,7 +30,9 @@ from context_palette.drop_extraction import DropItem
 from context_palette.launcher import (
     LauncherApp,
     bounded_sash_position,
+    ordered_configured_quick_groups,
     quick_action_column_count,
+    quick_group_top_level_choice_count,
 )
 from context_palette.ocr import OcrError, OcrResult, OcrSource
 from context_palette.palette_state import PaletteState
@@ -830,7 +834,7 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertTrue(opened)
         self.assertEqual(open_target.call_args.args[0].type, "open_folder")
 
-    def test_shift_number_executes_slot_for_azerty_find_input(self):
+    def test_retired_shift_one_through_five_remain_find_input(self):
         app = LauncherApp.__new__(LauncherApp)
         app.search_entry = object()
         app.root = Mock()
@@ -838,8 +842,8 @@ class LauncherInteractionTests(unittest.TestCase):
         app._execute_slot = Mock(return_value="break")
         event = FakeKeyEvent(state=0x0001, keysym="2", keycode=50)
 
-        self.assertEqual(app._handle_keypress(event), "break")
-        app._execute_slot.assert_called_once_with(2, event)
+        self.assertIsNone(app._handle_keypress(event))
+        app._execute_slot.assert_not_called()
 
     def test_focus_slot_dispatches_work_item_reference(self):
         app = LauncherApp.__new__(LauncherApp)
@@ -866,11 +870,6 @@ class LauncherInteractionTests(unittest.TestCase):
         app._execute_slot = Mock(return_value="break")
 
         for keysym, expected_slot in (
-            ("ampersand", 1),
-            ("eacute", 2),
-            ("quotedbl", 3),
-            ("apostrophe", 4),
-            ("parenleft", 5),
             ("minus", 6),
             ("egrave", 7),
             ("underscore", 8),
@@ -978,14 +977,125 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertEqual(quick_action_column_count(250), 2)
         self.assertEqual(quick_action_column_count(900), 2)
 
+    def test_filter_indicator_exposes_saved_filters_from_other_scopes(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.action_discovery_panel = Mock()
+        app.discovery_scope = DISCOVERY_ALL
+        app.action_type_filter = "open_url"
+        app.work_project_filter = "AB9C"
+        app.item_tag_filter = "urgent"
+
+        app._sync_filter_indicators()
+
+        app.action_discovery_panel.set_filter_indicators.assert_called_once_with(
+            scope=DISCOVERY_ALL,
+            primary_value=None,
+            tag_value="urgent",
+            saved_values=(
+                f"Actions: {ACTION_TYPES['open_url'].display_label}",
+                "Work Items: AB9C",
+            ),
+        )
+
+    def test_quick_action_order_prioritizes_personal_configured_menus(self):
+        with tempfile.TemporaryDirectory() as directory:
+            local_path = Path(directory) / "local_command_surface.json"
+            shared_path = Path(directory) / "command_surface.json"
+            groups = [
+                CommandGroup("shared-one", "Shared one", source_path=shared_path),
+                CommandGroup("personal-one", "Personal one", source_path=local_path),
+                CommandGroup("unknown", "Unknown"),
+                CommandGroup("personal-two", "Personal two", source_path=local_path),
+                CommandGroup("shared-two", "Shared two", source_path=shared_path),
+            ]
+
+            ordered = ordered_configured_quick_groups(groups, local_path)
+
+            self.assertEqual(
+                [group.id for group in ordered],
+                [
+                    "personal-one",
+                    "personal-two",
+                    "shared-one",
+                    "unknown",
+                    "shared-two",
+                ],
+            )
+
+    def test_quick_action_tooltip_count_describes_root_choices(self):
+        group = CommandGroup(
+            "tools",
+            "Tools",
+            items=(
+                CommandItem("first", "First"),
+                CommandItem("second", "Second"),
+            ),
+            primary_action_id="open-tools",
+            action_ids=("open-tools", "copy-tools"),
+        )
+
+        self.assertEqual(quick_group_top_level_choice_count(group), 4)
+
+    def test_configured_quick_action_tooltip_explains_browse_count(self):
+        app = LauncherApp.__new__(LauncherApp)
+        area = Mock()
+        control = Mock()
+        app.command_tiles_frame = Mock()
+        app._surface_menu_label = Mock(return_value=control)
+        app._command_surface_tooltip = Mock()
+        app._bind_surface_menu_control = Mock()
+        group = CommandGroup(
+            "tools",
+            "Tools",
+            items=(
+                CommandItem("first", "First"),
+                CommandItem("second", "Second"),
+            ),
+        )
+
+        with patch("context_palette.launcher.ttk.Frame", return_value=area):
+            app._render_configured_quick_group(group, row=1, column=0)
+
+        tooltip = app._command_surface_tooltip.call_args.args[1]
+        self.assertIn("browse Tools (2 configured top-level choices)", tooltip)
+        self.assertIn("Right-click: add or organize", tooltip)
+
+    def test_automatic_quick_action_tooltip_reports_live_action_count(self):
+        app = LauncherApp.__new__(LauncherApp)
+        area = Mock()
+        control = Mock()
+        app.command_tiles_frame = Mock()
+        app._surface_menu_label = Mock(return_value=control)
+        app._command_surface_tooltip = Mock()
+        app._bind_surface_menu_control = Mock()
+        app.actions = [
+            Action("folder", "Folder", "General", "open_folder", r"C:\work"),
+            Action(
+                "old-folder",
+                "Old folder",
+                "General",
+                "open_folder",
+                r"C:\old",
+                state="Archived",
+            ),
+        ]
+        group = CommandGroup("action-bound-folders", "Folders")
+
+        with patch("context_palette.launcher.ttk.Frame", return_value=area):
+            app._render_action_bound_quick_group(group, row=1, column=1)
+
+        tooltip = app._command_surface_tooltip.call_args.args[1]
+        self.assertIn("browse Folders (1 active Action)", tooltip)
+        self.assertIn("Matching Actions appear automatically", tooltip)
+
     def test_visible_result_rows_adapt_to_text_scaling(self):
         self.assertEqual(visible_result_row_count(1.333), 7)
         self.assertEqual(visible_result_row_count(1.667), 6)
         self.assertEqual(visible_result_row_count(2.0), 5)
 
-    def test_slot_row_tags_distinguish_shortcut_groups_without_number_labels(self):
+    def test_slot_row_tags_identify_only_context_shortcuts(self):
         for slot in range(1, 6):
-            self.assertEqual(slot_row_tag(slot), PINNED_SLOT_ROW_TAG)
+            self.assertIsNone(slot_row_tag(slot))
         for slot in range(6, 11):
             self.assertEqual(slot_row_tag(slot), FOCUS_SLOT_ROW_TAG)
         self.assertIsNone(slot_row_tag(None))
@@ -1029,28 +1139,58 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertEqual(app.passwords_button.options["style"], "RailIcon.TButton")
         self.assertEqual(refreshes, [True, True])
 
-    def test_focus_actions_button_toggles_focus_mode_and_visual_state(self):
+    def test_context_scope_switches_between_everywhere_and_working_context(self):
         app = LauncherApp.__new__(LauncherApp)
-        app.focus_actions_mode = False
-        app.focus_actions_button = FakeButton()
+        app.context_scope = CONTEXT_SCOPE_EVERYWHERE
+        app.palette_state = PaletteState((), "Developing", {})
+        app.status_var = FakeVariable()
         app.root = Mock()
-        scope_changes: list[str] = []
         refreshes: list[bool] = []
-        app._select_discovery_scope = scope_changes.append
+        synchronizations: list[bool] = []
+        app._sync_context_scope_control = lambda: synchronizations.append(True)
         app._refresh_results = lambda: refreshes.append(True)
+        app._focus_active_results = Mock()
 
-        app._activate_focus_actions()
+        app._select_context_scope(CONTEXT_SCOPE_THIS)
 
-        self.assertTrue(app.focus_actions_mode)
-        self.assertEqual(app.focus_actions_button.options["style"], "RailAccent.TButton")
+        self.assertEqual(app.context_scope, CONTEXT_SCOPE_THIS)
 
-        app._activate_focus_actions()
+        app._select_context_scope(CONTEXT_SCOPE_EVERYWHERE)
 
-        self.assertFalse(app.focus_actions_mode)
-        self.assertEqual(app.focus_actions_button.options["style"], "Compact.TButton")
-        self.assertEqual(scope_changes, ["all", "all"])
+        self.assertEqual(app.context_scope, CONTEXT_SCOPE_EVERYWHERE)
+        self.assertEqual(synchronizations, [True, True])
         self.assertEqual(refreshes, [True, True])
         self.assertEqual(app.root.after_idle.call_count, 2)
+
+    def test_this_context_scope_requires_a_specific_working_context(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.context_scope = CONTEXT_SCOPE_EVERYWHERE
+        app.palette_state = PaletteState((), "General", {})
+        app.status_var = FakeVariable()
+        app.root = Mock()
+        app._sync_context_scope_control = Mock()
+        app._refresh_results = Mock()
+        app._focus_active_results = Mock()
+
+        app._select_context_scope(CONTEXT_SCOPE_THIS)
+
+        self.assertEqual(app.context_scope, CONTEXT_SCOPE_EVERYWHERE)
+        self.assertIn("specific Working context", app.status_var.value)
+        app._sync_context_scope_control.assert_called_once_with()
+        app._refresh_results.assert_called_once_with()
+
+    def test_selected_result_context_uses_only_this_context_scope(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.palette_state = PaletteState((), "Developing", {})
+        app.context_scope = CONTEXT_SCOPE_EVERYWHERE
+
+        self.assertIsNone(app._selected_result_context())
+
+        app.context_scope = CONTEXT_SCOPE_THIS
+        self.assertEqual(app._selected_result_context(), "Developing")
+
+        app.palette_state = PaletteState((), "General", {})
+        self.assertIsNone(app._selected_result_context())
 
     def test_any_action_type_can_be_selected_as_a_filter(self):
         app = LauncherApp.__new__(LauncherApp)
@@ -1070,19 +1210,46 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertEqual(app.passwords_button.options["style"], "RailIcon.TButton")
         self.assertEqual(refreshes, [True])
 
+    def test_this_context_includes_a_preferred_only_work_item(self):
+        reference = WorkItemReference("cap40", "QST-CAP40-question")
+        item = DiscoveredWorkItem(
+            "cap40",
+            "CAP40",
+            reference.relative_folder,
+            Path("C:/workitems/QST-CAP40-question"),
+            reference.relative_folder,
+            "QST",
+            "Question",
+            "CAP40",
+            "question",
+            (),
+            None,
+        )
+        app = LauncherApp.__new__(LauncherApp)
+        app.context_definitions = [
+            ContextDefinition(
+                "Database",
+                preferred_item_refs=(
+                    PaletteItemReference(work_item_ref=reference),
+                ),
+            )
+        ]
+
+        self.assertTrue(app._work_item_belongs_to_context(item, "Database"))
+        self.assertFalse(app._work_item_belongs_to_context(item, "Other"))
+
     def test_f5_reset_clears_transient_state_but_preserves_palette_state(self):
         app = LauncherApp.__new__(LauncherApp)
-        app.focus_actions_mode = True
+        app.context_scope = CONTEXT_SCOPE_THIS
+        app.context_scope_var = FakeVariable()
         app.action_type_filter = "open_url"
         app.action_tag_filter = "database"
         app.work_project_filter = "AB9C"
         app.work_tag_filter = "urgent"
         app.item_tag_filter = "urgent"
-        app.item_context_filter = "Database"
         app.action_type_filter_var = FakeVariable()
         app.action_tag_filter_var = FakeVariable()
         app.item_tag_filter_var = FakeVariable()
-        app.item_context_filter_var = FakeVariable()
         app.passwords_button = FakeButton()
         app.captured_selection = "captured"
         app.source_foreground_handle = 123
@@ -1102,17 +1269,16 @@ class LauncherInteractionTests(unittest.TestCase):
         result = app._reset_main_window()
 
         self.assertEqual(result, "break")
-        self.assertFalse(app.focus_actions_mode)
+        self.assertEqual(app.context_scope, CONTEXT_SCOPE_EVERYWHERE)
+        self.assertEqual(app.context_scope_var.value, "Everywhere")
         self.assertIsNone(app.action_type_filter)
         self.assertIsNone(app.action_tag_filter)
         self.assertIsNone(app.work_project_filter)
         self.assertIsNone(app.work_tag_filter)
         self.assertIsNone(app.item_tag_filter)
-        self.assertIsNone(app.item_context_filter)
         self.assertEqual(app.action_type_filter_var.value, "All types")
         self.assertEqual(app.action_tag_filter_var.value, "All tags")
         self.assertEqual(app.item_tag_filter_var.value, "All tags")
-        self.assertEqual(app.item_context_filter_var.value, "All contexts")
         self.assertEqual(app.passwords_button.options["style"], "RailIcon.TButton")
         self.assertIsNone(app.captured_selection)
         self.assertIsNone(app.source_foreground_handle)
@@ -1587,37 +1753,10 @@ class LauncherInteractionTests(unittest.TestCase):
             app._change_focus_context()
 
         self.assertEqual(saved_states[0].focus_context, "Developing")
+        self.assertEqual(saved_states[0].pinned_action_ids, ("existing",))
         self.assertIs(app.palette_state, saved_states[0])
         self.assertEqual(refreshes, [True])
-        self.assertEqual(app.status_var.value, "Focus context: Developing")
-
-    def test_successful_pin_change_persists_before_applying_and_refreshes(self):
-        previous = PaletteState(("existing",), "General", {})
-        action = Action("new", "New action", "General", "copy_text", "Hello")
-        app = LauncherApp.__new__(LauncherApp)
-        app.palette_state = previous
-        app.status_var = FakeVariable()
-        app.palette_path = Path("palette.json")
-        app._selected_action = lambda: action
-        app._configuration_signature = lambda: (("palette.json", 1, 1),)
-        refreshes: list[bool] = []
-        surface_refreshes: list[bool] = []
-        app._refresh_results = lambda: refreshes.append(True)
-        app._render_command_surface = lambda: surface_refreshes.append(True)
-        saved_states: list[PaletteState] = []
-
-        def save(_path: Path, state: PaletteState) -> None:
-            self.assertIs(app.palette_state, previous)
-            saved_states.append(state)
-
-        with patch("context_palette.launcher.save_palette_state", side_effect=save):
-            app._toggle_selected_pin()
-
-        self.assertEqual(saved_states[0].pinned_action_ids, ("existing", "new"))
-        self.assertIs(app.palette_state, saved_states[0])
-        self.assertEqual(refreshes, [True])
-        self.assertEqual(surface_refreshes, [True])
-        self.assertIn("Pinned:", app.status_var.value)
+        self.assertEqual(app.status_var.value, "Working context: Developing")
 
     def test_failed_context_reload_preserves_last_known_good_contexts(self):
         app = LauncherApp.__new__(LauncherApp)
@@ -1722,27 +1861,6 @@ class LauncherInteractionTests(unittest.TestCase):
 
         self.assertEqual(app.palette_state.focus_context, "General")
         self.assertEqual(app.context_var.value, "General")
-        self.assertIn("not changed", app.status_var.value)
-        showerror.assert_called_once()
-
-    def test_failed_pin_save_preserves_previous_pins(self):
-        action = Action("new", "New action", "General", "copy_text", "Hello")
-        app = LauncherApp.__new__(LauncherApp)
-        app.palette_state = PaletteState(("existing",), "General", {})
-        app.status_var = FakeVariable()
-        app.palette_path = Path("palette.json")
-        app._selected_action = lambda: action
-
-        with (
-            patch(
-                "context_palette.launcher.save_palette_state",
-                side_effect=OSError("file is locked"),
-            ),
-            patch("context_palette.launcher.messagebox.showerror") as showerror,
-        ):
-            app._toggle_selected_pin()
-
-        self.assertEqual(app.palette_state.pinned_action_ids, ("existing",))
         self.assertIn("not changed", app.status_var.value)
         showerror.assert_called_once()
 

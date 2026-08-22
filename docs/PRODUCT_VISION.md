@@ -14,8 +14,9 @@ Context Palette is a portable Windows application that organizes reusable work a
 
 The intended experience has two equally important modes:
 
-- **Use:** choose a focus, find an Action or Work Item, understand its effect,
-  and invoke it quickly.
+- **Use:** choose a Working context and an explicit Everywhere/This-context
+  boundary, find an Action or Work Item, understand its effect, and invoke it
+  quickly.
 - **Build:** capture or drop useful material during real work, confirm a
   constrained action, and edit it directly whenever the workflow changes.
 
@@ -36,7 +37,9 @@ The long-term context model has four dimensions:
 | Capabilities | Preferred actions and transformations | Implemented at a basic level |
 | Activation | Visible bundle of reviewed applications, folders, files, URLs, and references | Proposed |
 
-One context is the explicit focus. Supporting contexts may contribute knowledge or ranking in the future, but they must not make action retrieval unpredictable or switch focus silently.
+One context is the explicit Working context. Supporting contexts may contribute
+knowledge or ranking in the future, but they must not make action retrieval
+unpredictable or switch the Working context silently.
 
 Every Action and available Work Item is visible through the General root.
 Specific Context membership is owned by the user's Context definitions, so each
@@ -45,11 +48,12 @@ without editing shipped Action records or external folders. Free-form tags
 provide quick cross-context discovery without turning classification into a
 fixed hierarchy.
 
-When the user explicitly selects a specific Focus, ordinary global discovery
-groups matching Focus members before other matches. It does not remove global
-results, silently infer a different Focus, or use an unexplained relevance
-score. This deterministic ordering makes Focus useful during normal retrieval
-while preserving the General root as the complete collection.
+The Working context supplies only its genuine shortcuts in slots 6–0 while Find
+is empty. **Everywhere** retains the General root as the complete collection;
+**This context** deliberately restricts retrieval to canonical members. A
+non-empty Find query suppresses shortcut promotion and uses an explicit,
+deterministic relevance order. Context Palette never switches either the
+Working context or retrieval boundary silently.
 
 ## Explicit effects
 
@@ -107,7 +111,7 @@ permanently only after confirmation.
 ## Product principles
 
 1. **Fast first:** repeated use must feel immediate.
-2. **Contextual, not hidden:** explicit focus improves relevance without silent automation.
+2. **Contextual, not hidden:** an explicit Working context and retrieval boundary improve relevance without silent automation.
 3. **Explicit effects:** powerful Windows targets remain visible and
    user-configured; the app does not invent or parse a compound command language.
 4. **Local ownership:** ordinary user organization lives in My configuration

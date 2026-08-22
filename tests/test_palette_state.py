@@ -16,7 +16,6 @@ from context_palette.palette_state import (
     load_palette_state,
     palette_item_slots,
     save_palette_state,
-    toggle_pin,
 )
 from context_palette.palette_items import PaletteItemReference
 from context_palette.work_items import WorkItemReference
@@ -32,13 +31,12 @@ class PaletteStateTests(unittest.TestCase):
             Action("c", "C", "General", "copy_text", "c"),
         ]
 
-    def test_pins_use_1_to_5_and_context_uses_6_to_10_with_duplicates(self):
+    def test_legacy_pins_are_not_projected_and_focus_uses_6_to_10(self):
         state = PaletteState(("a", "c"), "Mail", {"Mail": ("a", "b")})
 
         slots = action_slots(self.actions, state)
 
-        self.assertEqual(slots[1].id, "a")
-        self.assertEqual(slots[2].id, "c")
+        self.assertFalse(any(slot in slots for slot in range(1, 6)))
         self.assertEqual(slots[6].id, "a")
         self.assertEqual(slots[7].id, "b")
 
@@ -55,19 +53,14 @@ class PaletteStateTests(unittest.TestCase):
             ["1", "2", "3", "4", "5"],
         )
 
-    def test_toggle_pin_limits_pins_to_five(self):
-        state = PaletteState(("1", "2", "3", "4", "5"), "General", {})
-        with self.assertRaises(ActionError):
-            toggle_pin(state, "6")
-        self.assertEqual(toggle_pin(state, "3").pinned_action_ids, ("1", "2", "4", "5"))
-
-    def test_state_round_trip(self):
+    def test_legacy_pins_round_trip_without_becoming_slots(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "palette.json"
             state = PaletteState(("a",), "Mail", {"Mail": ("a", "b")})
             save_palette_state(path, state)
             loaded = load_palette_state(path)
         self.assertEqual(loaded, state)
+        self.assertNotIn(1, palette_item_slots(self.actions, loaded))
 
     def test_mixed_context_slots_round_trip_and_resolve_work_item(self):
         work_item = WorkItemReference("customer-work", "CAS-ACME-Review")

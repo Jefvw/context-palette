@@ -31,7 +31,6 @@ from context_palette.configuration_window import (
     context_membership_count,
     context_matches_filter,
     quick_action_matches_filter,
-    resolve_pinned_action_ids,
     select_first_tree_item,
     _focus_entry,
 )
@@ -218,16 +217,15 @@ class ActionReferenceLabelTests(unittest.TestCase):
 
         self.assertEqual(
             summary,
-            "2 member(s) · Focus shortcuts: Open project folder, Open code editor",
+            "2 member(s) · Context shortcuts: Open project folder, Open code editor",
         )
         self.assertNotIn("open-project", summary)
 
 
-class PinnedSlotConfigurationTests(unittest.TestCase):
+class ActionSurfaceRefreshTests(unittest.TestCase):
     def test_action_view_refresh_updates_every_dependent_configuration_surface(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         configuration._render_actions = Mock()
-        configuration._render_pinned_slots = Mock()
         configuration._render_contexts = Mock()
         configuration._render_buttons = Mock()
         configuration._refresh_diagnostics = Mock()
@@ -235,70 +233,9 @@ class PinnedSlotConfigurationTests(unittest.TestCase):
         configuration._refresh_action_views()
 
         configuration._render_actions.assert_called_once_with()
-        configuration._render_pinned_slots.assert_called_once_with()
         configuration._render_contexts.assert_called_once_with()
         configuration._render_buttons.assert_called_once_with()
         configuration._refresh_diagnostics.assert_called_once_with()
-
-    def test_pin_labels_resolve_in_slot_order_and_close_empty_gaps(self) -> None:
-        self.assertEqual(
-            resolve_pinned_action_ids(
-                ["Copy greeting", EMPTY_PIN_LABEL, "Open docs"],
-                {
-                    "Copy greeting": "copy-greeting",
-                    "Open docs": "open-docs",
-                },
-            ),
-            ("copy-greeting", "open-docs"),
-        )
-
-    def test_duplicate_pin_assignment_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ActionError, "only one pinned slot"):
-            resolve_pinned_action_ids(
-                ["Greeting", "Greeting"],
-                {"Greeting": "copy-greeting"},
-            )
-
-    def test_save_pins_preserves_focus_and_context_slots(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            configuration = ConfigurationWindow.__new__(ConfigurationWindow)
-            configuration.pin_vars = [
-                FakeVariable("Greeting"),
-                FakeVariable(EMPTY_PIN_LABEL),
-                FakeVariable("Documentation"),
-                FakeVariable(EMPTY_PIN_LABEL),
-                FakeVariable(EMPTY_PIN_LABEL),
-            ]
-            configuration.pin_choices = {
-                "Greeting": "copy-greeting",
-                "Documentation": "open-docs",
-            }
-            configuration.palette_state = PaletteState(
-                ("old",),
-                "Developing",
-                {"Developing": ("open-code",)},
-            )
-            configuration.palette_path = Path(directory) / "palette.json"
-            configuration.window = FakeWindow()
-            configuration.on_change = Mock()
-            configuration._render_pinned_slots = Mock()
-            configuration.feedback_var = FakeVariable()
-            configuration.feedback_label = Mock()
-
-            configuration._save_pinned_slots()
-
-            saved = load_palette_state(configuration.palette_path)
-            self.assertEqual(
-                saved,
-                PaletteState(
-                    ("copy-greeting", "open-docs"),
-                    "Developing",
-                    {"Developing": ("open-code",)},
-                ),
-            )
-            configuration.on_change.assert_called_once_with()
-            configuration._render_pinned_slots.assert_called_once_with()
-            self.assertIn("2 pinned action(s)", configuration.feedback_var.value)
 
 
 class ConfigurationFilterTests(unittest.TestCase):
@@ -524,7 +461,7 @@ class ConfigurationDialogTests(unittest.TestCase):
             "Developing",
         )
         self.assertIn(
-            "1 member(s) · 1 Focus shortcut(s)",
+            "1 member(s) · 1 context shortcut(s)",
             configuration.context_detail_summary_var.value,
         )
         self.assertIn(
@@ -612,6 +549,49 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.quick_item_edit_button.pack.assert_called_once()
         configuration.quick_item_move_button.pack.assert_called_once()
         configuration.quick_item_delete_button.pack.assert_called_once()
+
+    def test_standard_quick_menu_root_is_fixed_but_its_contents_remain_editable(self) -> None:
+        local_path = Path("local-commands.json")
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.groups = [
+            CommandGroup("standard", "Standard"),
+            CommandGroup("next", "Next", source_path=local_path),
+        ]
+        configuration.actions = []
+        configuration.command_surface_path = Path("shared-commands.json")
+        configuration.local_command_surface_path = local_path
+        configuration.button_tree = FakeSelectedActionTree("group-0")
+        configuration.action_bound_button_records = {}
+        configuration.button_preview_var = FakeVariable()
+        configuration.button_detail_title_var = FakeVariable()
+        configuration.quick_item_edit_button = Mock()
+        configuration.new_quick_item_button = Mock()
+        configuration.quick_item_move_menu = Mock()
+        configuration.quick_item_move_button = Mock()
+        configuration.quick_item_delete_button = Mock()
+
+        configuration._update_button_preview()
+
+        configuration.quick_item_edit_button.configure.assert_called_once_with(
+            text="Edit…",
+            state="normal",
+        )
+        configuration.new_quick_item_button.configure.assert_called_once_with(
+            text="New Quick action…",
+            state="normal",
+        )
+        self.assertEqual(
+            configuration.quick_item_move_menu.entryconfigure.call_args_list,
+            [call(0, state="disabled"), call(1, state="disabled")],
+        )
+        configuration.quick_item_delete_button.configure.assert_called_once_with(
+            state="disabled"
+        )
+        self.assertIn("Fixed first menu", configuration.button_preview_var.value)
+        configuration.new_quick_item_button.pack.assert_called_once()
+        configuration.quick_item_edit_button.pack.assert_called_once()
+        configuration.quick_item_move_button.pack.assert_not_called()
+        configuration.quick_item_delete_button.pack.assert_not_called()
 
     def test_configured_quick_manager_selects_exact_stable_submenu(self) -> None:
         child = CommandItem("child", "Child")
@@ -784,40 +764,6 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration._edit_action_record.assert_called_once_with(action)
         configuration.window.deiconify.assert_called_once_with()
         configuration.window.lift.assert_called_once_with()
-
-    def test_reused_configuration_preserves_unsaved_pin_choices(self) -> None:
-        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
-        configuration.initial_action_id = None
-        configuration.pin_vars = [
-            FakeVariable("Draft one"),
-            FakeVariable("Draft two"),
-        ]
-        configuration._pins_dirty = True
-        configuration._pins_rendering = False
-        configuration.notebook = Mock()
-        configuration.work_items_panel = Mock()
-        configuration.window = Mock()
-        configuration._focus_current_tab = Mock()
-        configuration._update_pin_summary = Mock()
-
-        def reload_saved_state() -> None:
-            for variable in configuration.pin_vars:
-                variable.set("Saved value")
-            configuration._pins_dirty = False
-
-        configuration._reload = Mock(side_effect=reload_saved_state)
-
-        configuration.show(initial_tab="buttons")
-
-        self.assertEqual(
-            [variable.get() for variable in configuration.pin_vars],
-            ["Draft one", "Draft two"],
-        )
-        self.assertTrue(configuration._pins_dirty)
-        configuration._update_pin_summary.assert_called_once_with()
-        configuration.notebook.select.assert_called_once_with(
-            CONFIGURATION_TAB_INDEXES["buttons"]
-        )
 
     def test_automatic_menu_creation_forwards_type_and_exact_path(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
@@ -1166,20 +1112,6 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration._focus_current_tab()
 
         configuration.backup_restore_panel.focus_primary.assert_called_once_with()
-
-    def test_collapsing_pins_returns_focus_to_disclosure_button(self) -> None:
-        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
-        configuration.pins_body = Mock()
-        configuration.pins_body.winfo_manager.return_value = "grid"
-        configuration.toggle_pins_button = Mock()
-
-        configuration._toggle_pins()
-
-        configuration.pins_body.grid_remove.assert_called_once_with()
-        configuration.toggle_pins_button.configure.assert_called_once_with(
-            text="Show pins"
-        )
-        configuration.toggle_pins_button.focus_set.assert_called_once_with()
 
     def test_configure_waits_for_active_backup_before_closing(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
@@ -1900,6 +1832,28 @@ class ConfigurationDialogTests(unittest.TestCase):
         self.assertIn("tracked by Git", confirmation.call_args.args[1])
         self.assertIn("other computers", confirmation.call_args.args[1])
 
+    def test_fixed_standard_quick_menu_cannot_be_deleted(self) -> None:
+        shared_path = Path("shared-commands.json")
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.groups = [
+            CommandGroup("standard", "Standard", source_path=shared_path)
+        ]
+        configuration.button_tree = FakeSelectedActionTree("group-0")
+        configuration.action_bound_button_records = {}
+        configuration.command_surface_path = shared_path
+        configuration.local_command_surface_path = Path("local-commands.json")
+        configuration.feedback_var = FakeVariable()
+
+        with (
+            patch("context_palette.configuration_window.delete_command_group") as delete,
+            patch("context_palette.configuration_window.messagebox.askyesno") as confirm,
+        ):
+            configuration._delete_button()
+
+        delete.assert_not_called()
+        confirm.assert_not_called()
+        self.assertIn("fixed first menu", configuration.feedback_var.value)
+
     def test_move_built_in_quick_menu_requires_shared_change_confirmation(self) -> None:
         shared_path = Path("shared-commands.json")
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
@@ -1926,6 +1880,29 @@ class ConfigurationDialogTests(unittest.TestCase):
 
         self.assertIn("tracked by Git", confirmation.call_args.args[1])
         move.assert_not_called()
+
+    def test_fixed_standard_quick_menu_cannot_be_moved(self) -> None:
+        shared_path = Path("shared-commands.json")
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.groups = [
+            CommandGroup("standard", "Standard", source_path=shared_path),
+            CommandGroup("two", "Two", source_path=shared_path),
+        ]
+        configuration.button_tree = FakeSelectedActionTree("group-0")
+        configuration.action_bound_button_records = {}
+        configuration.command_surface_path = shared_path
+        configuration.local_command_surface_path = Path("local-commands.json")
+        configuration.feedback_var = FakeVariable()
+
+        with (
+            patch("context_palette.configuration_window.move_command_group") as move,
+            patch("context_palette.configuration_window.messagebox.askokcancel") as confirm,
+        ):
+            configuration._move_button(1)
+
+        move.assert_not_called()
+        confirm.assert_not_called()
+        self.assertIn("fixed first menu", configuration.feedback_var.value)
 
     def test_local_quick_action_can_assign_project_and_local_actions(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
@@ -2278,6 +2255,61 @@ class ConfigurationDialogTests(unittest.TestCase):
         self.assertIn("built-in action", confirmation.call_args.args[1])
         delete.assert_not_called()
         self.assertEqual([action.id for action in configuration.actions], ["shared"])
+
+    def test_failed_action_deletion_reloads_transaction_result(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        action = Action(
+            "local",
+            "Local archived Action",
+            "General",
+            "copy_text",
+            "one",
+            state="Archived",
+        )
+        configuration.actions = [action]
+        configuration.stored_actions = [action]
+        configuration.local_action_ids = {action.id}
+        configuration.action_tree = FakeSelectedActionTree("action-0")
+        configuration.contexts_path = Path("contexts.json")
+        configuration.local_contexts_path = Path("local-contexts.json")
+        configuration.command_surface_path = Path("commands.json")
+        configuration.local_command_surface_path = Path("local-commands.json")
+        configuration.palette_path = Path("palette.json")
+        configuration.shared_actions_path = Path("actions.json")
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.window = FakeWindow()
+        configuration.on_change = Mock()
+        configuration._reload = Mock()
+
+        with (
+            patch(
+                "context_palette.configuration_window.dependent_sequences",
+                return_value=(),
+            ),
+            patch(
+                "context_palette.configuration_window.inspect_action_references",
+                return_value=ActionDeletionReport(1, 0, 0),
+            ),
+            patch(
+                "context_palette.configuration_window.messagebox.askyesno",
+                return_value=True,
+            ),
+            patch(
+                "context_palette.configuration_window.delete_action_and_references",
+                side_effect=ActionDeletionError("The Action file is locked."),
+            ),
+            patch(
+                "context_palette.configuration_window.messagebox.showerror"
+            ) as error,
+        ):
+            configuration._delete_action()
+
+        configuration.on_change.assert_called_once_with()
+        configuration._reload.assert_called_once_with()
+        self.assertEqual(error.call_args.args[0], "Action was not deleted")
+        self.assertIn("reloaded the current state", error.call_args.args[1])
+        self.assertNotIn("fewer", error.call_args.args[1])
+        self.assertEqual(configuration.stored_actions, [action])
 
     def test_focus_entry_schedules_focus_and_selects_existing_text(self) -> None:
         window = FakeFocusWindow()

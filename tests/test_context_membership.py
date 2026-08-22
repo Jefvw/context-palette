@@ -304,6 +304,16 @@ class ContextMembershipMigrationTests(unittest.TestCase):
                 local_contexts_path,
                 [ContextDefinition("Personal", action_ids=())],
             )
+            palette_path.write_text(
+                json.dumps(
+                    {
+                        "pinned_action_ids": ["shared"],
+                        "focus_context": "General",
+                        "context_slots": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
 
             report = migrate_legacy_action_contexts(
                 shared_actions_path=shared_actions_path,
@@ -330,6 +340,10 @@ class ContextMembershipMigrationTests(unittest.TestCase):
             self.assertEqual(
                 load_palette_state(palette_path).context_membership_version,
                 CONTEXT_MEMBERSHIP_VERSION,
+            )
+            self.assertEqual(
+                load_palette_state(palette_path).pinned_action_ids,
+                ("shared",),
             )
 
             repeated = migrate_legacy_action_contexts(

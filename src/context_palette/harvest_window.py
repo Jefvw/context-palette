@@ -436,7 +436,7 @@ class HarvestWindow:
             available = {value.casefold(): value for value in self.context_names}
             unknown = [value for value in values if value.casefold() not in available and value.casefold() != "general"]
             if unknown:
-                self.status_var.set("Unknown Focus membership: " + ", ".join(unknown))
+                self.status_var.set("Unknown Context membership: " + ", ".join(unknown))
                 return
             values = [available.get(value.casefold(), value) for value in values if value.casefold() != "general"]
         update_candidate_values(candidates, field_name=field_name, operation=operation, values=values)

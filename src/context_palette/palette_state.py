@@ -134,9 +134,6 @@ def palette_item_slots(
 ) -> dict[int, PaletteItemReference]:
     by_id = {action.id: action for action in actions}
     result: dict[int, PaletteItemReference] = {}
-    for slot, action_id in enumerate(state.pinned_action_ids[:5], start=1):
-        if action_id in by_id:
-            result[slot] = PaletteItemReference(action_id=action_id)
 
     configured_items = (state.context_item_slots or {}).get(state.focus_context)
     if configured_items is None:
@@ -174,23 +171,6 @@ def palette_item_slots(
     ):
         result[slot] = reference
     return result
-
-
-def toggle_pin(state: PaletteState, action_id: str) -> PaletteState:
-    pins = list(state.pinned_action_ids)
-    if action_id in pins:
-        pins.remove(action_id)
-    elif len(pins) >= 5:
-        raise ActionError("All five pinned slots are occupied. Unpin an action first.")
-    else:
-        pins.append(action_id)
-    return PaletteState(
-        tuple(pins),
-        state.focus_context,
-        state.context_slots,
-        state.context_membership_version,
-        state.context_item_slots,
-    )
 
 
 def _parse_item_references(

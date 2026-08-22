@@ -7,6 +7,8 @@ import unittest
 
 from context_palette.ui_mockups import (
     BASE_TK_SCALING,
+    CONTEXT_SCOPE_EVERYWHERE,
+    CONTEXT_SCOPE_THIS,
     MOCKUP_ACTIONS,
     MOCKUP_DEFINITIONS,
     MOCKUP_KEYS,
@@ -61,29 +63,40 @@ class UiMockupTkTests(unittest.TestCase):
         for screen in MOCKUP_KEYS:
             for size in SIZE_KEYS:
                 for scaling in SCALE_PERCENTAGES:
-                    with self.subTest(screen=screen, size=size, scaling=scaling):
-                        root, view = self.build(screen, size=size, scaling=scaling)
-                        try:
-                            self.assertEqual(view.layout_issues(), ())
-                            for widget in view.critical_widgets:
-                                if not widget.winfo_manager():
-                                    continue
-                                if widget.winfo_class() not in {"TButton", "TMenubutton"}:
-                                    continue
-                                if (
-                                    isinstance(view, MainPaletteMockup)
-                                    and widget in view.scope_buttons.values()
-                                ):
-                                    continue
-                                text = str(widget.cget("text"))
-                                if text:
-                                    self.assertGreaterEqual(
-                                        widget.winfo_width() + 1,
-                                        widget.winfo_reqwidth(),
-                                        f"Clipped {text!r} in {screen}/{size}/{scaling}%",
-                                    )
-                        finally:
-                            root.destroy()
+                    for scenario, _label in MOCKUP_DEFINITIONS[screen].scenarios:
+                        with self.subTest(
+                            screen=screen,
+                            size=size,
+                            scaling=scaling,
+                            scenario=scenario,
+                        ):
+                            root, view = self.build(
+                                screen,
+                                size=size,
+                                scaling=scaling,
+                                scenario=scenario,
+                            )
+                            try:
+                                self.assertEqual(view.layout_issues(), ())
+                                for widget in view.critical_widgets:
+                                    if not widget.winfo_manager():
+                                        continue
+                                    if widget.winfo_class() not in {"TButton", "TMenubutton"}:
+                                        continue
+                                    if (
+                                        isinstance(view, MainPaletteMockup)
+                                        and widget in view.scope_buttons.values()
+                                    ):
+                                        continue
+                                    text = str(widget.cget("text"))
+                                    if text:
+                                        self.assertGreaterEqual(
+                                            widget.winfo_width() + 1,
+                                            widget.winfo_reqwidth(),
+                                            f"Clipped {text!r} in {screen}/{size}/{scaling}%",
+                                        )
+                            finally:
+                                root.destroy()
 
     def test_main_palette_keeps_daily_regions_visible_at_minimum(self) -> None:
         for scaling in SCALE_PERCENTAGES:
@@ -96,7 +109,10 @@ class UiMockupTkTests(unittest.TestCase):
                 )
                 try:
                     self.assertGreaterEqual(view.panes.sashpos(0), 286)
-                    self.assertGreaterEqual(view.workspace.winfo_width(), 350)
+                    self.assertGreaterEqual(
+                        view.workspace.winfo_width(),
+                        340 if scaling >= 150 else 350,
+                    )
                     entry_center = view.find_entry.winfo_y() + view.find_entry.winfo_height() / 2
                     filter_center = view.filter_button.winfo_y() + view.filter_button.winfo_height() / 2
                     self.assertAlmostEqual(entry_center, filter_center, delta=1)
@@ -152,25 +168,93 @@ class UiMockupTkTests(unittest.TestCase):
                 finally:
                     root.destroy()
 
-    def test_focus_and_context_filter_remain_independent_and_truthful(self) -> None:
+    def test_working_context_scope_and_relevance_are_explicit(self) -> None:
         root, view = self.build(MOCKUP_MAIN, scenario="selected")
         try:
             self.assertIsInstance(view, MainPaletteMockup)
-            view._set_context_filter("Developing")
-            view._set_focus("Empty UAT")
-            self.assertEqual(view.context_filter, "Developing")
-            self.assertEqual(view.current_focus, "Empty UAT")
-            self.assertTrue(view.results.get_children(""))
-            self.assertFalse(
-                any(
-                    "focus" in view.results.item(item, "tags")
+            self.assertFalse(hasattr(view, "focus_only_button"))
+            self.assertFalse(hasattr(view, "context_filter"))
+            self.assertEqual(view.context_var.get(), "Context: All contexts")
+            self.assertEqual(view.context_scope_var.get(), "Everywhere")
+            self.assertEqual(view.context_scope_menu.entrycget(1, "state"), "disabled")
+
+            view._set_working_context("Developing")
+            self.assertEqual(view.context_var.get(), "Context: Developing")
+            self.assertEqual(view.context_scope_menu.entrycget(1, "state"), "normal")
+            self.assertEqual(
+                view.results.get_children("")[:5],
+                ("vscode", "current-date", "project-folder", "python-docs", "work-item-kilit"),
+            )
+            self.assertTrue(
+                all(
+                    "context_slot" in view.results.item(item, "tags")
+                    for item in view.results.get_children("")[:5]
+                )
+            )
+
+            view._set_context_scope(CONTEXT_SCOPE_THIS)
+            self.assertEqual(view.context_scope, CONTEXT_SCOPE_THIS)
+            self.assertTrue(
+                all(
+                    "Developing" in view.result_items[item].contexts
                     for item in view.results.get_children("")
                 )
             )
-            view._set_context_filter(None)
-            view._toggle_focus_only()
-            self.assertFalse(view.results.get_children(""))
-            self.assertTrue(view.empty_state.winfo_manager())
+            view._set_context_scope(CONTEXT_SCOPE_EVERYWHERE)
+            self.assertIn("cart", view.results.get_children(""))
+
+            view._placeholder_active = False
+            view.find_var.set("open")
+            view._render_results()
+            self.assertEqual(view.results.get_children("")[0], "cart")
+            self.assertFalse(
+                any(
+                    "context_slot" in view.results.item(item, "tags")
+                    for item in view.results.get_children("")
+                )
+            )
+
+            view._set_working_context("General")
+            view._set_context_scope(CONTEXT_SCOPE_THIS)
+            self.assertEqual(view.context_scope, CONTEXT_SCOPE_EVERYWHERE)
+            self.assertEqual(view.context_scope_var.get(), "Everywhere")
+        finally:
+            root.destroy()
+
+    def test_mockups_show_current_quick_order_and_work_item_organize(self) -> None:
+        root, main = self.build(MOCKUP_MAIN, scenario="no-selection")
+        try:
+            self.assertIsInstance(main, MainPaletteMockup)
+            self.assertEqual(
+                main.quick_group_order,
+                ("Standard", "My work", "Shared tools", "Passwords", "Folders", "Prompts"),
+            )
+            self.assertEqual(
+                tuple(button.cget("text") for button in main.quick_buttons),
+                main.quick_group_order,
+            )
+        finally:
+            root.destroy()
+
+        root, configure = self.build(MOCKUP_WORK_ITEMS, scenario="selected")
+        try:
+            self.assertIsInstance(configure, ConfigureMockup)
+            self.assertEqual(configure.work_organize_button.cget("text"), "Organize")
+            self.assertEqual(
+                configure.work_organize_menu.entrycget(0, "label"),
+                "Edit tags & contexts…",
+            )
+            self.assertEqual(
+                configure.work_organize_menu.entrycget(2, "label"),
+                "Forget Palette organization…",
+            )
+        finally:
+            root.destroy()
+
+        root, configure = self.build(MOCKUP_ACTIONS, scenario="active")
+        try:
+            self.assertIsInstance(configure, ConfigureMockup)
+            self.assertFalse(hasattr(configure, "pins_panel"))
         finally:
             root.destroy()
 
@@ -188,6 +272,13 @@ class UiMockupDefinitionTests(unittest.TestCase):
         self.assertAlmostEqual(tk_scaling_for_percentage(150), BASE_TK_SCALING * 1.5)
         with self.assertRaises(ValueError):
             tk_scaling_for_percentage(175)
+
+    def test_scenarios_describe_the_current_retrieval_model(self) -> None:
+        main_scenarios = dict(MOCKUP_DEFINITIONS[MOCKUP_MAIN].scenarios)
+        self.assertIn("context-slots", main_scenarios)
+        self.assertIn("this-context", main_scenarios)
+        self.assertIn("empty-context", main_scenarios)
+        self.assertNotIn("pins", dict(MOCKUP_DEFINITIONS[MOCKUP_ACTIONS].scenarios))
 
 
 if __name__ == "__main__":

@@ -111,7 +111,7 @@ class ActionDeletionTests(unittest.TestCase):
                     sequence_paths=(actions,),
                 )
 
-    def test_archive_reference_write_failure_keeps_action_active_and_stops_in_order(self) -> None:
+    def test_archive_reference_write_failure_rolls_back_every_attempted_file(self) -> None:
         for failure_index in (0, 1):
             with self.subTest(failure_index=failure_index), TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -156,7 +156,7 @@ class ActionDeletionTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     self._read(context_paths[0])["contexts"][0]["action_ids"],
-                    ["keep-me"] if failure_index == 0 else [],
+                    ["keep-me"],
                 )
                 self.assertEqual(
                     self._read(context_paths[1])["contexts"][0]["action_ids"],
@@ -187,6 +187,47 @@ class ActionDeletionTests(unittest.TestCase):
             with self.assertRaisesRegex(ActionDeletionError, "not archived"):
                 restore_action(active, "active")
 
+    def test_permanent_deletion_rejects_active_action_without_changing_references(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            actions = root / "actions.json"
+            contexts = root / "contexts.json"
+            palette = root / "palette.json"
+            self._write(
+                actions,
+                {"actions": [{"id": "active", "state": "Active"}]},
+            )
+            self._write(
+                contexts,
+                {"contexts": [{"name": "Work", "action_ids": ["active"]}]},
+            )
+            self._write(palette, {"pinned_action_ids": ["active"]})
+
+            with self.assertRaisesRegex(
+                ActionDeletionError,
+                "must be Archived before permanent deletion",
+            ):
+                delete_action_and_references(
+                    actions,
+                    "active",
+                    context_paths=(contexts,),
+                    command_surface_paths=(),
+                    palette_path=palette,
+                )
+
+            self.assertEqual(
+                self._read(actions),
+                {"actions": [{"id": "active", "state": "Active"}]},
+            )
+            self.assertEqual(
+                self._read(contexts),
+                {"contexts": [{"name": "Work", "action_ids": ["active"]}]},
+            )
+            self.assertEqual(
+                self._read(palette),
+                {"pinned_action_ids": ["active"]},
+            )
+
     def test_restore_write_failure_preserves_archived_record(self) -> None:
         with TemporaryDirectory() as directory:
             actions = Path(directory) / "actions.json"
@@ -209,7 +250,7 @@ class ActionDeletionTests(unittest.TestCase):
                 "Archived",
             )
 
-    def test_archive_write_failure_explains_valid_active_fallback(self) -> None:
+    def test_archive_action_write_failure_restores_reference_placements(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
             actions = root / "actions.json"
@@ -237,7 +278,7 @@ class ActionDeletionTests(unittest.TestCase):
                 ),
                 self.assertRaisesRegex(
                     ActionDeletionError,
-                    "remains Active.*placements may already have been removed",
+                    "all attempted configuration changes were restored",
                 ),
             ):
                 archive_action_and_references(
@@ -254,7 +295,67 @@ class ActionDeletionTests(unittest.TestCase):
             )
             self.assertEqual(
                 self._read(contexts)["contexts"][0]["action_ids"],
-                [],
+                ["keep-me"],
+            )
+
+    def test_permanent_delete_write_failure_restores_action_and_references(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            actions = root / "actions.json"
+            contexts = root / "contexts.json"
+            palette = root / "palette.json"
+            self._write(
+                actions,
+                {"actions": [{"id": "keep-me", "state": "Archived"}]},
+            )
+            self._write(
+                contexts,
+                {"contexts": [{"name": "Work", "action_ids": ["keep-me"]}]},
+            )
+            self._write(palette, {"pinned_action_ids": ["keep-me"]})
+            before = {
+                path: path.read_bytes()
+                for path in (actions, contexts, palette)
+            }
+
+            def fail_action_write(path: Path, data: object) -> None:
+                if path == actions:
+                    raise OSError("locked")
+                real_atomic_write_json(path, data)
+
+            with (
+                patch(
+                    "context_palette.action_deletion.atomic_write_json",
+                    side_effect=fail_action_write,
+                ),
+                self.assertRaisesRegex(
+                    ActionDeletionError,
+                    "all attempted configuration changes were restored",
+                ),
+            ):
+                delete_action_and_references(
+                    actions,
+                    "keep-me",
+                    context_paths=(contexts,),
+                    command_surface_paths=(),
+                    palette_path=palette,
+                )
+
+            self.assertEqual(
+                self._read(actions),
+                {"actions": [{"id": "keep-me", "state": "Archived"}]},
+            )
+            self.assertEqual(
+                self._read(contexts)["contexts"][0]["action_ids"],
+                ["keep-me"],
+            )
+            self.assertEqual(
+                self._read(palette)["pinned_action_ids"],
+                ["keep-me"],
+            )
+            self.assertEqual(
+                {path: path.read_bytes() for path in before},
+                before,
             )
 
     def test_archive_retains_record_removes_references_and_restore_is_unassigned(self) -> None:
@@ -351,6 +452,7 @@ class ActionDeletionTests(unittest.TestCase):
                             "title": "Delete",
                             "type": "copy_text",
                             "value": "x",
+                            "state": "Archived",
                         }
                     ]
                 },
@@ -411,7 +513,7 @@ class ActionDeletionTests(unittest.TestCase):
                 {
                     "actions": [
                         {"id": "delete-me", "title": "Delete", "context": "General",
-                         "type": "copy_text", "value": "x", "state": "Active"},
+                         "type": "copy_text", "value": "x", "state": "Archived"},
                         {"id": "keep", "title": "Keep", "context": "General",
                          "type": "copy_text", "value": "y", "state": "Active"},
                     ]
@@ -520,7 +622,7 @@ class ActionDeletionTests(unittest.TestCase):
                             "context": "General",
                             "type": "copy_text",
                             "value": "x",
-                            "state": "Active",
+                            "state": "Archived",
                         },
                         {
                             "id": "keep",

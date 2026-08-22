@@ -28,6 +28,12 @@ from .work_item_creation import (
     validate_work_item_name,
 )
 from .work_item_refresh import WorkItemIndex, WorkItemRefreshCoordinator
+from .work_item_organization import (
+    WorkItemOrganizationError,
+    WorkItemOrganizationReport,
+    forget_work_item_organization,
+    inspect_work_item_organization,
+)
 from .work_item_storage import (
     WorkItemMetadata,
     WorkItemCreationSettings,
@@ -40,6 +46,37 @@ from .work_item_storage import (
 )
 from .treeview_utils import scrollable_tree
 from .window_geometry import place_child_window
+
+
+def work_item_organization_summary(report: WorkItemOrganizationReport) -> str:
+    """Describe exactly which personal Palette records Forget will remove."""
+
+    parts: list[str] = []
+    if report.metadata_entries_removed:
+        parts.append(
+            f"{report.metadata_entries_removed} personal tag record(s)"
+        )
+    if report.context_memberships_removed:
+        parts.append(
+            f"membership in {report.context_memberships_removed} Context(s)"
+        )
+    if report.preferred_references_removed:
+        parts.append(
+            f"{report.preferred_references_removed} preferred Context placement(s)"
+        )
+    if report.palette_references_removed:
+        parts.append(
+            f"{report.palette_references_removed} context slot placement(s)"
+        )
+    if report.quick_action_references_removed:
+        parts.append(
+            f"{report.quick_action_references_removed} Quick-menu placement(s)"
+        )
+    if report.quick_action_items_removed:
+        parts.append(
+            f"{report.quick_action_items_removed} newly empty Quick-menu item(s)"
+        )
+    return "\n".join(f"- {part}" for part in parts)
 
 
 class WorkItemsConfigurationPanel:
@@ -57,6 +94,8 @@ class WorkItemsConfigurationPanel:
         on_change: Callable[[], None],
         feedback: Callable[[str, bool], None],
         refresh_configuration: Callable[[], None] | None = None,
+        palette_path: Path | None = None,
+        command_surface_path: Path | None = None,
     ) -> None:
         self.parent = parent
         self.sources = list(sources)
@@ -66,6 +105,12 @@ class WorkItemsConfigurationPanel:
         self.metadata_path = metadata_path
         self.settings_path = settings_path
         self.contexts_path = contexts_path
+        self.palette_path = Path(palette_path) if palette_path is not None else None
+        self.command_surface_path = (
+            Path(command_surface_path)
+            if command_surface_path is not None
+            else None
+        )
         self.contexts: list[ContextDefinition] = []
         self.on_change = on_change
         self.feedback = feedback
@@ -263,12 +308,26 @@ class WorkItemsConfigurationPanel:
             state=tk.DISABLED,
         )
         self.open_folder_button.pack(side=tk.RIGHT)
-        self.edit_details_button = ttk.Button(
+        self.edit_details_button = ttk.Menubutton(
             detail_top,
-            text="Tags & contexts…",
-            command=self.edit_tags,
+            text="Organize",
             state=tk.DISABLED,
         )
+        self.organize_menu = tk.Menu(self.edit_details_button, tearoff=False)
+        self.organize_menu.add_command(
+            label="Edit tags & contexts…",
+            command=self.edit_tags,
+        )
+        self._edit_organization_menu_index = int(self.organize_menu.index(tk.END))
+        self.organize_menu.add_separator()
+        self.organize_menu.add_command(
+            label="Forget Palette organization…",
+            command=self.forget_organization,
+        )
+        self._forget_organization_menu_index = int(
+            self.organize_menu.index(tk.END)
+        )
+        self.edit_details_button.configure(menu=self.organize_menu)
         self.edit_details_button.pack(side=tk.RIGHT, padx=(0, 6))
         self.detail_summary_var = tk.StringVar(
             value="Folder, Contexts, and personal tags appear here."
@@ -515,6 +574,15 @@ class WorkItemsConfigurationPanel:
                 "Folder, Contexts, and personal tags appear here."
             )
             self.edit_details_button.configure(state=tk.DISABLED)
+            if hasattr(self, "organize_menu"):
+                self.organize_menu.entryconfigure(
+                    self._edit_organization_menu_index,
+                    state=tk.DISABLED,
+                )
+                self.organize_menu.entryconfigure(
+                    self._forget_organization_menu_index,
+                    state=tk.DISABLED,
+                )
             self.open_folder_button.configure(state=tk.DISABLED)
             return
         key, item = selected
@@ -540,6 +608,20 @@ class WorkItemsConfigurationPanel:
             )
         )
         self.edit_details_button.configure(state=tk.NORMAL)
+        if hasattr(self, "organize_menu"):
+            self.organize_menu.entryconfigure(
+                self._edit_organization_menu_index,
+                state=tk.NORMAL,
+            )
+            self.organize_menu.entryconfigure(
+                self._forget_organization_menu_index,
+                state=(
+                    tk.NORMAL
+                    if self.palette_path is not None
+                    and self.command_surface_path is not None
+                    else tk.DISABLED
+                ),
+            )
         self.open_folder_button.configure(state=tk.NORMAL)
 
     def _resize_source_path(self, event: tk.Event) -> None:
@@ -704,7 +786,15 @@ class WorkItemsConfigurationPanel:
         source_id = source.id
         if not messagebox.askyesno(
             "Remove Work Item source?",
-            f'Remove “{source.name}” from Context Palette?\n\nNo folders or files will be deleted.',
+            (
+                f'Remove “{source.name}” from Context Palette on this PC?\n\n'
+                f"Source folder: {source.workitems_path}\n\n"
+                "Context Palette will stop discovering every Work Item in this "
+                "source. No folder, workbook, or other file will be deleted.\n\n"
+                "Saved tags, Context memberships, context slots, and Quick actions "
+                "will be kept but unavailable. They become available again if you "
+                f'add a source with ID “{source.id}” and the same Work Item folder names.'
+            ),
             parent=self.parent,
         ):
             return
@@ -718,7 +808,7 @@ class WorkItemsConfigurationPanel:
         self.selected_source_id = remaining[0].id if remaining else None
         self._prune_index()
         self.feedback(
-            f'Removed Work Item source “{source.name}”. Its private tags were retained for reuse.',
+            f'Removed Work Item source “{source.name}”. Its Palette organization was retained for reuse.',
             True,
         )
         self.on_change()
@@ -748,6 +838,88 @@ class WorkItemsConfigurationPanel:
                 tags,
                 contexts,
             ),
+        )
+
+    def forget_organization(self) -> None:
+        """Remove only Context Palette's personal references to one Work Item."""
+
+        selected = self._selected_item()
+        if selected is None:
+            self.feedback("Select a discovered Work Item first.", False)
+            return
+        key, item = selected
+        if self.palette_path is None or self.command_surface_path is None:
+            self.feedback("Work Item organization cleanup is unavailable.", False)
+            return
+        reference = WorkItemReference(item.source_id, item.relative_folder)
+        service_arguments = {
+            "metadata_path": self.metadata_path,
+            "context_paths": (self.contexts_path,),
+            "palette_path": self.palette_path,
+            "command_surface_path": self.command_surface_path,
+        }
+        try:
+            report = inspect_work_item_organization(reference, **service_arguments)
+        except WorkItemOrganizationError as exc:
+            messagebox.showerror(
+                "Work Item organization could not be inspected",
+                str(exc),
+                parent=self.parent,
+            )
+            return
+        if report.files_changed == 0:
+            self.feedback(
+                f'“{item.display_name}” has no saved Palette organization to forget.',
+                True,
+            )
+            return
+        summary = work_item_organization_summary(report)
+        if not messagebox.askyesno(
+            "Forget Palette organization?",
+            (
+                f'Forget Palette organization for “{item.display_name}”?\n\n'
+                f"This will remove:\n{summary}\n\n"
+                "The Work Item source, folder, workbook, files, and Inbox contents "
+                "will not be changed. Context Palette has no one-click Undo."
+            ),
+            icon=messagebox.WARNING,
+            parent=self.parent,
+        ):
+            return
+        try:
+            forgotten = forget_work_item_organization(
+                reference,
+                **service_arguments,
+            )
+        except WorkItemOrganizationError as exc:
+            if not exc.rollback_completed:
+                # A mixed-but-valid set of files is possible after a failed
+                # rollback.  Never let this panel keep writing from its stale
+                # pre-operation view.
+                self.on_change()
+                if self.refresh_configuration is not None:
+                    self.refresh_configuration()
+                self.render_items(selected_key=key)
+            messagebox.showerror(
+                "Work Item organization was not forgotten",
+                (
+                    f"{exc}\n\nContext Palette reloaded the current saved state. "
+                    "Review it before making another change."
+                    if not exc.rollback_completed
+                    else str(exc)
+                ),
+                parent=self.parent,
+            )
+            return
+        self.metadata.pop(key, None)
+        self.on_change()
+        if self.refresh_configuration is not None:
+            self.refresh_configuration()
+        self.render_items(selected_key=key)
+        self.feedback(
+            f'Forgot Palette organization for “{item.display_name}” '
+            f"across {forgotten.files_changed} personal file(s).",
+            True,
         )
 
     def open_folder(self) -> None:

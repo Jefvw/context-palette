@@ -167,6 +167,28 @@ def work_item_matches(
     return all(term in searchable for term in query.casefold().split())
 
 
+def work_item_search_rank(item: DiscoveredWorkItem, query: str) -> int:
+    """Rank an already-matching Work Item by its visible name and subject."""
+
+    normalized = " ".join(query.casefold().split())
+    if not normalized:
+        return 0
+    name = " ".join(item.display_name.casefold().split())
+    subject = " ".join(item.subject.casefold().replace("-", " ").split())
+    terms = normalized.split()
+    if name == normalized:
+        return 0
+    if name.startswith(normalized):
+        return 1
+    if normalized in name:
+        return 2
+    if all(term in name for term in terms):
+        return 3
+    if subject == normalized or subject.startswith(normalized):
+        return 4
+    return 5
+
+
 def discover_work_items(source: WorkItemSource) -> tuple[DiscoveredWorkItem, ...]:
     root = source.workitems_path
     if not root.exists():

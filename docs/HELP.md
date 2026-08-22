@@ -3,7 +3,7 @@
 Context Palette is a fast, portable Windows launcher for reusable actions,
 working contexts, captured material, and transformations.
 
-The interface uses a clean neutral surface with Segoe UI typography and a high-contrast dark teal accent. Teal is reserved for primary actions and active selections. Blue rows identify pinned shortcuts, green rows identify focus-context shortcuts, and neutral rows are ordinary results. Native focus borders make keyboard location visible.
+The interface uses a clean neutral surface with Segoe UI typography and a high-contrast dark teal accent. Teal is reserved for primary actions and active selections. Green rows identify Working-context shortcuts 6–0, and neutral rows are ordinary results. Native focus borders make keyboard location visible.
 
 Developers can find the current implementation in
 [Architecture](ARCHITECTURE.md) and its chronological rationale in
@@ -67,8 +67,8 @@ content.
 
 The review window shows each source and every candidate URL with its label and
 location. Search or filter the list, inspect provenance, edit one candidate,
-select or deselect candidates, and add or remove Focus memberships and tags in
-bulk. A specific current Focus is proposed as membership; **General** remains
+select or deselect candidates, and add or remove Context memberships and tags in
+bulk. A specific current Working context is proposed as membership; **General** remains
 implicit. Source filenames and folders are not converted into tags.
 
 The workflow is keyboard-operable. Use `Ctrl+O` to add documents, `Ctrl+F` to
@@ -86,7 +86,7 @@ but cannot be selected.
 
 Choose **Preview selected actions**, then **Create selected actions**. All selected
 actions are validated again and written to the personal action file together;
-their Focus memberships are synchronized to My configuration context
+their Context memberships are synchronized to My configuration Context
 definitions, with rollback if either write fails. They are permanent Active
 actions. Cancelling the scan or closing the review window creates nothing.
 Per-file failures do not discard successful results from other files, and
@@ -122,8 +122,8 @@ Harvest source automatically.
   **More → Keyboard shortcuts** for the authoritative shortcut page.
 - Press `F5` while the main palette is focused to clear transient screen state
   and return to the startup view. Find, scope, Context/tag filters, Action type,
-  Work Item project filter, Focus items mode, captured selection, and Input /
-  Output are cleared. Saved Focus, pins, context slots, actions, and
+  Work Item project filter, captured selection, and Input / Output are cleared.
+  The saved Working context, legacy pin data, context slots, Actions, and
   configuration are preserved.
 - Choose **Configure** for a visible route to the complete
   personal-configuration workspace.
@@ -138,102 +138,79 @@ External Windows tools may safely show and pre-filter the existing instance:
 
 This does not execute the highlighted action. Avoid passing secrets or selected text as command-line search values.
 
-## Focus context
+## Working context and search boundary
 
-Use the compact active-Focus menu to switch context explicitly. Choose
-**Manage focuses…** in that selector to open the existing Context
-configuration area, create or edit any Context, choose its Actions and Work
-Items, and select up to five preferred items for slots 6 through 0. **My
-configuration** definitions stay on this PC. **Built-in** definitions show a
-developer warning before editing. The only shipped specific context is
-**Developing Context Palette** in `data/contexts.json`; personal or
-work-specific definitions live in ignored
-`data/local_contexts.json`. The complete format and QTP-style recipes are in
+Use the compact **Context** menu to choose the Working context explicitly.
+Choose **Manage contexts…** there to open Context configuration, create or edit
+a Context, choose its Actions and Work Items, and select up to five preferred
+items for slots 6 through 0. **My configuration** definitions stay on this PC.
+**Built-in** definitions show a developer warning before editing. The only
+shipped specific Context is **Developing Context Palette** in
+`data/contexts.json`; personal or work-specific definitions live in ignored
+`data/local_contexts.json`. The complete format is documented in
 `docs/CONTEXT_CONFIGURATION.md`.
 
-Renaming a Focus also updates that name in existing actions, the active Focus,
-and saved Focus slots. Context Palette uses a safe intermediate state so an
-interrupted multi-file save may temporarily show both names, but does not leave
-actions assigned to an undefined Focus. Close and reopen Configure, then retry
-the rename if Windows reports a locked or unavailable file.
+The adjacent scope control answers a separate question:
 
-The Focus Context tells Context Palette what kind of work is currently most
-important. It changes slots 6 through 0 and controls the mixed **Focus items**
-view. In ordinary **All items**, matching Focus members appear before other
-matches while Find remains global.
+- **Everywhere** searches and browses across all Contexts.
+- **This context** limits Actions and Work Items to membership in the selected
+  specific Working context. It is unavailable for **All contexts / General**,
+  where it would mean the same thing as Everywhere.
 
-Focus and its icon-only **Show only this Focus** control share the first row
-above Find. The same command is available in the Focus menu. The next row keeps
-**All items**, **Actions**, and **Work Items** visible without taking width from
-the result list.
+The boundary applies consistently to **All items**, **Actions**, and **Work
+Items**, so there is no second Context-filter menu or separate Focus-items
+view. Changing the Working context does not silently change **Everywhere** to
+**This context**, and changing the item-kind scope does not reset either
+choice.
 
-- Slots `1–5` are personal pinned Actions and never change with Context.
-- Slots `6–0` are the top five Actions or Work Items for the selected Focus. Slot
-  `0` is the tenth overall slot and follows slot `9`. Unfilled slots use other
-  genuine members of that Focus; they remain empty when no members remain and
-  never borrow unrelated global Actions. **General** still treats all Actions
-  as global members.
-- An Action may appear in both groups.
+- Slots `6–0` are the top five genuine Actions or Work Items for the selected
+  Working context. Slot `0` follows slot `9`. Unfilled slots remain empty and
+  never borrow unrelated global Actions.
+- Historical global pin IDs 1–5 remain in `data/palette.json` for rollback,
+  but are no longer shown, configured, or executed.
 
-With a specific Focus selected, **All items** keeps matching shortcut rows at
-the top, then shows remaining members of that Focus alphabetically. When both
-Focus and non-Focus matches exist, **All other matches** separates the remaining
-global results. The divider cannot be selected or run. General uses ordinary
-global ordering. Choosing an explicit Context filter also uses ordinary
-ordering because the result set is already limited to that Context. Actions,
-Work Items, and **Focus items** keep their own scope-specific ordering.
-
-Focus and pin changes are saved before they take effect. If the local palette
-file cannot be written, Context Palette keeps the previous selection and
-explains the problem instead of showing an unsaved change.
-
-Choose **Focus items** to browse Actions and Work Items assigned to the active
-Focus. The list stays flat. General contains every Action and currently
-discovered Work Item; a specific Focus contains its configured membership,
-including unavailable Work Item references. Select an item and use Run, Enter,
-or double-click as usual. Activating **Focus items** moves keyboard focus
-directly into the list so arrow-key navigation can begin immediately. The button stays highlighted while this mode
-is active; choose it again to return to **All items**.
-
-Find remains global. Typing while Focus items is active temporarily shows the
-normal mixed global results; it does not limit search to the Focus. Clearing
-Find returns to the Focus list. Changing Focus refreshes the list only while
-that list is visible with Find empty.
+When Find is empty, context-slot rows may appear first. As soon as Find contains
+text, those rows are not promoted: matching items are ranked by exact visible
+name, name prefix, other name matches, then Context/tag/type/project metadata.
+The Working-context and slot state is saved before it takes effect. If the
+local palette file cannot be written, Context Palette keeps the previous
+selection and explains the problem.
 
 ## Find and open Palette items
 
-The left side is one compact command console. Focus and the three view choices
-sit above Find; Find and the result list use the full console width. Quick
+The left side is one compact command console. Working context, search boundary,
+and the three view choices sit above Find; Find and the result list use the full console width. Quick
 actions appear underneath. Choose **All
 items** to find Actions and Work Items together, **Actions** for
 Action-specific tools, or **Work Items** for Work Item tools. The selected view
-is highlighted and does not change the active Focus. The filter icon beside
-Find contains the current view's secondary commands and filters. An active
-filter appears as a readable chip below Find; activate the chip to clear the
-current Context, tag, type, and project filters.
+is highlighted and does not change the Working context or Everywhere/This
+context boundary. The filter icon beside Find contains the current view's
+secondary commands and filters. Active filters appear in one readable chip
+below Find; activate the chip to clear them. A type or project filter retained
+from another item scope stays named in that chip while dormant, so no hidden
+state surprises you when returning to its scope.
 
 Quick actions use only the height required by their visible menu rows. Extra
 space automatically enlarges the result list instead of leaving a blank area
 below the last Quick-action menu.
 
-Find, **Contexts**, and **Tags** apply to both Actions and Work Items. A
-specific Context returns the Actions and Work Items assigned to that Context;
-**All contexts** restores global discovery. A shared tag can therefore return
-both kinds in one result list.
+Find and **Tags** apply to both Actions and Work Items. **This context** uses
+the selected Working Context's canonical membership for both kinds; a shared
+tag can therefore return both kinds in one result list.
 
 - Type in **Find item** to filter both kinds by their searchable names and
   metadata.
-- Open the filter icon and choose **Filter by context…** or **Filter by tag…**
-  to open a searchable chooser and narrow the mixed list. Choose **All
-  contexts** or **All tags** to clear that filter. Active filters highlight the
-  icon and appear in the removable chip until cleared.
+- Open the filter icon and choose **Filter by tag…** to search and select a tag.
+  Choose **All tags** to clear it. Use the separate Everywhere/This context
+  control for Context membership; the filter menu does not duplicate it.
+  Active filters highlight the icon and appear in the removable chip.
 - Select an Action to show **Run**. Select a Work Item to show **Open** and the
   adjacent folder command. Enter and double-click use the selected kind's
   normal execution policy.
 - Right-click opens the selected Action in Configure or shows the selected
   Work Item's workbook, folder, source, Inbox, copy-file, and tag commands.
-- **Pin** remains available only for Actions in slots 1–5. Work Items can be
-  assigned to numbered Focus slots 6–0 through a personal Context.
+- Actions and Work Items can both be assigned to context slots 6–0 through a
+  personal Context. There is no global Pin command.
 
 In the **Actions** view:
 
@@ -254,26 +231,27 @@ In the **Actions** view:
 - Right-click an action row to open the Actions section in Configure with that
   exact action highlighted. Personal actions can then be edited, including
   short name, description, contexts, tags, type-specific value, and supported
-  launch settings. Context changes update the same context definitions used by
-  Focus items, slots, search, and the Contexts section.
+  launch settings. Context changes update the same Context definitions used by
+  This context, slots, search, and the Contexts section.
   Built-in actions can also be edited after acknowledging their developer warning.
 - Plain number-row and numpad digits remain ordinary Find text.
-- Shift plus a physical top-row number key executes slots 1 through 0 only
-  while Find has focus. `Shift+0` executes the tenth slot; numpad digits remain
-  Find input. This positional rule works on AZERTY and QWERTY.
+- Shift plus a physical top-row key from `6` through `0` executes the matching
+  context slot only while Find has focus. `Shift+0` executes the fifth context
+  slot; Shift+1–5 and numpad digits never execute. This positional rule works
+  on AZERTY and QWERTY.
 - Selecting an action updates the slim communication line at the bottom.
 
 The selected scope and results make the current view explicit without a
 duplicate heading or count row. When nothing matches, the list explains how to
 clear Find or create an action instead of presenting a blank pane.
 
-Blue rows map top-to-bottom to pinned slots 1–5. Green rows map top-to-bottom
-to focus-context slots 6–0. The numeric prefixes are hidden to leave more room
-for names; hover a shortcut row to see its exact Shift+number binding. A
-separator line divides shortcut rows from neutral search results in the
-Actions scope. Action and Work Item labels use a font-measured icon column
-followed directly by the short name. Symbols with different pixel widths stay
-aligned without a dash or an unused tree-expansion gutter.
+Green rows map top-to-bottom to Working-context slots 6–0 when Find is empty.
+The numeric prefixes are hidden to leave more room for names; hover a shortcut
+row to see its exact Shift+number binding. A non-empty Find query suppresses
+shortcut promotion and orders all matches by relevance. Action and Work Item
+labels use a font-measured icon column followed directly by the short name.
+Symbols with different pixel widths stay aligned without a dash or an unused
+tree-expansion gutter.
 
 ## Work Item-specific discovery and commands
 
@@ -281,8 +259,8 @@ Choose **Work Items** above Find to use the same result area for configured
 local work-item folders. The selected **Work Items** scope remains highlighted,
 the filter/tools icon gains Work Item commands, and the primary command
 becomes **Open**. Choose **All items** or **Actions** to change view. The shared
-Context and tag filters remain active across view changes; **Filter by project**
-inside that menu applies only to Work Items.
+Working-context boundary and tag filter remain active across view changes;
+**Filter by project** inside that menu applies only to Work Items.
 
 - **New Work Item** opens the guided Work Item creation flow. If setup is incomplete,
   Configure opens on the missing source or generic Excel template first.
@@ -294,7 +272,7 @@ inside that menu applies only to Work Items.
   name, detected project codes, and personal tags.
 - **Filter by project** filters by one detected four-character project code.
 - **Tags** uses the same exact reusable tag filter as Actions.
-- **Contexts** filters by personal Context membership.
+- **This context** filters by personal Context membership.
 - Enter, double-click, or **Open** opens the exact matching
   `<folder-name>.xlsx`; when it does not exist, the work-item folder opens.
 - The **📁** button beside **Open**, or Shift+Enter, always opens the work-item
@@ -318,9 +296,11 @@ folder path and availability remain visible above the full-width table; use
 Contexts, or tags. The stable source ID is suggested automatically and keeps
 tags attached when the source path differs on another computer. **Manage sources…**
 contains Add, Edit, safe source removal, and generic-template setup; **Refresh**
-remains visible for the selected source. Removing a source never deletes
-work folders or files. Its private tags are retained, so adding a source with
-the same stable ID restores them.
+remains visible for the selected source. Removing a source only disconnects it
+from discovery on this PC; it never deletes a folder, workbook, or other file.
+Saved tags, Context memberships, context slots, and Quick-action references
+are retained but unavailable. Adding a source with the same stable ID and the
+same Work Item folder names makes that organization available again.
 
 Double-click a discovered Work Item, press Enter, or choose **Edit tags and
 contexts** to update its personal tags and assign it directly to existing **My
@@ -328,6 +308,15 @@ configuration** Contexts. The editor writes membership to those Context records,
 so the Work Item and Context editors show the same truth. Create or rename
 Contexts from the Contexts page first; Built-in Contexts cannot reference
 personal Work Items.
+
+Choose **Organize → Forget Palette organization…** when the external Work Item
+should stay in place but Context Palette should stop remembering how you
+organized it. The confirmation inventories what will be removed. The operation
+transactionally removes its personal tags, Context memberships and preferred
+placement, context slots, and personal Quick-menu references. It never deletes
+or edits the source, Work Item folder, workbook, other files, or workbook
+Inbox. If a configuration write fails, all attempted files are restored; an
+incomplete rollback is reported explicitly.
 
 Source paths and tags remain in ignored local files on this computer. Configure
 does not alter the Work Item folders or their Excel files.
@@ -400,7 +389,7 @@ For safety:
 ## Quick-action surface
 
 Quick actions appear below discovery on the left side of the main palette and
-stay visible when Focus changes. Every visible control is one menu
+stay visible when the Working context changes. Every visible control is one menu
 launcher; no launcher silently runs a default Action.
 
 - Left-click a menu, or focus it and press Enter or Space, to browse its
@@ -418,10 +407,10 @@ launcher; no launcher silently runs a default Action.
   Quick actions, and submenus without editing JSON. Add Actions and Work Items from their
   searchable lists, then reorder them together; stable IDs are generated from the visible names
   when left blank.
-- **Standard** is the single Built-in group. Its one **Standard** launcher
-  distributes all active Built-in actions across root commands and three
-  first-level sections with deeper subject levels, leaving the other editable
-  group positions for **My configuration**.
+- **Standard** is the single fixed Built-in group. Its one **Standard** launcher
+  distributes Active Built-in Actions across root commands and nested subject
+  levels. It is always first and cannot be moved or deleted; its contents can
+  still be edited through the normal supported commands.
 - **Passwords**, **Folders**, and **Prompts** are permanent action-bound nested
   menus. They automatically include every Active `paste_credential`,
   `open_folder`, or `ai_prompt` action respectively, including actions created
@@ -431,10 +420,10 @@ launcher; no launcher silently runs a default Action.
   the Action directly at that menu's root, with no extra submenu. Archiving or
   deleting the action removes it
   from its generated menu without maintaining a second assignment.
-- The fixed first rows are **Standard | Passwords** and **Folders | Prompts**.
-  Personal configured groups continue below them in their configured order.
-- Groups remain in configured order across two columns. Subjects remain in
-  configured order from top to bottom inside each group.
+- Launcher order is **Standard**, personal configured menus, shared configured
+  menus, then the automatic **Passwords**, **Folders**, and **Prompts** menus.
+  Order within each configured storage file remains stable. The grid adapts to
+  one or two columns without changing that sequence.
 - The menu and every submenu accept any number of ordered Actions. Nesting
   is bounded at menu → level 1 → level 2 → level 3 → Action. Actions may stop
   at any earlier point, including directly under the menu. Native menus do not
@@ -442,7 +431,7 @@ launcher; no launcher silently runs a default Action.
 
 ## Configure
 
-Choose **Manage focuses…** in the Focus selector for direct Focus
+Choose **Manage contexts…** in the Working-context selector for direct Context
 configuration. Choose **Configure**, or use the shortcut (`Ctrl+,`), for the
 complete guided configuration workspace. The left navigator replaces the
 crowded row of tabs and keeps every section in one stable place. Frequent
@@ -451,26 +440,24 @@ destinations under **Support**:
 
 - **Start:** ordinary Configure opens with task choices instead of assuming
   which configuration category you need. Choose **Create an Action...**,
-  **Find or edit Actions**, **Organize Focuses**, **Arrange Quick actions**,
+  **Find or edit Actions**, **Organize Contexts**, **Arrange Quick actions**,
   **Set up Work Items**, or **Back up or restore**. **Browse Action types** and
   **View diagnostics** remain available as secondary choices. Each choice
   opens the existing editor; it does not create a second configuration window.
 - **Actions:** choose **New Action…** for the normal creation flow. **Other ways
   to create** contains the educational Action-type catalogue and attended
   document Harvest. Find, lifecycle, and selection commands surround one
-  Actions table; Contexts and tags for the selection appear below it. Choose
-  **Show pins** only when assigning the five machine-local slots, then save and
-  collapse them again. Hiding preserves unsaved choices for the current
-  Configure window and marks the summary **unsaved changes** until Save; closing
-  without Save discards them. Empty pin choices are closed automatically when saved.
+  Actions table; Contexts and tags for the selection appear below it. Use
+  **Archive…** to remove an Active Action from runtime, then switch Show to
+  Archived when restoration, editing, or permanent deletion is intended.
   New actions default to **My configuration**; choose **Built-in** only when
   deliberately changing shipped starter data.
 - **+ Action / New Action:** use the visible launcher button, Configure's
   **New Action…**, or press
   `Ctrl+N`, to search and choose a type before completing the usual Action
   form. The chooser supports typing, arrow keys, Enter, and Escape; it does
-  not save anything until the Action form is confirmed. A non-General active
-  Focus is prefilled as a Context. Use **Browse action types…** for the full
+  not save anything until the Action form is confirmed. A non-General Working
+  context is prefilled as a Context. Use **Browse action types…** for the full
   educational catalogue.
 - **Action types:** inspect what each available action reads and does, see a
   concrete example, then create a validated permanent action. Older
@@ -479,8 +466,8 @@ destinations under **Support**:
   changes or **Transform a text file** for a repeated file workflow.
 - **Contexts:** choose **New Context…**, use Find to search the full table, then
   use the selected-Context card to **Edit…** or **Delete permanently…**. A
-  Context organizes items; Focus is the Context currently highlighted in the
-  palette. The editor lists members first, followed by optional Focus shortcuts
+  Context organizes items; the Working context is the Context currently
+  highlighted in the palette. The editor lists members first, followed by optional context shortcuts
   6–0. My configuration Contexts can contain built-in Actions, personal Actions,
   and Work Items; Built-in Contexts remain Action-only.
 - **Quick actions:** choose **New menu…** to create a configured shortcut menu.
@@ -498,8 +485,8 @@ destinations under **Support**:
   **Quick menu** path. Actions at a menu root appear before child submenus. The
   selection card shows the complete path and only the commands valid for that
   selection.
-  The single Built-in **Standard** group offers only Built-in actions, keeping
-  starter buttons usable
+  The single fixed Built-in **Standard** group offers only Built-in actions,
+  cannot be moved or deleted, and keeps starter commands usable
   without one PC's private files. My configuration groups may use both
   built-in and personal actions, or personal Work Items. A temporarily
   unavailable Work Item remains assigned and reports how to refresh or repair
@@ -551,12 +538,12 @@ destinations under **Support**:
   the selected section's main content.
 
 Only one Configure workspace opens at a time. Choosing Configure again, using
-Manage focuses, right-clicking an action, or opening Work Item configuration
+Manage contexts, right-clicking an Action, or opening Work Item configuration
 raises that same window and moves it to the requested section or record. Close it
 when finished; the next request creates a fresh Configure window.
 
 Ordinary Configure opens on Start with focus on **Create an Action...**. Direct
-routes such as Edit, Manage focuses, Work Item setup, and Diagnostics open and
+routes such as Edit, Manage contexts, Work Item setup, and Diagnostics open and
 focus their requested editor instead. Action, context, and button dialogs focus
 and select their first editable field, so typing can begin immediately. Action
 create/edit forms keep **Create/Save action** and **Cancel**
@@ -566,14 +553,14 @@ type's **?** button for complete input, effect, and example guidance. Scroll the
 form body with its vertical scrollbar or the mouse wheel; moving through fields
 with Tab automatically reveals the focused field.
 
-All fields that choose an existing action use the same **Find…** picker:
-pinned slots 1–5, context membership, preferred slots 6–0, and Quick-action
-assignments. Search by any combination of action name, description, built-in
+All fields that choose an existing Action use the same **Find…** picker:
+Context membership, preferred slots 6–0, and Quick-action assignments. Search
+by any combination of Action name, description, built-in
 type, context, tag, state, stable ID, target or saved value, arguments, or
 working folder. The result count and filtered list update while you type. Press
 Down Arrow to enter the results, then Enter to select; pressing Enter directly
 from Find selects the highlighted result. Double-click works with the mouse.
-Choose **Not assigned** to clear a pin or preferred slot.
+Choose **Not assigned** to clear a preferred slot.
 
 Built-in contexts and the Built-in **Standard** Quick-action group deliberately
 list Built-in actions only, because tracked starter configuration cannot depend
@@ -626,15 +613,15 @@ beyond the available height.
 
 Press Enter on a selected result to edit it.
 
-Creating or editing an action immediately refreshes the Actions table, pin
-selectors, context summaries, Quick-action summaries, and diagnostics. Actions
+Creating or editing an Action immediately refreshes the Actions table, Context
+summaries, Quick-action summaries, and diagnostics. Actions
 created from Inbox, Harvest, or Cheat Sheets also refresh an already-open
 Configure workspace.
 
 Use **Show** to switch the Actions table between **Active**, **Archived**, and
 **All** stored actions. **Archive…** is the normal way to remove an
 Active Action from use without destroying its record. The confirmation reports
-how many saved pins, Focus slots, Context memberships, and configured Quick
+how many saved Context slots, Context memberships, and configured Quick
 actions will be removed; empty Quick-action buttons are cleaned automatically.
 The Archived Action remains searchable and editable in Configure. Restore it
 before assigning a Context because Archived Actions cannot own active saved
@@ -642,7 +629,7 @@ placements.
 
 Select an Archived Action and choose **Restore…** to make the same
 record Active again. Restore does not recreate its former saved placements, so
-reassign any wanted pins, Context membership, Focus slots, or configured Quick
+reassign any wanted Context membership, context slots, or configured Quick
 actions. Generated Passwords, Folders, or Prompts placement can return
 automatically when the Action type and retained **Quick menu** path apply.
 **Delete permanently…** is available for Archived Actions and cannot be
@@ -672,6 +659,22 @@ unchanged.
 
 The complete JSON format is documented in `docs/COMMAND_SURFACE_CONFIGURATION.md`.
 
+## Remove, disconnect, or forget
+
+These commands deliberately affect different kinds of data:
+
+| Entity | Command and result | What remains untouched |
+| --- | --- | --- |
+| Action | **Archive…** removes an Active Action from runtime and saved placements; an Archived Action can then use **Delete permanently…**. Archive and delete roll back all attempted configuration writes if one fails. | The Action's external file, folder, website, application, or other target. |
+| Context | Open **Configure**, choose **Contexts**, then use **Delete permanently…**. This removes that Context, its memberships, selected Working-context state, and its context-slot configuration. | Member Actions and Work Item folders/files. |
+| Quick menu | A configured custom menu or item can use **Delete**. **Standard** is fixed and cannot be moved or deleted; automatic Passwords/Folders/Prompts structure is changed through its owning Actions. | Assigned Actions, Work Items, and external targets. |
+| Work Item organization | Open **Configure**, choose **Work Items**, then choose **Organize** and **Forget Palette organization…**. This transactionally removes personal tags, Context membership and preferred placement, context slots, and personal Quick-menu references for that Work Item. | The source, folder, workbook, files, and workbook Inbox. |
+| Work Item source | **Manage sources → Remove** disconnects discovery on this PC and retains saved organization for reconnection by the same source ID and folder names. | Every external folder/file and all saved Palette organization. |
+| Capture Inbox item | **Inbox → Delete capture…** removes only the selected local capture. | Any Action already created from it. Work Item workbook Inbox rows remain Excel-managed. |
+
+All permanent Palette deletion commands confirm the exact selected entity. A
+shared Built-in change also explains its Git and multi-computer impact.
+
 ## Input / Output workspace
 
 Input / Output is the text-transformation workspace integrated with the action
@@ -692,7 +695,10 @@ can show the current clipboard or captured selection. Actions can read or
 replace it. Its compact heading includes bitmap controls for Capture, Inbox,
 **Create from Input**, **Extract text**, and **Text tools** without consuming label space.
 
-Numbered action triggering is deliberately active only while Find has focus. In every other control—including Clipboard / Input / Output, the result list, context selector, and buttons—`1` through `9` do not execute actions. This makes Find the explicit keyboard command mode. Standard text editing remains available in the workspace.
+Numbered Action triggering is deliberately active only for Shift+6–0 while
+Find has focus. Shift+1–5 is retired, and in every other control—including
+Input / Output, the result list, context selector, and buttons—number keys do
+not execute Actions. Standard text editing remains available in the workspace.
 
 The bottom communication line always stays one row high. Hover over it for the complete selected-action explanation; click it to open the full message in a selectable information window.
 
@@ -761,12 +767,12 @@ the three comma-list choices produce:
 
 ## Task-oriented controls
 
-Controls now stay beside the thing they affect. Focus and the three view
-choices remain readable above Find. The bitmap-icon filter control sits beside
-Find. Below results, the stable item toolbar contains `+A`, Edit, Pin, and
-Run/Open; invalid selection commands are disabled instead of failing after a
-click. Work Item-specific New, Inbox, Copy file, and project commands live in
-the filter/tools menu.
+Controls stay beside the thing they affect. Working context, Everywhere/This
+context, and the three item views remain readable above Find. The bitmap-icon
+filter control sits beside Find. Below results, the stable item toolbar
+contains `+A`, Edit, and Run/Open; invalid selection commands are disabled
+instead of failing after a click. Work Item-specific New, Inbox, Copy file, and
+project commands live in the filter/tools menu.
 
 The Input / Output header contains Capture, Inbox, Create from Input, Extract
 text, and Text tools. Configure, Help, and More sit below Quick actions. These icon-only
@@ -810,8 +816,8 @@ only the local Context Palette project folder, waits five seconds, and dispatche
 the same folder again. During the wait, Context Palette remains visible, shows
 the current step, and offers **Stop remaining**. Windows may reuse one Explorer
 window, so use the in-app progress rather than window count to verify dispatch.
-The sequence is intentionally visible in the **Developing Context Palette**
-Focus and does not run a script, modify a file, or use the clipboard.
+The sequence belongs to the **Developing Context Palette** Context and does not
+run a script, modify a file, or use the clipboard.
 
 Running shows every current Action name, type, target, and structured argument
 before anything starts. Confirm to dispatch the steps in order. While it runs,
@@ -934,13 +940,6 @@ Opens the selected Action editor directly, reusing the existing Configure
 workspace when it is already open. Every supported personal or Built-in Action
 type can be edited; Built-in Actions first show a developer-impact warning.
 Cancelling that warning leaves Configure open with the Action selected.
-
-### Pin
-
-Adds the selected action to the next free pinned slot from 1 to 5. If already
-pinned, it removes the pin. When all five slots are occupied, unpin another
-action first. To assign or reorder all five slots directly, open
-**Configure**, choose **Actions**, and use **Pinned slots 1–5**.
 
 ### Help
 
@@ -1216,7 +1215,8 @@ does not recreate those assignments.
 - `data/actions.json`: reviewed actions shared through Git.
 - `data/local_actions.json`: ignored personal and machine-specific actions.
 - `data/inbox.json`: ignored captures.
-- `data/palette.json`: ignored per-machine focus context, pins, and context slots.
+- `data/palette.json`: ignored per-machine Working context, context slots, and
+  preserved legacy pin IDs that are no longer projected at runtime.
 - `data/local_contexts.json`: ignored personal context definitions.
 - `data/local_command_surface.json`: ignored personal Quick-action menu records.
 - `data/local_work_item_sources.json`: ignored machine-local Work Item sources.
@@ -1256,8 +1256,8 @@ does not show a spinner that would flicker during ordinary use. Errors identify
 the affected area and preserve the rest of the launcher where possible. If an
 edited action, context, Quick-action record, or palette-state file is invalid,
 its last successfully loaded configuration remains available while the file is
-corrected. Palette failures retain the active pins, Focus, and context slots.
-On first start, a missing or invalid palette uses safe empty pins and slots
+corrected. Palette failures retain the Working context, legacy pin data, and
+context slots. On first start, a missing or invalid palette uses safe empty slots
 instead of preventing the launcher from opening.
 
 For an intermittent startup or configuration problem, inspect

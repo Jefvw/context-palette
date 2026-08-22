@@ -17,7 +17,7 @@ Local files (ignored by Git):
 - `data/local_contexts.json`: personal or machine-specific contexts.
 - `data/local_actions.json`: personal/private actions.
 - `data/local_command_surface.json`: personal quick-action groups/items.
-- `data/palette.json`: per-machine state (focus context, pins, optional explicit slots).
+- `data/palette.json`: per-machine state (Working context, legacy pin IDs, and optional explicit Context slots). Legacy `pinned_action_ids` still round-trip but are not shown or executed.
 
 Use Built-in files only for reviewed starter configuration intended to ship
 with Context Palette. Use My configuration files for the user's actual

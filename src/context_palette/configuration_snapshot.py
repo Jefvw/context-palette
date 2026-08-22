@@ -1010,7 +1010,7 @@ def _classify_palette_contexts(
             ValidationSeverity.WARNING,
             ValidationIssueCode.PALETTE_FOCUS_UNKNOWN,
             "palette-state",
-            f"Palette Focus context is unknown and runtime falls back to "
+            f"Palette Working context is unknown and runtime falls back to "
             f"General: {focus}",
             ValidationCategory.REFERENCE,
             (focus,),
@@ -1020,7 +1020,7 @@ def _classify_palette_contexts(
             ValidationSeverity.WARNING,
             ValidationIssueCode.PALETTE_CONTEXT_CANONICALIZATION,
             "palette-state",
-            f"Palette Focus context uses non-canonical spelling; runtime uses "
+            f"Palette Working context uses non-canonical spelling; runtime uses "
             f"{focus_canonical}.",
             ValidationCategory.REFERENCE,
             (focus, focus_canonical),

@@ -19,7 +19,7 @@ from context_palette.work_items import WorkItemReference
 
 
 class FocusModelTests(unittest.TestCase):
-    def test_resolve_discovers_names_seeds_preferences_and_preserves_explicit_slots(self):
+    def test_resolve_discovers_names_seeds_preferences_and_preserves_legacy_pins(self):
         actions = [
             Action("general", "General", "General", "copy_text", "1"),
             Action("database", "Database", "Database", "copy_text", "2"),

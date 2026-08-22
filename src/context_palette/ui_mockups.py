@@ -30,6 +30,8 @@ SIZE_KEYS = (SIZE_NORMAL, SIZE_MINIMUM)
 SCALE_PERCENTAGES = (100, 125, 150)
 SYSTEM_SCALING = "system"
 BASE_TK_SCALING = 96 / 72
+CONTEXT_SCOPE_EVERYWHERE = "everywhere"
+CONTEXT_SCOPE_THIS = "this"
 
 
 @dataclass(frozen=True)
@@ -58,11 +60,11 @@ MOCKUP_DEFINITIONS = {
             ("no-selection", "Populated, no selection"),
             ("selected", "Selected Action"),
             ("work-item", "Selected Work Item"),
-            ("context-filter", "Active Context filter"),
-            ("zero-match", "Filter with no matches"),
+            ("context-slots", "Working context slots 6–0"),
+            ("this-context", "This context results"),
+            ("zero-match", "Find with no matches"),
             ("sequence", "Sequence waiting"),
-            ("empty-focus", "Empty Focus"),
-            ("focus-only-empty", "Focus-only empty state"),
+            ("empty-context", "This context has no members"),
             ("sequence-stopped", "Sequence stopped"),
         ),
     ),
@@ -85,7 +87,6 @@ MOCKUP_DEFINITIONS = {
         (
             ("active", "Selected Active Action"),
             ("archived", "Selected Archived Action"),
-            ("pins", "Pins expanded"),
         ),
     ),
 }
@@ -277,8 +278,9 @@ class PaletteExample:
     key: str
     name: str
     kind: str
-    focus: str
-    group: str
+    contexts: tuple[str, ...]
+    context_slots: tuple[tuple[str, int], ...]
+    tags: tuple[str, ...]
     effect: str
 
 
@@ -287,98 +289,120 @@ PALETTE_EXAMPLES = (
         "professional-greeting",
         "Professional greeting",
         "action",
-        "General",
-        "pinned",
+        ("General", "Mail"),
+        (),
+        ("communication",),
         "paste saved text into the captured app; clipboard fallback",
     ),
     PaletteExample(
         "vscode",
         "Context Palette in VS Code",
         "action",
-        "Developing",
-        "focus",
+        ("Developing",),
+        (("Developing", 6),),
+        ("development",),
         "open a reviewed Windows target",
     ),
     PaletteExample(
         "cart",
         "Bioplanet cart",
         "action",
-        "Shopping",
-        "ordinary",
+        ("Shopping",),
+        (),
+        ("shopping",),
         "open a website",
     ),
     PaletteExample(
         "guitar-tab",
         "IVE BEEN LOSING YOU TAB",
         "action",
-        "Music",
-        "ordinary",
+        ("Music",),
+        (),
+        ("music",),
         "open a PDF file",
     ),
     PaletteExample(
         "current-date",
         "Current date and time",
         "action",
-        "General",
-        "focus",
+        ("General", "Developing"),
+        (("Developing", 7),),
+        ("date",),
         "replace Input / Output with the current date and time",
     ),
     PaletteExample(
         "project-folder",
         "Project folder",
         "action",
-        "Developing",
-        "focus",
+        ("Developing",),
+        (("Developing", 8),),
+        ("project",),
         "open a configured folder",
     ),
     PaletteExample(
         "python-docs",
         "Python documentation",
         "action",
-        "Developing",
-        "focus",
+        ("Developing",),
+        (("Developing", 9),),
+        ("python",),
         "open a website",
     ),
     PaletteExample(
         "url-encode",
         "URL-encoded clipboard text",
         "action",
-        "General",
-        "ordinary",
+        ("General",),
+        (),
+        ("text",),
         "transform clipboard text locally",
     ),
     PaletteExample(
         "selected-archive",
         "Selected archive item",
         "action",
-        "General",
-        "ordinary",
+        ("General",),
+        (),
+        ("archive",),
         "archive the selected item after confirmation",
     ),
     PaletteExample(
         "work-item-kilit",
         "Case - CAP40 KILIT",
         "work-item",
-        "CAP40 delivery",
-        "ordinary",
+        ("CAP40 delivery", "Developing"),
+        (("Developing", 10),),
+        ("urgent",),
         "open workbook CAS-CAP40-KILIT.xlsx",
     ),
     PaletteExample(
         "work-item-age",
         "Issue - CAP40 age verification",
         "work-item",
-        "Age verification",
-        "ordinary",
+        ("Age verification",),
+        (),
+        ("age",),
         "open workbook ISS-CAP40-age-verification.xlsx",
     ),
     PaletteExample(
         "sequence",
         "UAT: Run a harmless sequence",
         "sequence",
-        "General",
-        "ordinary",
+        ("General",),
+        (),
+        ("uat",),
         "dispatch a folder, wait 5 seconds, then dispatch the folder again",
     ),
+)
+
+
+QUICK_ACTION_MOCKUP_GROUPS = (
+    ("Standard", "fixed standard menu"),
+    ("My work", "personal configured menu"),
+    ("Shared tools", "shared configured menu"),
+    ("Passwords", "automatic Action-bound menu"),
+    ("Folders", "automatic Action-bound menu"),
+    ("Prompts", "automatic Action-bound menu"),
 )
 
 
@@ -461,12 +485,12 @@ class ConfigureMockup(MockupView):
         self._build_placeholder_page(
             "contexts",
             "Manage Contexts",
-            "A Context organizes items; Focus is the Context highlighted in the palette.",
+            "A Context organizes items; the Working context is highlighted in the palette.",
         )
         self._build_placeholder_page(
             "quick-actions",
             "Manage Quick actions",
-            "Arrange direct-launch menus without changing discovery results.",
+            "Arrange menu launchers without changing discovery results.",
         )
         self._build_work_items_page()
         self._build_placeholder_page(
@@ -684,12 +708,29 @@ class ConfigureMockup(MockupView):
         ).grid(row=1, column=0, sticky=tk.W, pady=(4, 0))
         selection_commands = ttk.Frame(self.work_selection, style="Mockup.Card.TFrame")
         selection_commands.grid(row=0, column=1, rowspan=2, sticky=tk.E)
-        self.work_organize_button = ttk.Button(
+        self.work_organize_button = ttk.Menubutton(
             selection_commands,
-            text="Tags & contexts...",
+            text="Organize",
             state=tk.DISABLED,
-            command=lambda: self._mock_status("Mockup: Tags and Contexts would open for the selected Work Item."),
         )
+        self.work_organize_menu = tk.Menu(
+            self.work_organize_button,
+            tearoff=False,
+        )
+        self.work_organize_menu.add_command(
+            label="Edit tags & contexts…",
+            command=lambda: self._mock_status(
+                "Mockup: tags and Context membership would open."
+            ),
+        )
+        self.work_organize_menu.add_separator()
+        self.work_organize_menu.add_command(
+            label="Forget Palette organization…",
+            command=lambda: self._mock_status(
+                "Mockup: a precise Forget preview would open."
+            ),
+        )
+        self.work_organize_button.configure(menu=self.work_organize_menu)
         self.work_organize_button.pack(side=tk.LEFT)
         self.work_open_button = ttk.Button(
             selection_commands,
@@ -712,7 +753,7 @@ class ConfigureMockup(MockupView):
     def _build_actions_page(self) -> None:
         page = self._new_page("actions")
         page.columnconfigure(0, weight=1)
-        page.rowconfigure(3, weight=1)
+        page.rowconfigure(2, weight=1)
         self.actions_page = page
         other_menu = tk.Menu(page, tearoff=False)
         other_menu.add_command(
@@ -734,63 +775,8 @@ class ConfigureMockup(MockupView):
         )
         self.critical(other_button)
 
-        self.pins_panel = ttk.Frame(page, style="Mockup.Card.TFrame", padding=(10, 8))
-        self.pins_panel.grid(row=1, column=0, sticky=tk.EW, pady=(0, 10))
-        self.pins_panel.columnconfigure(1, weight=1)
-        ttk.Label(
-            self.pins_panel,
-            text="Pinned slots 1-5",
-            style="Mockup.Card.TLabel",
-            font=("Segoe UI Semibold", 10),
-        ).grid(row=0, column=0, sticky=tk.W)
-        ttk.Label(
-            self.pins_panel,
-            text="5 assigned on this computer",
-            style="Mockup.CardMuted.TLabel",
-        ).grid(row=0, column=1, sticky=tk.W, padx=(10, 0))
-        self.pins_toggle_button = ttk.Button(
-            self.pins_panel,
-            text="Show pins",
-            command=self._toggle_pins,
-        )
-        self.pins_toggle_button.grid(row=0, column=2, sticky=tk.E)
-        self.pins_body = ttk.Frame(self.pins_panel, style="Mockup.Card.TFrame")
-        self.pin_names = (
-            "Professional greeting",
-            "Project folder",
-            "Python documentation",
-            "Current date and time",
-            "Bioplanet cart",
-        )
-        for row, name in enumerate(self.pin_names):
-            ttk.Label(
-                self.pins_body,
-                text=f"Slot {row + 1}",
-                style="Mockup.CardMuted.TLabel",
-                width=7,
-            ).grid(row=row, column=0, sticky=tk.W, pady=(3, 0))
-            ttk.Label(
-                self.pins_body,
-                text=name,
-                style="Mockup.Card.TLabel",
-            ).grid(row=row, column=1, sticky=tk.W, padx=(8, 8), pady=(3, 0))
-            ttk.Button(
-                self.pins_body,
-                text="Choose...",
-                style="Compact.TButton",
-                command=lambda: self._mock_status("Mockup: an Action picker would open."),
-            ).grid(row=row, column=2, sticky=tk.E, pady=(3, 0))
-        self.pins_body.columnconfigure(1, weight=1)
-        self.save_pins_button = ttk.Button(
-            self.pins_body,
-            text="Save pins",
-            command=lambda: self._mock_status("Mockup: pin choices were retained in memory only."),
-        )
-        self.save_pins_button.grid(row=5, column=2, sticky=tk.E, pady=(7, 0))
-        self.critical(self.pins_toggle_button)
-
         find = ttk.Frame(page)
-        find.grid(row=2, column=0, sticky=tk.EW, pady=(0, 6))
+        find.grid(row=1, column=0, sticky=tk.EW, pady=(0, 6))
         find.columnconfigure(1, weight=1)
         ttk.Label(find, text="Find").grid(row=0, column=0, sticky=tk.W, padx=(0, 6))
         self.action_search_var = tk.StringVar()
@@ -816,7 +802,7 @@ class ConfigureMockup(MockupView):
         self.actions_tree_frame, self.actions_tree = _scrollable_tree(
             page, ("type", "contexts", "source")
         )
-        self.actions_tree_frame.grid(row=3, column=0, sticky=tk.NSEW)
+        self.actions_tree_frame.grid(row=2, column=0, sticky=tk.NSEW)
         for column, label in (
             ("#0", "Action"),
             ("type", "Type"),
@@ -832,7 +818,7 @@ class ConfigureMockup(MockupView):
         page.bind("<Configure>", self._resize_action_columns, add="+")
 
         self.action_selection = ttk.Frame(page, style="Mockup.Card.TFrame", padding=(10, 8))
-        self.action_selection.grid(row=4, column=0, sticky=tk.EW, pady=(10, 0))
+        self.action_selection.grid(row=3, column=0, sticky=tk.EW, pady=(10, 0))
         self.action_selection.columnconfigure(0, weight=1)
         self.action_detail_title_var = tk.StringVar(value="Select an Action")
         self.action_detail_meta_var = tk.StringVar(value="Contexts, tags, ownership, and lifecycle appear here.")
@@ -896,8 +882,6 @@ class ConfigureMockup(MockupView):
             if self.scenario == "archived":
                 self.action_state_var.set("Archived")
                 self._render_actions()
-            elif self.scenario == "pins":
-                self._toggle_pins()
             self._select_first(self.actions_tree)
 
     @staticmethod
@@ -1068,14 +1052,6 @@ class ConfigureMockup(MockupView):
         verb = "restore" if action.state == "Archived" else "archive"
         self.status_var.set(f"Mockup only: would review references before {verb}.")
 
-    def _toggle_pins(self) -> None:
-        if self.pins_body.winfo_manager():
-            self.pins_body.grid_remove()
-            self.pins_toggle_button.configure(text="Show pins")
-        else:
-            self.pins_body.grid(row=1, column=0, columnspan=3, sticky=tk.EW, pady=(7, 0))
-            self.pins_toggle_button.configure(text="Hide pins")
-
     def _resize_action_columns(self, event: tk.Event) -> None:
         if not hasattr(self, "actions_tree"):
             return
@@ -1102,9 +1078,9 @@ class MainPaletteMockup(MockupView):
         self.size_key = size_key
         self.scaling = scaling or 100
         self.scope = "all"
-        self.current_focus = "General"
-        self.context_filter: str | None = None
-        self.focus_only = False
+        self.current_context = "General"
+        self.context_scope = CONTEXT_SCOPE_EVERYWHERE
+        self.tag_filter: str | None = None
         self.sequence_running = False
         self._placeholder_active = True
         self.result_items: dict[str, PaletteExample] = {}
@@ -1114,10 +1090,8 @@ class MainPaletteMockup(MockupView):
         self.icons = load_ui_icons(
             root,
             (
-                "focus",
                 "filters",
                 "edit",
-                "pin",
                 "folder",
                 "configure",
                 "help",
@@ -1143,7 +1117,7 @@ class MainPaletteMockup(MockupView):
         self._split_after_id: str | None = None
         self.panes.bind("<Configure>", self._queue_split, add="+")
         self.discovery.columnconfigure(0, weight=1)
-        self.discovery.rowconfigure(4, weight=1)
+        self.discovery.rowconfigure(3, weight=1)
         self.workspace.columnconfigure(0, weight=1)
         self.workspace.rowconfigure(1, weight=1)
         self._build_discovery()
@@ -1151,39 +1125,56 @@ class MainPaletteMockup(MockupView):
         self._apply_initial_scenario()
 
     def _build_discovery(self) -> None:
-        focus_row = ttk.Frame(self.discovery)
-        focus_row.grid(row=0, column=0, sticky=tk.EW, pady=(0, 4))
-        focus_row.columnconfigure(0, weight=1)
-        self.focus_var = tk.StringVar(value="Focus: General")
-        self.focus_button = ttk.Menubutton(
-            focus_row,
-            textvariable=self.focus_var,
+        context_row = ttk.Frame(self.discovery)
+        context_row.grid(row=0, column=0, sticky=tk.EW, pady=(0, 4))
+        context_row.columnconfigure(0, weight=1)
+        self.context_var = tk.StringVar(value="Context: All contexts")
+        self.context_picker = ttk.Menubutton(
+            context_row,
+            textvariable=self.context_var,
             style="Compact.TButton",
         )
-        focus_menu = tk.Menu(self.focus_button, tearoff=False)
-        for focus in ("General", "Developing", "CAP40 delivery", "Empty UAT"):
-            focus_menu.add_command(
-                label=focus,
-                command=lambda value=focus: self._set_focus(value),
+        self.context_menu = tk.Menu(self.context_picker, tearoff=False)
+        for context in ("General", "Developing", "CAP40 delivery", "Empty UAT"):
+            self.context_menu.add_command(
+                label="All contexts" if context == "General" else context,
+                command=lambda value=context: self._set_working_context(value),
             )
-        self.focus_button.configure(menu=focus_menu)
-        self.focus_button.grid(row=0, column=0, sticky=tk.EW, padx=(0, 4))
-        self.focus_only_button = ttk.Button(
-            focus_row,
-            image=self.icons["focus"],
-            command=self._toggle_focus_only,
-            style="Icon.TButton",
+        self.context_menu.add_separator()
+        self.context_menu.add_command(
+            label="Manage contexts...",
+            command=lambda: self._mock_preview("Mockup: Context management would open."),
+        )
+        self.context_picker.configure(menu=self.context_menu)
+        self.context_picker.grid(row=0, column=0, sticky=tk.EW, padx=(0, 3))
+        self._hint(
+            self.context_picker,
+            "Context — Choose your Working context. It supplies slots 6–0 when Find is empty.",
+        )
+
+        self.context_scope_var = tk.StringVar(value="Everywhere")
+        self.context_scope_picker = ttk.Menubutton(
+            context_row,
+            textvariable=self.context_scope_var,
+            style="Compact.TButton",
             takefocus=True,
         )
-        self.focus_only_button.grid(row=0, column=1)
-        self._hint(
-            self.focus_button,
-            "Focus chooses what is prioritized and fills slots 6-0; it does not narrow Find.",
+        self.context_scope_menu = tk.Menu(self.context_scope_picker, tearoff=False)
+        self.context_scope_menu.add_command(
+            label="Everywhere",
+            command=lambda: self._set_context_scope(CONTEXT_SCOPE_EVERYWHERE),
         )
-        self._hint(
-            self.focus_only_button,
-            "Show only actual members of the selected Focus.",
+        self.context_scope_menu.add_command(
+            label="This context",
+            command=lambda: self._set_context_scope(CONTEXT_SCOPE_THIS),
         )
+        self.context_scope_picker.configure(menu=self.context_scope_menu)
+        self.context_scope_picker.grid(row=0, column=1, sticky=tk.EW)
+        self._hint(
+            self.context_scope_picker,
+            "Search scope — Choose Everywhere to browse all Contexts, or This context to limit results to the Working context.",
+        )
+        self._sync_context_scope_control()
 
         scopes = ttk.Frame(self.discovery)
         scopes.grid(row=1, column=0, sticky=tk.EW, pady=(0, 4))
@@ -1192,9 +1183,9 @@ class MainPaletteMockup(MockupView):
         self.scope_buttons: dict[str, ttk.Button] = {}
         for column, (key, label, hint) in enumerate(
             (
-                ("all", "All", "Show Actions and Work Items together."),
+                ("all", "All items", "Show Actions and Work Items together."),
                 ("actions", "Actions", "Show Actions only."),
-                ("work-items", "Work", "Show Work Items only."),
+                ("work-items", "Work Items", "Show Work Items only."),
             )
         ):
             button = ttk.Button(
@@ -1219,19 +1210,11 @@ class MainPaletteMockup(MockupView):
         self.find_entry.bind("<KeyRelease>", lambda _event: self._render_results())
         self.filter_menu = tk.Menu(find, tearoff=False)
         self.filter_menu.add_command(
-            label="Filter by Context: Developing",
-            command=lambda: self._set_context_filter("Developing"),
-        )
-        self.filter_menu.add_command(
-            label="Filter by Context: CAP40 delivery",
-            command=lambda: self._set_context_filter("CAP40 delivery"),
-        )
-        self.filter_menu.add_command(
             label="Filter by tag: project",
-            command=lambda: self._mock_preview("Mockup: a tag filter would narrow these examples."),
+            command=lambda: self._set_tag_filter("project"),
         )
         self.filter_menu.add_separator()
-        self.filter_menu.add_command(label="Clear filters", command=lambda: self._set_context_filter(None))
+        self.filter_menu.add_command(label="Clear filters", command=lambda: self._set_tag_filter(None))
         self.filter_button = ttk.Menubutton(
             find,
             image=self.icons["filters"],
@@ -1242,28 +1225,25 @@ class MainPaletteMockup(MockupView):
         self.filter_button.grid(row=0, column=1)
         self._hint(
             self.filter_button,
-            "Filters narrow results without changing the selected Focus.",
+            "Filters narrow results without changing the Working context or search scope.",
         )
 
         self.filter_chip = ttk.Button(
             self.discovery,
             text="",
-            command=lambda: self._set_context_filter(None),
+            command=lambda: self._set_tag_filter(None),
             style="Compact.TButton",
         )
-        self.filter_chip.grid(row=3, column=0, sticky=tk.W, pady=(0, 4))
-        self.filter_chip.grid_remove()
 
         self.results_host = ttk.Frame(self.discovery)
-        self.results_host.grid(row=4, column=0, sticky=tk.NSEW)
+        self.results_host.grid(row=3, column=0, sticky=tk.NSEW)
         self.results_host.rowconfigure(0, weight=1)
         self.results_host.columnconfigure(0, weight=1)
         self.results_tree_frame, self.results = _scrollable_tree(self.results_host, ())
         self.results_tree_frame.grid(row=0, column=0, sticky=tk.NSEW)
         self.results.configure(show="tree", selectmode="browse")
         self.results.column("#0", stretch=True, width=260, minwidth=180)
-        self.results.tag_configure("pinned", background=COLORS["slot_pinned"])
-        self.results.tag_configure("focus", background=COLORS["slot_focus"])
+        self.results.tag_configure("context_slot", background=COLORS["slot_focus"])
         self.results.bind("<<TreeviewSelect>>", self._selection_changed)
         self.results.bind("<Double-1>", lambda _event: self._activate_primary())
         self.empty_state = ttk.Frame(
@@ -1282,8 +1262,8 @@ class MainPaletteMockup(MockupView):
         ).grid(row=0, column=0, sticky=tk.EW)
 
         toolbar = ttk.Frame(self.discovery)
-        toolbar.grid(row=5, column=0, sticky=tk.EW, pady=(6, 0))
-        toolbar.columnconfigure(3, weight=1)
+        toolbar.grid(row=4, column=0, sticky=tk.EW, pady=(6, 0))
+        toolbar.columnconfigure(2, weight=1)
         self.new_action_button = ttk.Button(
             toolbar,
             text="+A",
@@ -1299,21 +1279,13 @@ class MainPaletteMockup(MockupView):
             state=tk.DISABLED,
         )
         self.edit_button.grid(row=0, column=1, padx=(4, 0))
-        self.pin_button = ttk.Button(
-            toolbar,
-            image=self.icons["pin"],
-            command=lambda: self._mock_preview("Mockup: pin state changed in memory only."),
-            style="Icon.TButton",
-            state=tk.DISABLED,
-        )
-        self.pin_button.grid(row=0, column=2, padx=(4, 0))
         self.folder_button = ttk.Button(
             toolbar,
             image=self.icons["folder"],
             command=lambda: self._mock_preview("Mockup only: no Work Item folder was opened."),
             style="Icon.TButton",
         )
-        self.folder_button.grid(row=0, column=4, padx=(4, 0))
+        self.folder_button.grid(row=0, column=3, padx=(4, 0))
         self.folder_button.grid_remove()
         self.primary_button = ttk.Button(
             toolbar,
@@ -1322,14 +1294,13 @@ class MainPaletteMockup(MockupView):
             style="RailAccent.TButton",
             state=tk.DISABLED,
         )
-        self.primary_button.grid(row=0, column=5, sticky=tk.E, padx=(4, 0))
+        self.primary_button.grid(row=0, column=4, sticky=tk.E, padx=(4, 0))
         self._hint(self.new_action_button, "New Action - choose a type and review its form.")
         self._hint(self.edit_button, "Edit the selected Action or Work Item.")
-        self._hint(self.pin_button, "Pin or unpin the selected Action in slots 1-5.")
         self._hint(self.folder_button, "Open the selected Work Item folder.")
 
         self.quick_host = ttk.Frame(self.discovery)
-        self.quick_host.grid(row=6, column=0, sticky=tk.EW, pady=(7, 0))
+        self.quick_host.grid(row=5, column=0, sticky=tk.EW, pady=(7, 0))
         self.quick_host.columnconfigure(0, weight=1)
         self.quick_canvas = tk.Canvas(
             self.quick_host,
@@ -1352,7 +1323,8 @@ class MainPaletteMockup(MockupView):
             anchor=tk.NW,
         )
         self.quick_buttons: list[ttk.Menubutton] = []
-        for label in ("Standard", "Passwords", "Folders", "Prompts", "Apps", "Projects", "Tools"):
+        self.quick_group_order = tuple(label for label, _source in QUICK_ACTION_MOCKUP_GROUPS)
+        for label, source in QUICK_ACTION_MOCKUP_GROUPS:
             menu = tk.Menu(self.quick_body, tearoff=False)
             menu.add_command(
                 label=f"Example from {label}",
@@ -1366,6 +1338,7 @@ class MainPaletteMockup(MockupView):
                 menu=menu,
                 style="SurfaceMenu.TLabel",
             )
+            setattr(button, "mockup_quick_source", source)
             self.quick_buttons.append(button)
         self.quick_body.bind("<Configure>", self._sync_quick_scrollregion)
         self.quick_canvas.bind("<Configure>", self._resize_quick_actions)
@@ -1376,7 +1349,7 @@ class MainPaletteMockup(MockupView):
         self.root.after_idle(self._size_quick_actions)
 
         app_controls = ttk.Frame(self.discovery)
-        app_controls.grid(row=7, column=0, sticky=tk.EW, pady=(6, 0))
+        app_controls.grid(row=6, column=0, sticky=tk.EW, pady=(6, 0))
         self.configure_button = ttk.Button(
             app_controls,
             image=self.icons["configure"],
@@ -1407,15 +1380,14 @@ class MainPaletteMockup(MockupView):
         self._hint(self.more_button, "Keyboard shortcuts, Hide, and Quit.")
 
         self.critical(
-            self.focus_button,
-            self.focus_only_button,
+            self.context_picker,
+            self.context_scope_picker,
             *self.scope_buttons.values(),
             self.find_entry,
             self.filter_button,
             self.results,
             self.new_action_button,
             self.edit_button,
-            self.pin_button,
             self.primary_button,
             self.quick_canvas,
             self.configure_button,
@@ -1525,7 +1497,10 @@ class MainPaletteMockup(MockupView):
         if width <= 1:
             return
         desired = round(width * 0.41)
-        position = max(286, min(desired, width - 350))
+        high_scale = self.scaling >= 150
+        minimum_discovery = 315 if high_scale else 286
+        minimum_workspace = 340 if high_scale else 350
+        position = max(minimum_discovery, min(desired, width - minimum_workspace))
         try:
             self.panes.sashpos(0, position)
         except tk.TclError:
@@ -1553,17 +1528,48 @@ class MainPaletteMockup(MockupView):
             self.find_var.set("Find items...")
             self._placeholder_active = True
 
-    def _set_focus(self, focus: str) -> None:
-        self.current_focus = focus
-        self.focus_var.set(f"Focus: {focus}")
+    def _set_working_context(self, context: str) -> None:
+        self.current_context = context
+        self.context_var.set(
+            "Context: All contexts"
+            if context.casefold() == "general"
+            else f"Context: {context}"
+        )
+        self._sync_context_scope_control()
         self._render_results()
 
-    def _toggle_focus_only(self) -> None:
-        self.focus_only = not self.focus_only
-        self.focus_only_button.configure(
-            style="RailIconAccent.TButton" if self.focus_only else "Icon.TButton"
-        )
+    def _set_context_scope(self, scope: str) -> None:
+        if scope not in {CONTEXT_SCOPE_EVERYWHERE, CONTEXT_SCOPE_THIS}:
+            raise ValueError(f"Unsupported Context scope: {scope}")
+        if scope == CONTEXT_SCOPE_THIS and self.current_context.casefold() == "general":
+            scope = CONTEXT_SCOPE_EVERYWHERE
+            self._mock_preview(
+                "Choose a specific Working context before limiting results to it."
+            )
+        self.context_scope = scope
+        self._sync_context_scope_control()
         self._render_results()
+
+    def _sync_context_scope_control(self) -> None:
+        specific_context = self.current_context.casefold() != "general"
+        if not specific_context and self.context_scope == CONTEXT_SCOPE_THIS:
+            self.context_scope = CONTEXT_SCOPE_EVERYWHERE
+        self.context_scope_var.set(
+            "This context"
+            if self.context_scope == CONTEXT_SCOPE_THIS
+            else "Everywhere"
+        )
+        self.context_scope_picker.configure(
+            style=(
+                "Mockup.ScopeSelected.TButton"
+                if self.context_scope == CONTEXT_SCOPE_THIS
+                else "Compact.TButton"
+            )
+        )
+        self.context_scope_menu.entryconfigure(
+            1,
+            state=tk.NORMAL if specific_context else tk.DISABLED,
+        )
 
     def _set_scope(self, scope: str) -> None:
         self.scope = scope
@@ -1573,19 +1579,45 @@ class MainPaletteMockup(MockupView):
             )
         self._render_results()
 
-    def _set_context_filter(self, context: str | None) -> None:
-        self.context_filter = context
-        if context is None:
+    def _set_tag_filter(self, tag: str | None) -> None:
+        self.tag_filter = tag
+        if tag is None:
             self.filter_chip.grid_remove()
         else:
-            self.filter_chip.configure(text=f"Context filter: {context}  x")
-            self.filter_chip.grid()
+            self.filter_chip.configure(text=f"Tag: {tag}  x")
+            self.filter_chip.grid(row=3, column=0, sticky=tk.W, pady=(0, 4))
         self._render_results()
 
     def _query(self) -> str:
         if self._placeholder_active:
             return ""
         return self.find_var.get().strip().casefold()
+
+    def _context_slot(self, item: PaletteExample) -> int | None:
+        for context, slot in item.context_slots:
+            if context.casefold() == self.current_context.casefold():
+                return slot
+        return None
+
+    def _result_key(self, item: PaletteExample, query: str) -> tuple[int, str, str]:
+        name = item.name.casefold()
+        contexts = " ".join(item.contexts).casefold()
+        tags = " ".join(item.tags).casefold()
+        effect = item.effect.casefold()
+        if not query:
+            return 0, name, item.key
+        rank = (
+            0
+            if name.startswith(query)
+            else 1
+            if query in name
+            else 2
+            if query in contexts or query in tags
+            else 3
+            if query in effect
+            else 4
+        )
+        return rank, name, item.key
 
     def _render_results(self) -> None:
         selected = self.results.selection()
@@ -1596,29 +1628,46 @@ class MainPaletteMockup(MockupView):
                 continue
             if self.scope == "work-items" and item.kind != "work-item":
                 continue
-            if self.focus_only and item.focus != self.current_focus:
+            if (
+                self.context_scope == CONTEXT_SCOPE_THIS
+                and self.current_context.casefold()
+                not in {context.casefold() for context in item.contexts}
+            ):
                 continue
-            if self.context_filter and item.focus != self.context_filter:
+            if self.tag_filter and self.tag_filter.casefold() not in {
+                tag.casefold() for tag in item.tags
+            }:
                 continue
-            document = f"{item.name} {item.kind} {item.focus} {item.effect}".casefold()
+            document = " ".join(
+                (item.name, item.kind, *item.contexts, *item.tags, item.effect)
+            ).casefold()
             if query and query not in document:
                 continue
             visible.append(item)
 
         self.results.delete(*self.results.get_children(""))
         self.result_items = {}
-        for item in visible:
-            tag = "ordinary"
-            if item.group == "pinned":
-                tag = "pinned"
-            elif (
-                item.group == "focus"
-                and item.focus == self.current_focus
-                and self.current_focus != "Empty UAT"
-                and self.context_filter is None
-            ):
-                tag = "focus"
-            self.results.insert("", tk.END, iid=item.key, text=item.name, tags=(tag,))
+        slotted = (
+            []
+            if query
+            else sorted(
+                (
+                    (slot, item)
+                    for item in visible
+                    if (slot := self._context_slot(item)) is not None
+                ),
+                key=lambda row: row[0],
+            )
+        )
+        slotted_keys = {item.key for _slot, item in slotted}
+        ordinary = sorted(
+            (item for item in visible if item.key not in slotted_keys),
+            key=lambda item: self._result_key(item, query),
+        )
+        rows = [*slotted, *((None, item) for item in ordinary)]
+        for slot, item in rows:
+            tags = ("context_slot",) if slot is not None else ()
+            self.results.insert("", tk.END, iid=item.key, text=item.name, tags=tags)
             self.result_items[item.key] = item
 
         if visible:
@@ -1632,8 +1681,8 @@ class MainPaletteMockup(MockupView):
         else:
             self.results_tree_frame.grid_remove()
             self.empty_state_var.set(
-                "This Focus has no members."
-                if self.focus_only and self.current_focus == "Empty UAT"
+                f"This context ({self.current_context}) has no members."
+                if self.context_scope == CONTEXT_SCOPE_THIS and not query
                 else "No items match Find and the active filters."
             )
             self.empty_state.grid(row=0, column=0, sticky=tk.NSEW)
@@ -1648,13 +1697,11 @@ class MainPaletteMockup(MockupView):
         if self.sequence_running:
             self.primary_button.configure(text="Stop remaining", state=tk.NORMAL)
             self.edit_button.configure(state=tk.DISABLED)
-            self.pin_button.configure(state=tk.DISABLED)
             self.folder_button.grid_remove()
             return
         if item is None:
             self.primary_button.configure(text="Open / Run", state=tk.DISABLED)
             self.edit_button.configure(state=tk.DISABLED)
-            self.pin_button.configure(state=tk.DISABLED)
             self.folder_button.grid_remove()
             self.preview_var.set(
                 "Select an Action or Work Item to see Input -> Effect before Run or Open."
@@ -1663,11 +1710,9 @@ class MainPaletteMockup(MockupView):
         self.edit_button.configure(state=tk.NORMAL)
         if item.kind == "work-item":
             self.primary_button.configure(text="Open", state=tk.NORMAL)
-            self.pin_button.configure(state=tk.DISABLED)
             self.folder_button.grid()
         else:
             self.primary_button.configure(text="Run", state=tk.NORMAL)
-            self.pin_button.configure(state=tk.NORMAL if item.kind == "action" else tk.DISABLED)
             self.folder_button.grid_remove()
         self.preview_var.set(f"Input: selected {item.kind} -> Effect: {item.effect}")
 
@@ -1742,22 +1787,25 @@ class MainPaletteMockup(MockupView):
         if self.scenario == "work-item":
             self._set_scope("all")
             self._select_result("work-item-kilit")
-        elif self.scenario == "context-filter":
-            self._set_context_filter("Developing")
+        elif self.scenario == "context-slots":
+            self._set_working_context("Developing")
+            self._select_first_result()
+        elif self.scenario == "this-context":
+            self._set_working_context("Developing")
+            self._set_context_scope(CONTEXT_SCOPE_THIS)
             self._select_first_result()
         elif self.scenario == "zero-match":
-            self._set_context_filter("Developing")
+            self._set_working_context("Developing")
+            self._set_context_scope(CONTEXT_SCOPE_THIS)
             self._placeholder_active = False
             self.find_var.set("nothing can match this")
             self._render_results()
         elif self.scenario == "sequence":
             self._select_result("sequence")
             self._activate_primary()
-        elif self.scenario == "empty-focus":
-            self._set_focus("Empty UAT")
-        elif self.scenario == "focus-only-empty":
-            self._set_focus("Empty UAT")
-            self._toggle_focus_only()
+        elif self.scenario == "empty-context":
+            self._set_working_context("Empty UAT")
+            self._set_context_scope(CONTEXT_SCOPE_THIS)
         elif self.scenario == "sequence-stopped":
             self._select_result("sequence")
             self.sequence_running = False

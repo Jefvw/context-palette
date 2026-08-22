@@ -15,6 +15,11 @@ sys.path.insert(0, str(ROOT / "src"))
 from context_palette.work_item_configuration import (
     WorkItemsConfigurationPanel,
     _stable_source_id,
+    work_item_organization_summary,
+)
+from context_palette.work_item_organization import (
+    WorkItemOrganizationError,
+    WorkItemOrganizationReport,
 )
 from context_palette.configuration_data import save_contexts
 from context_palette.contexts import ContextDefinition, load_contexts
@@ -36,6 +41,122 @@ from context_palette.work_items import (
 
 
 class WorkItemConfigurationTests(unittest.TestCase):
+    def test_forget_summary_names_each_kind_of_saved_organization(self) -> None:
+        summary = work_item_organization_summary(
+            WorkItemOrganizationReport(
+                metadata_entries_removed=1,
+                context_memberships_removed=2,
+                preferred_references_removed=1,
+                palette_references_removed=1,
+                quick_action_references_removed=2,
+                quick_action_items_removed=1,
+                files_changed=4,
+            )
+        )
+
+        self.assertIn("personal tag record", summary)
+        self.assertIn("membership in 2 Context", summary)
+        self.assertIn("preferred Context placement", summary)
+        self.assertIn("context slot placement", summary)
+        self.assertIn("Quick-menu placement", summary)
+
+    def test_forget_organization_cancel_preserves_everything(self) -> None:
+        panel, item, key = self._forget_panel()
+        report = WorkItemOrganizationReport(
+            metadata_entries_removed=1,
+            context_memberships_removed=1,
+            files_changed=2,
+        )
+
+        with (
+            patch(
+                "context_palette.work_item_configuration.inspect_work_item_organization",
+                return_value=report,
+            ),
+            patch(
+                "context_palette.work_item_configuration.messagebox.askyesno",
+                return_value=False,
+            ) as confirm,
+            patch(
+                "context_palette.work_item_configuration.forget_work_item_organization"
+            ) as forget,
+        ):
+            panel.forget_organization()
+
+        self.assertIn(item.display_name, confirm.call_args.args[1])
+        self.assertIn("folder, workbook, files, and Inbox contents", confirm.call_args.args[1])
+        forget.assert_not_called()
+        self.assertIn(key, panel.metadata)
+        panel.on_change.assert_not_called()
+
+    def test_forget_organization_updates_live_views_after_transaction(self) -> None:
+        panel, item, key = self._forget_panel()
+        report = WorkItemOrganizationReport(
+            metadata_entries_removed=1,
+            context_memberships_removed=1,
+            palette_references_removed=1,
+            quick_action_references_removed=1,
+            files_changed=4,
+        )
+
+        with (
+            patch(
+                "context_palette.work_item_configuration.inspect_work_item_organization",
+                return_value=report,
+            ),
+            patch(
+                "context_palette.work_item_configuration.messagebox.askyesno",
+                return_value=True,
+            ),
+            patch(
+                "context_palette.work_item_configuration.forget_work_item_organization",
+                return_value=report,
+            ) as forget,
+        ):
+            panel.forget_organization()
+
+        forget.assert_called_once()
+        self.assertNotIn(key, panel.metadata)
+        panel.on_change.assert_called_once_with()
+        panel.refresh_configuration.assert_called_once_with()
+        panel.render_items.assert_called_once_with(selected_key=key)
+        self.assertIn("across 4 personal file", panel.feedback.call_args.args[0])
+
+    def test_incomplete_forget_rollback_reloads_before_more_edits(self) -> None:
+        panel, _item, key = self._forget_panel()
+        report = WorkItemOrganizationReport(
+            metadata_entries_removed=1,
+            files_changed=1,
+        )
+
+        with (
+            patch(
+                "context_palette.work_item_configuration.inspect_work_item_organization",
+                return_value=report,
+            ),
+            patch(
+                "context_palette.work_item_configuration.messagebox.askyesno",
+                return_value=True,
+            ),
+            patch(
+                "context_palette.work_item_configuration.forget_work_item_organization",
+                side_effect=WorkItemOrganizationError(
+                    "rollback incomplete",
+                    rollback_completed=False,
+                ),
+            ),
+            patch(
+                "context_palette.work_item_configuration.messagebox.showerror"
+            ) as error,
+        ):
+            panel.forget_organization()
+
+        self.assertIn(key, panel.metadata)
+        panel.on_change.assert_called_once_with()
+        panel.refresh_configuration.assert_called_once_with()
+        panel.render_items.assert_called_once_with(selected_key=key)
+        self.assertIn("reloaded the current saved state", error.call_args.args[1])
+
     def test_work_item_editor_saves_tags_and_replaces_context_membership(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -394,7 +515,7 @@ class WorkItemConfigurationTests(unittest.TestCase):
             self.assertTrue(panel._save_tags(key, ()))
             self.assertEqual(load_work_item_metadata(path), {})
 
-    def test_removing_source_is_one_write_and_retains_private_tags(self) -> None:
+    def test_removing_source_is_one_write_and_explains_retained_organization(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             workitems = root / "workitems"
@@ -423,12 +544,17 @@ class WorkItemConfigurationTests(unittest.TestCase):
             with patch(
                 "context_palette.work_item_configuration.messagebox.askyesno",
                 return_value=True,
-            ):
+            ) as confirm:
                 panel.remove_source()
 
             self.assertEqual(load_work_item_sources(sources_path), ())
             self.assertEqual(load_work_item_metadata(metadata_path), metadata)
             self.assertTrue(workitems.is_dir())
+            confirmation = confirm.call_args.args[1]
+            self.assertIn(str(workitems), confirmation)
+            self.assertIn("No folder, workbook, or other file will be deleted", confirmation)
+            self.assertIn("Saved tags, Context memberships", confirmation)
+            self.assertIn('source with ID “cap40”', confirmation)
             panel.on_change.assert_called_once_with()
             panel.feedback.assert_called_once()
             panel._start_refresh.assert_called_once_with()
@@ -559,6 +685,37 @@ class WorkItemConfigurationTests(unittest.TestCase):
             del panel
             gc.collect()
             self.assertIsNone(reference())
+
+    def _forget_panel(
+        self,
+    ) -> tuple[WorkItemsConfigurationPanel, DiscoveredWorkItem, str]:
+        item = DiscoveredWorkItem(
+            "cap40",
+            "CAP40",
+            "ISS-CAP40-example",
+            Path("C:/workitems/ISS-CAP40-example"),
+            "ISS-CAP40-example",
+            "ISS",
+            "Issue",
+            "CAP40",
+            "example",
+            (),
+            None,
+        )
+        key = "cap40/ISS-CAP40-example"
+        panel = WorkItemsConfigurationPanel.__new__(WorkItemsConfigurationPanel)
+        panel.parent = None
+        panel.metadata = {key: WorkItemMetadata(("urgent",))}
+        panel.metadata_path = Path("metadata.json")
+        panel.contexts_path = Path("contexts.json")
+        panel.palette_path = Path("palette.json")
+        panel.command_surface_path = Path("commands.json")
+        panel._selected_item = Mock(return_value=(key, item))
+        panel.on_change = Mock()
+        panel.refresh_configuration = Mock()
+        panel.render_items = Mock()
+        panel.feedback = Mock()
+        return panel, item, key
 
 
 if __name__ == "__main__":

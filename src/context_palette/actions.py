@@ -699,11 +699,48 @@ def action_matches_search(
 
 
 def search_actions(actions: Iterable[Action], query: str) -> list[Action]:
-    return [
+    matches = [
         action
         for action in actions
         if action_matches_search(action, query)
     ]
+    normalized = " ".join(query.casefold().split())
+    if not normalized:
+        return matches
+    return sorted(
+        matches,
+        key=lambda action: (
+            action_search_rank(action, normalized),
+            action.title.casefold(),
+            action.id.casefold(),
+        ),
+    )
+
+
+def action_search_rank(action: Action, query: str) -> int:
+    """Rank an already-matching Action by the most useful visible signal."""
+
+    normalized = " ".join(query.casefold().split())
+    if not normalized:
+        return 0
+    title = " ".join(action.title.casefold().split())
+    identifier = action.id.casefold()
+    terms = normalized.split()
+    if title == normalized or identifier == normalized:
+        return 0
+    if title.startswith(normalized):
+        return 1
+    if normalized in title:
+        return 2
+    if all(term in title for term in terms):
+        return 3
+    labels = {
+        value.casefold()
+        for value in (*action.effective_contexts, *action.effective_tags)
+    }
+    if normalized in labels:
+        return 4
+    return 5
 
 
 def execute_action(

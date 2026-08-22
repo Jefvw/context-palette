@@ -22,9 +22,9 @@ from context_palette.launcher import (
 )
 from context_palette.actions import Action, transform_text_file
 from context_palette.action_discovery_panel import (
-    FOCUS_GROUP_ROW_TAG,
+    CONTEXT_SCOPE_EVERYWHERE,
+    CONTEXT_SCOPE_THIS,
     FOCUS_SLOT_ROW_TAG,
-    PINNED_SLOT_ROW_TAG,
 )
 from context_palette.action_types import ACTION_TYPES, CREATABLE_ACTION_TYPES
 from context_palette.command_surface import (
@@ -38,7 +38,6 @@ from context_palette.configuration_window import (
 )
 from context_palette.contexts import ContextDefinition
 from context_palette.data_catalog import AppDataPaths
-from context_palette.focus_model import palette_items_for_context
 from context_palette.palette_state import PaletteState
 from context_palette.workspace_transforms import WORKSPACE_TRANSFORM_GROUPS
 from context_palette.workspace_panel import OcrPlacementDialog, WorkspacePanel
@@ -543,72 +542,9 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     root.update()
 
-                    self.assertEqual(len(configuration.pin_comboboxes), 5)
-                    self.assertEqual(
-                        configuration.pin_summary_var.get(),
-                        "0 assigned on this computer",
-                    )
-                    self.assertTrue(configuration.toggle_pins_button.winfo_ismapped())
-                    self.assertFalse(configuration.save_pins_button.winfo_ismapped())
-                    self.assertEqual(
-                        configuration.toggle_pins_button.cget("text"),
-                        "Show pins",
-                    )
                     configuration.window.geometry("900x520")
                     root.update()
-                    configuration.toggle_pins_button.invoke()
-                    root.update()
-                    self.assertTrue(configuration.save_pins_button.winfo_ismapped())
-                    self.assertEqual(
-                        configuration.toggle_pins_button.cget("text"),
-                        "Hide pins",
-                    )
-                    self.assertLessEqual(
-                        configuration.pins_frame.winfo_reqwidth(),
-                        configuration.window.winfo_width(),
-                    )
-                    pins_right = (
-                        configuration.pins_body.winfo_rootx()
-                        + configuration.pins_body.winfo_width()
-                    )
-                    for picker in configuration.pin_pickers:
-                        self.assertLessEqual(
-                            picker.winfo_rootx() + picker.winfo_width(),
-                            pins_right,
-                        )
                     self.assertGreater(configuration.action_tree.winfo_height(), 70)
-                    configuration.pin_vars[0].set("Temporary unsaved pin choice")
-                    root.update()
-                    self.assertIn(
-                        "unsaved changes",
-                        configuration.pin_summary_var.get(),
-                    )
-                    configuration.toggle_pins_button.invoke()
-                    root.update()
-                    self.assertFalse(configuration.save_pins_button.winfo_ismapped())
-                    self.assertEqual(
-                        configuration.pin_vars[0].get(),
-                        "Temporary unsaved pin choice",
-                    )
-                    self.assertIn(
-                        "unsaved changes",
-                        configuration.pin_summary_var.get(),
-                    )
-                    configuration.toggle_pins_button.invoke()
-                    root.update()
-                    self.assertEqual(
-                        configuration.pin_vars[0].get(),
-                        "Temporary unsaved pin choice",
-                    )
-                    configuration._render_pinned_slots()
-                    self.assertEqual(
-                        configuration.pin_summary_var.get(),
-                        "0 assigned on this computer",
-                    )
-                    configuration.toggle_pins_button.invoke()
-                    root.update()
-                    self.assertFalse(configuration.save_pins_button.winfo_ismapped())
-
                     configuration.action_detail_title_var.set(
                         compact_selection_title(
                             "A deliberately long Action name " * 24
@@ -934,7 +870,6 @@ class LauncherSmokeTests(unittest.TestCase):
                         for widget in (
                             app.new_action_button,
                             app.action_discovery_panel.edit_button,
-                            app.action_discovery_panel.pin_button,
                             app.action_discovery_panel.primary_action_frame,
                         )
                     }
@@ -989,7 +924,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertTrue(root.bind("<Control-Shift-D>"))
                     focus_chain = (
                         app.context_picker,
-                        app.focus_actions_button,
+                        app.context_scope_picker,
                         app.all_items_button,
                         app.actions_button,
                         app.work_items_button,
@@ -1018,6 +953,8 @@ class LauncherSmokeTests(unittest.TestCase):
                         2,
                     )
                     app.palette_state = PaletteState(focus_context="Database")
+                    app.context_var.set("Database")
+                    app._refresh_focus_controls()
                     database_work_item = next(
                         item
                         for item in app.work_item_index.items
@@ -1029,156 +966,85 @@ class LauncherSmokeTests(unittest.TestCase):
                             "Database",
                         )
                     )
-                    focus_members = palette_items_for_context(
-                        app.actions,
-                        "Database",
-                        app.context_definitions,
-                    )
-                    self.assertEqual(
-                        [
-                            reference.action_id
-                            or reference.work_item_ref.relative_folder
-                            for reference in focus_members
-                        ],
-                        ["database-only", "QST-CAP40-question"],
-                    )
                     app._refresh_results()
-                    grouped_rows = list(app.focus_tree.get_children())
-                    divider_row = next(
-                        item_id
-                        for item_id in grouped_rows
-                        if FOCUS_GROUP_ROW_TAG
-                        in app.focus_tree.item(item_id, "tags")
-                    )
-                    divider_index = grouped_rows.index(divider_row)
-                    self.assertEqual(app.actions_heading_var.get(), "All items · Focus first")
-                    self.assertEqual(app.results_count_var.get(), "5 items")
-                    self.assertNotIn(divider_row, app.focus_tree_items)
-                    self.assertEqual(divider_index, 2)
                     self.assertEqual(
                         [
                             reference.action_id
                             or reference.work_item_ref.relative_folder
                             for reference in app.focus_tree_items.values()
-                        ][:2],
+                        ],
+                        [
+                            "database-only",
+                            "general-first",
+                            "general-second",
+                            "ISS-CAP40-AB9C-age-verification",
+                            "QST-CAP40-question",
+                        ],
+                    )
+                    self.assertEqual(app.actions_heading_var.get(), "All items")
+                    self.assertEqual(app.results_count_var.get(), "5 items")
+
+                    app._select_context_scope(CONTEXT_SCOPE_THIS)
+                    self.assertEqual(app.context_scope, CONTEXT_SCOPE_THIS)
+                    self.assertEqual(app.context_scope_var.get(), "This context")
+                    self.assertEqual(app.results_count_var.get(), "2 items")
+                    self.assertEqual(
+                        [
+                            reference.action_id
+                            or reference.work_item_ref.relative_folder
+                            for reference in app.focus_tree_items.values()
+                        ],
                         [
                             "database-only",
                             "QST-CAP40-question",
                         ],
                     )
 
-                    last_focus_row = grouped_rows[divider_index - 1]
-                    first_other_row = grouped_rows[divider_index + 1]
-                    app.focus_tree.selection_set(last_focus_row)
-                    app.focus_tree.focus(last_focus_row)
-                    app.focus_tree.focus_force()
-                    app.focus_tree.event_generate("<Down>")
-                    root.update()
-                    self.assertEqual(app.focus_tree.selection(), (first_other_row,))
-
-                    app.focus_tree.selection_set(first_other_row)
-                    app.focus_tree.focus(first_other_row)
-                    divider_bounds = app.focus_tree.bbox(divider_row)
-                    self.assertTrue(divider_bounds)
-                    app.focus_tree.event_generate(
-                        "<Button-1>",
-                        x=divider_bounds[0] + 3,
-                        y=divider_bounds[1] + 3,
-                    )
-                    root.update()
-                    self.assertEqual(app.focus_tree.selection(), (first_other_row,))
-                    with patch.object(app, "_execute_palette_item") as execute_item:
-                        app.focus_tree.selection_set(divider_row)
-                        app.focus_tree.focus(divider_row)
-                        app.focus_tree.event_generate("<Return>")
-                        root.update()
-                        app._activate_mixed_tree_from_event(
-                            type(
-                                "PointerEvent",
-                                (),
-                                {
-                                    "keysym": "",
-                                    "y": divider_bounds[1] + 3,
-                                },
-                            )()
-                        )
-                    execute_item.assert_not_called()
-
                     app.search_var.set("question")
                     self._wait_for_search_refresh(root)
                     self.assertEqual(app.results_count_var.get(), "1 item")
-                    self.assertEqual(
-                        app.actions_heading_var.get(),
-                        "All items · Focus first",
-                    )
-                    self.assertFalse(
-                        any(
-                            FOCUS_GROUP_ROW_TAG
-                            in app.focus_tree.item(item_id, "tags")
-                            for item_id in app.focus_tree.get_children()
-                        )
-                    )
+                    self.assertEqual(app.actions_heading_var.get(), "All items")
 
                     app.search_var.set("age verification")
                     self._wait_for_search_refresh(root)
-                    self.assertEqual(app.results_count_var.get(), "1 item")
+                    self.assertEqual(app.results_count_var.get(), "0 items")
                     self.assertEqual(app.actions_heading_var.get(), "All items")
-                    self.assertEqual(
-                        [
-                            reference.work_item_ref.relative_folder
-                            for reference in app.focus_tree_items.values()
-                            if reference.work_item_ref is not None
-                        ],
-                        ["ISS-CAP40-AB9C-age-verification"],
-                    )
 
                     app.search_var.set("")
                     self._wait_for_search_refresh(root)
-                    app._select_item_context_filter("Review")
-                    self.assertEqual(app.actions_heading_var.get(), "All items")
-                    self.assertFalse(
-                        any(
-                            FOCUS_GROUP_ROW_TAG
-                            in app.focus_tree.item(item_id, "tags")
-                            for item_id in app.focus_tree.get_children()
-                        )
-                    )
-                    app._select_item_context_filter(None)
-                    self.assertEqual(
-                        app.actions_heading_var.get(),
-                        "All items · Focus first",
-                    )
+                    app._select_context_scope(CONTEXT_SCOPE_EVERYWHERE)
+                    self.assertEqual(app.context_scope, CONTEXT_SCOPE_EVERYWHERE)
+                    self.assertEqual(app.results_count_var.get(), "5 items")
 
                     app.palette_state = PaletteState(
                         ("general-first",),
-                        "General",
-                        {"General": ("database-only",)},
+                        "Database",
+                        {"Database": ("database-only",)},
                     )
                     app._refresh_results()
-                    pinned_row = next(
+                    ordinary_row = next(
                         item_id
                         for item_id, reference in app.focus_tree_items.items()
                         if reference.action_id == "general-first"
-                        and PINNED_SLOT_ROW_TAG in app.focus_tree.item(item_id, "tags")
                     )
                     focus_row = next(
                         item_id
                         for item_id, reference in app.focus_tree_items.items()
                         if reference.action_id == "database-only"
                     )
-                    self.assertFalse(app.focus_tree.item(pinned_row, "text").startswith("1. "))
+                    self.assertFalse(app.focus_tree.item(ordinary_row, "text").startswith("1. "))
                     self.assertFalse(app.focus_tree.item(focus_row, "text").startswith("6. "))
-                    self.assertIn(
-                        PINNED_SLOT_ROW_TAG,
-                        app.focus_tree.item(pinned_row, "tags"),
+                    self.assertNotIn(
+                        FOCUS_SLOT_ROW_TAG,
+                        app.focus_tree.item(ordinary_row, "tags"),
                     )
                     self.assertIn(
                         FOCUS_SLOT_ROW_TAG,
                         app.focus_tree.item(focus_row, "tags"),
                     )
-                    self.assertIn(
-                        "Shortcut: Shift+1",
-                        app._focus_tree_tooltip_text(pinned_row),
+                    self.assertNotIn(
+                        "Shortcut:",
+                        app._focus_tree_tooltip_text(ordinary_row),
                     )
                     self.assertIn(
                         "Shortcut: Shift+6",
@@ -1197,7 +1063,6 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app.run_button.cget("text"), "Open")
                     self.assertEqual(str(app.run_button.cget("state")), "normal")
                     self.assertEqual(str(app.action_discovery_panel.edit_button.cget("state")), "normal")
-                    self.assertEqual(str(app.action_discovery_panel.pin_button.cget("state")), "disabled")
                     self.assertTrue(app.work_item_folder_button.winfo_manager())
                     self.assertTrue(app.status_var.get().startswith("Input: none → Effect: open "))
                     self.assertIn("\n\nInput\nNo runtime input.", app.action_info_full)
@@ -1240,7 +1105,10 @@ class LauncherSmokeTests(unittest.TestCase):
                     root.update()
                     self.assertTrue(app.status_var.get().startswith("Input: saved text → Effect:"))
 
-                    app._select_item_context_filter("Review")
+                    app.palette_state = PaletteState(focus_context="Review")
+                    app.context_var.set("Review")
+                    app._refresh_focus_controls()
+                    app._select_context_scope(CONTEXT_SCOPE_THIS)
                     self.assertEqual(app.results_count_var.get(), "2 items")
                     self.assertEqual(
                         {
@@ -1249,7 +1117,7 @@ class LauncherSmokeTests(unittest.TestCase):
                         },
                         {"action", "work_item"},
                     )
-                    app._select_item_context_filter(None)
+                    app._select_context_scope(CONTEXT_SCOPE_EVERYWHERE)
                     app._select_item_tag_filter("database")
                     self.assertEqual(app.results_count_var.get(), "2 items")
                     self.assertEqual(
@@ -1291,44 +1159,24 @@ class LauncherSmokeTests(unittest.TestCase):
                             "Send Input / Output to Inbox",
                             "Copy file into Work Item",
                             "Filter by project",
-                            "Filter by context…",
                             "Filter by tag…",
                         ],
                     )
-                    context_filter_index = next(
-                        index
-                        for index in range(work_tools_menu.index(tk.END) + 1)
-                        if work_tools_menu.type(index) != "separator"
-                        if work_tools_menu.entrycget(index, "label")
-                        == "Filter by context…"
+                    context_scope_menu = root.nametowidget(
+                        app.context_scope_picker.cget("menu")
                     )
                     self.assertEqual(
-                        work_tools_menu.type(context_filter_index),
-                        "command",
+                        [
+                            context_scope_menu.entrycget(index, "label")
+                            for index in range(context_scope_menu.index(tk.END) + 1)
+                        ],
+                        ["Everywhere", "This context"],
                     )
-                    work_tools_menu.invoke(context_filter_index)
-                    root.update()
-                    context_popup = app.action_discovery_panel.context_picker_popup
-                    review_index = context_popup.visible_values.index("Review")
-                    context_popup.listbox.selection_clear(0, tk.END)
-                    context_popup.listbox.selection_set(review_index)
-                    context_popup._selection_changed()
-                    context_popup.apply()
-                    self.assertEqual(app.item_context_filter, "Review")
-                    work_tools_menu = root.nametowidget(
-                        app.scope_options_button.cget("menu")
-                    )
-                    work_tools_menu.invoke(context_filter_index)
-                    root.update()
-                    context_popup = app.action_discovery_panel.context_picker_popup
-                    all_contexts_index = context_popup.visible_values.index(
-                        "All contexts"
-                    )
-                    context_popup.listbox.selection_clear(0, tk.END)
-                    context_popup.listbox.selection_set(all_contexts_index)
-                    context_popup._selection_changed()
-                    context_popup.apply()
-                    self.assertIsNone(app.item_context_filter)
+                    context_scope_menu.invoke(1)
+                    self.assertEqual(app.context_scope, CONTEXT_SCOPE_THIS)
+                    self.assertEqual(app.context_scope_var.get(), "This context")
+                    context_scope_menu.invoke(0)
+                    self.assertEqual(app.context_scope, CONTEXT_SCOPE_EVERYWHERE)
                     self.assertEqual(
                         {
                             widget: (widget.winfo_x(), widget.winfo_y())
@@ -1393,27 +1241,31 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app.results_count_var.get(), "0 actions")
                     self.assertEqual(str(app.run_button.cget("state")), "disabled")
                     self.assertEqual(str(app.action_discovery_panel.edit_button.cget("state")), "disabled")
-                    self.assertEqual(str(app.action_discovery_panel.pin_button.cget("state")), "disabled")
                     app._select_item_tag_filter(None)
                     self.assertEqual(str(app.run_button.cget("state")), "normal")
                     self.assertEqual(str(app.action_discovery_panel.edit_button.cget("state")), "normal")
-                    self.assertEqual(str(app.action_discovery_panel.pin_button.cget("state")), "normal")
 
                     opened_action_ids: list[str] = []
                     original_show_configuration = app._show_configuration
                     app._show_configuration = lambda **options: opened_action_ids.append(
                         options["initial_action_id"]
                     )
-                    flat_index = 1
-                    expected_flat_action = app.displayed_actions[flat_index].id
+                    flat_index, (flat_action, _flat_slot) = next(
+                        (index, row)
+                        for index, row in enumerate(app.displayed_action_rows)
+                        if row[0] is not None and row[1] is None
+                    )
+                    assert flat_action is not None
+                    expected_flat_action = flat_action.id
                     flat_bounds = app.results.bbox(flat_index)
                     self.assertIsNotNone(flat_bounds)
-                    app.results.event_generate(
-                        "<Button-3>",
-                        x=flat_bounds[0] + 3,
-                        y=flat_bounds[1] + 3,
+                    app._configure_flat_action_from_event(
+                        type(
+                            "PointerEvent",
+                            (),
+                            {"y": flat_bounds[1] + 3},
+                        )()
                     )
-                    root.update()
                     self.assertEqual(opened_action_ids, [expected_flat_action])
                     self.assertEqual(app.results.curselection(), (flat_index,))
 
@@ -1426,7 +1278,7 @@ class LauncherSmokeTests(unittest.TestCase):
                             for index in range(action_tools_menu.index(tk.END) + 1)
                             if action_tools_menu.type(index) != "separator"
                         ],
-                        ["Filter by type", "Filter by context…", "Filter by tag…"],
+                        ["Filter by type", "Filter by tag…"],
                     )
 
                     type_menu = root.nametowidget(app.type_filter.cget("menu"))
@@ -1481,19 +1333,22 @@ class LauncherSmokeTests(unittest.TestCase):
                     app.search_var.set("")
                     root.update()
 
-                    app._activate_focus_actions()
+                    app.context_var.set("Database")
+                    app._change_focus_context()
+                    app._select_context_scope(CONTEXT_SCOPE_THIS)
                     root.update()
-                    self.assertEqual(app.results_view, "focus")
-                    self.assertEqual(
-                        app.focus_actions_button.cget("style"),
-                        "RailAccent.TButton",
-                    )
+                    self.assertEqual(app.results_view, "all")
+                    self.assertEqual(app.context_scope_var.get(), "This context")
                     self.assertIs(root.focus_get(), app.focus_tree)
                     self.assertEqual(
                         {action.id for action in app.focus_tree_actions.values()},
-                        {"general-first", "general-second", "database-only"},
+                        {"database-only"},
                     )
-                    focus_item = app.focus_tree.get_children()[1]
+                    focus_item = next(
+                        item_id
+                        for item_id, reference in app.focus_tree_items.items()
+                        if reference.action_id == "database-only"
+                    )
                     expected_focus_action = app.focus_tree_actions[focus_item].id
                     focus_bounds = app.focus_tree.bbox(focus_item)
                     self.assertTrue(focus_bounds)
@@ -1509,13 +1364,10 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     self.assertEqual(app.focus_tree.selection(), (focus_item,))
                     app._show_configuration = original_show_configuration
-                    app._show_flat_results()
-                    app._render_focus_actions()
-                    self.assertEqual(app._selected_action().id, "general-first")
-                    app.context_var.set("Database")
-                    app._change_focus_context()
                     app.context_var.set("General")
                     app._change_focus_context()
+                    self.assertEqual(app.context_scope, CONTEXT_SCOPE_EVERYWHERE)
+                    self.assertEqual(app.context_scope_var.get(), "Everywhere")
 
                     app.search_var.set("Database only")
                     self._wait_for_search_refresh(root)
@@ -1535,43 +1387,41 @@ class LauncherSmokeTests(unittest.TestCase):
 
                     app.search_var.set("")
                     self._wait_for_search_refresh(root)
-                    self.assertEqual(app.results_view, "focus")
+                    app._select_context_scope(CONTEXT_SCOPE_THIS)
+                    self.assertEqual(app.results_view, "all")
                     self.assertEqual(
                         {action.id for action in app.focus_tree_actions.values()},
                         {"database-only"},
                     )
+                    self.assertEqual(app.results_count_var.get(), "2 items")
 
-                    app._activate_focus_actions()
+                    app._select_context_scope(CONTEXT_SCOPE_EVERYWHERE)
                     root.update()
-                    self.assertFalse(app.focus_actions_mode)
                     self.assertEqual(app.results_view, "all")
-                    self.assertEqual(
-                        app.focus_actions_button.cget("style"),
-                        "Compact.TButton",
-                    )
+                    self.assertEqual(app.context_scope_var.get(), "Everywhere")
+                    self.assertEqual(app.results_count_var.get(), "5 items")
                     self._assert_input_first_layout(app)
 
                     surface_areas = app.command_tiles_frame.winfo_children()
+                    configurable_groups = [
+                        group
+                        for group in app.command_groups
+                        if group.id.casefold() != "standard"
+                    ]
+                    expected_surface_labels = [
+                        "Standard ▾",
+                        *(f"{group.label} ▾" for group in configurable_groups),
+                        "Passwords ▾",
+                        "Folders ▾",
+                        "Prompts ▾",
+                    ]
                     self.assertEqual(
                         len(surface_areas),
-                        4
-                        + len(
-                            [
-                                group
-                                for group in app.command_groups
-                                if group.id.casefold() != "standard"
-                            ]
-                        ),
+                        len(expected_surface_labels),
                     )
-                    for position, (area, label) in enumerate(zip(
-                        surface_areas[:4],
-                        (
-                            "Standard ▾",
-                            "Passwords ▾",
-                            "Folders ▾",
-                            "Prompts ▾",
-                        ),
-                    )):
+                    for position, (area, label) in enumerate(
+                        zip(surface_areas, expected_surface_labels)
+                    ):
                         expected_row, expected_column = divmod(
                             position,
                             app.command_surface_columns,
@@ -1584,40 +1434,13 @@ class LauncherSmokeTests(unittest.TestCase):
                             [child.cget("text") for child in area.winfo_children()],
                             [label],
                         )
-                    configurable_groups = [
-                        group
-                        for group in app.command_groups
-                        if group.id.casefold() != "standard"
-                    ]
-                    for index, (area, group) in enumerate(
-                        zip(surface_areas[4:], configurable_groups)
-                    ):
-                        expected_row, expected_column = divmod(
-                            index + 4,
-                            app.command_surface_columns,
-                        )
-                        self.assertEqual(
-                            int(area.grid_info()["row"]),
-                            expected_row,
-                        )
-                        self.assertEqual(
-                            int(area.grid_info()["column"]),
-                            expected_column,
-                        )
-                        self.assertIsInstance(area, ttk.Frame)
-                        self.assertNotIsInstance(area, ttk.LabelFrame)
                         menu_launchers = [
                             child
                             for child in area.winfo_children()
                             if isinstance(child, ttk.Label)
                             and child.cget("style") == "SurfaceMenu.TLabel"
                         ]
-                        self.assertEqual(
-                            [control.cget("text") for control in menu_launchers],
-                            [f"{group.label} ▾"],
-                        )
-                        for row, control in enumerate(menu_launchers):
-                            self.assertEqual(int(control.grid_info()["row"]), row)
+                        for control in menu_launchers:
                             self.assertEqual(int(control.grid_info()["column"]), 0)
                             self.assertEqual(str(control.cget("anchor")), "w")
                             self.assertTrue(control.cget("takefocus"))
@@ -2075,7 +1898,7 @@ class LauncherSmokeTests(unittest.TestCase):
                             {
                                 "Create an Action...",
                                 "Find or edit Actions",
-                                "Organize Focuses",
+                                "Organize Contexts",
                                 "Arrange Quick actions",
                                 "Set up Work Items",
                                 "Back up or restore",
@@ -2164,7 +1987,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     }
                     self.assertIn("Manage Contexts", context_labels)
                     self.assertIn(
-                        "A Context organizes items; Focus is the Context currently highlighted in the palette.",
+                        "A Context organizes items; the Working context is the one currently selected in the palette.",
                         context_labels,
                     )
                     self.assertEqual(
@@ -2393,8 +2216,22 @@ class LauncherSmokeTests(unittest.TestCase):
                         app.configuration_window.work_items_panel.edit_details_button.cget(
                             "text"
                         ),
-                        "Tags & contexts…",
+                        "Organize",
                     )
+                    organize_menu = (
+                        app.configuration_window.work_items_panel.organize_menu
+                    )
+                    self.assertEqual(
+                        [
+                            organize_menu.entrycget(index, "label")
+                            for index in (0, 2)
+                        ],
+                        [
+                            "Edit tags & contexts…",
+                            "Forget Palette organization…",
+                        ],
+                    )
+                    self.assertEqual(organize_menu.entrycget(2, "state"), "normal")
                     self.assertGreater(
                         int(
                             app.configuration_window.work_items_panel.source_path_label.cget(

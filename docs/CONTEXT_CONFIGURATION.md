@@ -1,11 +1,12 @@
 # Context configuration
 
-A Focus Context groups Actions and Work Items for a kind of work and gives slots
-6–0 a predictable set of preferred Palette items while search remains global.
+A Context groups Actions and Work Items for a kind of work. The selected
+**Working context** supplies predictable shortcuts in slots 6–0. Retrieval stays
+global with **Everywhere** and becomes membership-only with **This context**.
 
 ## Recommended: Configure window
 
-Choose **Manage focuses…** in the Focus selector to open **Contexts** directly,
+Choose **Manage contexts…** in the Context selector to open **Contexts** directly,
 or choose **Configure** (or press `Ctrl+,`) and select **Contexts**. Create,
 edit, or delete a Context, choose every Action and Work Item that belongs to it,
 and select up to five preferred items. The form uses names instead of technical
@@ -17,7 +18,7 @@ without editing the Actions or external folders themselves. **Built-in** is deve
 tracked through Git. General is implicit, and **Developing Context Palette** is
 the only shipped specific context.
 
-Deletion clears saved Focus state and any legacy Action-side metadata before
+Deletion clears saved Working-context state and any legacy Action-side metadata before
 removing the definition. Removing a Context assignment never deletes its
 Actions, Work Item folders, or workbooks.
 
@@ -27,7 +28,8 @@ Actions, Work Item folders, or workbooks.
 - `data/local_contexts.json`: personal or work-specific contexts, ignored by Git.
 - `data/actions.json`: Built-in starter actions.
 - `data/local_actions.json`: personal or machine-specific actions, ignored by Git.
-- `data/palette.json`: per-machine Focus, pins, and explicit slot overrides.
+- `data/palette.json`: per-machine Working context, explicit Context-slot
+  overrides, and legacy pin IDs retained only for compatible round-trip.
 
 Do not put internal URLs, customer names, work paths, or personal identifiers
 in Built-in files.
@@ -49,7 +51,7 @@ in Built-in files.
 ```
 
 `name` is the stable, case-insensitively unique context identity. `action_ids`
-is the ordered Action membership list used by **Focus items**.
+is the ordered Action membership list used by **This context** retrieval.
 `preferred_action_ids` supplies up to five default actions for slots 6–0 and
 should be a subset of `action_ids`. Explicit per-machine slots in
 `palette.json` override those defaults.
@@ -68,7 +70,8 @@ definitions. New and edited actions write their context choices back to those
 definitions and do not persist a second membership copy. A personal action
 cannot be assigned to a Built-in context because that would put a private ID
 in a Git-tracked file; use a My configuration context instead. Tags remain
-independent discovery terms. Search remains global regardless of Focus.
+independent discovery terms. **Everywhere** searches globally; **This context**
+limits results to canonical members of the selected Working context.
 
 Do not create a General Context definition; it is implied for every Action and
 discovered Work Item.

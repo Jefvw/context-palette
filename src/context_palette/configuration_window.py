@@ -129,6 +129,7 @@ ACTION_TYPE_EXAMPLES = {
 
 LOCAL_DESTINATION = "My configuration"
 PROJECT_DESTINATION = "Built-in"
+STANDARD_QUICK_GROUP_ID = "standard"
 EMPTY_PIN_LABEL = "Not assigned"
 DEFAULT_TEXT_ACTION_FILENAME = "local_text_action_source.txt"
 ACTION_DIALOG_SIZE = (700, 520)
@@ -477,7 +478,7 @@ def context_action_summary(
     preferred_text = ", ".join(preferred) if preferred else "automatic"
     return (
         f"{context_membership_count(context, actions)} member(s) · "
-        f"Focus shortcuts: {preferred_text}"
+        f"Context shortcuts: {preferred_text}"
     )
 
 
@@ -584,23 +585,6 @@ def select_first_tree_item(tree: ttk.Treeview, *, descend: bool = False) -> None
             target = children[0]
     tree.selection_set(target)
     tree.focus(target)
-
-
-def resolve_pinned_action_ids(
-    selected_labels: list[str],
-    action_choices: dict[str, str],
-) -> tuple[str, ...]:
-    action_ids: list[str] = []
-    for label in selected_labels:
-        if not label or label == EMPTY_PIN_LABEL:
-            continue
-        action_id = action_choices.get(label)
-        if action_id is None:
-            raise ActionError(f'Pinned action "{label}" is no longer available.')
-        if action_id in action_ids:
-            raise ActionError("Each action can occupy only one pinned slot.")
-        action_ids.append(action_id)
-    return tuple(action_ids)
 
 
 class ConfigurationWindow:
@@ -773,26 +757,12 @@ class ConfigurationWindow:
         start_action_edit: bool = False,
     ) -> None:
         """Refresh, navigate, and raise an already-open Configure workspace."""
-        pin_draft = (
-            tuple(variable.get() for variable in self.pin_vars)
-            if getattr(self, "_pins_dirty", False)
-            else None
-        )
         self.initial_action_id = initial_action_id
         if initial_action_id and self.action_filter_var.get():
             self.action_filter_var.set("")
         if initial_action_id and self.action_state_filter_var.get() != "Active":
             self.action_state_filter_var.set("Active")
         self._reload()
-        if pin_draft is not None:
-            self._pins_rendering = True
-            try:
-                for variable, value in zip(self.pin_vars, pin_draft):
-                    variable.set(value)
-            finally:
-                self._pins_rendering = False
-            self._pins_dirty = True
-            self._update_pin_summary()
         self.notebook.select(CONFIGURATION_TAB_INDEXES.get(initial_tab, 0))
         if initial_work_item_key:
             self.work_items_panel.select_item(initial_work_item_key)
@@ -1147,12 +1117,12 @@ class ConfigurationWindow:
             ),
             (
                 "Find or edit Actions",
-                "Manage saved Actions, pinned slots, and Active or Archived state.",
+                "Manage saved Actions and their Active or Archived state.",
                 lambda: self._show_config_named_tab("actions"),
             ),
             (
-                "Organize Focuses",
-                "Create Contexts, choose their members, and arrange Focus slots.",
+                "Organize Contexts",
+                "Create Contexts, choose their members, and arrange Working-context shortcuts.",
                 lambda: self._show_config_named_tab("contexts"),
             ),
             (
@@ -1269,77 +1239,6 @@ class ConfigurationWindow:
             ),
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(0, 7))
-
-        pins = ttk.Frame(
-            tab,
-            style="Card.TFrame",
-            padding=(8, 5),
-        )
-        self.pins_frame = pins
-        pins.pack(fill=tk.X, pady=(0, 8))
-        pins.columnconfigure(1, weight=1)
-        ttk.Label(
-            pins,
-            text="Pinned slots 1–5",
-            style="Card.TLabel",
-            font=("Segoe UI Semibold", 10),
-        ).grid(row=0, column=0, sticky=tk.W)
-        self.pin_summary_var = tk.StringVar(value="0 assigned on this computer")
-        ttk.Label(
-            pins,
-            textvariable=self.pin_summary_var,
-            style="CardMuted.TLabel",
-        ).grid(row=0, column=1, sticky=tk.W, padx=(10, 0))
-        self.toggle_pins_button = ttk.Button(
-            pins,
-            text="Show pins",
-            command=self._toggle_pins,
-            style="Compact.TButton",
-        )
-        self.toggle_pins_button.grid(row=0, column=2, sticky=tk.E)
-        self.pins_body = ttk.Frame(pins, style="Card.TFrame")
-        self.pins_body.columnconfigure(1, weight=1)
-        self._pins_rendering = False
-        self._pins_dirty = False
-        self.pin_vars: list[tk.StringVar] = []
-        self.pin_choices: dict[str, str] = {}
-        self.pin_pickers: list[ActionPickerField] = []
-        for row in range(5):
-            ttk.Label(
-                self.pins_body,
-                text=f"Slot {row + 1}",
-                style="CardMuted.TLabel",
-                width=7,
-            ).grid(row=row, column=0, sticky=tk.W, pady=(3, 0))
-            variable = tk.StringVar(value=EMPTY_PIN_LABEL)
-            picker = ActionPickerField(
-                self.pins_body,
-                variable=variable,
-                empty_label=EMPTY_PIN_LABEL,
-                title=f"Choose action for slot {row + 1}",
-                button_text="Choose…",
-            )
-            picker.configure(style="Card.TFrame")
-            picker.grid(
-                row=row,
-                column=1,
-                sticky=tk.EW,
-                padx=(8, 0),
-                pady=(3, 0),
-            )
-            self.pin_vars.append(variable)
-            self.pin_pickers.append(picker)
-            variable.trace_add(
-                "write",
-                lambda *_args: self._mark_pins_dirty(),
-            )
-        self.pin_comboboxes = self.pin_pickers
-        self.save_pins_button = ttk.Button(
-            self.pins_body,
-            text="Save pins",
-            command=self._save_pinned_slots,
-        )
-        self.save_pins_button.grid(row=5, column=1, sticky=tk.E, pady=(7, 0))
 
         filter_row = ttk.Frame(tab)
         filter_row.pack(fill=tk.X, pady=(0, 6))
@@ -1460,35 +1359,6 @@ class ConfigurationWindow:
         self.delete_action_button.pack(side=tk.LEFT, padx=(6, 0))
         selection.bind("<Configure>", self._resize_action_summary, add="+")
 
-    def _toggle_pins(self) -> None:
-        if self.pins_body.winfo_manager():
-            self.pins_body.grid_remove()
-            self.toggle_pins_button.configure(text="Show pins")
-            self.toggle_pins_button.focus_set()
-            return
-        self.pins_body.grid(
-            row=1,
-            column=0,
-            columnspan=3,
-            sticky=tk.EW,
-            pady=(7, 0),
-        )
-        self.toggle_pins_button.configure(text="Hide pins")
-
-    def _mark_pins_dirty(self) -> None:
-        if self._pins_rendering:
-            return
-        self._pins_dirty = True
-        self._update_pin_summary()
-
-    def _update_pin_summary(self) -> None:
-        assigned = len(self.palette_state.pinned_action_ids[:5])
-        self.pin_summary_var.set(
-            f"{assigned} saved · unsaved changes"
-            if self._pins_dirty
-            else f"{assigned} assigned on this computer"
-        )
-
     def _resize_action_summary(self, event: tk.Event) -> None:
         command_width = self.action_commands_frame.winfo_reqwidth()
         text_width = max(120, int(event.width) - command_width - 34)
@@ -1585,8 +1455,8 @@ class ConfigurationWindow:
         ttk.Label(
             heading,
             text=(
-                "A Context organizes items; Focus is the Context currently "
-                "highlighted in the palette."
+                "A Context organizes items; the Working context is the one "
+                "currently selected in the palette."
             ),
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(2, 0))
@@ -1622,7 +1492,7 @@ class ConfigurationWindow:
         )
         self.context_tree.heading("#0", text="Context")
         self.context_tree.heading("source", text="Source")
-        self.context_tree.heading("actions", text="Members / Focus shortcuts")
+        self.context_tree.heading("actions", text="Members / Context shortcuts")
         self.context_tree.column("#0", width=170, minwidth=140)
         self.context_tree.column("source", width=105, minwidth=100, stretch=False)
         self.context_tree.column("actions", width=300, minwidth=190)
@@ -1661,7 +1531,7 @@ class ConfigurationWindow:
         )
         self.context_detail_title_label.grid(row=0, column=0, sticky=tk.EW)
         self.context_detail_summary_var = tk.StringVar(
-            value="Choose a Context to review its members and Focus shortcuts."
+            value="Choose a Context to review its members and context shortcuts."
         )
         self.context_detail_summary_label = ttk.Label(
             selection,
@@ -1964,6 +1834,8 @@ class ConfigurationWindow:
             metadata_path=self.work_item_metadata_path,
             settings_path=self.work_item_settings_path,
             contexts_path=self.local_contexts_path,
+            palette_path=self.palette_path,
+            command_surface_path=self.local_command_surface_path,
             on_change=self.on_change,
             feedback=self._set_feedback,
             refresh_configuration=self._reload,
@@ -2203,71 +2075,9 @@ class ConfigurationWindow:
         """Refresh every Configure view derived from the current action list."""
 
         self._render_actions()
-        self._render_pinned_slots()
         self._render_contexts()
         self._render_buttons()
         self._refresh_diagnostics()
-
-    def _render_pinned_slots(self) -> None:
-        self.pin_choices = _action_choices(self.actions)
-        labels_by_id = {
-            action_id: label for label, action_id in self.pin_choices.items()
-        }
-        for action_id in self.palette_state.pinned_action_ids:
-            if action_id not in labels_by_id:
-                label = f"Missing action: {action_id}"
-                self.pin_choices[label] = action_id
-                labels_by_id[action_id] = label
-        picker_options = _action_picker_options(
-            self.actions,
-            choices=self.pin_choices,
-        )
-        for picker in self.pin_pickers:
-            picker.set_options(
-                picker_options,
-                empty_label=EMPTY_PIN_LABEL,
-            )
-        self._pins_rendering = True
-        try:
-            for index, variable in enumerate(self.pin_vars):
-                label = EMPTY_PIN_LABEL
-                if index < len(self.palette_state.pinned_action_ids):
-                    action_id = self.palette_state.pinned_action_ids[index]
-                    label = labels_by_id.get(action_id, f"Missing action: {action_id}")
-                variable.set(label)
-        finally:
-            self._pins_rendering = False
-        self._pins_dirty = False
-        self._update_pin_summary()
-
-    def _save_pinned_slots(self) -> None:
-        try:
-            action_ids = resolve_pinned_action_ids(
-                [variable.get() for variable in self.pin_vars],
-                self.pin_choices,
-            )
-            updated = PaletteState(
-                action_ids,
-                self.palette_state.focus_context,
-                self.palette_state.context_slots,
-                self.palette_state.context_membership_version,
-                self.palette_state.context_item_slots,
-            )
-            save_palette_state(self.palette_path, updated)
-        except (ActionError, OSError) as exc:
-            messagebox.showerror(
-                "Pinned slots were not saved",
-                f"Context Palette could not save slots 1–5.\n\n{exc}",
-                parent=self.window,
-            )
-            return
-        self.palette_state = updated
-        self.on_change()
-        self._render_pinned_slots()
-        self.feedback_var.set(
-            f"Saved {len(action_ids)} pinned action(s) in slots 1–5."
-        )
-        self.feedback_label.configure(style="Success.TLabel")
 
     def _render_contexts(self) -> None:
         self.context_tree.delete(*self.context_tree.get_children())
@@ -2781,7 +2591,7 @@ class ConfigurationWindow:
         if selected is None:
             self.context_detail_title_var.set("Select a Context")
             self.context_detail_summary_var.set(
-                "Choose a Context to review its members and Focus shortcuts."
+                "Choose a Context to review its members and context shortcuts."
             )
             self.context_edit_button.configure(state=tk.DISABLED)
             self.context_delete_button.configure(state=tk.DISABLED)
@@ -2796,7 +2606,7 @@ class ConfigurationWindow:
         self.context_detail_summary_var.set(
             compact_selection_summary(
                 f"{source} · {member_count} member(s) · "
-                f"{preferred_count} Focus shortcut(s) · {description}"
+                f"{preferred_count} context shortcut(s) · {description}"
             )
         )
         self.context_edit_button.configure(state=tk.NORMAL)
@@ -2998,7 +2808,7 @@ class ConfigurationWindow:
             if not messagebox.askyesno(
                 "Restore action?",
                 f'Restore "{action.title}" as Active?\n\nIt will return to normal '
-                "launcher search. Previous pins, Context membership, Focus slots, "
+                "launcher search. Previous Context membership, context slots, "
                 f"and configured Quick actions will not be recreated.{shared_warning}",
                 parent=self.window,
             ):
@@ -3051,7 +2861,7 @@ class ConfigurationWindow:
         impact = (
             f"{usage.references_removed} saved reference(s) will be removed."
             if usage.references_removed
-            else "It has no saved pins, Focus slots, Contexts, or Quick actions."
+            else "It has no saved context slots, Contexts, or Quick actions."
         )
         if usage.buttons_removed:
             impact += (
@@ -3081,9 +2891,9 @@ class ConfigurationWindow:
                 sequence_paths=(self.shared_actions_path, self.local_actions_path),
             )
         except (ActionDeletionError, OSError) as exc:
-            # Reference cleanup intentionally precedes the state write. A
-            # failure can therefore leave a valid Active action with fewer
-            # placements; reload every view before explaining that outcome.
+            # The lifecycle service rolls attempted writes back. Reload to
+            # reflect either the restored state or an explicitly reported
+            # incomplete rollback.
             self.on_change()
             self._reload()
             messagebox.showerror("Action was not archived", str(exc), parent=self.window)
@@ -3132,7 +2942,7 @@ class ConfigurationWindow:
         impact = (
             f"{usage.references_removed} saved reference(s) will also be removed."
             if usage.references_removed
-            else "No saved pins, Focus slots, contexts, or quick buttons reference it."
+            else "No saved context slots, Contexts, or Quick actions reference it."
         )
         if usage.buttons_removed:
             impact += (
@@ -3168,7 +2978,16 @@ class ConfigurationWindow:
                 sequence_paths=(self.shared_actions_path, self.local_actions_path),
             )
         except (ActionDeletionError, OSError) as exc:
-            messagebox.showerror("Context Palette", str(exc), parent=self.window)
+            # The lifecycle service rolls attempted writes back. Reload to
+            # reflect either the restored state or an explicitly reported
+            # incomplete rollback.
+            self.on_change()
+            self._reload()
+            messagebox.showerror(
+                "Action was not deleted",
+                f"{exc}\n\nContext Palette reloaded the current state.",
+                parent=self.window,
+            )
             return
         self.stored_actions[:] = [
             existing for existing in self.stored_actions if existing.id != action.id
@@ -3347,7 +3166,7 @@ class ConfigurationWindow:
             "Delete context?",
             f'Delete "{context.name}" permanently?\n\n'
             f"{membership_count} {membership_label} will be moved to General if they have "
-            "no other specific context. Saved Focus slots for this context will "
+            "no other specific Context. Saved shortcuts for this Context will "
             "also be removed.\n\n"
             f"Storage: {LOCAL_DESTINATION if local else PROJECT_DESTINATION}"
             f"{shared_warning}",
@@ -3763,6 +3582,9 @@ class ConfigurationWindow:
         if selected is None:
             return
         group, item, _path = selected
+        if item is None and group.id.casefold() == STANDARD_QUICK_GROUP_ID:
+            self.feedback_var.set("Standard is the fixed first menu.")
+            return
         target_path = self._group_target_path(group)
         project = target_path.resolve() == self.command_surface_path.resolve()
         noun = "menu" if item is None else "Quick-action item"
@@ -3820,6 +3642,9 @@ class ConfigurationWindow:
         if selected is None:
             return
         group, item, _path = selected
+        if item is None and group.id.casefold() == STANDARD_QUICK_GROUP_ID:
+            self.feedback_var.set("Standard is the fixed first menu.")
+            return
         target_path = self._group_target_path(group)
         project = target_path.resolve() == self.command_surface_path.resolve()
         if project and not messagebox.askokcancel(
@@ -4016,6 +3841,10 @@ class ConfigurationWindow:
             )
             return
         group, item, path = selected
+        fixed_standard_root = (
+            item is None
+            and group.id.casefold() == STANDARD_QUICK_GROUP_ID
+        )
         destination = (
             LOCAL_DESTINATION
             if self._group_target_path(group).resolve()
@@ -4034,9 +3863,9 @@ class ConfigurationWindow:
                 "New Quick action…" if item is None else "New submenu…"
             ),
             new_enabled=len(path) < MAX_COMMAND_MENU_LEVELS,
-            move_up=move_up,
-            move_down=move_down,
-            delete_enabled=True,
+            move_up=move_up and not fixed_standard_root,
+            move_down=move_down and not fixed_standard_root,
+            delete_enabled=not fixed_standard_root,
         )
         if item is None:
             root_labels = action_reference_labels(
@@ -4049,7 +3878,8 @@ class ConfigurationWindow:
                 )
             self.button_preview_var.set(
                 compact_selection_summary(
-                    f"Browse menu · {command_item_count(group)} item(s) · "
+                    f"Browse menu{' · Fixed first menu' if fixed_standard_root else ''} "
+                    f"· {command_item_count(group)} item(s) · "
                     f"Actions at menu root: "
                     f"{', '.join(root_labels) if root_labels else 'none'} · "
                     f"{destination}"
@@ -5062,14 +4892,14 @@ class ContextDialog:
         self.slot_choices: list[ActionPickerField] = []
         ttk.Label(
             form,
-            text="Focus shortcuts 6–0 (optional)",
+            text="Context shortcuts 6–0 (optional)",
             style="Heading.TLabel",
         ).pack(anchor=tk.W, pady=(9, 0))
         ttk.Label(
             form,
             text=(
                 "Choose up to five Context members for the numbered shortcuts "
-                "shown when this Context is the current Focus."
+                "shown when this Context is the Working context."
             ),
             style="Muted.TLabel",
             wraplength=610,

@@ -4,6 +4,35 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Simplified the main retrieval model around one **Working context** selector
+  and one adjacent **Everywhere / This context** boundary. The duplicate
+  Context filter, Focus-first grouping, and Focus-items presentation are gone.
+  Non-empty Find results now rank exact names, prefixes, visible-name matches,
+  then metadata matches; numbered context slots are not promoted above a real
+  query. Type or project filters retained from another item scope remain
+  visible in the filter chip instead of silently affecting a later return.
+- Retired the low-value global Action pins 1–5 from runtime and Configure.
+  Legacy pinned IDs still load, survive saves, and round-trip for rollback, but
+  they no longer create rows or execute through Shift+1–5. The five genuine
+  Working-context slots 6–0 remain, keep their green presentation, and stay
+  empty rather than borrowing unrelated items.
+- Made Quick-action order reflect likely use without changing menu semantics:
+  the fixed, non-movable **Standard** menu stays first, personal configured
+  menus follow it, then shared configured and automatic Action-bound menus.
+  Every launcher remains menu-only; its tooltip reports the number of choices
+  available at the menu root.
+- Hardened lifecycle and removal boundaries. Only an Archived Action can be
+  permanently deleted. Archive and permanent delete now snapshot every
+  participating file and roll back all attempted writes if one fails, with an
+  explicit incomplete-rollback error if recovery itself cannot finish.
+  **Standard** cannot be moved or deleted. Removing a Work Item source now
+  explicitly says that it only disconnects discovery on this PC: no external
+  folder, workbook, or file is deleted, and saved organization remains
+  available if the same source identity returns. **Forget Palette
+  organization…** provides the separate destructive operation for a Work
+  Item's personal tags, Context/preferred placement, context slots, and
+  personal Quick-menu references; it is transactional and cannot touch the
+  source, folder, workbook, files, or workbook Inbox.
 - Added a separate singleton **Drop into Context Palette** window for bounded
   Explorer, browser, OneNote, and desktop intake. Only that small non-transient
   Toplevel remains always on top while the ordinary palette keeps its existing

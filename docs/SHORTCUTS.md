@@ -21,15 +21,16 @@ Open it from **More → Keyboard shortcuts** in the main palette.
 | `Ctrl+,` | Open Configure. |
 | `Ctrl+Shift+D` | Open Configure on Diagnostics. |
 | `F1` | Open complete Help. |
-| `F5` | Reset transient screen state without changing saved actions, Focus, pins, or slots. |
+| `F5` | Reset transient screen state without changing saved Actions, the Working context, legacy pin data, or context slots. |
 | `Up`, `Down`, `Page Up`, `Page Down`, `Home`, `End` | Navigate action results. |
 | `Enter` | Run the selected Action, or open the selected Work Item's exact matching `.xlsx` workbook with folder fallback. |
 | `Shift+Enter` with a Work Item selected | Open the selected Work Item folder instead of its workbook. |
-| `Shift` + physical top-row `1`–`0` while Find is focused | Run the corresponding slot. This uses key positions and works on AZERTY and QWERTY. |
+| `Shift` + physical top-row `6`–`0` while Find is focused | Run the corresponding Working-context slot. This uses key positions and works on AZERTY and QWERTY. |
 | Plain number-row or numpad `1`–`0` | Enter text in Find; do not run an item. |
 
-Only Shift plus a physical top-row number key executes a slot. Ctrl-, Alt-,
-AltGr-, plain number-row, and numpad input never execute action slots.
+Only Shift plus a physical top-row key from `6` through `0` executes a slot.
+Historical global slots `1`–`5` are retired. Ctrl-, Alt-, AltGr-, plain
+number-row, and numpad input never execute Action slots.
 
 ## Configure
 
@@ -55,7 +56,7 @@ AltGr-, plain number-row, and numpad input never execute action slots.
 | --- | --- |
 | `F6` | Switch focus between the Sources and Discovered Work Items lists. |
 | `Insert` in Sources | Add a Work Item source. |
-| `Delete` in Sources | Remove the selected source after confirmation. |
+| `Delete` in Sources | Disconnect the selected source after confirmation. No folders or files are deleted, and saved Palette organization is retained for reconnection. |
 | `F5` in either list | Refresh the Work Item index. |
 | `Enter` in Sources | Edit the selected source. |
 | `Enter` in Discovered Work Items | Edit personal tags for the selected item. |

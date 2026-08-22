@@ -607,6 +607,48 @@ class ActionTests(unittest.TestCase):
         )
         self.assertEqual([action.id for action in search_actions(actions, "select")], ["database"])
 
+    def test_search_ranks_visible_title_matches_before_metadata_matches(self):
+        actions = [
+            Action(
+                "metadata",
+                "Open supplier portal",
+                "Database",
+                "copy_text",
+                "database",
+                tags=("database",),
+            ),
+            Action(
+                "contains",
+                "Review database changes",
+                "General",
+                "copy_text",
+                "review",
+            ),
+            Action(
+                "prefix",
+                "Database documentation",
+                "General",
+                "copy_text",
+                "docs",
+            ),
+            Action(
+                "exact",
+                "Database",
+                "General",
+                "copy_text",
+                "exact",
+            ),
+        ]
+
+        self.assertEqual(
+            [action.id for action in search_actions(actions, "database")],
+            ["exact", "prefix", "contains", "metadata"],
+        )
+        self.assertEqual(
+            [action.id for action in search_actions(actions, "")],
+            ["metadata", "contains", "prefix", "exact"],
+        )
+
     def test_search_uses_consistent_identity_type_and_target_metadata(self):
         action = Action(
             "monthly-invoice",

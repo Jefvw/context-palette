@@ -16,7 +16,8 @@ DISCOVERY_ALL = "all"
 DISCOVERY_ACTIONS = "actions"
 DISCOVERY_WORK_ITEMS = "work_items"
 DISCOVERY_SCOPES = (DISCOVERY_ALL, DISCOVERY_ACTIONS, DISCOVERY_WORK_ITEMS)
-PINNED_SLOT_ROW_TAG = "slot_pinned"
+CONTEXT_SCOPE_EVERYWHERE = "everywhere"
+CONTEXT_SCOPE_THIS = "this"
 FOCUS_SLOT_ROW_TAG = "slot_focus"
 FOCUS_GROUP_ROW_TAG = "focus_group"
 
@@ -24,8 +25,6 @@ FOCUS_GROUP_ROW_TAG = "focus_group"
 def slot_row_tag(slot: int | None) -> str | None:
     """Return the visual shortcut group without exposing its slot number."""
 
-    if slot is not None and 1 <= slot <= 5:
-        return PINNED_SLOT_ROW_TAG
     if slot is not None and 6 <= slot <= 10:
         return FOCUS_SLOT_ROW_TAG
     return None
@@ -52,14 +51,14 @@ class ActionDiscoveryPanel:
         action_type_filter_var: tk.StringVar,
         tag_filter_var: tk.StringVar,
         project_filter_var: tk.StringVar,
-        context_filter_var: tk.StringVar,
         focus_launcher_var: tk.StringVar,
+        context_scope_var: tk.StringVar,
         tooltip_adder: Callable[[tk.Widget, TooltipText], None],
         keypress_handler: Callable[[tk.Event], object],
         execute_selected: Callable[..., None],
         update_preview: Callable[[], None],
         toggle_password_actions: Callable[[], None],
-        toggle_focus_items: Callable[[], None],
+        select_context_scope: Callable[[str], None],
         select_scope: Callable[[str], None],
         create_action: Callable[[], None],
         create_work_item: Callable[[], None],
@@ -68,8 +67,6 @@ class ActionDiscoveryPanel:
         select_action_type_filter: Callable[[str | None], None],
         select_tag_filter: Callable[[str | None], None],
         select_project_filter: Callable[[str | None], None],
-        select_context_filter: Callable[[str | None], None],
-        toggle_pin: Callable[[], None],
         capture: Callable[[], None],
         show_inbox: Callable[[], None],
         edit_item: Callable[[], None],
@@ -92,10 +89,8 @@ class ActionDiscoveryPanel:
         self.ui_icons = load_ui_icons(
             self.frame,
             (
-                "focus",
                 "filters",
                 "edit",
-                "pin",
                 "folder",
                 "configure",
                 "help",
@@ -162,24 +157,37 @@ class ActionDiscoveryPanel:
         self.context_picker.configure(menu=self.focus_menu)
         tooltip_adder(
             self.context_picker,
-            "Focus — Choose what you are working on. This sets slots 6–0 and groups matching All items first without limiting global Find.",
+            "Context — Choose your Working context. Choose This context to limit "
+            "Find and browsing to it, or Everywhere to search all Contexts.",
         )
 
-        self.focus_items_button = ttk.Button(
+        self.context_scope_var = context_scope_var
+        self.select_context_scope = select_context_scope
+        self.context_scope_picker = ttk.Menubutton(
             focus_row,
-            image=self.ui_icons["focus"],
-            command=toggle_focus_items,
-            style="Icon.TButton",
+            textvariable=self.context_scope_var,
+            style="Compact.TButton",
             takefocus=True,
         )
-        self.focus_items_button.grid(
+        self.context_scope_picker.grid(
             row=0,
             column=1,
             sticky=tk.EW,
         )
+        self.context_scope_menu = tk.Menu(self.context_scope_picker, tearoff=False)
+        self.context_scope_menu.add_command(
+            label="Everywhere",
+            command=lambda: self.select_context_scope(CONTEXT_SCOPE_EVERYWHERE),
+        )
+        self.context_scope_menu.add_command(
+            label="This context",
+            command=lambda: self.select_context_scope(CONTEXT_SCOPE_THIS),
+        )
+        self.context_scope_picker.configure(menu=self.context_scope_menu)
         tooltip_adder(
-            self.focus_items_button,
-            "Focus items — Show only members of the active Focus. All items keeps global matches and groups Focus matches first.",
+            self.context_scope_picker,
+            "Search scope — Choose Everywhere to browse all Contexts, or This "
+            "context to limit results to the Working context.",
         )
 
         self.scope_buttons: dict[str, ttk.Button] = {}
@@ -205,8 +213,7 @@ class ActionDiscoveryPanel:
             tooltip_adder(
                 button,
                 (
-                    "All — Find remains global; matching items in the selected "
-                    "Focus appear before other matches."
+                    "All — Find Actions and Work Items in the selected search scope."
                     if scope == DISCOVERY_ALL
                     else f"{label} — Choose which kinds of Palette items appear in Find."
                 ),
@@ -254,7 +261,7 @@ class ActionDiscoveryPanel:
         )
         tooltip_adder(
             self.filter_chip,
-            "Active filters. Activate to clear the Context, tag, type, or project filters.",
+            "Active filters. Activate to clear the tag, type, or project filters.",
         )
 
         self.passwords_button = ttk.Button(
@@ -318,19 +325,6 @@ class ActionDiscoveryPanel:
 
         self.tag_filter_var = tag_filter_var
         self.select_tag_filter = select_tag_filter
-        self.context_filter_var = context_filter_var
-        self.select_context_filter = select_context_filter
-        self.context_filter = ttk.Menubutton(
-            self.tool_rail,
-            text="C",
-            style="RailIcon.TButton",
-        )
-        self.context_filter.grid(row=0, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
-        self.set_contexts(())
-        tooltip_adder(
-            self.context_filter,
-            "Contexts — Filter Actions and Work Items through their shared Context membership.",
-        )
         self.tag_filter = ttk.Button(
             self.tool_rail,
             text="#",
@@ -357,18 +351,6 @@ class ActionDiscoveryPanel:
             self.new_action_button,
             "+ Action — Choose an Action type, then complete the validated Action form.",
         )
-        self.pin_button = ttk.Button(
-            self.tool_rail,
-            image=self.ui_icons["pin"],
-            command=toggle_pin,
-            style="Icon.TButton",
-        )
-        self.pin_button.grid(row=1, column=1, sticky=tk.EW, padx=(2, 0), pady=(0, 2))
-        tooltip_adder(
-            self.pin_button,
-            "Pin — Pin or unpin the selected Action in stable slots 1–5.",
-        )
-
         self.capture_button = ttk.Button(
             self.tool_rail,
             text="⇩",
@@ -412,7 +394,7 @@ class ActionDiscoveryPanel:
         self.configure_button.grid(row=3, column=1, sticky=tk.EW, padx=(2, 0), pady=(0, 2))
         tooltip_adder(
             self.configure_button,
-            "Configure — Manage Actions, Focuses, Quick actions, Work Items, and diagnostics.",
+            "Configure — Manage Actions, Contexts, Quick actions, Work Items, and diagnostics.",
         )
 
         self.help_button = ttk.Button(
@@ -522,11 +504,6 @@ class ActionDiscoveryPanel:
             style="Flat.Treeview",
         )
         self.focus_tree.tag_configure(
-            PINNED_SLOT_ROW_TAG,
-            background=COLORS["slot_pinned"],
-            foreground=COLORS["text"],
-        )
-        self.focus_tree.tag_configure(
             FOCUS_SLOT_ROW_TAG,
             background=COLORS["slot_focus"],
             foreground=COLORS["text"],
@@ -550,19 +527,18 @@ class ActionDiscoveryPanel:
         for child in self.tool_rail.winfo_children():
             child.grid_forget()
         self.tool_rail.pack(fill=tk.X, pady=(5, 0))
-        self.tool_rail.columnconfigure(3, weight=1)
+        self.tool_rail.columnconfigure(2, weight=1)
         self.new_action_button.grid(row=0, column=0, padx=(0, 4))
         self.edit_button.grid(row=0, column=1, padx=(0, 4))
-        self.pin_button.grid(row=0, column=2, padx=(0, 6))
-        self.primary_action_frame.grid(row=0, column=3, sticky=tk.EW)
+        self.primary_action_frame.grid(row=0, column=2, sticky=tk.EW)
 
     def set_filter_indicators(
         self,
         *,
         scope: str,
         primary_value: str | None,
-        context_value: str | None,
         tag_value: str | None,
+        saved_values: tuple[str, ...] = (),
     ) -> None:
         """Keep the single filter control explicit about hidden active state."""
         work_items = scope == DISCOVERY_WORK_ITEMS
@@ -572,14 +548,10 @@ class ActionDiscoveryPanel:
             style="RailAccent.TButton" if primary_value else "Compact.TButton",
         )
         active_values = tuple(
-            value for value in (primary_value, context_value, tag_value) if value
+            value for value in (primary_value, tag_value, *saved_values) if value
         )
         self.scope_options_button.configure(
             style="RailIconAccent.TButton" if active_values else "Icon.TButton"
-        )
-        self.context_filter.configure(
-            text="C✓" if context_value else "C",
-            style="RailIconAccent.TButton" if context_value else "RailIcon.TButton",
         )
         self.tag_filter.configure(
             text="#✓" if tag_value else "#",
@@ -609,12 +581,11 @@ class ActionDiscoveryPanel:
             )
         if active_values:
             parts: list[str] = []
-            if context_value:
-                parts.append(f"Context: {context_value}")
             if tag_value:
                 parts.append(f"Tag: {tag_value}")
             if primary_value:
                 parts.append(f"{primary_label}: {primary_value}")
+            parts.extend(saved_values)
             self.filter_chip.configure(text=" | ".join(parts) + " (clear)")
             if not self.filter_chip.winfo_manager():
                 self.filter_chip.pack(fill=tk.X, pady=(4, 0))
@@ -624,8 +595,6 @@ class ActionDiscoveryPanel:
     def _clear_active_filters(self) -> None:
         """Clear only active filters through the launcher-owned callbacks."""
 
-        if self.context_filter_var.get() != "All contexts":
-            self.select_context_filter(None)
         if self.tag_filter_var.get() not in {"All tags", "All work tags"}:
             self.select_tag_filter(None)
         if self.action_type_filter_var.get() != "All types":
@@ -652,7 +621,6 @@ class ActionDiscoveryPanel:
                 )
             )
         if scope == DISCOVERY_WORK_ITEMS:
-            self.pin_button.configure(state=tk.DISABLED)
             self.find_label.configure(text="Find Work Item")
             self.type_filter.configure(text="Projects ▾")
             self.run_button.configure(text="Open")
@@ -667,12 +635,11 @@ class ActionDiscoveryPanel:
             )
             self.mode_help_text = (
                 "Work Items are indexed folders with workbook-first opening. "
-                "Choose All items to browse them beside Actions."
+                "Choose All items to browse them beside Actions in the selected search scope."
             )
             self._set_project_menu(project_codes)
             self._set_scope_options_menu(scope)
         elif scope == DISCOVERY_ACTIONS:
-            self.pin_button.configure(state=tk.NORMAL)
             self.find_label.configure(text="Find action")
             self.type_filter.configure(text="Types ▾")
             self.run_button.configure(text="Run")
@@ -683,13 +650,10 @@ class ActionDiscoveryPanel:
             self.primary_help_text = (
                 "Execute the highlighted action. Its input and effect appear in Action info below."
             )
-            self.mode_help_text = (
-                "Search globally across tags, contexts, action names, types, and content."
-            )
+            self.mode_help_text = "Search Actions in the selected search scope."
             self._set_action_type_menu()
             self._set_scope_options_menu(scope)
         else:
-            self.pin_button.configure(state=tk.NORMAL)
             self.find_label.configure(text="Find item")
             self.run_button.configure(text="Open / Run")
             self.work_item_folder_button.pack_forget()
@@ -702,9 +666,8 @@ class ActionDiscoveryPanel:
                 "Run the selected Action or open the selected Work Item."
             )
             self.mode_help_text = (
-                "All items keeps Find global and groups matching items in the "
-                "selected Focus before other matches. Use Actions or Work Items "
-                "for type-specific filters."
+                "Search Actions and Work Items in the selected search scope. "
+                "Use Actions or Work Items for type-specific filters."
             )
             self._set_scope_options_menu(scope)
         self.set_tags(tags)
@@ -735,13 +698,6 @@ class ActionDiscoveryPanel:
         selected_work_item = self._selected_work_item is True
         can_select = self._has_selection
         self.edit_button.configure(state=tk.NORMAL if can_select else tk.DISABLED)
-        self.pin_button.configure(
-            state=(
-                tk.NORMAL
-                if can_select and not selected_work_item
-                else tk.DISABLED
-            )
-        )
         self.run_button.configure(
             state=tk.NORMAL if can_select or self._sequence_running else tk.DISABLED,
             text=(
@@ -788,35 +744,6 @@ class ActionDiscoveryPanel:
             project_codes=project_codes,
             tags=tags,
         )
-
-    def set_contexts(self, contexts: tuple[str, ...]) -> None:
-        previous_menu = getattr(self, "context_menu", None)
-        if previous_menu is not None:
-            previous_menu.destroy()
-        menu = tk.Menu(self.context_filter, tearoff=False)
-        menu.add_radiobutton(
-            label="All contexts",
-            variable=self.context_filter_var,
-            value="All contexts",
-            command=lambda: self.select_context_filter(None),
-        )
-        specific = tuple(
-            context for context in contexts if context.casefold() != "general"
-        )
-        self._context_options = specific
-        if specific:
-            menu.add_separator()
-        for context in specific:
-            menu.add_radiobutton(
-                label=context,
-                variable=self.context_filter_var,
-                value=context,
-                command=lambda selected=context: self.select_context_filter(selected),
-            )
-        self.context_filter.configure(menu=menu)
-        self.context_menu = menu
-        if hasattr(self, "discovery_scope"):
-            self._set_scope_options_menu(self.discovery_scope)
 
     def _set_action_type_menu(self) -> None:
         previous_menu = getattr(self, "type_menu", None)
@@ -872,7 +799,7 @@ class ActionDiscoveryPanel:
         menu = tk.Menu(self.scope_options_button, tearoff=False)
         if scope == DISCOVERY_ACTIONS:
             menu.add_cascade(label="Filter by type", menu=self.type_menu)
-            help_text = "Filter Actions by type, Context, or tag."
+            help_text = "Filter Actions by type or tag."
         elif scope == DISCOVERY_WORK_ITEMS:
             menu.add_command(
                 label="New Work Item…",
@@ -890,16 +817,12 @@ class ActionDiscoveryPanel:
             menu.add_separator()
             menu.add_cascade(label="Filter by project", menu=self.type_menu)
             help_text = (
-                "Create or update a Work Item, or filter by project, Context, or tag."
+                "Create or update a Work Item, or filter by project or tag."
             )
         else:
-            help_text = "Filter All items by Context or tag."
+            help_text = "Filter All items by tag."
         if menu.index(tk.END) is not None:
             menu.add_separator()
-        menu.add_command(
-            label="Filter by context…",
-            command=self._queue_context_picker,
-        )
         menu.add_command(label="Filter by tag…", command=self._show_tag_picker)
         self.scope_options_menu = menu
         self.scope_options_help_text = help_text
@@ -942,33 +865,6 @@ class ActionDiscoveryPanel:
             empty_label=self._tag_empty_label,
         )
         return "break" if _event is not None else None
-
-    def _queue_context_picker(self) -> None:
-        # Let the menu invocation return before the grabbed popup can process
-        # pending layout work that may rebuild the same options menu.
-        self.scope_options_button.after_idle(self._show_context_picker)
-
-    def _show_context_picker(self) -> None:
-        existing_popup = getattr(self, "context_picker_popup", None)
-        if existing_popup is not None and existing_popup.window.winfo_exists():
-            existing_popup.window.lift()
-            existing_popup.search_entry.focus_set()
-            return
-        self.context_picker_popup = SearchableSelectionPopup(
-            self.scope_options_button,
-            self._context_options,
-            selected=(self.context_filter_var.get(),),
-            multiple=False,
-            on_select=self._select_context_from_picker,
-            title="Filter contexts",
-            empty_label="All contexts",
-            search_label="Find context",
-            item_name="context",
-        )
-
-    def _select_context_from_picker(self, selected: tuple[str, ...]) -> None:
-        value = selected[0] if selected else "All contexts"
-        self.select_context_filter(None if value == "All contexts" else value)
 
     def _select_tag_from_picker(self, selected: tuple[str, ...]) -> None:
         value = selected[0] if selected else self._tag_empty_label

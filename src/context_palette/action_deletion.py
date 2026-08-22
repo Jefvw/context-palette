@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from .configuration_mutation import configuration_mutation_gate
-from .persistence import atomic_write_json
+from .persistence import atomic_replace_bytes, atomic_write_json
 
 
 class ActionDeletionError(Exception):
@@ -109,19 +109,11 @@ def archive_action_and_references(
                 palette_path=palette_path,
             )
         )
-        # References must disappear before the state changes. If the final write
-        # fails, an unassigned Active action remains a valid, recoverable state.
-        try:
-            for path, data in pending_writes:
-                atomic_write_json(path, data)
-            action["state"] = "Archived"
-            atomic_write_json(action_path, action_data)
-        except OSError as exc:
-            raise ActionDeletionError(
-                "The Action was not archived and remains Active, but some saved "
-                "placements may already have been removed. Reload Context Palette "
-                "before trying again."
-            ) from exc
+        action["state"] = "Archived"
+        _write_json_transaction(
+            (*pending_writes, (action_path, action_data)),
+            operation="The Action archive",
+        )
         return ActionDeletionReport(
             references_removed,
             buttons_removed,
@@ -153,13 +145,16 @@ def _delete_action_and_references(
     actions = action_data.get("actions")
     if not isinstance(actions, list):
         raise ActionDeletionError(f"{action_path.name} must contain an 'actions' list.")
+    action = _find_action_record(action_data, action_path, action_id)
+    if action.get("state", "Active") != "Archived":
+        raise ActionDeletionError(
+            f"Action must be Archived before permanent deletion: {action_id}"
+        )
     retained_actions = [
         item
         for item in actions
         if not (isinstance(item, dict) and item.get("id") == action_id)
     ]
-    if len(retained_actions) == len(actions):
-        raise ActionDeletionError(f"Action was not found: {action_id}")
 
     pending_writes, references_removed, buttons_removed = _prepare_reference_removals(
         action_id,
@@ -168,12 +163,11 @@ def _delete_action_and_references(
         palette_path=palette_path,
     )
 
-    # Remove references first. If a later write fails, an unused action is safer
-    # than configuration that points at an action that no longer exists.
-    for path, data in pending_writes:
-        atomic_write_json(path, data)
     action_data["actions"] = retained_actions
-    atomic_write_json(action_path, action_data)
+    _write_json_transaction(
+        (*pending_writes, (action_path, action_data)),
+        operation="The permanent Action deletion",
+    )
     return ActionDeletionReport(
         references_removed,
         buttons_removed,
@@ -274,6 +268,50 @@ def _prepare_reference_removals(
             pending_writes.append((palette_path, palette_data))
 
     return pending_writes, references_removed, buttons_removed
+
+
+def _write_json_transaction(
+    writes: tuple[tuple[Path, dict[str, object]], ...],
+    *,
+    operation: str,
+) -> None:
+    """Best-effort all-or-nothing commit across several configuration files."""
+
+    originals: dict[Path, bytes] = {}
+    for path, _data in writes:
+        if path in originals:
+            raise ActionDeletionError(
+                f"{operation} tried to update {path.name} more than once."
+            )
+        try:
+            originals[path] = path.read_bytes()
+        except OSError as exc:
+            raise ActionDeletionError(
+                f"{operation} could not snapshot {path.name} before writing."
+            ) from exc
+
+    attempted: list[Path] = []
+    try:
+        for path, data in writes:
+            attempted.append(path)
+            atomic_write_json(path, data)
+    except OSError as exc:
+        rollback_errors: list[str] = []
+        for path in reversed(attempted):
+            try:
+                atomic_replace_bytes(path, originals[path])
+            except OSError as rollback_exc:
+                rollback_errors.append(f"{path.name}: {rollback_exc}")
+        if rollback_errors:
+            raise ActionDeletionError(
+                f"{operation} failed and automatic rollback was incomplete. "
+                "Reload Context Palette and recover from backup if needed. "
+                + "; ".join(rollback_errors)
+            ) from exc
+        raise ActionDeletionError(
+            f"{operation} could not be completed; all attempted configuration "
+            "changes were restored."
+        ) from exc
 
 
 def _read_object(path: Path) -> dict[str, object]:

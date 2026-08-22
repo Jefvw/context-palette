@@ -119,7 +119,7 @@ covered by real-Tk and focused unit tests.
 3. Check a repeated URL, conflicting labels, an existing Active URL, and a
    non-HTTP target. Verify their readiness and duplicate
    states, provenance, and default selection.
-4. Edit one candidate and use explicit Add/Remove for Focus memberships and
+4. Edit one candidate and use explicit Add/Remove for Context memberships and
    tags. Preview the selected actions.
 5. Cancel the confirmation and verify the personal action file is unchanged.
    Then confirm once and verify all selected actions appear together as Active
@@ -138,15 +138,13 @@ links, email links, heading-only anchors, inline-code examples, and fenced code
 blocks.
 
 `tests.test_launcher_smoke` exercises the real Tk view transitions among All
-items, Actions, Work Items, and explicit Focus items. Its temporary fixture
-proves that one Context or tag can return both an Action and a Work Item, that
-only explicit Context members enter a specific Focus list, and that normal All
-items groups canonical Focus members before other global matches without
-changing the count. It also verifies the presentation divider is skipped by
-keyboard navigation and cannot execute, an outside-Focus Find match remains
-reachable, explicit Context filtering suppresses redundant grouping, a Focus
-change does not silently filter visible global results, and clearing Find
-restores the list when Focus items remains active.
+items, Actions, and Work Items with Everywhere/This-context retrieval. Its
+temporary fixture proves that one Context or tag can return both an Action and
+a Work Item, only canonical Context members enter This-context results, General
+cannot enable the redundant This-context boundary, and a Working-context change
+does not silently limit Everywhere. It also verifies non-empty Find results are
+relevance-ranked without context-slot promotion and dormant type/project
+filters remain visible in the filter chip.
 `tests.test_action_preview` requires every supported Action type to produce a
 bounded, readable **Input → Effect** summary and structured details without
 technical type IDs. It protects current-input, captured-selection, destination,
@@ -166,6 +164,12 @@ read-only scrollable summary plus keyboard-reachable Refresh and Copy controls.
 `tests.test_diagnostics` protects the allow-listed parser and privacy boundary;
 `tests.test_configuration_window` verifies exact safe-summary copying and
 honest failure feedback when the Windows clipboard is unavailable.
+`tests.test_action_deletion` verifies that Active Actions cannot be permanently
+deleted and that archive or Archived deletion restores exact bytes across all
+attempted files when any write fails, including explicit incomplete rollback.
+`tests.test_work_item_organization` verifies inspection, idempotent Forget,
+complete personal-reference cleanup, exact-byte rollback, and the hard boundary
+that no external Work Item content path participates in the transaction.
 
 ## Manual Windows smoke test
 
@@ -217,10 +221,10 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    Start, verify all six primary tasks are visible without scrolling. Open each
    destination and confirm it reuses the same Configure window. Verify
    **Create an Action...** opens the existing type chooser, while direct Edit,
-   Manage focuses, Work Item, and Diagnostics routes bypass Start. In the chooser,
+   Manage contexts, Work Item, and Diagnostics routes bypass Start. In the chooser,
    verify typing filters types, arrows and Enter choose one, and Escape or
    Cancel changes nothing. Repeat with **New Action…** and `Ctrl+N` on Configure
-   → Actions; confirm a non-General Focus is offered as the initial Context,
+   → Actions; confirm a non-General Working context is offered as the initial Context,
    an existing Configure workspace is reused, and backup/restore busy state
    refuses the request.
    Put one absolute file path in Input / Output, including a quoted path with
@@ -244,7 +248,7 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    Context and one tag that each belong to both kinds and verify both remain in
    the mixed results. Switch to Actions, then Work Items, and back; verify the
    filter menu changes between Action type tools and Work Item/project tools
-   without moving Find, the result list, or the stable `+A`/Edit/Pin/Run toolbar.
+   without moving Find, the result list, or the stable `+A`/Edit/Run toolbar.
    Verify Configure, Help, and More remain below Quick actions. Resize to the
    supported minimum and verify the filter control, item toolbar, app controls,
    and all three scope labels remain available. Drag
@@ -259,9 +263,10 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    source, and folder fallback remain visible. Hover and click the line to
    verify structured details, then run an item and confirm its operational
    result temporarily replaces the preview. Select again to restore it.
-4. Enter Find text, activate Context/tag filters and Focus items, and put text in
-   Input / Output. Press `F5`; verify those transient values clear, Find regains
-   focus, and saved Focus, pins, and context slots remain unchanged.
+4. Enter Find text, choose **This context**, activate tag/type/project filters,
+   and put text in Input / Output. Press `F5`; verify transient values clear,
+   Find regains focus, and the saved Working context, legacy pin data, and
+   context slots remain unchanged.
 5. From a disposable text field, open the palette with the hotkey and run a
    saved-text action. Verify the palette hides, the original window regains
    focus, and the text is pasted. Open Context Palette without a captured
@@ -275,7 +280,7 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    Inspect the local log for success, no-destination, unavailable-destination,
    and dispatch-error outcomes. Verify sample saved text, credential targets,
    usernames, passwords, and window titles are absent from every event.
-6. Right-click a personal action in ordinary results and in Focus items.
+6. Right-click a personal Action in ordinary results.
    Verify Configure opens on Actions with the clicked row highlighted and its
    name, contexts, and tags editable after choosing **Edit…**. From the
    main palette, select the same Action and choose **Edit**; verify its editor
@@ -283,34 +288,32 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    verify the Git/private-data warning appears, cancel once, then accept and
    verify the Built-in file receives the reviewed edit. Revert that disposable
    edit afterward. In Configure -> Actions, archive a disposable personal
-   Action assigned to a pin, Context, Focus slot, and configured Quick action.
+   Action assigned to a Context, context slot, and configured Quick action.
    Verify the confirmation reports the impact, the Action disappears from
    every runtime placement, and **Show: Archived** retains it. Restore it and
    verify it returns to normal search without recreating former assignments.
    Archive and permanently delete it. Repeat archive cancellation with a
    disposable Built-in Action and verify the Git/multi-computer warning.
    In Configure, confirm **Set up** and **Support** are visually separate and no
-   horizontal tab strip appears. On Actions, verify pins start collapsed, then
-   expand **Show pins** at the 900 x 520 minimum and confirm all five choices,
-   Save pins, the Action table, and selection commands remain readable. On Work
+   horizontal tab strip appears. On Actions, verify no pin configuration or Pin
+   toolbar command remains and lifecycle commands stay readable. On Work
    Items, verify **Manage sources…** contains Add, Edit, Remove, and Creation
    template while Refresh remains visible; with no sources, Add and template
    stay available while Edit, Remove, and Refresh are disabled.
-7. Select a specific Focus while **All items** is active. Verify matching
-   shortcut rows remain first, remaining Focus members follow, and **All other
-   matches** separates the remaining global results. Arrow, Page, Home, and End
-   across the divider; click and double-click it; confirm it is never selected,
-   previewed, or run. Search for one item inside and one item outside the Focus
-   and verify both remain reachable with the expected heading. Confirm General
-   and an explicit Context filter remove the grouping. Then activate Focus
-   items and verify keyboard focus enters its list. Search for an action from
-   another Focus, verify the flat results remain global, change Focus while Find
-   is non-empty, then clear Find and verify the new Focus list returns. Confirm
-   only slots 6–0 change and pins 1–5 remain stable.
+7. Select a specific Working context while **All items** is active. Compare
+   **Everywhere** with **This context** and verify only the latter limits both
+   Actions and Work Items to canonical membership. Repeat in Actions and Work
+   Items. Select General and verify This context is disabled. With Find empty,
+   confirm genuine context slots 6–0 can appear first and unused slots remain
+   empty. Enter queries matching an exact name, prefix, visible-name substring,
+   and metadata only; verify relevance order and no shortcut promotion. Confirm
+   Shift+1–5 never executes and legacy pin IDs survive a palette-state save.
 8. At the standard `780x600` size and supported minimum, verify Quick actions
    use two readable columns without clipping beneath discovery. Narrow the
    command console until one column is genuinely necessary, then verify stable
-   row-major order returns. Tab through the visible Focus/scope controls,
+   row-major order returns. Confirm fixed Standard is first, personal configured
+   menus precede shared configured menus, automatic Passwords/Folders/Prompts
+   follow them, and every launcher remains menu-only. Tab through the visible Working-context/scope controls,
    Find/filter/results, item toolbar, Quick actions, app controls, workspace
    header controls, and Input / Output. Press Enter or Space on a
    Quick-action launcher and verify it opens the menu without running an
@@ -325,56 +328,61 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
 9. Create disposable actions and contexts in both **My configuration** and
    **Built-in**; reload and confirm each uses the selected file. In a My
    configuration Context, assign a Built-in Action, a personal Action, and a
-   disposable Work Item, then verify all three appear in Focus items without
+   disposable Work Item, then verify all three appear in This-context results without
    editing either Action or the Work Item folder. Put the Work Item in slot 6,
    verify `Shift+6` opens its workbook/folder, disconnect its source, and verify
-   the unavailable reference remains visible and recoverable. Confirm pins 1–5
-   still offer Actions only. Create
+   the unavailable reference remains saved and recoverable after reconnection. Create
    two Quick-action groups, add more than four ordered Actions to one item,
    move the item and groups, and verify launcher left-click browses while
    launcher right-click offers Add/Organize. Inside the menu, verify Action
    left-click runs only the selected Action and Action right-click opens only
    its editor. Rename and delete an item and group. Delete a
-   disposable context and verify its action memberships and Focus state clear.
-   Assign an action to a pin, Focus slot, context preference, and Quick action.
+   disposable Context and verify its Action memberships and Working-context state clear.
+   Assign an Action to a context slot, Context preference, and Quick action.
    Choose **Delete permanently…**, verify the
    confirmation reports its references, cancel once, then accept and verify the
    action and all references disappear. Repeat the warning check with a
    disposable Built-in action, revert tracked test changes, and remove the
    remaining disposable records afterward.
-   In every action-reference field used above—pins, context membership,
+   In every Action-reference field used above—Context membership,
    preferred slots, and Quick-action assignments—open **Find…**, search by
    action name and by a metadata term such as type, context, or tag, and verify
    Down Arrow plus Enter and double-click select the expected action. Verify
-   **Not assigned** clears a pin and a preferred slot without widening
+   **Not assigned** clears a preferred slot without widening
    Configure beyond the screen.
 10. In an action form, verify `Alt+C` focuses Specific contexts and `Alt+T`
    focuses Tags. From each field, verify `Alt+Down` or `F4` opens **Choose…**,
    arrow keys move through the checklist, Space toggles an item, and `Esc`
    closes it without losing typed values.
 11. Verify compact bitmap controls remain fully visible and their tooltips begin
-    with semantic command names for Filter, Edit, Pin, Capture, Inbox, Extract
+    with semantic command names for Filter, Edit, Capture, Inbox, Extract
     text, Text tools, Configure, Help, and More. Switch views and verify the
     stable item toolbar does not move while scope-specific commands change in
     the filter menu. Open More and verify the searchable Keyboard Shortcuts page
     appears. With
     Find focused on an AZERTY keyboard, press Shift plus
-    each physical top-row number key and verify the corresponding populated
-    slots execute. Verify plain number-row and numpad digits filter Find, and
+    each physical top-row key from 6 through 0 and verify the corresponding
+    populated context slots execute. Verify Shift+1–5 do nothing, plain
+    number-row and numpad digits filter Find, and
     Ctrl+number does not execute a slot.
-    Confirm result labels have no numeric prefixes, pinned shortcut rows are
-    blue, Focus shortcut rows are green, ordinary results are neutral, and a
+    Confirm result labels have no numeric prefixes, context shortcut rows are
+    green, ordinary results are neutral, and a
     shortcut-row tooltip reports its exact Shift+number binding. Confirm the
     compact controls remain visible without clipping.
     Confirm row icons share one aligned column, names start at one aligned
     position without a dash, and no blank tree-expansion gutter remains before
-    the icons in All items or Focus items.
+    the icons in All items.
 12. With at least one disposable local Work Item source configured, choose
     **Configure**, then **Work Items**. Add and edit a source using Browse,
     confirm its state and item summary, edit a discovered item's personal tags
     and existing My configuration Context memberships in the same dialog,
     and use Refresh index. Confirm removing the source clearly states that no
-    folders or files will be deleted. Re-add it for the opening checks. Choose
+    folders or files will be deleted and all Palette organization is retained.
+    Re-add it with the same identity and confirm organization returns. On a
+    disposable Work Item, choose **Organize → Forget Palette organization…**;
+    confirm tags, Context/preferred placement, context slots, and personal
+    Quick-menu references are removed while its folder, workbook, files, and
+    workbook Inbox remain. Re-add organization needed for the opening checks. Choose
     **Work** and verify Find, Projects, and Tags combine correctly. Press Enter
     on an item with an exact workbook and verify that workbook opens; press
     Shift+Enter and verify its folder opens. Verify an item without the exact
@@ -394,7 +402,7 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
     description, Contexts, tags, target, and the prefilled menu location. Clear
     the location and verify the Action appears at the menu root with no
     **Unsorted** submenu. Archive/delete the disposable Action afterward.
-    Select a specific Focus with fewer than five genuine members and confirm
+    Select a specific Working context with fewer than five genuine members and confirm
     slots 6–0 remain empty after its final member instead of showing unrelated
     global Actions.
     Run **UAT: Run a harmless sequence**, inspect its two project-folder steps

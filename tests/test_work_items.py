@@ -16,6 +16,7 @@ from context_palette.work_items import (
     is_marker_folder_name,
     parse_work_item_name,
     work_item_matches,
+    work_item_search_rank,
 )
 
 
@@ -128,6 +129,31 @@ class WorkItemDiscoveryTests(unittest.TestCase):
             )
             self.assertFalse(work_item_matches(item, "verification", project_code="XY9Z"))
             self.assertFalse(work_item_matches(item, "verification", tags=("urgent",), tag="later"))
+
+    def test_search_rank_prefers_visible_exact_and_phrase_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory) / "workitems"
+            exact = root / "database"
+            phrase = root / "ISS-CAP40-database-review"
+            fallback = root / "ISS-CAP40-other"
+            for folder in (exact, phrase, fallback):
+                folder.mkdir(parents=True, exist_ok=True)
+            items = {
+                item.relative_folder: item
+                for item in discover_work_items(self._source(root))
+            }
+
+            self.assertLess(
+                work_item_search_rank(items["database"], "database"),
+                work_item_search_rank(
+                    items["ISS-CAP40-database-review"],
+                    "database",
+                ),
+            )
+            self.assertEqual(
+                work_item_search_rank(items["ISS-CAP40-other"], ""),
+                0,
+            )
 
     def test_source_requires_stable_id_name_and_absolute_path(self) -> None:
         with self.assertRaises(WorkItemDiscoveryError):

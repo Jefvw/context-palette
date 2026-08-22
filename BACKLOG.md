@@ -24,6 +24,15 @@ This file contains actionable future work. Completed user-visible work belongs i
   long names, empty/selected states, automatic versus custom Quick actions,
   scrollbars, and every command edge against the accepted
   [real-Tk baseline](docs/UI_MOCKUPS.md).
+- Manually validate the simplified retrieval model at 100%, 125%, and 150%:
+  switch the Working context, compare **Everywhere** with **This context** in
+  all three item scopes, verify query relevance and dormant-filter chips, and
+  confirm that Shift+1–5 never executes while context slots 6–0 still do.
+- Manually validate complete deletion and disconnection wording: archive then
+  permanently delete a disposable Action, delete a disposable Context and
+  configured Quick menu, and disconnect/reconnect a disposable Work Item
+  source while confirming that external folders/files and saved organization
+  remain untouched.
 - Manually validate optional local OCR on a second standard-user Windows PC,
   including a Snipping Tool bitmap, copied browser image, exact image-file
   path, non-empty workspace, no-text image, accented Latin text, offline use,
@@ -68,14 +77,14 @@ This file contains actionable future work. Completed user-visible work belongs i
 - Validate the task-oriented main-window toolbar at 100%, 125%, and 150%
   display scaling and refine bitmap contrast only if real Windows themes expose
   a problem.
-- Evaluate typed Work Item support for global pins 1–5 only after the normal
-  mixed-result projection can display those pins consistently.
 - Consider optional Context visibility/grouping for Quick-action groups. The
   current schema deliberately leaves groups global, while their targets already
   use the shared Palette-item reference needed by a later design.
 - Add line-ending normalization and CSV/TSV column operations after real-use
   feedback on the expanded reusable text-operation catalogue.
-- Design supporting-context composition and weighted ranking while preserving explicit Focus and global search.
+- Design supporting-context composition only after the explicit Working
+  context and relevance-ranked search have enough real-use feedback; never
+  make the retrieval boundary implicit.
 - Extend the protected plain-text clipboard transaction to ordinary saved-text
   paste only after destination paste timing and manual-fallback recovery are
   defined; add rich/image formats only through format-specific snapshots.

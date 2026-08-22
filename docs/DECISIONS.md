@@ -1,5 +1,42 @@
 # Decisions
 
+## 2026-08-21 - Make retrieval explicit and retire global runtime pins
+
+**Decision:** Use one **Working context** selector and one adjacent
+**Everywhere / This context** scope for Action and Work Item retrieval. Remove
+the duplicate Context-filter chooser, Focus-items mode, and Focus-first global
+grouping. When Find is non-empty, rank matches by useful visible signals and do
+not promote numbered shortcut rows above query relevance. Retain slots 6–0 for
+genuine members of the Working context, but stop projecting or executing
+global pins 1–5. Continue loading and writing legacy pinned IDs unchanged so a
+saved local file or restored backup can roll back safely.
+
+**Reason:** The former screen exposed three overlapping concepts—selected
+Focus, Focus items, and Context filtering—and made global results look relevant
+because of grouping rather than match quality. The five global default slots
+had not proved useful enough to justify permanent screen, configuration, and
+keyboard complexity. A named context plus an explicit search boundary answers
+the user-facing question directly: “what am I working on, and should I search
+here or everywhere?”
+
+**Consequences:** Shift+1–5 no longer dispatches anything; Shift+6–0 continues
+to execute context slots while Find owns focus. Selecting General disables
+**This context** because it would be indistinguishable from Everywhere. Type,
+project, and tag filters remain scope-specific state, with dormant type/project
+filters disclosed in the filter chip. The fixed Standard Quick menu stays
+first, followed by personal configured menus, shared configured menus, and
+automatic Action-bound menus; every launcher remains menu-only. An Active
+Action must be archived before permanent deletion, Standard cannot be moved or
+deleted, and disconnecting a Work Item source retains organization without
+deleting external content. Action archive and permanent deletion snapshot and
+roll back their complete multi-file mutation on failure. Work Item **Forget
+Palette organization…** separately removes its personal tags, Context and slot
+placement, and personal Quick-menu references as one rollback-capable
+transaction, without accepting an external-content path. This decision supersedes the runtime behavior of
+the 2026-08-03 pin/slot presentation, Focus-first grouping, Focus-items mode,
+and the separate Context-filter UI while preserving their stored-data
+compatibility.
+
 ## 2026-08-19 - Add one isolated always-on-top drop intake surface
 
 **Decision:** Add a singleton non-transient drop-target `Toplevel` to the

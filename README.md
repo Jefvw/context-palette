@@ -14,19 +14,19 @@ actions remain editable there but stay outside normal retrieval. See
 ## What it does today
 
 - Opens instantly from a resident process with `F9` or `Ctrl+Alt+P`.
-- Searches Actions and Work Items together by text, tag, and Context, with
-  explicit kind-specific scopes when needed.
-- Keeps five global pinned Action slots and five mixed slots for the selected
-  focus context.
+- Searches Actions and Work Items together by text and tag, with one explicit
+  **Working context** and an **Everywhere / This context** search scope.
+- Keeps five mixed Action/Work Item slots, 6–0, for the selected Working
+  context. Historical pin IDs remain readable for rollback, but global slots
+  1–5 are no longer shown or executed.
 - Runs the explicit, allow-listed [standard action types](docs/ACTION_TYPES.md).
 - Opens or runs user-configured Windows targets through ShellExecute, including
   registered protocols such as `vscode:`, `shell:` targets, `file:` URIs,
   drive paths, documents, and associated scripts.
 - Pastes Windows or generic credentials without storing passwords in action JSON.
 - Provides compact, fully configurable Quick-action groups and ordered menus.
-- Configures My configuration or Built-in actions, contexts, groups, menu
-  items, and local pinned slots 1–5 through a guided window without exposing
-  technical IDs.
+- Configures My configuration or Built-in actions, contexts, groups, and menu
+  items through a guided window without exposing technical IDs.
 - Captures clipboard material into an Inbox and converts it into permanent actions.
 - Keeps a separate always-on-top drop target for files, folders, shortcuts,
   links, and text. A successful drop reveals the ordinary non-topmost palette
@@ -175,9 +175,10 @@ After the application starts:
 2. Type in **Find**, select an action, and press `Enter`.
 3. Drag a useful file, folder, browser link, desktop shortcut, or text object
    onto **Drop into Context Palette** when clipboard capture is inconvenient.
-3. Choose a **Focus** Context to change mixed Action/Work Item slots 6–0.
+3. Choose a **Working context** to change mixed Action/Work Item slots 6–0,
+   then choose **Everywhere** or **This context** for the result boundary.
 4. Choose **Configure**, or press `Ctrl+,`, to add personal actions, contexts,
-   or Quick actions. **Manage focuses…** in the Focus selector opens the
+   or Quick actions. **Manage contexts…** in the context selector opens the
    relevant context tab directly.
 5. Use **Capture** when material should enter the Inbox before becoming an action.
 
@@ -187,10 +188,11 @@ configuration**, which stays on this PC. **Built-in** is the starter
 configuration tracked through Git and is intended for deliberate developer
 changes. The starter Quick actions occupy one **Standard** group; additional
 editable groups can remain personal while still assigning both Built-in and
-My configuration actions. Standard uses one compact launcher with nested
-subject menus up to three levels deep, with actions allowed at the group or any
-level. Every Quick-action control is a menu: left-click browses it, right-click
-manages it, and only choosing an Action inside the menu runs that Action.
+My configuration actions. **Standard** is fixed first and cannot be moved or
+deleted; personal configured menus follow it before shared configured and
+automatic menus. Every Quick-action control is menu-only: left-click browses
+it, right-click manages it, and only choosing an Action inside the menu runs
+that Action.
 
 Close, `Esc`, and **Hide** keep the process resident. **Quit** stops it.
 
@@ -232,7 +234,7 @@ Personal and runtime files are ignored by Git:
 | `data/local_contexts.json` | Personal contexts |
 | `data/local_command_surface.json` | Personal Quick-action menu records |
 | `data/inbox.json` | Captured material |
-| `data/palette.json` | Focus, pins, and per-machine slot choices |
+| `data/palette.json` | Working context, legacy pin IDs, and per-machine context-slot choices |
 | `data/context-palette.log*` | Bounded local diagnostics |
 
 Captured Inbox material can be removed without editing JSON: open **Inbox**,
@@ -240,10 +242,19 @@ select the capture, and choose **Delete capture…**. This deletes only the loca
 captured copy; an Action already created from it remains. A Work Item workbook's
 Excel **Inbox** sheet is separate and is still edited in Excel.
 
+Removal is deliberately entity-specific: Actions archive before permanent
+deletion; Contexts and configured Quick menus delete only their Palette
+organization; Work Item **Forget Palette organization…** clears saved tags,
+Context/slot placement, and personal Quick-menu references without touching the
+folder, workbook, files, or Excel Inbox. Removing a Work Item source is only a
+reversible local disconnection and retains that organization.
+
 Choose **Configure**, or press `Ctrl+,`, to open the complete guided
 configuration workspace. Its single left navigator separates **Set up** from
-**Support**. Actions keeps optional pins collapsed until needed; Work Items
+**Support**. Actions exposes the Active/Archived lifecycle directly; Work Items
 keeps Refresh visible and consolidates source setup under **Manage sources…**.
+Removing a Work Item source disconnects it on this PC without deleting folders
+or files and retains its saved Palette organization for later reconnection.
 Contexts and Quick actions use the same find/table/selection-card structure;
 Backup & restore and Diagnostics use explicit support-task labels. The
 JSON guides are intended for advanced editing, review, and automation:

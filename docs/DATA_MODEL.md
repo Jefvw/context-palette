@@ -39,7 +39,7 @@ erDiagram
     PALETTE_ITEM_REFERENCE }o--o| ACTION : "Action target"
     PALETTE_ITEM_REFERENCE }o--o| WORK_ITEM_IDENTITY : "Work Item target"
 
-    PALETTE_STATE ||--o{ PINNED_ACTION : "orders slots 1-5"
+    PALETTE_STATE ||--o{ PINNED_ACTION : "retains legacy IDs"
     ACTION ||--o{ PINNED_ACTION : "fills"
     PALETTE_STATE }o--|| CONTEXT : "selects Focus"
     PALETTE_STATE ||--o{ CONTEXT_SLOT_OVERRIDE : "stores per-context slots"
@@ -114,7 +114,7 @@ There is one machine-local `PaletteState` aggregate.
 
 | Field | Meaning |
 | --- | --- |
-| `pinned_action_ids` | Up to five ordered Action references for slots 1–5 |
+| `pinned_action_ids` | Up to five legacy Action references retained for compatible round-trip and rollback; no current runtime slots consume them |
 | `focus_context` | Current Context name, or implicit `General` |
 | `context_slots` | Context-name to ordered Action-reference overrides for slots 6–0 |
 | `context_item_slots` | Context-name to ordered typed Action/Work Item overrides for slots 6–0 |
@@ -186,7 +186,7 @@ Action, but the resulting Action is independent.
 | --- | --- |
 | Context membership/preference → Action | Hard; the Action must exist |
 | Personal Context membership/preference → Work Item | Soft; retained while its source/item is unavailable |
-| Palette pin → Action | Hard; pins 1–5 remain Action-only |
+| Legacy palette pin → Action | Compatibility-only hard reference; still cleaned during Action lifecycle changes but not projected or executed |
 | Palette Context slot → Action or Work Item | Action is hard; Work Item is soft |
 | Palette Focus/context-slot key → Context | Canonicalized case-insensitively; unknown historical slot keys are currently preserved |
 | Quick-action Action target → Action | Hard; the Action must exist |
@@ -244,7 +244,7 @@ The launcher builds and keeps last-known-good versions of:
 - the combined Built-in and My configuration Action list;
 - the combined Context list and context-owned Action/Work Item membership projection;
 - the combined persisted command surface plus generated action-bound menus;
-- resolved pins, Focus slots, filters, and visible rows;
+- resolved context slots, filters, and visible rows;
 - an immutable Work Item index refreshed from configured sources.
 
 These projections should not be serialized into a backup. After restore, they
@@ -263,7 +263,7 @@ a defensive copy of palette Context slots.
 
 Structured issues carry a stable code, catalog asset ID, severity, category,
 privacy-safe summary, and optional stable subject IDs. Context membership,
-preferences, pins, Context slots, and Quick-action Action targets are hard
+preferences, legacy pin IDs, Context slots, and Quick-action Action targets are hard
 references to Active Actions. Built-in-to-personal Action dependencies and
 Built-in Work Item targets are errors. Missing Work Item source relationships,
 noncanonical or historical palette Context names, and machine-local portability

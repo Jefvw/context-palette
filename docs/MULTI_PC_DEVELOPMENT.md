@@ -159,7 +159,8 @@ environment nor a compatible base Python can launch, setup changes nothing and
 asks for a normal Windows retry or Python repair. This prevents a restricted
 Codex process from misclassifying a working environment. Local Context Palette
 data is stored under `data`, not inside `.venv`, so rebuilding the environment
-does not remove Inbox items, private actions, contexts, buttons, pins, or local
+does not remove Inbox items, private actions, contexts, Quick menus, legacy pin
+data, or local
 settings. Setup adopts an existing unmarked environment once, then stores an
 ignored repository-location marker inside `.venv` so subsequent folder copies
 are detected reliably.
@@ -200,7 +201,8 @@ previous contents in the ignored adjacent `.bak` file.
 - `data/local_actions.json`: personal or machine-specific actions.
 - `data/local_contexts.json`: personal or work-specific contexts.
 - `data/local_command_surface.json`: personal or machine-specific quick-action groups.
-- `data/palette.json`: pins, focus context, and per-PC slots.
+- `data/palette.json`: Working context, per-PC Context slots, and legacy pin IDs
+  retained for compatible round-trip.
 - `data/context-palette.log*`: bounded local diagnostics.
 - `.venv`: the local Python environment.
 
