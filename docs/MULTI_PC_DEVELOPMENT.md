@@ -71,10 +71,13 @@ runs the canonical configuration, compilation, and test checks.
 The **Export Excel files to CSV** Action has a second, independent local
 component: Python Excel. Context Palette does not install, bundle, or update
 that repository. On each PC, separately clone or otherwise transfer the exact
-Python Excel implementation, bootstrap it according to its own instructions,
-then configure its local launcher path in Context Palette. The path is kept in
-ignored `data/local_excel_automation_settings.json`; do not commit, copy, or
-make it Built-in because the installation location is machine-specific.
+Python Excel implementation and bootstrap it according to its own instructions.
+When it is the exact direct sibling `python-excel\python-excel.bat`, Context
+Palette detects it without persisting the path. Any explicit override is kept
+in ignored `data/local_excel_automation_settings.json`; do not commit, copy, or
+make it Built-in because the installation location is machine-specific. The
+first workbook's folder is the initial CSV output folder on every run and can
+be overridden inside the reviewed flow.
 
 If Python Excel is absent, moved, or fails its availability check, ordinary
 Context Palette setup and use remain available; only the CSV Action explains

@@ -18,6 +18,10 @@ from .window_geometry import place_child_window
 from .workspace_transforms import WORKSPACE_TRANSFORM_GROUPS, WorkspaceTransform
 
 
+WORKSPACE_HISTORY_LIMIT = 10
+WORKSPACE_HISTORY_CHARACTER_LIMIT = 16 * 1024 * 1024
+
+
 class TextPlacementDialog:
     """Explicit Replace / Append / Cancel choice for incoming workspace text."""
 
@@ -162,16 +166,44 @@ class WorkspacePanel:
         self.create_action = create_action
         self.extract_text = extract_text
         self.text_change_callback = text_change_callback
+        self._content_history: list[str] = [""]
+        self._content_history_index = 0
+        self._content_history_dirty = False
+        self._semantic_edit_in_progress = False
 
         self.frame = ttk.Frame(parent)
         self.frame.pack(fill=tk.BOTH, expand=True)
         self.ui_icons = load_ui_icons(
             self.frame,
-            ("capture", "inbox", "create_from_input", "ocr", "text_tools"),
+            (
+                "back",
+                "forward",
+                "capture",
+                "inbox",
+                "create_from_input",
+                "ocr",
+                "text_tools",
+            ),
             foreground=COLORS["text"],
         )
         header = ttk.Frame(self.frame)
         header.pack(fill=tk.X, pady=(0, 4))
+        self.content_back_button = ttk.Button(
+            header,
+            image=self.ui_icons["back"],
+            command=self.show_previous_content,
+            state=tk.DISABLED,
+            style="Icon.TButton",
+        )
+        self.content_back_button.pack(side=tk.LEFT)
+        self.content_forward_button = ttk.Button(
+            header,
+            image=self.ui_icons["forward"],
+            command=self.show_next_content,
+            state=tk.DISABLED,
+            style="Icon.TButton",
+        )
+        self.content_forward_button.pack(side=tk.LEFT, padx=(4, 0))
         self.text_tools_button = ttk.Menubutton(
             header,
             image=self.ui_icons["text_tools"],
@@ -269,6 +301,14 @@ class WorkspacePanel:
             "Text tools — Transform selected text, or the complete field when nothing is selected. Results are copied.",
         )
         tooltip_adder(
+            self.content_back_button,
+            "Previous content — Return to the previous meaningful Input / Output state from this session.",
+        )
+        tooltip_adder(
+            self.content_forward_button,
+            "Next content — Move forward through Input / Output states after going back.",
+        )
+        tooltip_adder(
             self.ocr_button,
             (
                 "Extract text — Read text from a selected image file or clipboard image. "
@@ -295,9 +335,120 @@ class WorkspacePanel:
         if not self.text.edit_modified():
             return
         self.text.edit_modified(False)
+        if self._semantic_edit_in_progress:
+            return
+        self._content_history_dirty = True
+        self._sync_content_history_buttons()
+        self._notify_text_changed()
+
+    def _notify_text_changed(self) -> None:
         self._sync_create_action_state()
         if self.text_change_callback is not None:
             self.text_change_callback()
+
+    def _sync_content_history_buttons(self) -> None:
+        self.content_back_button.configure(
+            state=(
+                tk.NORMAL
+                if self._content_history_dirty or self._content_history_index > 0
+                else tk.DISABLED
+            )
+        )
+        self.content_forward_button.configure(
+            state=(
+                tk.NORMAL
+                if not self._content_history_dirty
+                and self._content_history_index + 1 < len(self._content_history)
+                else tk.DISABLED
+            )
+        )
+
+    def _append_content_history(self, value: str) -> bool:
+        if value == self._content_history[self._content_history_index]:
+            self._content_history_dirty = False
+            self._sync_content_history_buttons()
+            return False
+
+        del self._content_history[self._content_history_index + 1 :]
+        self._content_history.append(value)
+        self._content_history_index = len(self._content_history) - 1
+        while len(self._content_history) > 1 and (
+            len(self._content_history) > WORKSPACE_HISTORY_LIMIT
+            or sum(len(item) for item in self._content_history)
+            > WORKSPACE_HISTORY_CHARACTER_LIMIT
+        ):
+            del self._content_history[0]
+            self._content_history_index -= 1
+        self._content_history_dirty = False
+        self._sync_content_history_buttons()
+        return True
+
+    def _checkpoint_current_content(self) -> bool:
+        value = self.raw_text()
+        current = self._content_history[self._content_history_index]
+        if value == current:
+            self._content_history_dirty = False
+            self._sync_content_history_buttons()
+            return False
+        if (
+            self._content_history_index > 0
+            and value == self._content_history[self._content_history_index - 1]
+        ):
+            self._content_history_index -= 1
+            self._content_history_dirty = False
+            self._sync_content_history_buttons()
+            return False
+        if (
+            self._content_history_index + 1 < len(self._content_history)
+            and value == self._content_history[self._content_history_index + 1]
+        ):
+            self._content_history_index += 1
+            self._content_history_dirty = False
+            self._sync_content_history_buttons()
+            return False
+        return self._append_content_history(value)
+
+    def _edit_text(self, edit: Callable[[], None]) -> None:
+        self._semantic_edit_in_progress = True
+        try:
+            self.text.edit_separator()
+            edit()
+            self.text.edit_separator()
+            self.text.edit_modified(False)
+        finally:
+            self._semantic_edit_in_progress = False
+
+    def _record_semantic_edit(self, edit: Callable[[], None]) -> None:
+        self._checkpoint_current_content()
+        self._edit_text(edit)
+        self._append_content_history(self.raw_text())
+        self._notify_text_changed()
+
+    def _show_content_history_index(self, index: int) -> None:
+        value = self._content_history[index]
+        self.clear_file_preview()
+
+        def replace() -> None:
+            self.text.replace("1.0", "end-1c", value)
+
+        if value != self.raw_text():
+            self._edit_text(replace)
+        self._content_history_index = index
+        self._content_history_dirty = False
+        self._sync_content_history_buttons()
+        self._notify_text_changed()
+        self.text.mark_set(tk.INSERT, "end-1c")
+        self.text.see(tk.INSERT)
+
+    def show_previous_content(self) -> None:
+        self._checkpoint_current_content()
+        if self._content_history_index > 0:
+            self._show_content_history_index(self._content_history_index - 1)
+
+    def show_next_content(self) -> None:
+        self._checkpoint_current_content()
+        if self._content_history_index + 1 < len(self._content_history):
+            self._show_content_history_index(self._content_history_index + 1)
 
     def _sync_create_action_state(self) -> None:
         self.create_action_button.configure(
@@ -397,15 +548,18 @@ class WorkspacePanel:
         """Apply one already-approved incoming value as one undoable edit."""
 
         self.clear_file_preview()
-        self.text.edit_separator()
-        if placement == "replace":
-            self.text.delete("1.0", tk.END)
-            self.text.insert("1.0", value)
-        else:
-            separator = "" if current.endswith(("\n", "\r")) else "\n\n"
-            self.text.insert("end-1c", f"{separator}{value}")
-        self.text.edit_separator()
-        self._sync_create_action_state()
+        separator = "" if current.endswith(("\n", "\r")) else "\n\n"
+        updated = value if placement == "replace" else f"{current}{separator}{value}"
+        if updated == current:
+            return placement
+
+        def place() -> None:
+            if placement == "replace":
+                self.text.replace("1.0", "end-1c", value)
+            else:
+                self.text.insert("end-1c", f"{separator}{value}")
+
+        self._record_semantic_edit(place)
         return placement
 
     def _build_context_menu(self) -> None:
@@ -466,9 +620,13 @@ class WorkspacePanel:
         self._replace_text(value)
 
     def _replace_text(self, value: str) -> None:
-        self.text.delete("1.0", tk.END)
-        self.text.insert("1.0", value)
-        self._sync_create_action_state()
+        if value == self.raw_text():
+            return
+
+        def replace() -> None:
+            self.text.replace("1.0", "end-1c", value)
+
+        self._record_semantic_edit(replace)
 
     def show_file_preview(self, preview: TextFileTransformPreview) -> None:
         self.file_preview = preview
@@ -615,9 +773,10 @@ class WorkspacePanel:
         except ActionError as exc:
             messagebox.showerror("Context Palette", str(exc), parent=self.text.winfo_toplevel())
             return
-        self.text.edit_separator()
-        self.text.replace(start, end, result)
-        self.text.edit_separator()
+        if result != source:
+            self._record_semantic_edit(
+                lambda: self.text.replace(start, end, result)
+            )
         result_end = self.text.index(f"{start}+{len(result)}c")
         self.text.mark_set(tk.INSERT, result_end)
         if had_selection:

@@ -32,6 +32,7 @@ from context_palette.excel_automation import (
     build_execute_automation_request,
     build_plan_automation_request,
     csv_invocation,
+    discover_direct_sibling_python_excel_launcher,
     load_excel_automation_settings,
     parse_automation_response,
     save_excel_automation_settings,
@@ -88,7 +89,14 @@ def _describe_result(*, available: bool = True) -> dict[str, object]:
     }
 
 
-def _ready_plan_result(source: Path, output: Path) -> dict[str, object]:
+def _ready_plan_result(
+    source: Path,
+    output: Path,
+    *,
+    disposition: str = "create",
+    allow_overwrite: bool = False,
+) -> dict[str, object]:
+    output_policy = "explicit_replace" if allow_overwrite else "create_only"
     return {
         "state": "ready",
         "automation": {
@@ -109,6 +117,28 @@ def _ready_plan_result(source: Path, output: Path) -> dict[str, object]:
                 "physical_columns": [1, 3],
                 "rows_to_write": 20,
                 "output_path": str(output / "book.csv"),
+                "output_disposition": disposition,
+                "destination_state": (
+                    {
+                        "exists": True,
+                        "size_bytes": 19,
+                        "modified_ns": 123456789,
+                        "created_ns": 123456000,
+                        "device": 7,
+                        "inode": 11,
+                        "sha256": "c" * 64,
+                    }
+                    if disposition == "replace"
+                    else {
+                        "exists": False,
+                        "size_bytes": None,
+                        "modified_ns": None,
+                        "created_ns": None,
+                        "device": None,
+                        "inode": None,
+                        "sha256": None,
+                    }
+                ),
             }
         ],
         "parameters": {
@@ -117,20 +147,23 @@ def _ready_plan_result(source: Path, output: Path) -> dict[str, object]:
             "encoding": "utf-8-sig",
             "formula_mode": "formulas",
             "excel_safe": True,
+            "allow_overwrite": allow_overwrite,
             "worksheet_selector_policy": (
                 "single_sheet_automatic_otherwise_exact_required"
             ),
             "physical_column_selector_policy": "all_used_physical_columns",
-            "output_policy": "create_only",
+            "output_policy": output_policy,
         },
         "warnings": [],
         "effect": {
             "effect_class": "creates_output",
             "mutates_inputs": False,
-            "output_policy": "create_only",
+            "output_policy": output_policy,
             "input_files": 1,
             "output_files": 1,
             "rows_to_write": 20,
+            "outputs_to_create": int(disposition == "create"),
+            "outputs_to_replace": int(disposition == "replace"),
         },
         "predicted_artifacts": [
             {
@@ -158,16 +191,27 @@ def _execution_result(
     output: Path,
     *,
     state: str = "succeeded",
+    replace: bool = False,
 ) -> dict[str, object]:
-    created = [str(output / "book.csv")] if state != "failed_before_effect" else []
+    completed = [str(output / "book.csv")] if state != "failed_before_effect" else []
+    created = [] if replace else completed
+    replaced = completed if replace else []
     effects_started = state != "failed_before_effect"
     inputs = (
         [
             {
                 "input_id": "input-1",
                 "outcome": "succeeded",
-                "code": "automation.output_created",
-                "message": "The reviewed CSV output was created.",
+                "code": (
+                    "automation.output_replaced"
+                    if replace
+                    else "automation.output_created"
+                ),
+                "message": (
+                    "The reviewed CSV output was replaced."
+                    if replace
+                    else "The reviewed CSV output was created."
+                ),
                 "source_path": str(source),
                 "worksheet": "Données",
                 "physical_columns": [1, 3],
@@ -177,7 +221,7 @@ def _execution_result(
                 "escaped_cells": 0,
             }
         ]
-        if created
+        if completed
         else []
     )
     return {
@@ -189,17 +233,18 @@ def _execution_result(
         "reviewed_plan_fingerprint": FINGERPRINT,
         "final_plan_fingerprint": FINGERPRINT,
         "effects_started": effects_started,
-        "writes_performed": len(created),
+        "writes_performed": len(completed),
         "inputs": inputs,
         "source_effect": {"mutates_inputs": False, "workbooks_saved": 0},
         "outputs_created": created,
-        "outputs_overwritten": 0,
+        "outputs_replaced": replaced,
+        "outputs_overwritten": len(replaced),
         "artifacts": (
             [
                 {
                     "artifact_id": "csv_files",
                     "kind": "file",
-                    "path": created[0],
+                    "path": completed[0],
                     "media_type": "text/csv",
                     "input_id": "input-1",
                 },
@@ -211,7 +256,7 @@ def _execution_result(
                     "input_id": None,
                 },
             ]
-            if created
+            if completed
             else []
         ),
         "warnings": [],
@@ -245,6 +290,33 @@ class ExcelAutomationSettingsAndInputTests(unittest.TestCase):
             self.assertEqual(load_excel_automation_settings(settings_path), settings)
             with self.assertRaises(FrozenInstanceError):
                 settings.launcher_path = None
+
+    def test_launcher_discovery_checks_only_the_exact_direct_sibling(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            application_root = root / "context-palette"
+            application_root.mkdir()
+            wrong_location = application_root / "python-excel" / "python-excel.bat"
+            wrong_location.parent.mkdir()
+            wrong_location.write_text("@echo off\n", encoding="utf-8")
+
+            self.assertIsNone(
+                discover_direct_sibling_python_excel_launcher(application_root)
+            )
+            self.assertIsNone(
+                discover_direct_sibling_python_excel_launcher(
+                    Path("relative-context-palette")
+                )
+            )
+
+            expected = root / "python-excel" / "python-excel.bat"
+            expected.parent.mkdir()
+            expected.write_text("@echo off\n", encoding="utf-8")
+
+            self.assertEqual(
+                discover_direct_sibling_python_excel_launcher(application_root),
+                expected,
+            )
 
     def test_settings_reject_unknown_malformed_relative_and_non_batch_paths(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -318,6 +390,8 @@ class ExcelAutomationRequestTests(unittest.TestCase):
         assert isinstance(arguments, dict)
         self.assertEqual(arguments["automation_id"], EXCEL_AUTOMATION_ID)
         self.assertEqual(arguments["automation_version"], EXCEL_AUTOMATION_VERSION)
+        self.assertEqual(arguments["automation_version"], "2.0")
+        self.assertFalse(arguments["parameters"]["allow_overwrite"])
         self.assertEqual(
             [item["input_id"] for item in arguments["inputs"]],  # type: ignore[index]
             ["input-1", "input-2"],
@@ -334,6 +408,21 @@ class ExcelAutomationRequestTests(unittest.TestCase):
             execute["arguments"]["expected_plan_fingerprint"],  # type: ignore[index]
             FINGERPRINT,
         )
+
+    def test_overwrite_choice_is_sent_identically_to_plan_and_execute(self) -> None:
+        invocation = csv_invocation(
+            (Path("C:/data/one.xlsx"),),
+            output_directory=Path("C:/data/csv"),
+            allow_overwrite=True,
+        )
+
+        plan = build_plan_automation_request("plan-overwrite", invocation)
+        execute = build_execute_automation_request(
+            "execute-overwrite", invocation, FINGERPRINT
+        )
+
+        self.assertTrue(plan["arguments"]["parameters"]["allow_overwrite"])  # type: ignore[index]
+        self.assertTrue(execute["arguments"]["parameters"]["allow_overwrite"])  # type: ignore[index]
 
     def test_execute_builder_rejects_unreviewed_fingerprint(self) -> None:
         invocation = CsvAutomationInvocation(
@@ -378,12 +467,57 @@ class ExcelAutomationResponseTests(unittest.TestCase):
         self.assertIsInstance(describe.result, DescribeAutomationsResult)
         assert isinstance(describe.result, DescribeAutomationsResult)
         self.assertTrue(describe.result.csv_automation.available)  # type: ignore[union-attr]
-        self.assertEqual(plan.classification, "plan_ready")
+        self.assertEqual(plan.classification, "plan_ready", plan.reason)
         self.assertIsInstance(plan.result, PlanAutomationResult)
         assert isinstance(plan.result, PlanAutomationResult)
         self.assertEqual(plan.result.inputs[0].physical_columns, (1, 3))
+        self.assertEqual(plan.result.inputs[0].output_disposition, "create")
+        self.assertEqual(plan.result.effect.outputs_to_create, 1)  # type: ignore[union-attr]
+        self.assertEqual(plan.result.effect.outputs_to_replace, 0)  # type: ignore[union-attr]
         self.assertEqual(execution.classification, "execute_succeeded")
         self.assertIsInstance(execution.result, ExecuteAutomationResult)
+
+    def test_v2_replacement_plan_and_execution_receipts_are_typed(self) -> None:
+        source = Path("C:/data/book.xlsx")
+        output = Path("C:/data/csv")
+
+        plan = parse_automation_response(
+            phase="plan",
+            request_id="plan-replace",
+            return_code=0,
+            stdout=_envelope(
+                "plan_automation",
+                "plan-replace",
+                _ready_plan_result(
+                    source,
+                    output,
+                    disposition="replace",
+                    allow_overwrite=True,
+                ),
+            ),
+        )
+        execution = parse_automation_response(
+            phase="execute",
+            request_id="execute-replace",
+            return_code=0,
+            stdout=_envelope(
+                "execute_automation",
+                "execute-replace",
+                _execution_result(source, output, replace=True),
+            ),
+        )
+
+        self.assertEqual(plan.classification, "plan_ready", plan.reason)
+        assert isinstance(plan.result, PlanAutomationResult)
+        planned = plan.result.inputs[0]
+        self.assertEqual(planned.output_disposition, "replace")
+        self.assertTrue(planned.destination_state.exists)
+        self.assertEqual(plan.result.effect.outputs_to_replace, 1)  # type: ignore[union-attr]
+        self.assertEqual(execution.classification, "execute_succeeded")
+        assert isinstance(execution.result, ExecuteAutomationResult)
+        self.assertEqual(execution.result.outputs_created, ())
+        self.assertEqual(execution.result.outputs_replaced, (str(output / "book.csv"),))
+        self.assertEqual(execution.result.outputs_overwritten, 1)
 
     def test_execution_rejects_any_claimed_source_workbook_mutation(self) -> None:
         source = Path("C:/data/book.xlsx")
@@ -645,6 +779,139 @@ class ExcelAutomationResponseTests(unittest.TestCase):
                     stdout=stdout,
                 )
                 self.assertTrue(result.unknown_outcome)
+
+    def test_v2_plan_rejects_an_unknown_output_disposition(self) -> None:
+        source = Path("C:/data/book.xlsx")
+        output = Path("C:/data/csv")
+        document = _ready_plan_result(source, output)
+        inputs = document["inputs"]
+        assert isinstance(inputs, list)
+        inputs[0]["output_disposition"] = "rename"
+
+        result = parse_automation_response(
+            phase="plan",
+            request_id="plan-invalid-disposition",
+            return_code=0,
+            stdout=_envelope(
+                "plan_automation",
+                "plan-invalid-disposition",
+                document,
+            ),
+        )
+
+        self.assertEqual(result.classification, "plan_failed")
+        self.assertIn("output disposition", result.reason)
+
+    def test_v2_plan_rejects_contradictory_destination_and_policy_semantics(
+        self,
+    ) -> None:
+        source = Path("C:/data/book.xlsx")
+        output = Path("C:/data/csv")
+        for mutation in ("destination", "policy"):
+            with self.subTest(mutation=mutation):
+                document = _ready_plan_result(source, output)
+                if mutation == "destination":
+                    inputs = document["inputs"]
+                    assert isinstance(inputs, list)
+                    destination = inputs[0]["destination_state"]
+                    assert isinstance(destination, dict)
+                    destination.update(
+                        {
+                            "exists": True,
+                            "size_bytes": 12,
+                            "modified_ns": 20,
+                            "created_ns": 10,
+                            "device": 1,
+                            "inode": 2,
+                            "sha256": "c" * 64,
+                        }
+                    )
+                else:
+                    parameters = document["parameters"]
+                    assert isinstance(parameters, dict)
+                    parameters["allow_overwrite"] = True
+
+                result = parse_automation_response(
+                    phase="plan",
+                    request_id=f"plan-{mutation}",
+                    return_code=0,
+                    stdout=_envelope(
+                        "plan_automation",
+                        f"plan-{mutation}",
+                        document,
+                    ),
+                )
+
+                self.assertEqual(result.classification, "plan_failed")
+                self.assertIn("contradict", result.reason)
+
+    def test_v2_execution_rejects_contradictory_create_replace_totals(self) -> None:
+        source = Path("C:/data/book.xlsx")
+        output = Path("C:/data/csv")
+        document = _execution_result(source, output)
+        document["outputs_replaced"] = [str(output / "book.csv")]
+        document["outputs_overwritten"] = 1
+        document["writes_performed"] = 2
+
+        result = parse_automation_response(
+            phase="execute",
+            request_id="execute-overlapping-output",
+            return_code=0,
+            stdout=_envelope(
+                "execute_automation",
+                "execute-overlapping-output",
+                document,
+            ),
+        )
+
+        self.assertEqual(result.classification, "execute_unknown")
+        self.assertIn("contradictory", result.reason)
+
+    def test_v2_execution_rejects_a_receipt_with_the_wrong_disposition(self) -> None:
+        source = Path("C:/data/book.xlsx")
+        output = Path("C:/data/csv")
+        document = _execution_result(source, output, replace=True)
+        inputs = document["inputs"]
+        assert isinstance(inputs, list)
+        inputs[0]["code"] = "automation.output_created"
+
+        result = parse_automation_response(
+            phase="execute",
+            request_id="execute-wrong-receipt",
+            return_code=0,
+            stdout=_envelope(
+                "execute_automation",
+                "execute-wrong-receipt",
+                document,
+            ),
+        )
+
+        self.assertEqual(result.classification, "execute_unknown")
+        self.assertIn("receipts", result.reason)
+
+    def test_v2_execution_rejects_a_receipt_in_the_wrong_effect_collection(
+        self,
+    ) -> None:
+        source = Path("C:/data/book.xlsx")
+        output = Path("C:/data/csv")
+        document = _execution_result(source, output)
+        inputs = document["inputs"]
+        assert isinstance(inputs, list)
+        inputs[0]["code"] = "automation.output_replaced"
+
+        result = parse_automation_response(
+            phase="execute",
+            request_id="execute-wrong-receipt",
+            return_code=0,
+            stdout=_envelope(
+                "execute_automation",
+                "execute-wrong-receipt",
+                document,
+            ),
+        )
+
+        self.assertEqual(result.classification, "execute_unknown")
+        self.assertIn("receipts", result.reason)
 
 
 class ExcelAutomationProcessClientTests(unittest.TestCase):

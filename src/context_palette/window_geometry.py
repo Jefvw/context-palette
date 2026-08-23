@@ -83,9 +83,8 @@ def fit_window_size(
     )
 
 
-def main_window_monitor_work_area(owner: tk.Misc) -> WindowBounds:
-    """Return the work area of the monitor containing the application root."""
-    root = owner._root()
+def window_monitor_work_area(window: tk.Misc) -> WindowBounds:
+    """Return the work area of the monitor containing this specific Tk window."""
     if sys.platform == "win32":
         try:
             user32 = ctypes.windll.user32
@@ -97,7 +96,7 @@ def main_window_monitor_work_area(owner: tk.Misc) -> WindowBounds:
             ]
             user32.GetMonitorInfoW.restype = wintypes.BOOL
             monitor = user32.MonitorFromWindow(
-                wintypes.HWND(root.winfo_id()),
+                wintypes.HWND(window.winfo_id()),
                 MONITOR_DEFAULTTONEAREST,
             )
             info = _MonitorInfo()
@@ -114,14 +113,19 @@ def main_window_monitor_work_area(owner: tk.Misc) -> WindowBounds:
                 )
         except (AttributeError, OSError, tk.TclError):
             pass
-    left = int(root.winfo_vrootx())
-    top = int(root.winfo_vrooty())
+    left = int(window.winfo_vrootx())
+    top = int(window.winfo_vrooty())
     return (
         left,
         top,
-        left + int(root.winfo_vrootwidth()),
-        top + int(root.winfo_vrootheight()),
+        left + int(window.winfo_vrootwidth()),
+        top + int(window.winfo_vrootheight()),
     )
+
+
+def main_window_monitor_work_area(owner: tk.Misc) -> WindowBounds:
+    """Return the work area of the monitor containing the application root."""
+    return window_monitor_work_area(owner._root())
 
 
 def place_child_window(

@@ -138,7 +138,7 @@ def build_action_preview(
             )
         return ActionPreview(
             "exact .xlsx paths from Input / Output",
-            "plan create-only CSV files, show every output for review, then export only after confirmation",
+            "plan exact CSV create or replace effects, show every output for review, then export only after confirmation",
             details,
             limitations,
         )

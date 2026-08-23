@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from context_palette.window_geometry import (
     DEFAULT_WINDOW_HEIGHT,
@@ -12,8 +13,10 @@ from context_palette.window_geometry import (
     configure_main_window,
     configure_standard_window,
     fit_window_size,
+    main_window_monitor_work_area,
     place_child_window,
     standard_window_size,
+    window_monitor_work_area,
     window_position_below_owner,
 )
 
@@ -71,6 +74,37 @@ class FakeOwner:
 
     def winfo_toplevel(self) -> "FakeOwner":
         return self.toplevel
+
+
+class FakeMonitorWindow:
+    def __init__(
+        self,
+        window_id: int,
+        *,
+        virtual_root: tuple[int, int, int, int] = (0, 0, 1920, 1080),
+        root: "FakeMonitorWindow | None" = None,
+    ) -> None:
+        self.window_id = window_id
+        self.virtual_root = virtual_root
+        self.root = root or self
+
+    def winfo_id(self) -> int:
+        return self.window_id
+
+    def winfo_vrootx(self) -> int:
+        return self.virtual_root[0]
+
+    def winfo_vrooty(self) -> int:
+        return self.virtual_root[1]
+
+    def winfo_vrootwidth(self) -> int:
+        return self.virtual_root[2]
+
+    def winfo_vrootheight(self) -> int:
+        return self.virtual_root[3]
+
+    def _root(self) -> "FakeMonitorWindow":
+        return self.root
 
 
 class WindowGeometryTests(unittest.TestCase):
@@ -149,6 +183,58 @@ class WindowGeometryTests(unittest.TestCase):
             fit_window_size((2000, 1200), (1920, 0, 3520, 900)),
             (1600, 900),
         )
+
+    def test_monitor_work_area_uses_the_specific_window_handle(self) -> None:
+        window = FakeMonitorWindow(456)
+        user32 = SimpleNamespace(
+            MonitorFromWindow=Mock(return_value=123),
+            GetMonitorInfoW=Mock(),
+        )
+
+        def populate_work_area(_monitor: object, pointer: object) -> bool:
+            info = pointer._obj  # type: ignore[attr-defined]
+            info.rcWork.left = 1920
+            info.rcWork.top = 40
+            info.rcWork.right = 3520
+            info.rcWork.bottom = 900
+            return True
+
+        user32.GetMonitorInfoW.side_effect = populate_work_area
+        with (
+            patch("context_palette.window_geometry.sys.platform", "win32"),
+            patch(
+                "context_palette.window_geometry.ctypes.windll",
+                SimpleNamespace(user32=user32),
+                create=True,
+            ),
+        ):
+            result = window_monitor_work_area(window)  # type: ignore[arg-type]
+
+        handle, flags = user32.MonitorFromWindow.call_args.args
+        self.assertEqual(handle.value, 456)
+        self.assertEqual(flags, 2)
+        self.assertEqual(result, (1920, 40, 3520, 900))
+
+    def test_monitor_work_area_uses_window_virtual_root_as_fallback(self) -> None:
+        window = FakeMonitorWindow(456, virtual_root=(-1920, 0, 3840, 1040))
+
+        with patch("context_palette.window_geometry.sys.platform", "linux"):
+            result = window_monitor_work_area(window)  # type: ignore[arg-type]
+
+        self.assertEqual(result, (-1920, 0, 1920, 1040))
+
+    def test_main_monitor_work_area_still_resolves_application_root(self) -> None:
+        root = FakeMonitorWindow(100)
+        owner = FakeMonitorWindow(456, root=root)
+
+        with patch(
+            "context_palette.window_geometry.window_monitor_work_area",
+            return_value=(0, 0, 1920, 1040),
+        ) as monitor_work_area:
+            result = main_window_monitor_work_area(owner)  # type: ignore[arg-type]
+
+        monitor_work_area.assert_called_once_with(root)
+        self.assertEqual(result, (0, 0, 1920, 1040))
 
     def test_standard_child_uses_main_monitor_and_owner_center(self) -> None:
         window = FakeWindow(1920, 1080)

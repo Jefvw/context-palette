@@ -24,7 +24,7 @@ from .persistence import atomic_write_json
 SCHEMA_VERSION = "1.0"
 AUTOMATION_CONTRACT_VERSION = "1.0"
 EXCEL_AUTOMATION_ID = "excel.export_workbooks_to_csv"
-EXCEL_AUTOMATION_VERSION = "1.0"
+EXCEL_AUTOMATION_VERSION = "2.0"
 DESCRIBE_OPERATION = "describe_automations"
 PLAN_OPERATION = "plan_automation"
 EXECUTE_OPERATION = "execute_automation"
@@ -33,6 +33,8 @@ MAX_WORKBOOKS = 100
 MAX_REQUEST_BYTES = 1024 * 1024
 DEFAULT_MAX_STDOUT_BYTES = 4 * 1024 * 1024
 DEFAULT_MAX_STDERR_BYTES = 256 * 1024
+PYTHON_EXCEL_SIBLING_DIRECTORY = "python-excel"
+PYTHON_EXCEL_LAUNCHER_NAME = "python-excel.bat"
 
 AutomationPhase = Literal["describe", "plan", "execute"]
 CallClassification = Literal[
@@ -108,6 +110,30 @@ def save_excel_automation_settings(
         Path(path),
         {"launcher_path": str(launcher) if launcher is not None else ""},
     )
+
+
+def discover_direct_sibling_python_excel_launcher(
+    application_root: Path,
+) -> Path | None:
+    """Return the one supported sibling launcher candidate when it exists.
+
+    Discovery is deliberately limited to the direct ``python-excel`` sibling
+    of the Context Palette application root. It never searches PATH, descends
+    through folders, or persists the detected machine-local path.
+    """
+
+    root = Path(application_root)
+    if not root.is_absolute():
+        return None
+    candidate = (
+        root.parent
+        / PYTHON_EXCEL_SIBLING_DIRECTORY
+        / PYTHON_EXCEL_LAUNCHER_NAME
+    )
+    try:
+        return candidate if candidate.is_file() else None
+    except OSError:
+        return None
 
 
 def _validate_launcher_path(path: Path) -> None:
@@ -198,6 +224,7 @@ class CsvAutomationInvocation:
     encoding: str = "utf-8-sig"
     formula_mode: str = "formulas"
     excel_safe: bool = True
+    allow_overwrite: bool = False
 
     def __post_init__(self) -> None:
         if not 1 <= len(self.inputs) <= MAX_WORKBOOKS:
@@ -208,6 +235,8 @@ class CsvAutomationInvocation:
             raise ExcelAutomationInputError("Workbook input IDs must be unique.")
         if self.output_directory is not None and not self.output_directory.is_absolute():
             raise ExcelAutomationInputError("The output directory must be absolute.")
+        if not isinstance(self.allow_overwrite, bool):
+            raise ExcelAutomationInputError("Allow overwrite must be a boolean.")
 
 
 def csv_invocation(
@@ -215,6 +244,7 @@ def csv_invocation(
     *,
     output_directory: Path | None = None,
     worksheets: Mapping[str, str] | None = None,
+    allow_overwrite: bool = False,
 ) -> CsvAutomationInvocation:
     selections = worksheets or {}
     inputs = tuple(
@@ -225,7 +255,11 @@ def csv_invocation(
         )
         for index, path in enumerate(paths, start=1)
     )
-    return CsvAutomationInvocation(inputs, output_directory)
+    return CsvAutomationInvocation(
+        inputs,
+        output_directory,
+        allow_overwrite=allow_overwrite,
+    )
 
 
 def build_describe_automations_request(request_id: str) -> dict[str, object]:
@@ -301,6 +335,7 @@ def _invocation_arguments(invocation: CsvAutomationInvocation) -> dict[str, obje
             "encoding": invocation.encoding,
             "formula_mode": invocation.formula_mode,
             "excel_safe": invocation.excel_safe,
+            "allow_overwrite": invocation.allow_overwrite,
         },
     }
 
@@ -376,6 +411,17 @@ class AutomationWarning:
 
 
 @dataclass(frozen=True, slots=True)
+class DestinationState:
+    exists: bool
+    size_bytes: int | None
+    modified_ns: int | None
+    created_ns: int | None
+    device: int | None
+    inode: int | None
+    sha256: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class PlannedWorkbook:
     input_id: str
     original_path: str
@@ -384,6 +430,8 @@ class PlannedWorkbook:
     physical_columns: tuple[int, ...]
     rows_to_write: int
     output_path: str
+    output_disposition: Literal["create", "replace"]
+    destination_state: DestinationState
 
 
 @dataclass(frozen=True, slots=True)
@@ -393,6 +441,8 @@ class PlanEffect:
     input_files: int
     output_files: int
     rows_to_write: int
+    outputs_to_create: int
+    outputs_to_replace: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -445,6 +495,7 @@ class ExecuteAutomationResult:
     source_mutates_inputs: bool
     workbooks_saved: int
     outputs_created: tuple[str, ...]
+    outputs_replaced: tuple[str, ...]
     outputs_overwritten: int
     artifacts: tuple[AutomationArtifact, ...]
     warnings: tuple[AutomationWarning, ...]
@@ -637,6 +688,28 @@ def _parse_plan_result(document: dict[str, object]) -> PlanAutomationResult:
     if state == "ready":
         if requirements or blockers or effect is None or not _is_sha256(fingerprint):
             raise _ProtocolError("The ready plan is incomplete or contradictory.")
+        parameters = _object(document.get("parameters"), "parameters")
+        allow_overwrite = _boolean(
+            parameters.get("allow_overwrite"), "parameters.allow_overwrite"
+        )
+        parameter_policy = _text(
+            parameters.get("output_policy"), "parameters.output_policy"
+        )
+        if parameter_policy not in {"create_only", "explicit_replace"}:
+            raise _ProtocolError("The plan returned an unsupported output policy.")
+        if (
+            parameter_policy != effect.output_policy
+            or allow_overwrite != (parameter_policy == "explicit_replace")
+        ):
+            raise _ProtocolError("The plan returned contradictory overwrite semantics.")
+        creates = sum(item.output_disposition == "create" for item in inputs)
+        replacements = sum(item.output_disposition == "replace" for item in inputs)
+        if (
+            creates != effect.outputs_to_create
+            or replacements != effect.outputs_to_replace
+            or creates + replacements != effect.output_files
+        ):
+            raise _ProtocolError("The plan returned contradictory output totals.")
     elif fingerprint is not None:
         raise _ProtocolError("A non-ready plan reported a fingerprint.")
     return PlanAutomationResult(
@@ -695,6 +768,14 @@ def _parse_planned_workbook(value: object, index: int) -> PlannedWorkbook:
     if not _is_sha256(source_hash):
         raise _ProtocolError("The plan returned an invalid source fingerprint.")
     _nonnegative_int(item.get("source_size_bytes"), "input.source_size_bytes")
+    disposition = item.get("output_disposition")
+    if disposition not in {"create", "replace"}:
+        raise _ProtocolError("The plan returned an unsupported output disposition.")
+    destination = _parse_destination_state(item.get("destination_state"))
+    if (disposition == "replace") != destination.exists:
+        raise _ProtocolError(
+            "The plan returned a contradictory destination disposition."
+        )
     return PlannedWorkbook(
         _text(item.get("input_id"), "input.input_id"),
         _text(item.get("original_path"), "input.original_path"),
@@ -703,7 +784,50 @@ def _parse_planned_workbook(value: object, index: int) -> PlannedWorkbook:
         _positive_int_tuple(item.get("physical_columns"), "input.physical_columns"),
         _nonnegative_int(item.get("rows_to_write"), "input.rows_to_write"),
         _text(item.get("output_path"), "input.output_path"),
+        disposition,  # type: ignore[arg-type]
+        destination,
     )
+
+
+def _parse_destination_state(value: object) -> DestinationState:
+    item = _object(value, "input.destination_state")
+    state = DestinationState(
+        _boolean(item.get("exists"), "destination_state.exists"),
+        _optional_nonnegative_int(
+            item.get("size_bytes"), "destination_state.size_bytes"
+        ),
+        _optional_nonnegative_int(
+            item.get("modified_ns"), "destination_state.modified_ns"
+        ),
+        _optional_nonnegative_int(
+            item.get("created_ns"), "destination_state.created_ns"
+        ),
+        _optional_nonnegative_int(
+            item.get("device"), "destination_state.device"
+        ),
+        _optional_nonnegative_int(
+            item.get("inode"), "destination_state.inode"
+        ),
+        _optional_text(item.get("sha256"), "destination_state.sha256"),
+    )
+    details = (
+        state.size_bytes,
+        state.modified_ns,
+        state.created_ns,
+        state.device,
+        state.inode,
+        state.sha256,
+    )
+    if state.exists:
+        if any(detail is None for detail in details) or not _is_sha256(state.sha256):
+            raise _ProtocolError(
+                "An existing destination omitted its reviewed identity."
+            )
+    elif any(detail is not None for detail in details):
+        raise _ProtocolError(
+            "A missing destination unexpectedly reported file identity."
+        )
+    return state
 
 
 def _parse_effect(value: object) -> PlanEffect:
@@ -716,6 +840,12 @@ def _parse_effect(value: object) -> PlanEffect:
         _nonnegative_int(item.get("input_files"), "effect.input_files"),
         _nonnegative_int(item.get("output_files"), "effect.output_files"),
         _nonnegative_int(item.get("rows_to_write"), "effect.rows_to_write"),
+        _nonnegative_int(
+            item.get("outputs_to_create"), "effect.outputs_to_create"
+        ),
+        _nonnegative_int(
+            item.get("outputs_to_replace"), "effect.outputs_to_replace"
+        ),
     )
 
 
@@ -743,23 +873,40 @@ def _parse_execute_result(document: dict[str, object]) -> ExecuteAutomationResul
         for index, raw in enumerate(_array(document.get("inputs"), "inputs"))
     )
     source = _object(document.get("source_effect"), "source_effect")
-    outputs = tuple(
+    created = tuple(
         _text(value, "outputs_created")
         for value in _array(document.get("outputs_created"), "outputs_created")
+    )
+    replaced = tuple(
+        _text(value, "outputs_replaced")
+        for value in _array(document.get("outputs_replaced"), "outputs_replaced")
     )
     writes = _nonnegative_int(document.get("writes_performed"), "writes_performed")
     effects_started = _boolean(document.get("effects_started"), "effects_started")
     overwritten = _nonnegative_int(
         document.get("outputs_overwritten"), "outputs_overwritten"
     )
-    if overwritten != 0 or writes != len(outputs):
+    normalized_created = {os.path.normcase(value) for value in created}
+    normalized_replaced = {os.path.normcase(value) for value in replaced}
+    if (
+        len(normalized_created) != len(created)
+        or len(normalized_replaced) != len(replaced)
+        or normalized_created & normalized_replaced
+        or overwritten != len(replaced)
+        or writes != len(created) + len(replaced)
+    ):
         raise _ProtocolError("Execution output counts are contradictory.")
-    if state == "succeeded" and (not effects_started or not outputs):
+    completed_outputs = created + replaced
+    if state == "succeeded" and (not effects_started or not completed_outputs):
         raise _ProtocolError("Successful execution reported no effect.")
-    if state == "failed_before_effect" and (effects_started or outputs or writes):
+    if state == "failed_before_effect" and (
+        effects_started or completed_outputs or writes
+    ):
         raise _ProtocolError("A before-effect failure reported an output effect.")
-    if state == "failed_after_partial_effect" and (not effects_started or not outputs):
-        raise _ProtocolError("A partial-effect failure reported no created output.")
+    if state == "failed_after_partial_effect" and (
+        not effects_started or not completed_outputs
+    ):
+        raise _ProtocolError("A partial-effect failure reported no completed output.")
     succeeded_inputs = tuple(item for item in inputs if item.outcome == "succeeded")
     if state == "succeeded" and (
         not inputs or len(succeeded_inputs) != len(inputs)
@@ -771,6 +918,27 @@ def _parse_execute_result(document: dict[str, object]) -> ExecuteAutomationResul
         raise _ProtocolError("A before-effect failure reported a successful input.")
     if state == "failed_after_partial_effect" and not succeeded_inputs:
         raise _ProtocolError("A partial-effect failure reported no successful input.")
+    receipt_created: set[str] = set()
+    receipt_replaced: set[str] = set()
+    for item in succeeded_inputs:
+        if item.output_path is None:
+            raise _ProtocolError("A successful execution input omitted its output.")
+        key = os.path.normcase(item.output_path)
+        if item.code == "automation.output_created":
+            receipt_created.add(key)
+        elif item.code == "automation.output_replaced":
+            receipt_replaced.add(key)
+        else:
+            raise _ProtocolError(
+                "A successful execution input returned an unsupported effect code."
+            )
+    if (
+        receipt_created != normalized_created
+        or receipt_replaced != normalized_replaced
+    ):
+        raise _ProtocolError(
+            "Execution input receipts contradict the published output lists."
+        )
     mutates_inputs = _boolean(
         source.get("mutates_inputs"),
         "source_effect.mutates_inputs",
@@ -792,7 +960,8 @@ def _parse_execute_result(document: dict[str, object]) -> ExecuteAutomationResul
         inputs,
         mutates_inputs,
         workbooks_saved,
-        outputs,
+        created,
+        replaced,
         overwritten,
         _parse_artifacts(document.get("artifacts")),
         _parse_warnings(document.get("warnings")),
@@ -931,6 +1100,12 @@ def _nonnegative_int(value: object, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise _ProtocolError(f"{label} must be a non-negative integer.")
     return value
+
+
+def _optional_nonnegative_int(value: object, label: str) -> int | None:
+    if value is None:
+        return None
+    return _nonnegative_int(value, label)
 
 
 def _positive_int_tuple(value: object, label: str) -> tuple[int, ...]:

@@ -253,10 +253,15 @@ Pure transformation algorithms and validation remain in `actions.py`.
 ### `workspace_panel.py`
 
 Owns the complete Input / Output UI component: text widget, edit menu, visible
-Capture, Inbox, **Create from Input**, **Extract text**, and **Text tools** bitmap controls;
-selection-first source choice and replacement; undo boundaries; prompting;
+Back, Forward, Capture, Inbox, **Create from Input**, **Extract text**, and
+**Text tools** bitmap controls; selection-first source choice and replacement;
+undo boundaries; prompting;
 clipboard copy and replacement, transformation feedback, and file-transform
-preview provenance. It also owns the shared undoable incoming-text placement
+preview provenance. Its separate session-only history retains at most ten
+meaningful whole-content states, coalesces manual typing until the next
+navigation or semantic change, and applies normal branch semantics after Back;
+native Tk Undo/Redo remains available for finer edits. It also owns the shared
+undoable incoming-text placement
 boundary used by OCR and drag-and-drop, including explicit Replace, Append,
 and Cancel for a non-empty workspace. A file preview exposes explicit replace, save-as, and
 dismiss commands; ordinary workspace replacement clears that provenance. It
@@ -300,7 +305,15 @@ remains mapped when the main root is withdrawn and stays available after a
 drop. Its callback returns only a completed structured result to `LauncherApp`;
 the component cannot modify Input / Output, clipboard, persistence, Actions,
 Inbox, or external applications. Dependency import/native-load failures are
-caught at this feature boundary so ordinary startup remains usable.
+caught at this feature boundary so ordinary startup remains usable. The window
+retains only the last ten successful non-empty `DropResult` values in memory,
+identifies the selected result with type-level metadata, and can resend that
+immutable result through the same launcher callback without re-resolving or
+duplicating it. A collapsed disclosure renders a bounded read-only preview of
+the exact prepared paths, web links, or text plus warnings; it performs no
+filesystem or network inspection and collapses on Hide or a new drop. Preview
+truncation never truncates the retained result. Errors and empty drops are not
+retained; process exit clears the history.
 
 ### `ocr.py`
 
@@ -1061,27 +1074,47 @@ cannot block the Palette process.
 Contexts, tags, and Quick-action menus, but it is not eligible for sequences
 or the ordinary ShellExecute executor. Planning obtains required worksheet and
 output-folder parameters and presents the engine's exact Input → Effect review.
+When no explicit launcher is configured, discovery checks only the exact
+direct sibling `python-excel\python-excel.bat`; it never searches PATH or a
+drive and does not persist the detected path. After capability validation, the
+first workbook's parent is the deterministic initial output folder. Blocked and
+ready views retain an explicit **Choose another output folder…** override.
 Execution receives the reviewed fingerprint rather than a recreated plan. The
-first automation exports all used columns to create-only CSV files: it does not
-mutate sources and it never overwrites an existing destination.
+host requests the exact `excel.export_workbooks_to_csv` automation version
+`2.0`; it never allocates a CSV filename itself. With **Allow overwrite** off,
+Python Excel returns the first collision-free path (`report.csv`,
+`report(1).csv`, `report(2).csv`, and so on). With it on, Python Excel targets
+the unsuffixed name and classifies each output as `create` or `replace`. The
+review retains those exact dispositions, create/replace totals, invocation,
+and fingerprint. Source workbooks are never mutated.
 
 The result envelope, not the child exit code, determines the attended outcome.
 `succeeded`, `failed_before_effect`, `failed_after_partial_effect`, stale-plan,
-and unknown-after-process-loss states have distinct presentation. A partial
-result lists only confirmed created files; partial and unknown outcomes are
-never retried automatically. There is intentionally no progress, cancellation,
-live-Excel, or rollback protocol: one subprocess owns a batch. The configured
-engine path is stored only in ignored `data/local_excel_automation_settings.json`.
+and unknown-after-process-loss states have distinct presentation. Execution
+uses the identical reviewed invocation plus its expected fingerprint. A stale
+plan (`conflict.automation_plan_stale`) must be planned and reviewed again; the
+host never picks a different suffix or retries it. Successful and partial
+results distinguish confirmed `outputs_created` from `outputs_replaced`;
+partial and unknown outcomes are never retried automatically. The engine stages
+the complete batch and publishes reviewed replacements atomically per file,
+but does not create replacement backups or claim batch rollback. There is
+intentionally no progress, cancellation, live-Excel, or rollback protocol: one
+subprocess owns a batch. The configured engine path is stored only in ignored
+`data/local_excel_automation_settings.json`.
 Absence, misconfiguration, or a failed engine leaves every non-Excel feature
 available.
 
 ### `excel_automation_window.py`
 
 Owns the attended Tk workflow for the CSV automation without implementing
-workbook behavior. It collects the machine-local launcher and output folder,
+workbook behavior. It resolves the optional machine-local launcher and initial
+output folder,
 renders any worksheet requirements, presents the exact reviewed plan, and
 uses one effect-labelled button on that review as the execution confirmation;
-there is no redundant generic Yes/No dialog. It also distinguishes
+there is no redundant generic Yes/No dialog. The session-only **Allow
+overwrite** checkbox defaults off and every change invalidates the prior review
+and replans. Ready plans show the exact `create`/`replace` disposition, totals,
+and a button such as **Replace 1 and create 2 CSV files**. It also distinguishes
 successful, known no-effect, partial-effect, and unknown outcomes, while the
 workflow-owned coordinator keeps subprocess work off the Tk thread.
 
@@ -1269,7 +1302,12 @@ The drop target is deliberately outside those full-screen presets. It is a
 small non-transient Toplevel positioned near the lower-right screen edge,
 movable by the user, and independently hideable. With the main root withdrawn,
 Windows/Tk keeps this non-transient child mapped; the main palette is never made
-permanently topmost to achieve that lifecycle.
+permanently topmost to achieve that lifecycle. Unlike ordinary child placement,
+its dynamic compact and expanded sizes use `window_monitor_work_area()` for the
+monitor containing that specific Toplevel. Its content column reserves a stable
+width, user-moved interior positions remain unchanged, and overflow is clamped
+with native frame offsets so text, controls, and title buttons stay within the
+usable work area.
 
 The main content is one user-adjustable horizontal split. It starts at
 approximately 40% for the command console and 60% for Input / Output, while
@@ -1422,7 +1460,7 @@ credential targets, usernames, passwords, or window titles. Successful and
 clipboard-only outcomes use informational logging, unavailable destinations use
 warning logging, and dispatch failures retain their exception at error level.
 
-Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown normally and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. A successful drop uses a separate reveal path that deliberately skips clipboard synchronization, invalidates stale captured selection/destination state, and places only the normalized result. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `workspace_panel.py` owns selection ranges, one-step Undo grouping, clipboard updates, and menus. The launcher injects clipboard, status, and content-change callbacks and retains orchestration delegates. A selected item places its current-state **Input → Effect** summary in the slim bottom communication line; progress, success, and errors temporarily replace it. Hovering or clicking that line exposes the full structured explanation and current operational message.
+Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown normally and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. A successful drop uses a separate reveal path that deliberately skips clipboard synchronization, invalidates stale captured selection/destination state, and places only the normalized result. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `workspace_panel.py` owns selection ranges, one-step Undo grouping, clipboard updates, menus, and a last-ten session history of meaningful complete states. Back/Forward navigation clears file-preview provenance rather than reconnecting historical text to a stale source hash. The launcher injects clipboard, status, and content-change callbacks and retains orchestration delegates. A selected item places its current-state **Input → Effect** summary in the slim bottom communication line; progress, success, and errors temporarily replace it. Hovering or clicking that line exposes the full structured explanation and current operational message.
 
 The legacy generic `transform_text` action persists one catalogue operation key
 and only that operation's ordered parameters. It remains loadable and editable

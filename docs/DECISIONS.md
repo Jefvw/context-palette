@@ -1,5 +1,86 @@
 # Decisions
 
+## 2026-08-23 - Let Python Excel own reviewed CSV collision handling
+
+**Decision:** Target exact automation version
+`excel.export_workbooks_to_csv 2.0`. Expose one session-only **Allow
+overwrite** checkbox, unchecked by default. Unchecked planning lets Python
+Excel select the first available `report.csv`, `report(1).csv`,
+`report(2).csv`, and later suffix. Checked planning targets the unsuffixed name
+and returns an exact `create` or `replace` disposition. Context Palette displays
+every disposition and its totals, then uses one effect-labelled execution
+button. It does not allocate filenames itself.
+
+**Reason:** Failing merely because a CSV name already exists makes routine
+exports unnecessarily fragile, while silent replacement would violate the
+attended review boundary. Engine-owned allocation keeps planning, fingerprint
+validation, reservations, and publication consistent across callers.
+
+**Safety boundary:** Source workbooks remain unchanged. Execution receives the
+identical invocation and reviewed fingerprint. A stale plan must be planned and
+reviewed again; partial and unknown outcomes are never retried automatically.
+Each reviewed replacement is published atomically, but no recovery backup or
+batch rollback is promised. This decision supersedes the create-only and
+never-overwrite output boundary recorded in the earlier 2026-08-23 Python Excel
+vertical-slice decision; that historical decision remains below as the initial
+version 1.0 boundary.
+
+## 2026-08-23 - Reveal prepared drop details only on request
+
+**Decision:** Identify the selected recent drop in the compact always-on-top
+window, then provide a collapsed **Show details** disclosure in that same
+window. The disclosure shows a bounded preview of the exact normalized paths,
+web links, or text that will be sent to Input / Output, plus shortcut warnings.
+
+**Reason:** A count alone cannot distinguish two recent drops or let the user
+verify what **Send again** will reuse. Keeping details in the existing window
+avoids another popup and keeps Previous/Next, inspection, and resend together.
+
+**Safety boundary:** Details are session-only, never logged, persisted, copied,
+opened, or re-resolved. The compact summary exposes no text content; large
+details are visibly truncated while resend retains the complete bounded result.
+Details start collapsed and collapse again when the target is hidden or a new
+drop starts. This supersedes the earlier same-day decision that the window
+would show counts and never content. The compact history column reserves its
+full wrapped width from construction; later status, selection, and disclosure
+changes re-fit the complete Windows frame inside the work area of the monitor
+currently containing the independently movable drop window.
+
+## 2026-08-23 - Keep recent intake histories private and session-only
+
+**Decision:** Retain the last ten successful non-empty drops inside the drop
+window and the last ten meaningful complete Input / Output states inside the
+workspace. Drop history can resend an exact immutable result through the
+existing launcher handoff; workspace Back/Forward uses whole-content semantic
+checkpoints while native Undo/Redo remains the fine-grained editor history.
+
+**Reason:** Reusing a recent path, link, OCR result, transform, or manually
+edited workspace state should not require repeating acquisition. Event history
+in the drop surface and semantic content history in the workspace match those
+two different jobs without turning every keystroke into a visible item.
+
+**Safety boundary:** Both histories exist only in memory and disappear on
+process exit. The always-on-top drop window shows counts, never content. Resend
+does not re-resolve shortcuts and still uses Replace/Append/Cancel. Navigating
+workspace history clears file-preview provenance so historical text cannot be
+written through a stale source association.
+
+## 2026-08-23 - Remove routine Excel setup choices from each export
+
+**Decision:** With no explicit launcher setting, check only the exact direct
+sibling `python-excel\python-excel.bat`. After a successful capability check,
+plan immediately into the first workbook's parent folder while retaining the
+visible output-folder override in blocked and reviewed states.
+
+**Reason:** Launcher selection is machine setup, and output location normally
+follows the source workbook. Requiring both choices for every export added
+clicks without strengthening the reviewed plan.
+
+**Safety boundary:** Explicit configured paths take precedence; a missing
+explicit path is never silently bypassed. There is no PATH, drive, or recursive
+search, detected paths are not persisted, and the engine still authors and
+fingerprints every exact reviewed output path.
+
 ## 2026-08-23 - Delegate attended closed-workbook CSV export to Python Excel
 
 **Decision:** Add one optional `excel_automation` Action, **Export Excel files

@@ -31,10 +31,17 @@ actions remain editable there but stay outside normal retrieval. See
 - Keeps a separate always-on-top drop target for files, folders, shortcuts,
   links, and text. A successful drop reveals the ordinary non-topmost palette
   and offers the normalized result to Input / Output without changing the
-  clipboard.
+  clipboard. The target remembers the last ten useful drops for the current
+  session, identifies the selected prepared content, offers exact details on
+  request, and can send it through the same placement flow again.
 - Optionally delegates reviewed closed-workbook CSV exports to a separately
-  bootstrapped Python Excel installation. It plans asynchronously and creates
-  CSV outputs without overwriting destinations or changing source workbooks.
+  bootstrapped Python Excel installation. A direct sibling checkout is detected
+  automatically, planning starts with the first workbook's folder as the
+  overridable output folder, and Python Excel automation 2.0 owns collision-safe
+  output names. **Allow overwrite** is off by default, so an existing `report.csv`
+  produces `report(1).csv`, then `report(2).csv`, and so on; turning it on
+  reviews exact unsuffixed create/replace effects before one labelled execution
+  button. Source workbooks are never changed.
 - Turns one clear website or absolute file, folder, or application path in
   Input / Output into a prefilled, review-before-save Action without probing a
   mapped drive or changing the general Action type chooser.

@@ -59,8 +59,9 @@ Quick-actions heading. Its order is:
 7. A bounded, scrollable Quick-action region with no heading.
 8. Configure, Help, and More controls that never scroll off screen.
 
-Input / Output keeps only the five content-dependent icon controls above the
-editor and a permanently readable Input -> Effect strip below it.
+Input / Output keeps the two session-history arrows plus its five
+content-dependent icon controls above the editor and a permanently readable
+Input -> Effect strip below it.
 
 The Working context and retrieval boundary are deliberately one coherent
 model:

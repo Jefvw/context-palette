@@ -117,7 +117,7 @@ ACTION_TYPE_EXAMPLES = {
     "open_file": r"Example: Open %PROJECT_ROOT%\README.md in its associated application.",
     "open_folder": r"Example: Open %PROJECT_ROOT%\docs in File Explorer.",
     "launch_app": r"Example: Start C:\Tools\Example\Example.exe with reviewed arguments.",
-    "excel_automation": "Example: Export exact .xlsx paths from Input / Output to reviewed create-only CSV files.",
+    "excel_automation": "Example: Export exact .xlsx paths from Input / Output to reviewed CSV create or replace effects.",
     "sequence": "Example: Start an import Action, wait briefly, then open its results folder.",
     "paste_credential": "Example: Paste the Windows or generic credential target oracle-pc17.",
     "build_url_open": "Example: Ask for ABC 123, then copy and open its generated website address.",

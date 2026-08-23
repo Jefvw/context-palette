@@ -13,6 +13,7 @@ from context_palette.excel_automation import (
     AutomationCallError,
     AutomationCallResult,
     AutomationWarning,
+    DestinationState,
     DescribeAutomationsResult,
     ExecuteAutomationResult,
     PlanAutomationResult,
@@ -87,7 +88,7 @@ def describe_success() -> AutomationCallResult:
             (
                 AutomationAvailability(
                     "excel.export_workbooks_to_csv",
-                    "1.0",
+                    "2.0",
                     True,
                     ("describe", "plan", "execute"),
                     None,
@@ -128,7 +129,46 @@ def needs_worksheet() -> AutomationCallResult:
     )
 
 
-def ready_plan(source: Path, output: Path) -> AutomationCallResult:
+def ready_plan(
+    source: Path | tuple[Path, ...],
+    output: Path,
+    *,
+    dispositions: tuple[str, ...] | None = None,
+    output_names: tuple[str, ...] | None = None,
+    allow_overwrite: bool = False,
+) -> AutomationCallResult:
+    sources = (source,) if isinstance(source, Path) else source
+    actual_dispositions = dispositions or tuple("create" for _ in sources)
+    actual_names = output_names or tuple(
+        "book-Data.csv" if len(sources) == 1 else f"{item.stem}-Data.csv"
+        for item in sources
+    )
+    planned = tuple(
+        PlannedWorkbook(
+            f"input-{index}",
+            str(item),
+            str(item),
+            "Data",
+            (1, 2, 4),
+            27,
+            str(output / name),
+            disposition,  # type: ignore[arg-type]
+            DestinationState(
+                disposition == "replace",
+                19 if disposition == "replace" else None,
+                123456789 if disposition == "replace" else None,
+                123456000 if disposition == "replace" else None,
+                7 if disposition == "replace" else None,
+                11 if disposition == "replace" else None,
+                "c" * 64 if disposition == "replace" else None,
+            ),
+        )
+        for index, (item, name, disposition) in enumerate(
+            zip(sources, actual_names, actual_dispositions), start=1
+        )
+    )
+    create_count = sum(item == "create" for item in actual_dispositions)
+    replace_count = sum(item == "replace" for item in actual_dispositions)
     return AutomationCallResult(
         "plan",
         "plan_ready",
@@ -138,19 +178,17 @@ def ready_plan(source: Path, output: Path) -> AutomationCallResult:
             state="ready",
             requirements=(),
             blockers=(),
-            inputs=(
-                PlannedWorkbook(
-                    "input-1",
-                    str(source),
-                    str(source),
-                    "Data",
-                    (1, 2, 4),
-                    27,
-                    str(output / "book-Data.csv"),
-                ),
-            ),
+            inputs=planned,
             warnings=(AutomationWarning("formula_text", "Formulas are exported as text.", "input-1"),),
-            effect=PlanEffect(False, "create_only", 1, 1, 27),
+            effect=PlanEffect(
+                False,
+                "explicit_replace" if allow_overwrite else "create_only",
+                len(planned),
+                len(planned),
+                27 * len(planned),
+                create_count,
+                replace_count,
+            ),
             predicted_artifacts=(),
             plan_fingerprint=FINGERPRINT,
             writes_performed=0,
@@ -162,6 +200,7 @@ def execution_result(
     state: str,
     *,
     outputs: tuple[str, ...] = (),
+    replacements: tuple[str, ...] = (),
     code: str = "ok",
     final_fingerprint: str | None = FINGERPRINT,
 ) -> AutomationCallResult:
@@ -176,12 +215,13 @@ def execution_result(
         reviewed_plan_fingerprint=FINGERPRINT,
         final_plan_fingerprint=final_fingerprint,
         effects_started=effects_started,
-        writes_performed=len(outputs),
+        writes_performed=len(outputs) + len(replacements),
         inputs=(),
         source_mutates_inputs=False,
         workbooks_saved=0,
         outputs_created=outputs,
-        outputs_overwritten=0,
+        outputs_replaced=replacements,
+        outputs_overwritten=len(replacements),
         artifacts=(),
         warnings=(),
         code=code,
@@ -208,18 +248,37 @@ class ExcelAutomationWindowTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.directory = Path(self.temporary.name)
-        self.launcher = self.directory / "python-excel.bat"
+        self.application_root = self.directory / "context-palette"
+        self.data_directory = self.application_root / "data"
+        self.data_directory.mkdir(parents=True)
+        self.launcher = self.directory / "configured-python-excel.bat"
         self.launcher.write_text("@echo off\n", encoding="utf-8")
-        self.workbook = self.directory / "book.xlsx"
-        self.workbook.write_bytes(b"test workbook placeholder")
         self.output = self.directory / "csv"
         self.output.mkdir()
-        self.settings = self.directory / "local_python_excel.json"
+        self.workbook = self.output / "book.xlsx"
+        self.workbook.write_bytes(b"test workbook placeholder")
+        self.settings = self.data_directory / "local_python_excel.json"
         self.status = Mock()
         self.closed = Mock()
         self.coordinator = FakeCoordinator()
+        self.addCleanup(self._release_coordinator_callbacks)
 
-    def _window(self, *, configured: bool = True, opener=None) -> ExcelAutomationWindow:
+    def _release_coordinator_callbacks(self) -> None:
+        """Release bound Tk-window callbacks before the owning root is destroyed."""
+
+        self.coordinator.running = False
+        self.coordinator.completion_pending = False
+        self.coordinator._callback = None
+        self.coordinator._result = None
+        self.coordinator.calls.clear()
+
+    def _window(
+        self,
+        *,
+        configured: bool = True,
+        opener=None,
+        workbooks: tuple[Path, ...] | None = None,
+    ) -> ExcelAutomationWindow:
         if configured:
             self.settings.write_text(
                 json.dumps({"launcher_path": str(self.launcher)}),
@@ -228,7 +287,7 @@ class ExcelAutomationWindowTests(unittest.TestCase):
         window = ExcelAutomationWindow(
             self.root,
             settings_path=self.settings,
-            workbooks=(self.workbook,),
+            workbooks=workbooks or (self.workbook,),
             status_setter=self.status,
             coordinator=self.coordinator,  # type: ignore[arg-type]
             folder_opener=opener,
@@ -247,7 +306,14 @@ class ExcelAutomationWindowTests(unittest.TestCase):
     def _through_describe(self, window: ExcelAutomationWindow) -> None:
         self.assertEqual(self.coordinator.calls[-1]["phase"], "describe")
         self._complete(window, describe_success())
-        self.assertEqual(window.view_state, "choose_output")
+        self.assertEqual(window.view_state, "planning")
+        self.assertEqual(self.coordinator.calls[-1]["phase"], "plan")
+        arguments = self.coordinator.calls[-1]["request"]["arguments"]
+        self.assertEqual(
+            arguments["parameters"]["output_directory"],
+            str(self.workbook.parent),
+        )
+        self.assertFalse(arguments["parameters"]["allow_overwrite"])
 
     def _complete(
         self,
@@ -262,12 +328,6 @@ class ExcelAutomationWindowTests(unittest.TestCase):
 
     def _start_plan(self, window: ExcelAutomationWindow) -> None:
         self._through_describe(window)
-        with patch(
-            "context_palette.excel_automation_window.filedialog.askdirectory",
-            return_value=str(self.output),
-        ):
-            window._browse_output_directory()
-        self.assertEqual(self.coordinator.calls[-1]["phase"], "plan")
 
     def _through_ready(self, window: ExcelAutomationWindow) -> None:
         self._start_plan(window)
@@ -328,6 +388,57 @@ class ExcelAutomationWindowTests(unittest.TestCase):
         self.assertEqual(self.coordinator.calls[-1]["phase"], "describe")
         self.assertEqual(window.view_state, "describing")
 
+    def test_missing_configuration_uses_direct_sibling_without_persisting(self) -> None:
+        discovered = self.directory / "python-excel" / "python-excel.bat"
+        discovered.parent.mkdir()
+        discovered.write_text("@echo off\n", encoding="utf-8")
+
+        window = self._window(configured=False)
+
+        self.assertEqual(window.view_state, "describing")
+        self.assertEqual(
+            self.coordinator.calls[-1]["launcher_path"],
+            discovered,
+        )
+        self.assertFalse(self.settings.exists())
+
+    def test_explicit_launcher_precedes_discovered_sibling(self) -> None:
+        discovered = self.directory / "python-excel" / "python-excel.bat"
+        discovered.parent.mkdir()
+        discovered.write_text("@echo off\n", encoding="utf-8")
+
+        self._window()
+
+        self.assertEqual(
+            self.coordinator.calls[-1]["launcher_path"],
+            self.launcher,
+        )
+
+    def test_missing_explicit_launcher_does_not_fallback_to_sibling(self) -> None:
+        discovered = self.directory / "python-excel" / "python-excel.bat"
+        discovered.parent.mkdir()
+        discovered.write_text("@echo off\n", encoding="utf-8")
+        missing = self.directory / "missing-python-excel.bat"
+        self.settings.write_text(
+            json.dumps({"launcher_path": str(missing)}),
+            encoding="utf-8",
+        )
+
+        invalid = self._window(configured=False)
+
+        self.assertEqual(invalid.view_state, "setup")
+        self.assertFalse(self.coordinator.calls)
+        self.assertIn("configured", self._visible_text(invalid).casefold())
+
+    def test_successful_describe_starts_default_folder_plan_without_prompt(self) -> None:
+        window = self._window()
+        with patch(
+            "context_palette.excel_automation_window.filedialog.askdirectory"
+        ) as browse:
+            self._through_describe(window)
+
+        browse.assert_not_called()
+
     def test_requirements_offer_per_input_worksheet_choices_and_replan_exact_selection(self) -> None:
         window = self._window()
         self._start_plan(window)
@@ -376,13 +487,120 @@ class ExcelAutomationWindowTests(unittest.TestCase):
         self.assertEqual(request["arguments"]["expected_plan_fingerprint"], FINGERPRINT)
         self.assertEqual(request["arguments"]["inputs"][0]["path"], str(self.workbook))
 
+    def test_default_unchecked_review_uses_a_collision_safe_suffixed_create(self) -> None:
+        (self.output / "book-Data.csv").write_text("existing", encoding="utf-8")
+        window = self._window()
+        self._start_plan(window)
+        self._complete(
+            window,
+            ready_plan(
+                self.workbook,
+                self.output,
+                output_names=("book-Data(1).csv",),
+            ),
+        )
+
+        self.assertFalse(window.allow_overwrite)
+        self.assertEqual(window.view_state, "ready")
+        visible = self._visible_text(window)
+        self.assertIn("COLLISION SAFE", visible)
+        self.assertIn("1 new CSV file", visible)
+        self.assertIn(f"Creates: {self.output / 'book-Data(1).csv'}", visible)
+        self.assertEqual(window.primary_button.cget("text"), "Create 1 CSV file")
+
+    def test_allow_overwrite_toggle_invalidates_review_and_replans(self) -> None:
+        window = self._window()
+        self._through_ready(window)
+
+        window.overwrite_checkbutton.invoke()
+
+        self.assertTrue(window.allow_overwrite)
+        self.assertEqual(window.view_state, "planning")
+        request = self.coordinator.calls[-1]["request"]
+        self.assertTrue(request["arguments"]["parameters"]["allow_overwrite"])
+        self.assertNotIn("expected_plan_fingerprint", request["arguments"])
+
+    def test_mixed_create_replace_review_executes_and_lists_exact_results(self) -> None:
+        replacement = self.output / "book-Data.csv"
+        replacement.write_text("existing", encoding="utf-8")
+        second = self.output / "second.xlsx"
+        second.write_bytes(b"second workbook placeholder")
+        created = self.output / "second-Data.csv"
+        window = self._window(workbooks=(self.workbook, second))
+        window.allow_overwrite = True
+        self._complete(window, describe_success())
+        plan_request = self.coordinator.calls[-1]["request"]
+        self.assertTrue(plan_request["arguments"]["parameters"]["allow_overwrite"])
+        self._complete(
+            window,
+            ready_plan(
+                (self.workbook, second),
+                self.output,
+                dispositions=("replace", "create"),
+                output_names=(replacement.name, created.name),
+                allow_overwrite=True,
+            ),
+        )
+
+        visible = self._visible_text(window)
+        self.assertIn("1 new CSV file", visible)
+        self.assertIn("1 existing CSV file will be replaced", visible)
+        self.assertIn(f"Replaces: {replacement}", visible)
+        self.assertIn(f"Creates: {created}", visible)
+        self.assertEqual(
+            window.primary_button.cget("text"),
+            "Replace 1 and create 1 CSV files",
+        )
+
+        window.primary_button.invoke()
+        execute_request = self.coordinator.calls[-1]["request"]
+        self.assertTrue(
+            execute_request["arguments"]["parameters"]["allow_overwrite"]
+        )
+        self._complete(
+            window,
+            execution_result(
+                "succeeded",
+                outputs=(str(created),),
+                replacements=(str(replacement),),
+            ),
+        )
+
+        self.assertEqual(window.view_state, "succeeded")
+        result_text = self._visible_text(window)
+        self.assertIn("Files created in this attempt", result_text)
+        self.assertIn(str(created), result_text)
+        self.assertIn("Files replaced in this attempt", result_text)
+        self.assertIn(str(replacement), result_text)
+
+    def test_contradictory_create_and_replace_result_is_unknown(self) -> None:
+        window = self._window()
+        self._through_ready(window)
+        window._execute_reviewed()
+        output = str(self.output / "book-Data.csv")
+
+        self._complete(
+            window,
+            execution_result(
+                "succeeded",
+                outputs=(output,),
+                replacements=(output,),
+            ),
+        )
+
+        self.assertEqual(window.view_state, "execute_unknown")
+        self.assertIn("Automatic retry is disabled", window.status_var.get())
+
     def test_stale_before_effect_offers_only_replan(self) -> None:
         window = self._window()
         self._through_ready(window)
         window._execute_reviewed()
         self._complete(
             window,
-            execution_result("failed_before_effect", code="stale_plan_fingerprint")
+            execution_result(
+                "failed_before_effect",
+                code="conflict.automation_plan_stale",
+            )
         )
 
         self.assertEqual(window.view_state, "failed_before_effect")

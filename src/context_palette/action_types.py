@@ -153,8 +153,8 @@ ACTION_TYPES = {
             "Excel automation",
             "Run one reviewed Python Excel automation through its versioned planning and execution protocol.",
             "Reads exact .xlsx paths from Input / Output after an explicit Run.",
-            "Plans first, shows every create-only CSV effect for review, then executes from one effect-labelled review button.",
-            "The Action is portable; each computer needs a machine-local Python Excel setup. Source workbooks stay unchanged and existing outputs are never overwritten.",
+            "Plans with Python Excel automation 2.0, shows every collision-safe create or attended replacement for review, then executes from one effect-labelled button.",
+            "The Action is portable; each computer needs a machine-local Python Excel setup. Source workbooks stay unchanged. Overwrite is off by default; checked replacements have no recovery backup or batch rollback.",
         ),
         _definition(
             "sequence",

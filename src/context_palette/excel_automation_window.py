@@ -25,6 +25,7 @@ from .excel_automation import (
     build_execute_automation_request,
     build_plan_automation_request,
     csv_invocation,
+    discover_direct_sibling_python_excel_launcher,
     load_excel_automation_settings,
     save_excel_automation_settings,
 )
@@ -39,7 +40,7 @@ _EXECUTE_TIMEOUT_SECONDS = 300.0
 
 
 class ExcelAutomationWindow:
-    """Guide one reviewed, create-only workbook-to-CSV operation."""
+    """Guide one reviewed workbook-to-CSV operation."""
 
     def __init__(
         self,
@@ -74,6 +75,9 @@ class ExcelAutomationWindow:
         self._reviewed_warning_count = 0
         self._predicted_output_folder: Path | None = None
         self._predicted_outputs: tuple[Path, ...] = ()
+        self._predicted_creates: tuple[Path, ...] = ()
+        self._predicted_replacements: tuple[Path, ...] = ()
+        self.allow_overwrite = False
         self._poll_after_id: str | None = None
         self._closed = False
         self.view_state = "starting"
@@ -120,6 +124,7 @@ class ExcelAutomationWindow:
 
         self.primary_button: ttk.Button | None = None
         self.secondary_button: ttk.Button | None = None
+        self.overwrite_checkbutton: ttk.Checkbutton | None = None
         self.worksheet_variables: dict[str, tk.StringVar] = {}
         self._worksheet_requirements_supported = False
         self.review_text: tk.Text | None = None
@@ -169,10 +174,21 @@ class ExcelAutomationWindow:
             self._show_setup(str(exc))
             return
         launcher = settings.launcher_path
-        if launcher is None or not launcher.is_file():
+        if launcher is None:
+            application_root = self.settings_path.parent.parent
+            launcher = discover_direct_sibling_python_excel_launcher(
+                application_root
+            )
+            if launcher is None:
+                self._show_setup(
+                    "Choose the Python Excel machine launcher on this computer. "
+                    "Excel features remain optional."
+                )
+                return
+        elif not launcher.is_file():
             self._show_setup(
-                "Choose the Python Excel machine launcher on this computer. "
-                "Excel features remain optional."
+                "The configured Python Excel launcher is unavailable on this "
+                "computer. Choose its current machine-local launcher."
             )
             return
         self._launcher_path = launcher
@@ -275,7 +291,8 @@ class ExcelAutomationWindow:
                 )
             self._show_unavailable(reason)
             return
-        self._show_output_directory()
+        self._output_directory = self.workbooks[0].parent
+        self._start_plan()
 
     def _show_unavailable(self, message: str) -> None:
         self.view_state = "unavailable"
@@ -304,14 +321,15 @@ class ExcelAutomationWindow:
         self._clear_content()
         ttk.Label(
             self.content,
-            text="Choose where new CSV files will be created",
+            text="Choose where CSV files will be written",
             style="Heading.TLabel",
         ).pack(anchor=tk.W)
         ttk.Label(
             self.content,
             text=(
                 f"{len(self.workbooks)} closed .xlsx workbook(s) will be inspected during planning. "
-                "The output directory must already exist. Existing files will not be overwritten."
+                "The output directory must already exist. By default, an existing name gets "
+                "the next free suffix, such as report(1).csv."
             ),
             wraplength=700,
             justify=tk.LEFT,
@@ -348,12 +366,13 @@ class ExcelAutomationWindow:
             self.workbooks,
             output_directory=self._output_directory,
             worksheets=self._worksheets,
+            allow_overwrite=self.allow_overwrite,
         )
         self._current_invocation = invocation
         self._clear_review_identity()
         self.view_state = "planning"
         self._clear_content()
-        self._show_working("Inspecting workbooks and preparing a create-only plan…")
+        self._show_working("Inspecting workbooks and preparing the exact CSV plan…")
         self._start_call(
             build_plan_automation_request(_request_id(), invocation),
             phase="plan",
@@ -520,6 +539,7 @@ class ExcelAutomationWindow:
             wrap=tk.WORD,
             pady=(6, 8),
         )
+        self._add_overwrite_checkbox(self.content, pady=(0, 8))
         self.primary_button = ttk.Button(
             self.content,
             text="Choose another output folder…",
@@ -545,19 +565,53 @@ class ExcelAutomationWindow:
         self._reviewed_invocation = invocation
         self._reviewed_fingerprint = fingerprint
         self._predicted_output_folder = self._output_directory
-        self._predicted_outputs = tuple(
-            Path(item.output_path) for item in plan.inputs
+        self._predicted_creates = tuple(
+            Path(item.output_path)
+            for item in plan.inputs
+            if item.output_disposition == "create"
+        )
+        self._predicted_replacements = tuple(
+            Path(item.output_path)
+            for item in plan.inputs
+            if item.output_disposition == "replace"
+        )
+        self._predicted_outputs = (
+            self._predicted_creates + self._predicted_replacements
         )
         self.view_state = "ready"
         self._clear_content()
         ttk.Label(self.content, text="Review before export", style="Heading.TLabel").pack(anchor=tk.W)
+        self._add_overwrite_checkbox(self.content, pady=(5, 2))
         ttk.Label(
             self.content,
             text=(
-                "CREATE ONLY · Source workbooks unchanged · Existing outputs never overwritten"
+                "OVERWRITE ALLOWED · Only the exact reviewed existing CSV files will be replaced · "
+                "Sources unchanged"
+                if invocation.allow_overwrite
+                else "COLLISION SAFE · Existing names receive (1), (2), ... suffixes · Sources unchanged"
             ),
             style="Success.TLabel",
-        ).pack(anchor=tk.W, pady=(3, 8))
+            wraplength=700,
+            justify=tk.LEFT,
+        ).pack(anchor=tk.W, pady=(2, 5))
+        if invocation.allow_overwrite:
+            ttk.Label(
+                self.content,
+                text=(
+                    "Replaced CSV files receive no recovery backup or rollback copy."
+                ),
+                style="Muted.TLabel",
+                wraplength=700,
+                justify=tk.LEFT,
+            ).pack(anchor=tk.W, pady=(0, 5))
+        create_count = len(self._predicted_creates)
+        replace_count = len(self._predicted_replacements)
+        effect_summary = _effect_summary(create_count, replace_count)
+        ttk.Label(
+            self.content,
+            text=effect_summary,
+            style="Heading.TLabel",
+        ).pack(anchor=tk.W, pady=(0, 5))
         ttk.Label(
             self.content,
             text=_csv_format_summary(invocation),
@@ -584,7 +638,11 @@ class ExcelAutomationWindow:
                     f"  Worksheet: {item.worksheet}",
                     f"  Columns: {columns}",
                     f"  Rows: {item.rows_to_write}",
-                    f"  Creates: {item.output_path}",
+                    (
+                        f"  Replaces: {item.output_path}"
+                        if item.output_disposition == "replace"
+                        else f"  Creates: {item.output_path}"
+                    ),
                     "",
                 )
             )
@@ -602,10 +660,7 @@ class ExcelAutomationWindow:
         button_row.pack(fill=tk.X, pady=(10, 0))
         self.primary_button = ttk.Button(
             button_row,
-            text=(
-                f"Create {len(plan.inputs)} CSV "
-                f"file{'s' if len(plan.inputs) != 1 else ''}"
-            ),
+            text=_execute_button_label(create_count, replace_count),
             command=self._execute_reviewed,
             style="Accent.TButton",
         )
@@ -618,6 +673,31 @@ class ExcelAutomationWindow:
         self.secondary_button.pack(side=tk.LEFT, padx=(8, 0))
         self._set_status("Review every workbook and output, then explicitly execute the reviewed plan.")
 
+    def _overwrite_choice_changed(self) -> None:
+        """Invalidate the review and ask the engine for the newly selected policy."""
+
+        checkbox = self.overwrite_checkbutton
+        if checkbox is None:
+            return
+        self.allow_overwrite = checkbox.instate(["selected"])
+        self._start_plan()
+
+    def _add_overwrite_checkbox(
+        self,
+        parent: tk.Misc,
+        *,
+        pady: tuple[int, int],
+    ) -> None:
+        self.overwrite_checkbutton = ttk.Checkbutton(
+            parent,
+            text="Allow overwrite",
+            command=self._overwrite_choice_changed,
+        )
+        self.overwrite_checkbutton.state(
+            ["selected"] if self.allow_overwrite else ["!selected"]
+        )
+        self.overwrite_checkbutton.pack(anchor=tk.W, pady=pady)
+
     def _execute_reviewed(self) -> None:
         invocation = self._reviewed_invocation
         fingerprint = self._reviewed_fingerprint
@@ -627,7 +707,7 @@ class ExcelAutomationWindow:
         self.view_state = "executing"
         self._clear_content()
         self._show_working(
-            "Creating the reviewed CSV files… Do not close this window until the result is known."
+            "Writing the reviewed CSV files… Do not close this window until the result is known."
         )
         self._start_call(
             build_execute_automation_request(_request_id(), invocation, fingerprint),
@@ -677,8 +757,10 @@ class ExcelAutomationWindow:
         self._clear_content()
         headings = {
             "succeeded": "CSV export completed",
-            "failed_before_effect": "No CSV files were created",
-            "failed_after_partial_effect": "CSV export stopped after creating some files",
+            "failed_before_effect": "No CSV files were created or replaced",
+            "failed_after_partial_effect": (
+                "CSV export stopped after creating or replacing some files"
+            ),
         }
         ttk.Label(self.content, text=headings[state], style="Heading.TLabel").pack(anchor=tk.W)
         ttk.Label(
@@ -699,6 +781,18 @@ class ExcelAutomationWindow:
                 wrap=tk.NONE,
                 pady=(3, 8),
             )
+        if result.outputs_replaced:
+            ttk.Label(
+                self.content,
+                text="Files replaced in this attempt:",
+                style="Heading.TLabel",
+            ).pack(anchor=tk.W)
+            self._read_only_text(
+                "\n".join(result.outputs_replaced),
+                height=min(12, max(3, len(result.outputs_replaced))),
+                wrap=tk.NONE,
+                pady=(3, 8),
+            )
         if state == "failed_before_effect" and _is_stale(result.code):
             self.primary_button = ttk.Button(
                 self.content,
@@ -716,13 +810,16 @@ class ExcelAutomationWindow:
             self.primary_button.pack(anchor=tk.W)
         if state == "failed_after_partial_effect":
             self._set_status(
-                "Some outputs exist. Automatic retry is disabled; inspect the exact list above.",
+                "Some outputs were created or replaced. Automatic retry is disabled; "
+                "inspect the exact lists above.",
                 error=True,
             )
         elif state == "failed_before_effect":
             self._set_status("No effects started. Re-plan only when the reviewed plan became stale.", error=True)
         else:
-            self._set_status("Export complete. Source workbooks were not changed.")
+            self._set_status(
+                "Export complete. Source workbooks were not changed."
+            )
         self._clear_review_identity()
 
     def _show_unknown(self, call: AutomationCallResult) -> None:
@@ -736,7 +833,8 @@ class ExcelAutomationWindow:
         ttk.Label(
             self.content,
             text=(
-                "Context Palette lost a trustworthy execution result. Some predicted outputs may exist. "
+                "Context Palette lost a trustworthy execution result. Some predicted outputs may have "
+                "been created or replaced. "
                 "Do not retry automatically; inspect the output directory first."
             ),
             wraplength=700,
@@ -883,12 +981,15 @@ class ExcelAutomationWindow:
         invocation: CsvAutomationInvocation,
     ) -> str | None:
         effect = plan.effect
+        expected_policy = (
+            "explicit_replace" if invocation.allow_overwrite else "create_only"
+        )
         if (
             effect is None
             or effect.mutates_inputs
-            or effect.output_policy != "create_only"
+            or effect.output_policy != expected_policy
         ):
-            return "the effect is not create-only and source-preserving"
+            return "the effect policy does not match the reviewed overwrite choice"
         if len(plan.inputs) != len(invocation.inputs):
             return "the returned workbook count changed"
         expected_ids = tuple(item.input_id for item in invocation.inputs)
@@ -899,8 +1000,16 @@ class ExcelAutomationWindow:
             effect.input_files != len(plan.inputs)
             or effect.output_files != len(plan.inputs)
             or effect.rows_to_write != sum(item.rows_to_write for item in plan.inputs)
+            or effect.outputs_to_create
+            != sum(item.output_disposition == "create" for item in plan.inputs)
+            or effect.outputs_to_replace
+            != sum(item.output_disposition == "replace" for item in plan.inputs)
+            or effect.outputs_to_create + effect.outputs_to_replace
+            != effect.output_files
         ):
             return "the returned effect totals are inconsistent"
+        if not invocation.allow_overwrite and effect.outputs_to_replace:
+            return "the plan would replace a CSV while overwrite is disabled"
         output_directory = self._output_directory
         if output_directory is None:
             return "the reviewed output directory is missing"
@@ -932,8 +1041,8 @@ class ExcelAutomationWindow:
             if output_key in seen_outputs:
                 return "the plan returned the same output more than once"
             seen_outputs.add(output_key)
-            if output.exists():
-                return "an output already exists; re-plan after choosing another folder"
+            if returned.output_disposition == "replace" and not invocation.allow_overwrite:
+                return "the plan would replace a CSV while overwrite is disabled"
         return None
 
     def _execution_result_is_consistent(
@@ -946,15 +1055,19 @@ class ExcelAutomationWindow:
             or result.reviewed_plan_fingerprint != fingerprint
             or result.source_mutates_inputs
             or result.workbooks_saved != 0
-            or result.outputs_overwritten != 0
+            or result.outputs_overwritten != len(result.outputs_replaced)
             or (
                 result.state in {"succeeded", "failed_after_partial_effect"}
                 and result.final_plan_fingerprint != fingerprint
             )
         ):
             return False
-        predicted = {
-            os.path.normcase(str(path)): path for path in self._predicted_outputs
+        predicted_creates = {
+            os.path.normcase(str(path)): path for path in self._predicted_creates
+        }
+        predicted_replacements = {
+            os.path.normcase(str(path)): path
+            for path in self._predicted_replacements
         }
         created: set[str] = set()
         for raw in result.outputs_created:
@@ -964,15 +1077,34 @@ class ExcelAutomationWindow:
                 not path.is_absolute()
                 or path.suffix.casefold() != ".csv"
                 or key in created
-                or key not in predicted
+                or key not in predicted_creates
             ):
                 return False
             created.add(key)
+        replaced: set[str] = set()
+        for raw in result.outputs_replaced:
+            path = Path(raw)
+            key = os.path.normcase(str(path))
+            if (
+                not path.is_absolute()
+                or path.suffix.casefold() != ".csv"
+                or key in replaced
+                or key not in predicted_replacements
+            ):
+                return False
+            replaced.add(key)
         if result.state == "succeeded":
-            return created == set(predicted)
+            return (
+                created == set(predicted_creates)
+                and replaced == set(predicted_replacements)
+            )
         if result.state == "failed_before_effect":
-            return not created
-        return bool(created) and created.issubset(predicted)
+            return not created and not replaced
+        return (
+            bool(created or replaced)
+            and created.issubset(predicted_creates)
+            and replaced.issubset(predicted_replacements)
+        )
 
     def _input_label(self, input_id: str) -> str:
         invocation = self._current_invocation
@@ -987,6 +1119,8 @@ class ExcelAutomationWindow:
         self._reviewed_fingerprint = None
         self._reviewed_warning_count = 0
         self._predicted_outputs = ()
+        self._predicted_creates = ()
+        self._predicted_replacements = ()
 
     def _read_only_text(
         self,
@@ -1029,6 +1163,7 @@ class ExcelAutomationWindow:
             child.destroy()
         self.primary_button = None
         self.secondary_button = None
+        self.overwrite_checkbutton = None
         self.review_text = None
         self._worksheet_requirements_supported = False
 
@@ -1069,9 +1204,32 @@ def _csv_format_summary(invocation: CsvAutomationInvocation) -> str:
     )
 
 
+def _effect_summary(create_count: int, replace_count: int) -> str:
+    parts: list[str] = []
+    if create_count:
+        parts.append(
+            f"{create_count} new CSV file{'s' if create_count != 1 else ''}"
+        )
+    if replace_count:
+        parts.append(
+            f"{replace_count} existing CSV file{'s' if replace_count != 1 else ''} "
+            f"will be replaced"
+        )
+    return " · ".join(parts)
+
+
+def _execute_button_label(create_count: int, replace_count: int) -> str:
+    create_label = f"create {create_count}"
+    replace_label = f"Replace {replace_count}"
+    if replace_count and create_count:
+        return f"{replace_label} and {create_label} CSV files"
+    if replace_count:
+        return f"{replace_label} CSV file{'s' if replace_count != 1 else ''}"
+    return f"Create {create_count} CSV file{'s' if create_count != 1 else ''}"
+
+
 def _is_stale(code: str) -> bool:
-    normalized = code.casefold()
-    return "stale" in normalized or "fingerprint" in normalized
+    return code == "conflict.automation_plan_stale"
 
 
 def _open_folder(path: Path) -> None:

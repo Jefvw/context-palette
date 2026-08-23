@@ -695,8 +695,9 @@ areas shrink and retain their scrolling. Divider movement is bounded so
 neither side can be accidentally collapsed. A fresh
 application start leaves the workspace empty. Reopening the resident palette
 can show the current clipboard or captured selection. Actions can read or
-replace it. Its compact heading includes bitmap controls for Capture, Inbox,
-**Create from Input**, **Extract text**, and **Text tools** without consuming label space.
+  replace it. Its compact heading includes bitmap controls for Back, Forward,
+  Capture, Inbox, **Create from Input**, **Extract text**, and **Text tools**
+  without consuming label space.
 
 Numbered Action triggering is deliberately active only for Shift+6–0 while
 Find has focus. Shift+1–5 is retired, and in every other control—including
@@ -712,6 +713,11 @@ The bottom communication line always stays one row high. Hover over it for the c
   **Replace**, **Append**, and **Cancel** choices. The drop path does not read,
   replace, or copy the clipboard.
 - Type or edit text directly.
+- Use the Back and Forward arrows to navigate the last ten meaningful complete
+  Input / Output states from this session. Consecutive typing is kept as one
+  state rather than one entry per character. Going back and then changing the
+  content discards the old forward branch. This history preserves whitespace,
+  is not persisted, and is separate from native Undo/Redo.
 - The right-click command `Clear` empties it.
 - The right-click menu also provides Undo, Redo, Cut, Copy, Paste, Select all, and Copy all.
 - Open `Transform` through the right-click menu or choose **Text tools**.
@@ -743,19 +749,26 @@ The bottom communication line always stays one row high. Hover over it for the c
 - To export Excel workbooks, put one exact absolute `.xlsx` path on each line
   in Input / Output, or drop the workbook paths into Context Palette, then run
   **Export Excel files to CSV**. Context Palette accepts at most 100 closed
-  workbooks per batch. It asks for any required worksheet and output-folder
-  choices, plans in the background, and shows the exact source-to-CSV effects
-  before you approve execution with the effect-labelled **Create CSV files**
-  button; it does not ask again in a generic Yes/No dialog. The export uses all used columns, creates new
-  CSV files only, never overwrites a destination, and never changes a source
-  workbook. Existing CSVs, a changed source, or an invalid reviewed plan stop
-  the request safely.
-- A completed export shows its created files and lets you open the output
-  folder. A pre-effect failure creates nothing. A partial result is reported as
-  partial with only its confirmed files; an interrupted/lost engine is an
+  workbooks per batch. It asks for any required worksheet choices and initially
+  uses the first workbook's folder for CSV output. Choose **Choose another
+  output folder…** in the blocked or reviewed flow to override it. Planning
+  runs in the background and shows the exact source-to-CSV effects before
+  execution. **Allow overwrite** is off by default. In that mode Python Excel
+  keeps existing files and chooses the first free name: `report.csv`,
+  `report(1).csv`, `report(2).csv`, and so on. Turn **Allow overwrite** on to
+  target the exact unsuffixed name; the review then says whether each CSV will
+  be created or replaced. It also shows the create/replace totals and provides
+  one matching button, such as **Replace 1 and create 2 CSV files**. There is no
+  second generic Yes/No dialog. The export uses all used columns and never
+  changes a source workbook. Changing the checkbox or output folder produces a
+  new plan. A stale plan must be planned and reviewed again.
+- A completed export lists created and replaced files separately and lets you
+  open the output folder. A pre-effect failure creates or replaces nothing. A
+  partial result lists only confirmed effects; an interrupted/lost engine is an
   unknown outcome. Do not retry either automatically: inspect the output first.
-  This first integration has no progress display, cancellation, rollback, live
-  Excel support, or Action-sequence support.
+  Replacement publication is atomic per file, but there is no recovery backup
+  or batch rollback. This integration also has no progress display,
+  cancellation, live Excel support, or Action-sequence support.
 - A transform changes the selection, or the complete field when nothing is selected.
 - Every transform result is copied to the clipboard automatically and can be reverted with one Undo.
 - Transform groups provide case and naming styles, whitespace cleanup, literal
@@ -793,11 +806,12 @@ contains `+A`, Edit, and Run/Open; invalid selection commands are disabled
 instead of failing after a click. Work Item-specific New, Inbox, Copy file, and
 project commands live in the filter/tools menu.
 
-The Input / Output header contains Capture, Inbox, Create from Input, Extract
-text, and Text tools. Configure, Help, and More sit below Quick actions. These icon-only
-controls use portable Tk bitmaps rather than font characters. Hover over or
-keyboard-focus any icon to see its complete name and explanation. The generic
-`+A` chooser and the conservative Create from Input route remain separate.
+The Input / Output header contains Back, Forward, Capture, Inbox, Create from
+Input, Extract text, and Text tools. Configure, Help, and More sit below Quick
+actions. These icon-only controls use portable Tk bitmaps rather than font
+characters. Hover over or keyboard-focus any icon to see its complete name and
+explanation. The generic `+A` chooser and the conservative Create from Input
+route remain separate.
 
 ### Run
 
@@ -979,13 +993,25 @@ the target of a shortcut. It never imports shortcut arguments.
 After a useful drop, the palette appears without synchronizing from the
 clipboard. Any stale hotkey-captured selection or destination is discarded so
 it cannot replace or receive the dropped material. Input / Output placement is
-one Undo step. The target remains ready for later drops. Choose its **Hide**
-button to put it away and **More → Show drop target** to restore it.
+one Undo step. The target remembers the last ten successful non-empty drops for
+this session. **Previous** and **Next** navigate a compact description such as
+the path name, web-link host, text length, or mixed item counts. Choose **Show
+details** to expand a read-only preview of exactly what will be sent to Input /
+Output, including shortcut warnings. Very large details say when the preview is
+truncated; **Send again** still uses the complete prepared result. Details
+collapse when the target is hidden or a new drop starts. Changing summaries or
+details keeps all text, navigation controls, and window buttons inside the
+usable area of the monitor containing the movable target. **Send again** sends
+the selected exact normalized result through the same
+Replace/Append/Cancel placement flow without resolving it again or creating a
+duplicate history entry. Errors and empty drops are not retained. Choose its
+**Hide** button to put it away and **More → Show drop target** to restore it.
 
 Dropping does not open or execute anything, save configuration, create an
 Action or Inbox item, write a log containing the dropped value, or modify the
 clipboard. An unreadable `.url` or unresolved `.lnk` remains as its original
-path with a warning. If TkDND cannot load, the target is unavailable but the
+path with a warning. Showing details does not inspect a path, access a web link,
+re-resolve a shortcut, or copy anything. If TkDND cannot load, the target is unavailable but the
 resident launcher and every non-drop feature continue to work.
 
 ### Hide

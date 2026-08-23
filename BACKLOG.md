@@ -7,18 +7,25 @@ This file contains actionable future work. Completed user-visible work belongs i
 - Manually validate the first Python Excel CSV automation vertical slice on a
   second standard-user PC. Cover missing/invalid local engine setup,
   Input/Output and Drop-into exact `.xlsx` intake, the 100-workbook limit,
-  required worksheet/output parameters, asynchronous plan/review/execute,
-  source immutability, create-only collision handling, stale plan, partial
-  commit, unknown process loss, Open output folder, and the absence of desktop
-  Excel, automatic retry, cancellation, progress, and sequence support.
+  direct-sibling discovery, required worksheet parameters, automatic default
+  output and its reviewed override, asynchronous plan/review/execute,
+  source immutability, unchecked `report.csv`/`report(1).csv` collision
+  suffixing, checked unsuffixed create/replace review, exact effect counts and
+  execute-button wording, stale-plan replanning, partial commit, unknown
+  process loss, Open output folder, and the absence of desktop Excel,
+  automatic retry, cancellation, progress, replacement backup/rollback, and
+  sequence support.
 
 - Manually validate the always-on-top drop target on a second standard-user
   Windows PC and at 100%, 125%, and 150% display scaling. Cover Explorer files,
   folders, multiple items, UNC and percent-encoded paths, `.url`, `.lnk`, a
   browser link, OneNote link/text, and a desktop shortcut; verify empty,
   Replace, Append, and Cancel placement, unchanged clipboard content, ordinary
-  palette auto-hide/non-topmost behavior, target Hide/Show, and fallback when
-  TkDND cannot load.
+  palette auto-hide/non-topmost behavior, last-ten Previous/Next/Send-again
+  history, compact selection summaries, bounded on-demand prepared-content
+  details and warnings, collapse on Hide/new drop, target Hide/Show, and
+  fallback when TkDND cannot load. Also exercise
+  the Input / Output Back/Forward history and its branch behavior.
 - Manually verify native Quick-action menu right-click delivery on Windows at
   100%, 125%, and 150%: launcher left-click/Enter/Space browses without
   execution; launcher right-click offers Add/Organize; Action right-click opens

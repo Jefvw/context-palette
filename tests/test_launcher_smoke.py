@@ -40,7 +40,11 @@ from context_palette.contexts import ContextDefinition
 from context_palette.data_catalog import AppDataPaths
 from context_palette.palette_state import PaletteState
 from context_palette.workspace_transforms import WORKSPACE_TRANSFORM_GROUPS
-from context_palette.workspace_panel import OcrPlacementDialog, WorkspacePanel
+from context_palette.workspace_panel import (
+    OcrPlacementDialog,
+    WORKSPACE_HISTORY_LIMIT,
+    WorkspacePanel,
+)
 
 
 @unittest.skipUnless(sys.platform == "win32", "The launcher smoke test requires Windows Tk.")
@@ -84,6 +88,138 @@ class LauncherSmokeTests(unittest.TestCase):
                 "Notes before https://example.com/report after",
             )
             clipboard_getter.assert_not_called()
+        finally:
+            root.destroy()
+
+    def test_workspace_content_history_coalesces_manual_edits_and_branches(self):
+        root = tk.Tk()
+        root.withdraw()
+        host = ttk.Frame(root)
+        host.pack(fill=tk.BOTH, expand=True)
+        tooltips: dict[tk.Widget, str] = {}
+        panel = WorkspacePanel(
+            host,
+            clipboard_getter=lambda: "",
+            clipboard_setter=lambda _value: None,
+            status_setter=lambda _value: None,
+            tooltip_adder=lambda widget, text: tooltips.__setitem__(widget, text),
+        )
+        try:
+            self.assertEqual(str(panel.content_back_button.cget("state")), "disabled")
+            self.assertEqual(
+                str(panel.content_forward_button.cget("state")),
+                "disabled",
+            )
+            self.assertTrue(panel.content_back_button.cget("image"))
+            self.assertTrue(panel.content_forward_button.cget("image"))
+            self.assertTrue(tooltips[panel.content_back_button].startswith("Previous content"))
+            self.assertTrue(tooltips[panel.content_forward_button].startswith("Next content"))
+            root.update_idletasks()
+            workspace_header = panel.frame.winfo_children()[0]
+            self.assertLessEqual(
+                workspace_header.winfo_reqwidth(),
+                MINIMUM_WORKSPACE_WIDTH,
+            )
+
+            panel.text.insert("1.0", "  first")
+            panel.text.insert("end-1c", "\nsecond  ")
+            root.update()
+            manually_edited = "  first\nsecond  "
+            self.assertEqual(panel.raw_text(), manually_edited)
+            self.assertEqual(panel._content_history, [""])
+            self.assertEqual(str(panel.content_back_button.cget("state")), "normal")
+
+            panel.content_back_button.invoke()
+            self.assertEqual(panel.raw_text(), "")
+            self.assertEqual(panel._content_history, ["", manually_edited])
+            self.assertEqual(
+                str(panel.content_forward_button.cget("state")),
+                "normal",
+            )
+            panel.content_forward_button.invoke()
+            self.assertEqual(panel.raw_text(), manually_edited)
+
+            panel.set_text("third")
+            panel.set_text("fourth")
+            panel.content_back_button.invoke()
+            self.assertEqual(panel.raw_text(), "third")
+            panel.text.insert("end-1c", " edited")
+            root.update()
+            self.assertEqual(
+                str(panel.content_forward_button.cget("state")),
+                "disabled",
+            )
+            panel.content_back_button.invoke()
+            self.assertEqual(panel.raw_text(), "third")
+            self.assertNotIn("fourth", panel._content_history)
+            panel.content_forward_button.invoke()
+            self.assertEqual(panel.raw_text(), "third edited")
+        finally:
+            root.destroy()
+
+    def test_workspace_semantic_history_is_bounded_and_keeps_native_undo(self):
+        root = tk.Tk()
+        root.withdraw()
+        host = ttk.Frame(root)
+        host.pack(fill=tk.BOTH, expand=True)
+        panel = WorkspacePanel(
+            host,
+            clipboard_getter=lambda: "",
+            clipboard_setter=lambda _value: None,
+            status_setter=lambda _value: None,
+            tooltip_adder=lambda _widget, _text: None,
+        )
+        try:
+            panel.set_text("first")
+            panel.set_text("second")
+            panel.set_text("second")
+            self.assertEqual(panel._content_history, ["", "first", "second"])
+
+            panel.text.edit_undo()
+            root.update()
+            self.assertEqual(panel.raw_text(), "first")
+            panel.text.edit_redo()
+            root.update()
+            self.assertEqual(panel.raw_text(), "second")
+
+            panel.transform("uppercase", "Uppercased")
+            self.assertEqual(panel.raw_text(), "SECOND")
+            panel.text.edit_undo()
+            root.update()
+            self.assertEqual(panel.raw_text(), "second")
+
+            clipboard_values = iter(
+                ("clipboard replacement", "clipboard synchronization")
+            )
+            panel.clipboard_getter = lambda: next(clipboard_values)
+            panel.replace_with_clipboard()
+            panel.sync_from_clipboard()
+            self.assertEqual(panel.raw_text(), "clipboard synchronization")
+            self.assertEqual(
+                panel._content_history[-2:],
+                ["clipboard replacement", "clipboard synchronization"],
+            )
+            panel.set_text("")
+            self.assertEqual(panel._content_history[-1], "")
+
+            for index in range(WORKSPACE_HISTORY_LIMIT + 3):
+                panel.set_text(f"state {index}")
+            self.assertEqual(len(panel._content_history), WORKSPACE_HISTORY_LIMIT)
+            self.assertEqual(panel._content_history[-1], "state 12")
+            self.assertEqual(str(panel.content_forward_button.cget("state")), "disabled")
+            for _index in range(WORKSPACE_HISTORY_LIMIT - 1):
+                panel.content_back_button.invoke()
+            self.assertEqual(str(panel.content_back_button.cget("state")), "disabled")
+            self.assertEqual(str(panel.content_forward_button.cget("state")), "normal")
+
+            with patch(
+                "context_palette.workspace_panel.WORKSPACE_HISTORY_CHARACTER_LIMIT",
+                12,
+            ):
+                panel.set_text("123456")
+                panel.set_text("abcdef")
+                panel.set_text("current")
+            self.assertEqual(panel._content_history, ["current"])
         finally:
             root.destroy()
 
@@ -188,7 +324,16 @@ class LauncherSmokeTests(unittest.TestCase):
                 panel.raw_text(),
                 "C:\\Dropped\\first.txt\n\nhttps://example.test/second",
             )
+            self.assertEqual(
+                panel._content_history,
+                [
+                    "",
+                    "C:\\Dropped\\first.txt",
+                    "C:\\Dropped\\first.txt\n\nhttps://example.test/second",
+                ],
+            )
             unchanged = panel.raw_text()
+            unchanged_history = list(panel._content_history)
             with patch(
                 "context_palette.workspace_panel.ask_text_placement",
                 return_value=None,
@@ -200,6 +345,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                 )
             self.assertEqual(panel.raw_text(), unchanged)
+            self.assertEqual(panel._content_history, unchanged_history)
             clipboard_getter.assert_not_called()
             clipboard_setter.assert_not_called()
         finally:
@@ -223,12 +369,22 @@ class LauncherSmokeTests(unittest.TestCase):
                 tooltip_adder=lambda _widget, _text: None,
             )
             try:
+                panel.set_text("Earlier workspace text")
                 panel.show_file_preview(preview)
                 root.update_idletasks()
 
                 self.assertTrue(panel.file_preview_frame.winfo_manager())
                 self.assertEqual(panel.raw_text(), "ALPHA\r\n")
                 self.assertIn(str(source), panel.file_preview_path_var.get())
+                panel.content_back_button.invoke()
+                self.assertEqual(panel.raw_text(), "Earlier workspace text")
+                self.assertIsNone(panel.file_preview)
+                self.assertFalse(panel.file_preview_frame.winfo_manager())
+                panel.content_forward_button.invoke()
+                self.assertEqual(panel.raw_text(), "ALPHA\r\n")
+                self.assertIsNone(panel.file_preview)
+
+                panel.show_file_preview(preview)
                 with patch(
                     "context_palette.workspace_panel.messagebox.askyesno",
                     return_value=True,
@@ -241,6 +397,12 @@ class LauncherSmokeTests(unittest.TestCase):
                 panel.set_text("Unrelated workspace text")
                 self.assertIsNone(panel.file_preview)
                 self.assertFalse(panel.file_preview_frame.winfo_manager())
+                panel.content_back_button.invoke()
+                self.assertEqual(panel.raw_text(), "ALPHA\r\n")
+                self.assertIsNone(panel.file_preview)
+                self.assertFalse(panel.file_preview_frame.winfo_manager())
+                panel.content_forward_button.invoke()
+                self.assertEqual(panel.raw_text(), "Unrelated workspace text")
             finally:
                 root.destroy()
 

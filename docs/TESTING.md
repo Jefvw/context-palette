@@ -448,7 +448,22 @@ Perform only when relevant:
   existing text, independently verify Replace, Append, and Cancel. Confirm the
   target remains visible, stale captured selection/destination state never
   wins, the clipboard is byte-for-byte unchanged, and no target opens or runs.
-  Repeat the window/layout checks at 100%, 125%, and 150%. Finally simulate an
+  Make more than ten successful drops and confirm only the newest ten remain;
+  use Previous/Next and confirm the compact path name, web-link host, text
+  length, or mixed counts identify each selection. Expand **Show details** and
+  verify exact normalized values plus `.url`/`.lnk` warnings, wrapped vertical
+  scrolling, a visible truncation notice for large content, and no filesystem,
+  web, clipboard, or execution effect. Confirm Hide/Show and a new drop collapse
+  details while retaining the in-memory list. Use **Send again** to restore an
+  older drop—including content beyond a truncated preview—through the same
+  placement choice. Confirm errors/empty drops are absent. In Input / Output, verify Back/Forward across typed,
+  dropped, OCR, transformed, and clipboard-replaced content; verify a new edit
+  after Back discards the old forward branch while native Undo/Redo still works.
+  Repeat the window/layout checks at 100%, 125%, and 150%; after every summary,
+  Previous/Next change, and details expansion confirm the complete text plus
+  Previous, Next, Send again, Show/Hide details, Hide, and title-bar controls
+  remain inside the current monitor work area. Move the target near every edge
+  and onto a secondary monitor before repeating. Finally simulate an
   unavailable TkDND component and confirm only the drop target is unavailable.
 
 - On a standard-user Windows PC, first start Context Palette with Python Excel
@@ -458,14 +473,25 @@ Perform only when relevant:
   cloned/transferred and bootstrapped Python Excel engine, use disposable
   closed `.xlsx` fixtures. Place exact paths one per Input / Output line and
   repeat from Drop into Context Palette. Confirm the 100-workbook limit,
-  required worksheet/output-folder prompts, asynchronous planning, and an
+  required worksheet prompts, automatic first-workbook-folder output, the
+  reviewed output-folder override, asynchronous planning, and an
   exact Input → Effect review before execution. Export all used columns to a
   new folder; verify sources are byte-for-byte unchanged, every displayed CSV
   exists, and **Open output folder** opens that folder. Verify an existing
-  destination is never overwritten, an edited source produces stale-plan
-  handling, and an injected pre-effect failure, partial-effect failure, and
-  lost process produce distinct honest states. Confirm no automatic retry,
-  cancellation/progress claim, sequence route, or desktop Excel launch.
+  **Allow overwrite** starts unchecked, and `report.csv` remains unchanged
+  while the unchecked plan reviews and creates
+  `report(1).csv`, then `report(2).csv` when both earlier names exist. Turn
+  **Allow overwrite** on and verify the review targets unsuffixed `report.csv`,
+  labels it **Replaces**, shows exact create/replace counts, and uses one
+  effect-labelled button. Confirm a mixed batch can show **Replace 1 and create
+  2 CSV files**. Execute only against disposable outputs; verify created and
+  replaced results are listed separately and sources remain byte-for-byte
+  unchanged. Change a reviewed source or destination and confirm exact
+  stale-plan handling requires a fresh plan and review. Inject a pre-effect
+  failure, partial-effect failure, and lost process and confirm distinct honest
+  states with no automatic retry. Confirm no replacement backup/rollback,
+  cancellation/progress claim, sequence route, Context Palette filename
+  allocation, or desktop Excel launch.
 
 - With the optional OCR component prepared, copy a Snipping Tool bitmap and
   choose **Extract text**. Verify the UI stays responsive, useful text appears

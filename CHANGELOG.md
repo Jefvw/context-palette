@@ -4,16 +4,43 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Upgraded the reviewed Excel CSV Action to Python Excel automation 2.0. The
+  new **Allow overwrite** checkbox is off by default: existing names receive
+  deterministic `(1)`, `(2)`, and later suffixes chosen by the engine. When
+  enabled, the unsuffixed destination is reviewed as an exact create or atomic
+  replacement. The review shows every disposition plus the create/replace
+  counts, and its single button states that exact effect. Stale plans require a
+  fresh review; partial and unknown results list only confirmed effects and are
+  never retried automatically. Source workbooks remain unchanged. Replacements
+  have no recovery backup or batch rollback.
+- Added session-only navigation for recent content. **Drop into Context
+  Palette** remembers the last ten successful drops and can send the selected
+  drop through the existing Replace/Append/Cancel flow again. It identifies
+  each selected drop and can expand a bounded read-only preview of the exact
+  prepared content and shortcut warnings; details collapse on Hide or a new
+  drop and never change the complete resend result. Stable summary width and
+  monitor-aware frame clamping keep all text and buttons visible after content
+  or scaling changes, including on a user-selected monitor. Input / Output
+  adds compact Back/Forward controls for its last ten meaningful whole-content
+  states while keeping native Undo/Redo for detailed editing. Neither history
+  is persisted or copied to the clipboard.
+- Reduced routine Excel-export setup clicks. With no explicit machine setting,
+  Context Palette recognizes only the exact direct-sibling
+  `python-excel\python-excel.bat`; after capability validation it immediately
+  plans into the first workbook's folder. The reviewed flow still lets the user
+  choose another output folder.
 - Removed the redundant Yes/No prompt after reviewing an Excel CSV plan. The
-  effect-labelled **Create CSV files** button on the review is now the single
-  explicit execution confirmation.
+  effect-labelled create/replace button on the review is now the single explicit
+  execution confirmation.
 - Added the first optional Python Excel vertical slice: **Export Excel files to
   CSV** is an ordinary Action available through Actions, Contexts, tags, and
   Quick menus. It accepts exact closed `.xlsx` paths from Input / Output or the
-  drop target, plans asynchronously, collects worksheet/output choices, and
+  drop target, plans asynchronously, collects worksheet choices, starts from
+  an overridable default output folder, and
   requires an exact reviewed Input → Effect plan before execution. It exports
-  all used columns to create-only CSV files without changing sources or
-  overwriting destinations. Stale plans, pre-effect failures, partial commits,
+  all used columns without changing sources. Collision-safe names are the
+  default; attended overwrite is available only through an exact reviewed
+  replacement plan. Stale plans, pre-effect failures, partial commits,
   and unknown process loss are shown distinctly; partial and unknown batches
   are never retried automatically. Python Excel configuration is machine-local
   and optional, so its absence leaves the rest of Context Palette usable.
