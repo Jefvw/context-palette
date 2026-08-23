@@ -1305,6 +1305,49 @@ class ConfigurationDialogTests(unittest.TestCase):
         )
         self.assertEqual(configuration.actions, [active])
 
+    def test_permanent_delete_is_visible_only_for_archived_actions(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        active = Action("active", "Active", "General", "copy_text", "one")
+        archived = Action(
+            "archived",
+            "Archived",
+            "General",
+            "copy_text",
+            "two",
+            state="Archived",
+        )
+        configuration.actions = [active]
+        configuration.stored_actions = [active, archived]
+        configuration.local_action_ids = {"active", "archived"}
+        configuration.action_tree = FakeSelectedActionTree("action-0")
+        configuration.action_detail_title_var = FakeVariable()
+        configuration.action_detail_summary_var = FakeVariable()
+        configuration.action_edit_button = Mock()
+        configuration.action_lifecycle_button = Mock()
+        configuration.delete_action_button = Mock()
+
+        configuration._update_action_controls()
+
+        configuration.delete_action_button.configure.assert_called_with(
+            state=tk.DISABLED
+        )
+        configuration.delete_action_button.pack_forget.assert_called_once_with()
+        configuration.delete_action_button.pack.assert_not_called()
+
+        configuration.action_tree = FakeSelectedActionTree("action-1")
+        configuration.delete_action_button.reset_mock()
+
+        configuration._update_action_controls()
+
+        configuration.delete_action_button.configure.assert_called_with(
+            state=tk.NORMAL
+        )
+        configuration.delete_action_button.pack.assert_called_once_with(
+            side=tk.LEFT,
+            padx=(6, 0),
+        )
+        configuration.delete_action_button.pack_forget.assert_not_called()
+
     def test_archive_confirmation_reports_impact_and_runs_lifecycle_service(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         action = Action("local", "Local action", "General", "copy_text", "one")
@@ -1321,6 +1364,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.palette_path = Path("palette.json")
         configuration.window = FakeWindow()
         configuration.initial_action_id = action.id
+        configuration.action_state_filter_var = FakeVariable("Active")
         configuration.feedback_var = FakeVariable()
         configuration.feedback_label = Mock()
         configuration.on_change = Mock()
@@ -1344,10 +1388,14 @@ class ConfigurationDialogTests(unittest.TestCase):
 
         self.assertIn("3 saved reference(s)", confirmation.call_args.args[1])
         self.assertIn("does not recreate", confirmation.call_args.args[1])
+        self.assertIn("deleted permanently", confirmation.call_args.args[1])
         archive.assert_called_once()
+        self.assertEqual(configuration.action_state_filter_var.value, "Archived")
+        self.assertEqual(configuration.initial_action_id, action.id)
         configuration.on_change.assert_called_once_with()
         configuration._reload.assert_called_once_with()
         self.assertIn("Archived action", configuration.feedback_var.value)
+        self.assertIn("Delete permanently", configuration.feedback_var.value)
 
     def test_restore_switches_to_active_and_does_not_claim_assignments_return(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
@@ -2213,6 +2261,28 @@ class ConfigurationDialogTests(unittest.TestCase):
         self.assertEqual(configuration.feedback_var.value, "unchanged")
         self.assertEqual(error.call_args.args[0], "Quick-action item was not saved")
         self.assertIn("left unchanged", error.call_args.args[1])
+
+    def test_active_action_delete_explains_archive_requirement(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        action = Action("local", "Active Action", "General", "copy_text", "one")
+        configuration.actions = [action]
+        configuration.stored_actions = [action]
+        configuration.action_tree = FakeSelectedActionTree("action-0")
+        configuration.window = FakeWindow()
+
+        with (
+            patch(
+                "context_palette.configuration_window.messagebox.showinfo"
+            ) as information,
+            patch(
+                "context_palette.configuration_window.delete_action_and_references"
+            ) as delete,
+        ):
+            configuration._delete_action()
+
+        self.assertEqual(information.call_args.args[0], "Archive action first")
+        self.assertIn("keeps it selected", information.call_args.args[1])
+        delete.assert_not_called()
 
     def test_cancelling_shared_action_deletion_preserves_action(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)

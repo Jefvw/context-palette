@@ -290,7 +290,9 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    edit afterward. In Configure -> Actions, archive a disposable personal
    Action assigned to a Context, context slot, and configured Quick action.
    Verify the confirmation reports the impact, the Action disappears from
-   every runtime placement, and **Show: Archived** retains it. Restore it and
+   every runtime placement, Configure switches to **Show: Archived**, the same
+   Action remains selected, and **Delete permanently…** becomes visible. Verify
+   that permanent delete is not shown for an Active Action. Restore it and
    verify it returns to normal search without recreating former assignments.
    Archive and permanently delete it. Repeat archive cancellation with a
    disposable Built-in Action and verify the Git/multi-computer warning.

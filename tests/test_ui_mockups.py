@@ -255,6 +255,18 @@ class UiMockupTkTests(unittest.TestCase):
         try:
             self.assertIsInstance(configure, ConfigureMockup)
             self.assertFalse(hasattr(configure, "pins_panel"))
+            self.assertFalse(configure.action_delete_button.winfo_manager())
+        finally:
+            root.destroy()
+
+        root, configure = self.build(MOCKUP_ACTIONS, scenario="archived")
+        try:
+            self.assertIsInstance(configure, ConfigureMockup)
+            self.assertTrue(configure.action_delete_button.winfo_manager())
+            self.assertEqual(
+                str(configure.action_delete_button.cget("state")),
+                str(tk.NORMAL),
+            )
         finally:
             root.destroy()
 

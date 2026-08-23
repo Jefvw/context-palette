@@ -4,6 +4,10 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Clarified the guarded Action-deletion path. Active Actions no longer show a
+  disabled permanent-delete control. After archiving, Configure switches to
+  Archived, keeps the same Action selected, and reveals the enabled **Delete
+  permanently…** command for the required second confirmation.
 - Simplified the main retrieval model around one **Working context** selector
   and one adjacent **Everywhere / This context** boundary. The duplicate
   Context filter, Focus-first grouping, and Focus-items presentation are gone.

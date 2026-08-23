@@ -856,7 +856,6 @@ class ConfigureMockup(MockupView):
             style="Mockup.Danger.TButton",
             command=lambda: self._mock_status("Mockup only: no Action was deleted."),
         )
-        self.action_delete_button.pack(side=tk.LEFT, padx=(6, 0))
         self.critical(
             self.action_search,
             self.action_state,
@@ -1038,12 +1037,19 @@ class ConfigureMockup(MockupView):
 
     def _set_action_commands(self, action: ActionExample | None) -> None:
         state = tk.NORMAL if action is not None else tk.DISABLED
+        archived = action is not None and action.state == "Archived"
         self.action_edit_button.configure(state=state)
         self.action_lifecycle_button.configure(
             state=state,
-            text="Restore..." if action is not None and action.state == "Archived" else "Archive...",
+            text="Restore..." if archived else "Archive...",
         )
-        self.action_delete_button.configure(state=state)
+        self.action_delete_button.configure(
+            state=tk.NORMAL if archived else tk.DISABLED
+        )
+        if archived:
+            self.action_delete_button.pack(side=tk.LEFT, padx=(6, 0))
+        else:
+            self.action_delete_button.pack_forget()
 
     def _mock_lifecycle(self) -> None:
         action = self._selected_action()

@@ -1356,7 +1356,6 @@ class ConfigurationWindow:
             state=tk.DISABLED,
             style="Danger.TButton",
         )
-        self.delete_action_button.pack(side=tk.LEFT, padx=(6, 0))
         selection.bind("<Configure>", self._resize_action_summary, add="+")
 
     def _resize_action_summary(self, event: tk.Event) -> None:
@@ -2510,10 +2509,13 @@ class ConfigurationWindow:
         )
         if hasattr(self, "action_state_help_var"):
             guidance = {
-                "Active": "Active actions appear in the launcher and can be run.",
+                "Active": (
+                    "Active actions appear in the launcher and can be run. "
+                    "Archive one before deleting it permanently."
+                ),
                 "Archived": (
-                    "Archived actions are kept for review or restore and do not "
-                    "appear in the launcher."
+                    "Archived actions do not appear in the launcher. Select one "
+                    "to restore or delete permanently."
                 ),
                 "All": "Archived actions are kept but cannot run until restored.",
             }[state_filter]
@@ -2551,7 +2553,7 @@ class ConfigurationWindow:
             )
             self.action_edit_button.configure(state=tk.DISABLED)
             self.action_lifecycle_button.configure(state=tk.DISABLED)
-            self.delete_action_button.configure(state=tk.DISABLED)
+            self._set_action_delete_available(False)
             return
         archived = action.state == "Archived"
         local = action.id in self.local_action_ids
@@ -2569,9 +2571,16 @@ class ConfigurationWindow:
             text="Restore…" if archived else "Archive…",
             state=tk.NORMAL,
         )
+        self._set_action_delete_available(archived)
+
+    def _set_action_delete_available(self, available: bool) -> None:
         self.delete_action_button.configure(
-            state=tk.NORMAL if archived else tk.DISABLED
+            state=tk.NORMAL if available else tk.DISABLED
         )
+        if available:
+            self.delete_action_button.pack(side=tk.LEFT, padx=(6, 0))
+        else:
+            self.delete_action_button.pack_forget()
 
     def _selected_context_record(
         self,
@@ -2872,8 +2881,9 @@ class ConfigurationWindow:
             "Archive action?",
             f'Archive "{action.title}"?\n\nIt will disappear from normal '
             f"discovery and saved placements. {impact}\n\nThe Action remains "
-            "editable under Show: Archived and can be restored later. Restoring "
-            f"does not recreate removed assignments.{shared_warning}",
+            "under Show: Archived, where it can be restored or deleted "
+            "permanently. Restoring does not recreate removed assignments."
+            f"{shared_warning}",
             icon=messagebox.WARNING,
             parent=self.window,
         ):
@@ -2898,18 +2908,29 @@ class ConfigurationWindow:
             self._reload()
             messagebox.showerror("Action was not archived", str(exc), parent=self.window)
             return
-        self.initial_action_id = None
+        self.action_state_filter_var.set("Archived")
+        self.initial_action_id = action.id
         self.on_change()
         self._reload()
         self.feedback_var.set(
             f"Archived action: {action.title}. Removed "
-            f"{report.references_removed} saved reference(s)."
+            f"{report.references_removed} saved reference(s). "
+            "Delete permanently… is now available."
         )
         self.feedback_label.configure(style="Success.TLabel")
 
     def _delete_action(self) -> None:
         action = self._selected_stored_action()
-        if action is None or action.state != "Archived":
+        if action is None:
+            return
+        if action.state != "Archived":
+            messagebox.showinfo(
+                "Archive action first",
+                "Archive this Action before deleting it permanently. After "
+                "archiving, Context Palette keeps it selected under Show: "
+                "Archived and makes Delete permanently available.",
+                parent=self.window,
+            )
             return
         local = action.id in self.local_action_ids
         blockers = dependent_sequences(

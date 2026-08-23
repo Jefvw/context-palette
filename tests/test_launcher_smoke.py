@@ -564,6 +564,9 @@ class LauncherSmokeTests(unittest.TestCase):
                             button.winfo_rootx() + button.winfo_width(),
                             selection_right,
                         )
+                    self.assertFalse(
+                        configuration.delete_action_button.winfo_manager()
+                    )
                     self.assertGreater(configuration.action_tree.winfo_height(), 70)
                     configuration._update_action_controls()
                     for index, definition in enumerate(CREATABLE_ACTION_TYPES.values()):

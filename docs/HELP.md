@@ -448,8 +448,10 @@ destinations under **Support**:
   to create** contains the educational Action-type catalogue and attended
   document Harvest. Find, lifecycle, and selection commands surround one
   Actions table; Contexts and tags for the selection appear below it. Use
-  **Archive…** to remove an Active Action from runtime, then switch Show to
-  Archived when restoration, editing, or permanent deletion is intended.
+  **Archive…** to remove an Active Action from runtime. Configure then switches
+  to **Show: Archived**, keeps that Action selected, and reveals **Delete
+  permanently…**. The permanent-delete control is hidden for Active Actions so
+  it cannot look available before the required archive step.
   New actions default to **My configuration**; choose **Built-in** only when
   deliberately changing shipped starter data.
 - **+ Action / New Action:** use the visible launcher button, Configure's
@@ -623,9 +625,10 @@ Use **Show** to switch the Actions table between **Active**, **Archived**, and
 Active Action from use without destroying its record. The confirmation reports
 how many saved Context slots, Context memberships, and configured Quick
 actions will be removed; empty Quick-action buttons are cleaned automatically.
-The Archived Action remains searchable and editable in Configure. Restore it
-before assigning a Context because Archived Actions cannot own active saved
-placements.
+After archiving, Configure switches to **Show: Archived**, keeps the same Action
+selected, and reveals **Delete permanently…**. The Archived Action remains
+searchable and editable in Configure. Restore it before assigning a Context
+because Archived Actions cannot own active saved placements.
 
 Select an Archived Action and choose **Restore…** to make the same
 record Active again. Restore does not recreate its former saved placements, so
