@@ -212,6 +212,19 @@
       ]
     },
     {
+      "id": "excel-export-workbooks-to-csv",
+      "title": "Export Excel files to CSV",
+      "type": "excel_automation",
+      "value": "excel.export_workbooks_to_csv",
+      "state": "Active",
+      "tags": [
+        "excel",
+        "csv",
+        "file conversion"
+      ],
+      "description": "Plan and review create-only CSV outputs for exact .xlsx paths from Input / Output, then run the reviewed Python Excel automation."
+    },
+    {
       "id": "developing-uat-sequence",
       "title": "UAT: Run a harmless sequence",
       "description": "Test sequence preview, confirmation, progress, and Stop remaining by dispatching the Context Palette project folder twice with a five-second wait. Windows may reuse one Explorer window.",

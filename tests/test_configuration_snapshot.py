@@ -206,6 +206,10 @@ def write_complete_project(root: Path) -> AppDataPaths:
         paths.work_item_settings_file,
         {"template_path": str(root / "missing" / "template.xlsx")},
     )
+    write_json(
+        paths.excel_automation_settings_file,
+        {"launcher_path": str(root / "python-excel" / "python-excel.bat")},
+    )
     paths.managed_text_action_source_file.write_text(
         "managed private text",
         encoding="utf-8",
@@ -243,6 +247,10 @@ class ConfigurationSnapshotTests(unittest.TestCase):
         self.assertEqual(report.counts["work_item_sources"], 1)
         self.assertEqual(report.counts["work_item_metadata"], 1)
         self.assertEqual(report.counts["work_item_settings"], 1)
+        self.assertEqual(report.counts["excel_automation_configured"], 1)
+        self.assertIsNotNone(
+            report.snapshot.excel_automation_settings.launcher_path
+        )
         self.assertTrue(report.snapshot.managed_text_content_present)
         self.assertFalse(
             {
@@ -266,6 +274,7 @@ class ConfigurationSnapshotTests(unittest.TestCase):
             "work-item-sources",
             "work-item-metadata",
             "work-item-settings",
+            "excel-automation-settings",
             "managed-text-action-source",
         ):
             self.assertIn(asset_id, report.snapshot.loaded_asset_ids)
@@ -315,6 +324,9 @@ class ConfigurationSnapshotTests(unittest.TestCase):
         self.assertEqual(report.snapshot.work_item_sources, ())
         self.assertEqual(dict(report.snapshot.work_item_metadata), {})
         self.assertIsNone(report.snapshot.work_item_settings.template_path)
+        self.assertIsNone(
+            report.snapshot.excel_automation_settings.launcher_path
+        )
         self.assertFalse(report.snapshot.managed_text_content_present)
 
     def test_missing_required_assets_are_errors_with_catalog_provenance(self) -> None:

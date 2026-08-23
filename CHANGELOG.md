@@ -4,6 +4,17 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Added the first optional Python Excel vertical slice: **Export Excel files to
+  CSV** is an ordinary Action available through Actions, Contexts, tags, and
+  Quick menus. It accepts exact closed `.xlsx` paths from Input / Output or the
+  drop target, plans asynchronously, collects worksheet/output choices, and
+  requires an exact reviewed Input → Effect plan before execution. It exports
+  all used columns to create-only CSV files without changing sources or
+  overwriting destinations. Stale plans, pre-effect failures, partial commits,
+  and unknown process loss are shown distinctly; partial and unknown batches
+  are never retried automatically. Python Excel configuration is machine-local
+  and optional, so its absence leaves the rest of Context Palette usable.
+
 - Clarified the guarded Action-deletion path. Active Actions no longer show a
   disabled permanent-delete control. After archiving, Configure switches to
   Archived, keeps the same Action selected, and reveals the enabled **Delete

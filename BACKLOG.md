@@ -4,6 +4,14 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Now
 
+- Manually validate the first Python Excel CSV automation vertical slice on a
+  second standard-user PC. Cover missing/invalid local engine setup,
+  Input/Output and Drop-into exact `.xlsx` intake, the 100-workbook limit,
+  required worksheet/output parameters, asynchronous plan/review/execute,
+  source immutability, create-only collision handling, stale plan, partial
+  commit, unknown process loss, Open output folder, and the absence of desktop
+  Excel, automatic retry, cancellation, progress, and sequence support.
+
 - Manually validate the always-on-top drop target on a second standard-user
   Windows PC and at 100%, 125%, and 150% display scaling. Cover Explorer files,
   folders, multiple items, UNC and percent-encoded paths, `.url`, `.lnk`, a

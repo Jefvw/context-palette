@@ -88,6 +88,11 @@ from .contexts import ContextDefinition, ContextError, load_combined_contexts
 from .data_catalog import AppDataPaths
 from .drop_adapter import DropResult
 from .drop_target_window import DropTargetWindow
+from .excel_automation import (
+    ExcelAutomationInputError,
+    workbook_paths_from_workspace,
+)
+from .excel_automation_window import ExcelAutomationWindow
 from .inbox import InboxError, append_inbox_item, create_clipboard_item, load_inbox_items
 from .inbox_window import ActionCreator, InboxWindow, suggest_url_template
 from .ocr import (
@@ -304,6 +309,9 @@ class LauncherApp:
         self.local_work_item_sources_path = self.data_paths.work_item_sources_file
         self.local_work_item_metadata_path = self.data_paths.work_item_metadata_file
         self.local_work_item_settings_path = self.data_paths.work_item_settings_file
+        self.excel_automation_settings_path = (
+            self.data_paths.excel_automation_settings_file
+        )
         self.work_item_sources: tuple[WorkItemSource, ...] = ()
         self.work_item_metadata: dict[str, WorkItemMetadata] = {}
         self.work_item_index = WorkItemIndex()
@@ -371,6 +379,7 @@ class LauncherApp:
         self.command_surface_columns = 1
         self.configuration_window: ConfigurationWindow | None = None
         self.drop_target_window: DropTargetWindow | None = None
+        self.excel_automation_window: ExcelAutomationWindow | None = None
         self.action_info_full = (
             "Select an Action or Work Item to see what it will do."
         )
@@ -1287,6 +1296,7 @@ class LauncherApp:
         active_operations = (
             self._active_work_item_writes()
             + self._active_configuration_operations()
+            + self._active_excel_automation_operations()
             + ocr_operations
         )
         if active_operations:
@@ -1356,6 +1366,12 @@ class LauncherApp:
         panel = getattr(configuration, "backup_restore_panel", None)
         if exists and panel is not None and panel.busy:
             return ("a configuration backup or restore",)
+        return ()
+
+    def _active_excel_automation_operations(self) -> tuple[str, ...]:
+        workflow = getattr(self, "excel_automation_window", None)
+        if workflow is not None and workflow.busy:
+            return ("an Excel automation",)
         return ()
 
     def _quit_for_restore_recovery_when_safe(self) -> bool:
@@ -3198,6 +3214,7 @@ class LauncherApp:
                 ),
                 opener=self._open_action_target,
                 sequence_runner=self._run_action_sequence,
+                excel_automation_runner=self._run_excel_automation,
             )
             if action.type == "copy_text":
                 message = self._paste_saved_text_if_destination(destination)
@@ -3206,6 +3223,52 @@ class LauncherApp:
             self.status_var.set("Action failed")
             messagebox.showerror("Context Palette", str(exc))
             LOGGER.exception("Action failed: id=%s type=%s", action.id, action.type)
+
+    def _run_excel_automation(self, action: Action) -> str:
+        try:
+            workbooks = workbook_paths_from_workspace(self._workspace_text())
+        except ExcelAutomationInputError as exc:
+            raise ActionError(str(exc)) from exc
+
+        existing = getattr(self, "excel_automation_window", None)
+        if existing is not None:
+            if existing.busy:
+                existing.show()
+                raise ActionError(
+                    "Another Excel automation is still running. Wait for its "
+                    "result before starting a new one."
+                )
+            existing.close()
+
+        workflow = ExcelAutomationWindow(
+            self.root,
+            settings_path=self.excel_automation_settings_path,
+            workbooks=workbooks,
+            status_setter=self.status_var.set,
+            folder_opener=self._open_excel_output_folder,
+            on_close=self._excel_automation_closed,
+        )
+        self.excel_automation_window = workflow
+        return (
+            f"Opened reviewed Excel CSV export for {len(workbooks)} workbook(s)."
+        )
+
+    def _excel_automation_closed(self) -> None:
+        self.excel_automation_window = None
+        self._quit_for_restore_recovery_when_safe()
+
+    def _open_excel_output_folder(self, path: Path) -> None:
+        if not path.is_dir():
+            raise OSError(f"Output folder is unavailable: {path}")
+        open_action_target(
+            Action(
+                id="excel-output-folder",
+                title="Excel output folder",
+                context="General",
+                type="open_folder",
+                value=str(path),
+            )
+        )
 
     def _run_action_sequence(self, action: Action) -> str:
         if getattr(self, "sequence_run_plan", None) is not None:

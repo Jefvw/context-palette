@@ -6,7 +6,8 @@
       "presentation": "nested_menu",
       "primary_action_id": "general-open-python-docs",
       "action_ids": [
-        "general-open-python-docs"
+        "general-open-python-docs",
+        "excel-export-workbooks-to-csv"
       ],
       "items": [
         {

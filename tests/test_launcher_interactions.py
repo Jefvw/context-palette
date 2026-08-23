@@ -471,6 +471,24 @@ class LauncherInteractionTests(unittest.TestCase):
         app._finish_protected_clipboard.assert_not_called()
         app.root.destroy.assert_not_called()
 
+    def test_quit_is_blocked_while_excel_automation_is_running(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.hotkey = Mock()
+        app.instance_server = Mock()
+        app.work_item_file_copy = Mock(running=False)
+        app.work_item_inbox = Mock(running=False)
+        app.excel_automation_window = Mock(busy=True)
+        app.status_var = FakeVariable()
+        app._finish_protected_clipboard = Mock()
+
+        with patch("context_palette.launcher.messagebox.showwarning") as warning:
+            app.quit_app()
+
+        self.assertIn("Excel automation", warning.call_args.args[1])
+        app._finish_protected_clipboard.assert_not_called()
+        app.root.destroy.assert_not_called()
+
     def test_quit_is_blocked_while_protected_clipboard_cleanup_is_pending(self):
         app = LauncherApp.__new__(LauncherApp)
         app.root = Mock()
@@ -1593,6 +1611,92 @@ class LauncherInteractionTests(unittest.TestCase):
 
         self.assertIsNone(app.source_foreground_handle)
         self.assertEqual(app.status_var.value, "Action failed")
+
+    def test_excel_action_opens_attended_workflow_for_exact_workspace_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "one.xlsx"
+            second = root / "two.xlsx"
+            first.write_bytes(b"one")
+            second.write_bytes(b"two")
+            app = LauncherApp.__new__(LauncherApp)
+            app.root = Mock()
+            app.status_var = FakeVariable()
+            app.excel_automation_settings_path = root / "settings.json"
+            app.excel_automation_window = None
+            app._workspace_text = Mock(return_value=f'"{first}"\n{second}')
+            app._open_excel_output_folder = Mock()
+            app._excel_automation_closed = Mock()
+            workflow = Mock(busy=False)
+
+            with patch(
+                "context_palette.launcher.ExcelAutomationWindow",
+                return_value=workflow,
+            ) as window:
+                message = app._run_excel_automation(
+                    Action(
+                        "excel-export",
+                        "Export Excel files to CSV",
+                        "General",
+                        "excel_automation",
+                        "excel.export_workbooks_to_csv",
+                    )
+                )
+
+            self.assertEqual(
+                window.call_args.kwargs["workbooks"],
+                (first.resolve(), second.resolve()),
+            )
+            self.assertEqual(
+                window.call_args.kwargs["settings_path"],
+                app.excel_automation_settings_path,
+            )
+            self.assertIs(app.excel_automation_window, workflow)
+            self.assertIn("2 workbook(s)", message)
+
+    def test_excel_action_rejects_mixed_workspace_without_opening_workflow(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app._workspace_text = Mock(return_value="notes and not a workbook")
+        app.excel_automation_window = None
+
+        with (
+            patch("context_palette.launcher.ExcelAutomationWindow") as window,
+            self.assertRaises(ActionError),
+        ):
+            app._run_excel_automation(
+                Action(
+                    "excel-export",
+                    "Export Excel files to CSV",
+                    "General",
+                    "excel_automation",
+                    "excel.export_workbooks_to_csv",
+                )
+            )
+
+        window.assert_not_called()
+
+    def test_excel_action_lifts_existing_busy_workflow(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app._workspace_text = Mock()
+        existing = Mock(busy=True)
+        app.excel_automation_window = existing
+
+        with patch(
+            "context_palette.launcher.workbook_paths_from_workspace",
+            return_value=(Path("C:/book.xlsx"),),
+        ), self.assertRaises(ActionError):
+            app._run_excel_automation(
+                Action(
+                    "excel-export",
+                    "Export Excel files to CSV",
+                    "General",
+                    "excel_automation",
+                    "excel.export_workbooks_to_csv",
+                )
+            )
+
+        existing.show.assert_called_once_with()
+        existing.close.assert_not_called()
 
     def test_credential_paste_confirms_destination_and_clears_conditionally(self):
         app = LauncherApp.__new__(LauncherApp)

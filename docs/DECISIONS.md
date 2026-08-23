@@ -1,5 +1,35 @@
 # Decisions
 
+## 2026-08-23 - Delegate attended closed-workbook CSV export to Python Excel
+
+**Decision:** Add one optional `excel_automation` Action, **Export Excel files
+to CSV**, backed by a separately bootstrapped Python Excel installation. The
+Palette stores only its machine-local launcher path, accepts up to 100 exact
+closed `.xlsx` paths from Input / Output or Drop into, and performs
+`describe → plan → review → execute` asynchronously. The initial export uses
+all used columns and requires explicit worksheet/output parameters when the
+engine requests them.
+
+**Reason:** Python Excel already provides a reviewed, fingerprint-bound CSV
+protocol that is safer and more useful than an in-process CSV implementation.
+The narrow vertical slice retains Context Palette's familiar Action, Context,
+tag, and Quick-menu discovery without making arbitrary subprocess execution a
+general Action capability.
+
+**Safety boundary:** Outputs are create-only CSV files; source workbooks are
+never mutated and existing destinations are never overwritten. The client
+drains bounded stdout/stderr concurrently and classifies outcomes from the
+structured result envelope, never process exit code alone. It reports stale
+plans, pre-effect failures, exact partial commits, and unknown outcomes after
+process loss honestly. Partial and unknown batches are never retried
+automatically.
+
+**Consequences:** Python Excel must be separately cloned/transferred and
+bootstrapped on every PC; Context Palette setup neither installs nor requires
+it. Missing or failed local setup disables only this Action. There is no
+progress, cancellation, rollback, live-Excel, or sequence protocol yet; one
+subprocess owns each batch and planning is asynchronous.
+
 ## 2026-08-21 - Make retrieval explicit and retire global runtime pins
 
 **Decision:** Use one **Working context** selector and one adjacent

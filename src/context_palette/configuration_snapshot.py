@@ -36,6 +36,11 @@ from .data_catalog import (
     asset_spec_by_id,
 )
 from .inbox import InboxError, InboxItem, load_inbox_items
+from .excel_automation import (
+    ExcelAutomationError,
+    ExcelAutomationSettings,
+    load_excel_automation_settings,
+)
 from .palette_state import PaletteState, load_palette_state
 from .work_item_storage import (
     WorkItemCreationSettings,
@@ -135,6 +140,9 @@ class ConfigurationSnapshot:
     work_item_metadata: Mapping[str, WorkItemMetadata] = field(default_factory=dict)
     work_item_settings: WorkItemCreationSettings = field(
         default_factory=WorkItemCreationSettings
+    )
+    excel_automation_settings: ExcelAutomationSettings = field(
+        default_factory=ExcelAutomationSettings
     )
     managed_text_content_present: bool = False
     loaded_asset_ids: frozenset[str] = frozenset()
@@ -253,6 +261,7 @@ _LOAD_ERRORS = (
     ContextError,
     InboxError,
     WorkItemStorageError,
+    ExcelAutomationError,
     OSError,
     UnicodeError,
 )
@@ -270,6 +279,7 @@ _ASSET_LABELS = {
     "work-item-sources": "Work Item sources",
     "work-item-metadata": "Work Item metadata",
     "work-item-settings": "Work Item settings",
+    "excel-automation-settings": "Excel automation settings",
 }
 
 _LOCAL_TARGET_ACTION_TYPES = frozenset(
@@ -447,6 +457,14 @@ def load_configuration_snapshot(paths: AppDataPaths) -> SnapshotValidationReport
         lambda: load_work_item_creation_settings(paths.work_item_settings_file),
         WorkItemCreationSettings(),
     )
+    excel_automation_settings = builder.load_asset(
+        "excel-automation-settings",
+        paths.excel_automation_settings_file,
+        lambda: load_excel_automation_settings(
+            paths.excel_automation_settings_file
+        ),
+        ExcelAutomationSettings(),
+    )
 
     managed_content_present = paths.managed_text_action_source_file.exists()
     if managed_content_present:
@@ -478,6 +496,7 @@ def load_configuration_snapshot(paths: AppDataPaths) -> SnapshotValidationReport
         work_item_sources=work_item_sources,
         work_item_metadata=work_item_metadata,
         work_item_settings=work_item_settings,
+        excel_automation_settings=excel_automation_settings,
         managed_text_content_present=managed_content_present,
         loaded_asset_ids=frozenset(builder.loaded_asset_ids),
         present_asset_ids=frozenset(builder.present_asset_ids),
@@ -504,6 +523,9 @@ def load_configuration_snapshot(paths: AppDataPaths) -> SnapshotValidationReport
         "work_item_sources": len(snapshot.work_item_sources),
         "work_item_metadata": len(snapshot.work_item_metadata),
         "work_item_settings": int(snapshot.work_item_settings.template_path is not None),
+        "excel_automation_configured": int(
+            snapshot.excel_automation_settings.launcher_path is not None
+        ),
         "managed_text_content": int(snapshot.managed_text_content_present),
     }
     return SnapshotValidationReport(snapshot, tuple(builder.issues), counts)

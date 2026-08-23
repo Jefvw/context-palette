@@ -101,6 +101,10 @@ class AppDataPaths:
         return self.data_directory / "local_work_item_settings.json"
 
     @property
+    def excel_automation_settings_file(self) -> Path:
+        return self.data_directory / "local_excel_automation_settings.json"
+
+    @property
     def managed_text_action_source_file(self) -> Path:
         return self.data_directory / "local_text_action_source.txt"
 
@@ -308,6 +312,15 @@ DATA_ASSET_CATALOG: tuple[DataAssetSpec, ...] = (
         AssetSensitivity.PRIVATE_PATHS,
         BackupPolicy.CORE_CONFIGURATION,
         relative_path=PurePosixPath("data/local_work_item_settings.json"),
+        schema_version=1,
+    ),
+    DataAssetSpec(
+        "excel-automation-settings",
+        AssetOwnership.MACHINE_LOCAL,
+        AssetRequirement.OPTIONAL,
+        AssetSensitivity.PRIVATE_PATHS,
+        BackupPolicy.CORE_CONFIGURATION,
+        relative_path=PurePosixPath("data/local_excel_automation_settings.json"),
         schema_version=1,
     ),
     DataAssetSpec(

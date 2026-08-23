@@ -128,6 +128,20 @@ def build_action_preview(
             details,
             limitations,
         )
+    if action.type == "excel_automation":
+        if not workspace_has_text:
+            return ActionPreview(
+                "needed: exact .xlsx paths in Input / Output",
+                "Run will stop without changes",
+                details,
+                limitations,
+            )
+        return ActionPreview(
+            "exact .xlsx paths from Input / Output",
+            "plan create-only CSV files, show every output for review, then export only after confirmation",
+            details,
+            limitations,
+        )
     if action.type == "sequence":
         try:
             plan = resolve_sequence_steps(
@@ -270,6 +284,8 @@ def _configured_details(action: Action) -> tuple[tuple[str, str], ...]:
         label = "Configured folder"
     elif action.type == "launch_app":
         label = "Configured application"
+    elif action.type == "excel_automation":
+        return (("Automation", "Export Excel files to CSV"),)
     elif action.type == "paste_credential":
         return (("Credential target", action.value),)
     elif action.type == "transform_file_text":

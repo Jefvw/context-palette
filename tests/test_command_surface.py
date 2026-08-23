@@ -270,7 +270,10 @@ class CommandSurfaceTests(unittest.TestCase):
         )
         self.assertEqual(
             command_group_action_ids(groups[0]),
-            ("general-open-python-docs",),
+            (
+                "general-open-python-docs",
+                "excel-export-workbooks-to-csv",
+            ),
         )
         product_systems = groups[0].items[0]
         self.assertEqual(product_systems.primary_action_id, "")

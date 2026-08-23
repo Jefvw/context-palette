@@ -22,7 +22,7 @@ No open-source license has been selected yet. Keep the repository private, or ch
 
    ```powershell
    git status --short
-   git check-ignore data\inbox.json data\local_actions.json data\local_contexts.json data\local_command_surface.json data\local_work_item_sources.json data\local_work_item_metadata.json data\local_work_item_settings.json data\local_text_action_source.txt data\palette.json data\context-palette.log
+   git check-ignore data\inbox.json data\local_actions.json data\local_contexts.json data\local_command_surface.json data\local_work_item_sources.json data\local_work_item_metadata.json data\local_work_item_settings.json data\local_excel_automation_settings.json data\local_text_action_source.txt data\palette.json data\context-palette.log
    ```
 
 3. Review the complete history for previously committed private data before pushing.
@@ -65,6 +65,23 @@ No open-source license has been selected yet. Keep the repository private, or ch
 The development entry point creates or repairs `.venv`, copies safe local-data
 templates when needed, verifies Tkinter, and
 runs the canonical configuration, compilation, and test checks.
+
+### Optional Python Excel CSV automation
+
+The **Export Excel files to CSV** Action has a second, independent local
+component: Python Excel. Context Palette does not install, bundle, or update
+that repository. On each PC, separately clone or otherwise transfer the exact
+Python Excel implementation, bootstrap it according to its own instructions,
+then configure its local launcher path in Context Palette. The path is kept in
+ignored `data/local_excel_automation_settings.json`; do not commit, copy, or
+make it Built-in because the installation location is machine-specific.
+
+If Python Excel is absent, moved, or fails its availability check, ordinary
+Context Palette setup and use remain available; only the CSV Action explains
+how to finish its local setup. Verify the vertical slice on each PC with
+disposable closed `.xlsx` files: plan asynchronously, review exact CSV
+effects, execute once, and inspect any partial or unknown result before trying
+another batch. Administrator rights and desktop Excel are not required.
 
 ## Python environments and dependencies across computers
 

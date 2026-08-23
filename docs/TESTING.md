@@ -451,6 +451,22 @@ Perform only when relevant:
   Repeat the window/layout checks at 100%, 125%, and 150%. Finally simulate an
   unavailable TkDND component and confirm only the drop target is unavailable.
 
+- On a standard-user Windows PC, first start Context Palette with Python Excel
+  absent and then with an invalid configured path. Confirm only the Excel CSV
+  Action is unavailable and ordinary discovery, Input / Output, drop intake,
+  Actions, Contexts, and Quick menus continue to work. With a separately
+  cloned/transferred and bootstrapped Python Excel engine, use disposable
+  closed `.xlsx` fixtures. Place exact paths one per Input / Output line and
+  repeat from Drop into Context Palette. Confirm the 100-workbook limit,
+  required worksheet/output-folder prompts, asynchronous planning, and an
+  exact Input → Effect review before execution. Export all used columns to a
+  new folder; verify sources are byte-for-byte unchanged, every displayed CSV
+  exists, and **Open output folder** opens that folder. Verify an existing
+  destination is never overwritten, an edited source produces stale-plan
+  handling, and an injected pre-effect failure, partial-effect failure, and
+  lost process produce distinct honest states. Confirm no automatic retry,
+  cancellation/progress claim, sequence route, or desktop Excel launch.
+
 - With the optional OCR component prepared, copy a Snipping Tool bitmap and
   choose **Extract text**. Verify the UI stays responsive, useful text appears
   in Input / Output, the original image remains on the clipboard, and Undo

@@ -32,6 +32,9 @@ actions remain editable there but stay outside normal retrieval. See
   links, and text. A successful drop reveals the ordinary non-topmost palette
   and offers the normalized result to Input / Output without changing the
   clipboard.
+- Optionally delegates reviewed closed-workbook CSV exports to a separately
+  bootstrapped Python Excel installation. It plans asynchronously and creates
+  CSV outputs without overwriting destinations or changing source workbooks.
 - Turns one clear website or absolute file, folder, or application path in
   Input / Output into a prefilled, review-before-save Action without probing a
   mapped drive or changing the general Action type chooser.

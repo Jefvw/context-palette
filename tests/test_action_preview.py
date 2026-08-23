@@ -31,6 +31,10 @@ class ActionPreviewTests(unittest.TestCase):
             "open_file": self._action("open_file", "C:/work/report.txt"),
             "open_folder": self._action("open_folder", "C:/work"),
             "launch_app": self._action("launch_app", "C:/Tools/tool.exe"),
+            "excel_automation": self._action(
+                "excel_automation",
+                "excel.export_workbooks_to_csv",
+            ),
             "sequence": Action(
                 id="preview-sequence",
                 title="Preview sequence",

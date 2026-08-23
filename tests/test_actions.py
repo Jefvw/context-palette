@@ -115,6 +115,42 @@ class ActionTests(unittest.TestCase):
             "started",
         )
 
+    def test_excel_automation_requires_the_injected_attended_runner(self):
+        action = Action(
+            "excel",
+            "Export Excel files to CSV",
+            "General",
+            "excel_automation",
+            "excel.export_workbooks_to_csv",
+        )
+
+        with self.assertRaisesRegex(ActionError, "execution is unavailable"):
+            execute_action(action)
+        self.assertEqual(
+            execute_action(
+                action,
+                excel_automation_runner=lambda selected: f"opened:{selected.id}",
+            ),
+            "opened:excel",
+        )
+
+    def test_excel_automation_rejects_hidden_process_configuration(self):
+        with self.assertRaisesRegex(ActionError, "cannot store process arguments"):
+            configured_action(
+                title="Export Excel files",
+                context="General",
+                action_type="excel_automation",
+                value="excel.export_workbooks_to_csv",
+                arguments=("--unsafe",),
+            )
+        with self.assertRaisesRegex(ActionError, "supported Excel automation"):
+            configured_action(
+                title="Unknown Excel automation",
+                context="General",
+                action_type="excel_automation",
+                value="excel.unknown",
+            )
+
     def test_context_membership_validation_canonicalizes_and_rejects_unknown_names(self):
         self.assertEqual(
             validate_context_memberships(

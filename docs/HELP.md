@@ -740,6 +740,21 @@ The bottom communication line always stays one row high. Hover over it for the c
   choice explicitly warns about that change. The insertion is one Undo step.
   No readable text, an unsupported or oversized image, or an OCR failure leaves
   Input / Output unchanged.
+- To export Excel workbooks, put one exact absolute `.xlsx` path on each line
+  in Input / Output, or drop the workbook paths into Context Palette, then run
+  **Export Excel files to CSV**. Context Palette accepts at most 100 closed
+  workbooks per batch. It asks for any required worksheet and output-folder
+  choices, plans in the background, and shows the exact source-to-CSV effects
+  before you approve execution. The export uses all used columns, creates new
+  CSV files only, never overwrites a destination, and never changes a source
+  workbook. Existing CSVs, a changed source, or an invalid reviewed plan stop
+  the request safely.
+- A completed export shows its created files and lets you open the output
+  folder. A pre-effect failure creates nothing. A partial result is reported as
+  partial with only its confirmed files; an interrupted/lost engine is an
+  unknown outcome. Do not retry either automatically: inspect the output first.
+  This first integration has no progress display, cancellation, rollback, live
+  Excel support, or Action-sequence support.
 - A transform changes the selection, or the complete field when nothing is selected.
 - Every transform result is copied to the clipboard automatically and can be reverted with one Undo.
 - Transform groups provide case and naming styles, whitespace cleanup, literal
@@ -1225,6 +1240,8 @@ does not recreate those assignments.
 - `data/local_work_item_sources.json`: ignored machine-local Work Item sources.
 - `data/local_work_item_metadata.json`: ignored personal Work Item tags.
 - `data/local_work_item_settings.json`: ignored generic Excel template path.
+- `data/local_excel_automation_settings.json`: ignored machine-local path to
+  the separately bootstrapped Python Excel engine.
 - `data/local_text_action_source.txt`: ignored default source offered when
   creating a personal text-file transformation.
 - `data/cheatsheets`: reviewed cheat sheets shared through Git.

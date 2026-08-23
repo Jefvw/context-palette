@@ -28,6 +28,7 @@ from .action_sequences import (
     sequence_steps_to_data,
 )
 from .workspace_transforms import WORKSPACE_TRANSFORMS
+from .excel_automation import EXCEL_AUTOMATION_ID
 
 
 ACTIVE_STATE = "Active"
@@ -536,6 +537,13 @@ def configured_action(
         if action_type in {"transform_text", "transform_file_text"}
         else tuple(argument.strip() for argument in arguments if argument.strip())
     )
+    clean_working_directory = working_directory.strip()
+    if action_type == "excel_automation" and (
+        clean_arguments or clean_working_directory
+    ):
+        raise ActionError(
+            "Excel automation Actions cannot store process arguments or a working folder."
+        )
     if action_type == "transform_text":
         validate_text_transform(clean_value, clean_arguments)
     elif action_type == "transform_file_text":
@@ -556,7 +564,7 @@ def configured_action(
         value=clean_value,
         state=ACTIVE_STATE,
         arguments=clean_arguments,
-        working_directory=working_directory.strip() or None,
+        working_directory=clean_working_directory or None,
         technology=technology.strip(),
         task=task.strip(),
         contexts=clean_contexts,
@@ -756,11 +764,17 @@ def execute_action(
     credential_paster: Callable[[Action], str] | None = None,
     opener: Callable[[Action], None] | None = None,
     sequence_runner: Callable[[Action], str] | None = None,
+    excel_automation_runner: Callable[[Action], str] | None = None,
 ) -> str:
     if action.type == "sequence":
         if sequence_runner is None:
             raise ActionError("Action sequence execution is unavailable.")
         return sequence_runner(action)
+    if action.type == "excel_automation":
+        validate_action_value(action.type, action.value)
+        if excel_automation_runner is None:
+            raise ActionError("Excel automation execution is unavailable.")
+        return excel_automation_runner(action)
     if action.type == "paste_credential":
         validate_credential_target(action.value)
         if credential_paster is None:
@@ -999,6 +1013,10 @@ def validate_action_value(
     if action_type == "sequence":
         if clean_value != "sequence-v1":
             raise ActionError("Sequence data uses an unsupported version.")
+        return
+    if action_type == "excel_automation":
+        if clean_value != EXCEL_AUTOMATION_ID:
+            raise ActionError("Choose a supported Excel automation.")
         return
     if not clean_value:
         raise ActionError("The action value cannot be empty.")
@@ -1839,6 +1857,13 @@ def _parse_action(
     working_directory = item.get("working_directory")
     if working_directory is not None and not isinstance(working_directory, str):
         raise ActionError(f"Action #{index} has an invalid working directory.")
+    if action_type == "excel_automation" and (
+        arguments or (working_directory is not None and working_directory.strip())
+    ):
+        raise ActionError(
+            f"Action #{index}: Excel automation Actions cannot contain process "
+            "arguments or a working directory."
+        )
 
     technology = item.get("technology", "")
     task = item.get("task", "")

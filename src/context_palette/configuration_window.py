@@ -117,6 +117,7 @@ ACTION_TYPE_EXAMPLES = {
     "open_file": r"Example: Open %PROJECT_ROOT%\README.md in its associated application.",
     "open_folder": r"Example: Open %PROJECT_ROOT%\docs in File Explorer.",
     "launch_app": r"Example: Start C:\Tools\Example\Example.exe with reviewed arguments.",
+    "excel_automation": "Example: Export exact .xlsx paths from Input / Output to reviewed create-only CSV files.",
     "sequence": "Example: Start an import Action, wait briefly, then open its results folder.",
     "paste_credential": "Example: Paste the Windows or generic credential target oracle-pc17.",
     "build_url_open": "Example: Ask for ABC 123, then copy and open its generated website address.",
@@ -4168,6 +4169,7 @@ class ActionDialog:
             "open_file": "File",
             "open_folder": "Folder",
             "launch_app": "Application",
+            "excel_automation": "Automation",
             "paste_credential": "Credential",
             "transform_file_text": "Text file",
             "transform_list_csv": "Mode",
@@ -4211,6 +4213,10 @@ class ActionDialog:
                 self.value.insert("1.0", "vscode:")
             elif action_type in {"build_url_open", "build_url_selection_open"}:
                 self.value.insert("1.0", "https://example.com/items/{id_url}")
+            elif action_type == "excel_automation":
+                self.value.insert("1.0", "excel.export_workbooks_to_csv")
+            if action_type == "excel_automation":
+                self.value.configure(state=tk.DISABLED)
         if action_type in {"launch_app", "open_windows_target"}:
             self.arguments_text = self._compact_text(
                 form,

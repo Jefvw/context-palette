@@ -1047,6 +1047,43 @@ ordinary Hide remains available. This keeps daemon-backed work from being
 terminated by the application's own Quit control before completion is
 delivered.
 
+### `excel_automation.py`
+
+Provides the optional machine-local boundary to the separately installed
+Python Excel engine. It accepts only exact existing absolute `.xlsx` paths
+from Input / Output or the general drop intake (up to 100 closed workbooks),
+then performs the engine's `describe`, `plan`, and reviewed `execute` protocol
+off the Tk thread. Standard input carries structured requests; stdout and
+stderr are drained concurrently with bounded capture, so a verbose child
+cannot block the Palette process.
+
+`excel_automation` is an ordinary constrained Action type for discovery,
+Contexts, tags, and Quick-action menus, but it is not eligible for sequences
+or the ordinary ShellExecute executor. Planning obtains required worksheet and
+output-folder parameters and presents the engine's exact Input → Effect review.
+Execution receives the reviewed fingerprint rather than a recreated plan. The
+first automation exports all used columns to create-only CSV files: it does not
+mutate sources and it never overwrites an existing destination.
+
+The result envelope, not the child exit code, determines the attended outcome.
+`succeeded`, `failed_before_effect`, `failed_after_partial_effect`, stale-plan,
+and unknown-after-process-loss states have distinct presentation. A partial
+result lists only confirmed created files; partial and unknown outcomes are
+never retried automatically. There is intentionally no progress, cancellation,
+live-Excel, or rollback protocol: one subprocess owns a batch. The configured
+engine path is stored only in ignored `data/local_excel_automation_settings.json`.
+Absence, misconfiguration, or a failed engine leaves every non-Excel feature
+available.
+
+### `excel_automation_window.py`
+
+Owns the attended Tk workflow for the CSV automation without implementing
+workbook behavior. It collects the machine-local launcher and output folder,
+renders any worksheet requirements, presents the exact reviewed plan, and
+enables execution only after explicit confirmation. It also distinguishes
+successful, known no-effect, partial-effect, and unknown outcomes, while the
+workflow-owned coordinator keeps subprocess work off the Tk thread.
+
 ### `single_instance.py`
 
 Resident-process coordination through a localhost socket.
@@ -1319,6 +1356,7 @@ The current allow-list includes:
 - `workspace_template`
 - `ai_prompt`
 - `open_windows_target`
+- `excel_automation`
 
 Action types that cause external effects use constrained implementations.
 `launch_app`, for example, accepts an existing absolute `.exe`, fixed argument
@@ -1344,6 +1382,7 @@ Input / Output workspace <---- Paste / manual edit
         +-- transformation -> replace workspace + copy result
         +-- file-transform preview -> review/edit -> replace source or save as
         +-- URL builder -> prompt or consume workspace -> copy + open URL
+        +-- Excel CSV automation -> describe -> plan -> attended review -> execute
         `-- saved-text action -> clipboard -> fresh captured destination, or manual-paste fallback
 
 Windows Credential Manager -- exact target --> protected clipboard --> captured destination

@@ -111,6 +111,14 @@ EXPECTED_ASSETS = {
         BackupPolicy.CORE_CONFIGURATION,
         1,
     ),
+    "excel-automation-settings": (
+        "data/local_excel_automation_settings.json",
+        AssetOwnership.MACHINE_LOCAL,
+        AssetRequirement.OPTIONAL,
+        AssetSensitivity.PRIVATE_PATHS,
+        BackupPolicy.CORE_CONFIGURATION,
+        1,
+    ),
     "inbox": (
         "data/inbox.json",
         AssetOwnership.CAPTURED_CONTENT,
@@ -212,6 +220,10 @@ class AppDataPathsTests(unittest.TestCase):
         self.assertEqual(
             paths.work_item_settings_file,
             root / "data" / "local_work_item_settings.json",
+        )
+        self.assertEqual(
+            paths.excel_automation_settings_file,
+            root / "data" / "local_excel_automation_settings.json",
         )
         self.assertEqual(
             paths.managed_text_action_source_file,
