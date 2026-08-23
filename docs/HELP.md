@@ -745,7 +745,8 @@ The bottom communication line always stays one row high. Hover over it for the c
   **Export Excel files to CSV**. Context Palette accepts at most 100 closed
   workbooks per batch. It asks for any required worksheet and output-folder
   choices, plans in the background, and shows the exact source-to-CSV effects
-  before you approve execution. The export uses all used columns, creates new
+  before you approve execution with the effect-labelled **Create CSV files**
+  button; it does not ask again in a generic Yes/No dialog. The export uses all used columns, creates new
   CSV files only, never overwrites a destination, and never changes a source
   workbook. Existing CSVs, a changed source, or an invalid reviewed plan stop
   the request safely.

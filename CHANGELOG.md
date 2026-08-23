@@ -4,6 +4,9 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Removed the redundant Yes/No prompt after reviewing an Excel CSV plan. The
+  effect-labelled **Create CSV files** button on the review is now the single
+  explicit execution confirmation.
 - Added the first optional Python Excel vertical slice: **Export Excel files to
   CSV** is an ordinary Action available through Actions, Contexts, tags, and
   Quick menus. It accepts exact closed `.xlsx` paths from Input / Output or the

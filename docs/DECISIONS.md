@@ -8,7 +8,9 @@ Palette stores only its machine-local launcher path, accepts up to 100 exact
 closed `.xlsx` paths from Input / Output or Drop into, and performs
 `describe → plan → review → execute` asynchronously. The initial export uses
 all used columns and requires explicit worksheet/output parameters when the
-engine requests them.
+engine requests them. The effect-labelled button on the reviewed plan is the
+single execution confirmation; a second generic Yes/No dialog would add clicks
+without adding another trust boundary.
 
 **Reason:** Python Excel already provides a reviewed, fingerprint-bound CSV
 protocol that is safer and more useful than an in-process CSV implementation.

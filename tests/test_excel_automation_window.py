@@ -366,15 +366,10 @@ class ExcelAutomationWindowTests(unittest.TestCase):
             window.secondary_button.cget("text"),
             "Choose another output folder…",
         )
+        self.assertEqual(window.primary_button.cget("text"), "Create 1 CSV file")
         self._assert_scrollable_text_present(window, horizontal=True)
 
-        with patch(
-            "context_palette.excel_automation_window.messagebox.askyesno",
-            return_value=True,
-        ) as confirm:
-            window._confirm_execute()
-
-        self.assertIn("1 warning", confirm.call_args.args[1])
+        window.primary_button.invoke()
 
         request = self.coordinator.calls[-1]["request"]
         self.assertEqual(self.coordinator.calls[-1]["phase"], "execute")
@@ -384,11 +379,7 @@ class ExcelAutomationWindowTests(unittest.TestCase):
     def test_stale_before_effect_offers_only_replan(self) -> None:
         window = self._window()
         self._through_ready(window)
-        with patch(
-            "context_palette.excel_automation_window.messagebox.askyesno",
-            return_value=True,
-        ):
-            window._confirm_execute()
+        window._execute_reviewed()
         self._complete(
             window,
             execution_result("failed_before_effect", code="stale_plan_fingerprint")
@@ -422,11 +413,7 @@ class ExcelAutomationWindowTests(unittest.TestCase):
         opened = Mock()
         window = self._window(opener=opened)
         self._through_ready(window)
-        with patch(
-            "context_palette.excel_automation_window.messagebox.askyesno",
-            return_value=True,
-        ):
-            window._confirm_execute()
+        window._execute_reviewed()
         created = str(self.output / "book-Data.csv")
         self._complete(
             window,
@@ -444,11 +431,7 @@ class ExcelAutomationWindowTests(unittest.TestCase):
         opened = Mock()
         window = self._window(opener=opened)
         self._through_ready(window)
-        with patch(
-            "context_palette.excel_automation_window.messagebox.askyesno",
-            return_value=True,
-        ):
-            window._confirm_execute()
+        window._execute_reviewed()
         self._complete(
             window,
             AutomationCallResult(
@@ -477,11 +460,7 @@ class ExcelAutomationWindowTests(unittest.TestCase):
     def test_process_start_failure_is_known_to_have_no_effect(self) -> None:
         window = self._window()
         self._through_ready(window)
-        with patch(
-            "context_palette.excel_automation_window.messagebox.askyesno",
-            return_value=True,
-        ):
-            window._confirm_execute()
+        window._execute_reviewed()
         self._complete(
             window,
             AutomationCallResult(
@@ -504,11 +483,7 @@ class ExcelAutomationWindowTests(unittest.TestCase):
     def test_correlated_engine_rejection_is_known_to_have_no_effect(self) -> None:
         window = self._window()
         self._through_ready(window)
-        with patch(
-            "context_palette.excel_automation_window.messagebox.askyesno",
-            return_value=True,
-        ):
-            window._confirm_execute()
+        window._execute_reviewed()
         self._complete(
             window,
             AutomationCallResult(
@@ -545,11 +520,7 @@ class ExcelAutomationWindowTests(unittest.TestCase):
     def test_execution_with_unreviewed_output_is_treated_as_unknown(self) -> None:
         window = self._window()
         self._through_ready(window)
-        with patch(
-            "context_palette.excel_automation_window.messagebox.askyesno",
-            return_value=True,
-        ):
-            window._confirm_execute()
+        window._execute_reviewed()
         unreviewed = str(self.output / "different.csv")
         self._complete(
             window,
@@ -564,11 +535,7 @@ class ExcelAutomationWindowTests(unittest.TestCase):
             with self.subTest(state=state):
                 window = self._window()
                 self._through_ready(window)
-                with patch(
-                    "context_palette.excel_automation_window.messagebox.askyesno",
-                    return_value=True,
-                ):
-                    window._confirm_execute()
+                window._execute_reviewed()
                 created = str(self.output / "book-Data.csv")
                 self._complete(
                     window,

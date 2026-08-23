@@ -1080,7 +1080,8 @@ available.
 Owns the attended Tk workflow for the CSV automation without implementing
 workbook behavior. It collects the machine-local launcher and output folder,
 renders any worksheet requirements, presents the exact reviewed plan, and
-enables execution only after explicit confirmation. It also distinguishes
+uses one effect-labelled button on that review as the execution confirmation;
+there is no redundant generic Yes/No dialog. It also distinguishes
 successful, known no-effect, partial-effect, and unknown outcomes, while the
 workflow-owned coordinator keeps subprocess work off the Tk thread.
 

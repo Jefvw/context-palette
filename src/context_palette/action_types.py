@@ -153,7 +153,7 @@ ACTION_TYPES = {
             "Excel automation",
             "Run one reviewed Python Excel automation through its versioned planning and execution protocol.",
             "Reads exact .xlsx paths from Input / Output after an explicit Run.",
-            "Plans first, shows every create-only CSV effect for review, then executes only after confirmation.",
+            "Plans first, shows every create-only CSV effect for review, then executes from one effect-labelled review button.",
             "The Action is portable; each computer needs a machine-local Python Excel setup. Source workbooks stay unchanged and existing outputs are never overwritten.",
         ),
         _definition(

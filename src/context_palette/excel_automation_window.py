@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, ttk
 from typing import Callable
 from uuid import uuid4
 
@@ -602,8 +602,11 @@ class ExcelAutomationWindow:
         button_row.pack(fill=tk.X, pady=(10, 0))
         self.primary_button = ttk.Button(
             button_row,
-            text="Execute reviewed export…",
-            command=self._confirm_execute,
+            text=(
+                f"Create {len(plan.inputs)} CSV "
+                f"file{'s' if len(plan.inputs) != 1 else ''}"
+            ),
+            command=self._execute_reviewed,
             style="Accent.TButton",
         )
         self.primary_button.pack(side=tk.LEFT)
@@ -615,28 +618,11 @@ class ExcelAutomationWindow:
         self.secondary_button.pack(side=tk.LEFT, padx=(8, 0))
         self._set_status("Review every workbook and output, then explicitly execute the reviewed plan.")
 
-    def _confirm_execute(self) -> None:
+    def _execute_reviewed(self) -> None:
         invocation = self._reviewed_invocation
         fingerprint = self._reviewed_fingerprint
         if invocation is None or fingerprint is None:
             self._set_status("The reviewed plan is no longer available. Re-plan first.", error=True)
-            return
-        warning_count = self._reviewed_warning_count
-        warning_note = (
-            f"\n\nThe reviewed plan contains {warning_count} "
-            f"warning{'s' if warning_count != 1 else ''}. Review them before continuing."
-            if warning_count
-            else "\n\nThe reviewed plan contains no warnings."
-        )
-        if not messagebox.askyesno(
-            "Execute reviewed Excel export?",
-            (
-                "Create the reviewed CSV files now?\n\n"
-                "Source workbooks will remain unchanged and existing output files will not be overwritten."
-                f"{warning_note}"
-            ),
-            parent=self.window,
-        ):
             return
         self.view_state = "executing"
         self._clear_content()
