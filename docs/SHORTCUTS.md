@@ -21,11 +21,11 @@ Open it from **More → Keyboard shortcuts** in the main palette.
 | `Ctrl+,` | Open Configure. |
 | `Ctrl+Shift+D` | Open Configure on Diagnostics. |
 | `F1` | Open complete Help. |
-| `F5` | Reset transient screen state without changing saved Actions, the Working context, legacy pin data, or context slots. |
+| `F5` | Reset transient screen state to All contexts with General's slots, without changing saved Actions or slot configuration. |
 | `Up`, `Down`, `Page Up`, `Page Down`, `Home`, `End` | Navigate action results. |
 | `Enter` | Run the selected Action, or open the selected Work Item's exact matching `.xlsx` workbook with folder fallback. |
 | `Shift+Enter` with a Work Item selected | Open the selected Work Item folder instead of its workbook. |
-| `Shift` + physical top-row `6`–`0` while Find is focused | Run the corresponding Working-context slot. This uses key positions and works on AZERTY and QWERTY. |
+| `Shift` + physical top-row `6`–`0` while Find is focused | Run the corresponding slot for the selected Context filter; All contexts uses General. This uses key positions and works on AZERTY and QWERTY. |
 | Plain number-row or numpad `1`–`0` | Enter text in Find; do not run an item. |
 
 Only Shift plus a physical top-row key from `6` through `0` executes a slot.

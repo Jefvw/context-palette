@@ -4,6 +4,11 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Centered the main palette and ordinary application windows in the usable
+  area of their current monitor. F9 and Ctrl+Alt+P still use the cursor to
+  choose a monitor, but no longer use it as the window's top-left corner.
+  Control-anchored filter pickers, menus, and tooltips remain attached, and the
+  independently movable drop target keeps its lower-right placement.
 - Upgraded the reviewed Excel CSV Action to Python Excel automation 2.0. The
   new **Allow overwrite** checkbox is off by default: existing names receive
   deterministic `(1)`, `(2)`, and later suffixes chosen by the engine. When
@@ -49,18 +54,26 @@ This project has not published a versioned release. Changes are recorded under *
   disabled permanent-delete control. After archiving, Configure switches to
   Archived, keeps the same Action selected, and reveals the enabled **Delete
   permanently…** command for the required second confirmation.
-- Simplified the main retrieval model around one **Working context** selector
-  and one adjacent **Everywhere / This context** boundary. The duplicate
-  Context filter, Focus-first grouping, and Focus-items presentation are gone.
-  Non-empty Find results now rank exact names, prefixes, visible-name matches,
-  then metadata matches; numbered context slots are not promoted above a real
-  query. Type or project filters retained from another item scope remain
-  visible in the filter chip instead of silently affecting a later return.
+- Simplified the main retrieval model around one transient Context choice in
+  the unified **Filter** menu. The separate Working-context/**Shortcuts** and
+  adjacent **Everywhere / This context** controls, Focus-first grouping, and
+  Focus-items presentation are gone. **All contexts** shows the General-root
+  collection and uses General's slot bank for 6–0; a specific Context limits
+  visible membership and uses its own bank. Context and tag apply to All items,
+  Actions, and Work Items, while Action type and Work Item project remain
+  kind-specific; Find and those non-Context filters narrow results without
+  choosing another bank. Filter state is not persisted, existing Context/slot
+  formats require no migration, and legacy `focus_context` data continues to
+  round-trip only for compatibility. Non-empty Find results rank exact names,
+  prefixes, visible-name matches, then metadata matches; numbered context slots
+  are not promoted above a real query. Type or project filters retained from
+  another item scope remain visible in the filter chip instead of silently
+  affecting a later return.
 - Retired the low-value global Action pins 1–5 from runtime and Configure.
   Legacy pinned IDs still load, survive saves, and round-trip for rollback, but
   they no longer create rows or execute through Shift+1–5. The five genuine
-  Working-context slots 6–0 remain, keep their green presentation, and stay
-  empty rather than borrowing unrelated items.
+  Context slots 6–0 remain, keep their green presentation, and stay empty
+  rather than borrowing unrelated items.
 - Made Quick-action order reflect likely use without changing menu semantics:
   the fixed, non-movable **Standard** menu stays first, personal configured
   menus follow it, then shared configured and automatic Action-bound menus.

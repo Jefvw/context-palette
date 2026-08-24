@@ -28,15 +28,15 @@ from .action_preview import (
 )
 from .action_bound_quick_actions import action_bound_quick_groups
 from .action_discovery_panel import (
+    ALL_CONTEXTS_FILTER_LABEL,
     ActionDiscoveryPanel,
     DISCOVERY_ACTIONS,
     DISCOVERY_ALL,
     DISCOVERY_SCOPES,
     DISCOVERY_WORK_ITEMS,
-    CONTEXT_SCOPE_EVERYWHERE,
-    CONTEXT_SCOPE_THIS,
     FOCUS_GROUP_ROW_TAG,
     FOCUS_SLOT_ROW_TAG,
+    context_filter_display_label,
     slot_row_tag,
 )
 from .action_types import ACTION_TYPES
@@ -79,12 +79,16 @@ from .hotkeys import (
     focus_window,
     send_copy_shortcut,
     send_paste_shortcut,
-    window_position_near_cursor,
     window_title,
 )
 from .help_window import HelpWindow
 from .harvest_window import HarvestWindow
-from .contexts import ContextDefinition, ContextError, load_combined_contexts
+from .contexts import (
+    ContextDefinition,
+    ContextError,
+    load_combined_contexts,
+    load_contexts,
+)
 from .data_catalog import AppDataPaths
 from .drop_adapter import DropResult
 from .drop_target_window import DropTargetWindow
@@ -108,13 +112,16 @@ from .ocr import (
 from .single_instance import SingleInstanceServer
 from .style import COLORS, configure_theme
 from .tooltips import WidgetTooltip
-from .window_geometry import configure_main_window, configure_standard_window
+from .window_geometry import (
+    centered_work_area_position,
+    configure_main_window,
+    configure_standard_window,
+)
 from .palette_state import (
     PaletteState,
     action_slots,
     load_palette_state,
     palette_item_slots,
-    save_palette_state,
     slot_display_number,
 )
 from .palette_items import PaletteItemReference
@@ -296,6 +303,7 @@ class LauncherApp:
         self.local_contexts_path = local_contexts_path
         self.context_definitions: list[ContextDefinition] = []
         self.available_context_names: list[str] = []
+        self.local_context_names: dict[str, str] = {}
         self.command_surface_path = command_surface_path
         self.local_command_surface_path = local_command_surface_path
         self.command_groups: list[CommandGroup] = []
@@ -355,7 +363,7 @@ class LauncherApp:
         self.work_project_filter = None
         self.work_tag_filter = None
         self.item_tag_filter: str | None = None
-        self.context_scope = CONTEXT_SCOPE_EVERYWHERE
+        self.item_context_filter: str | None = None
         self.focus_tree_actions: dict[str, Action] = {}
         self.focus_tree_items: dict[str, PaletteItemReference] = {}
         self.focus_tree_context: str | None = None
@@ -364,13 +372,11 @@ class LauncherApp:
         self.action_type_filter_var = tk.StringVar(value="All types")
         self.action_tag_filter_var = tk.StringVar(value="All tags")
         self.item_tag_filter_var = tk.StringVar(value="All tags")
-        self.context_scope_var = tk.StringVar(value="Everywhere")
+        self.item_context_filter_var = tk.StringVar(value=ALL_CONTEXTS_FILTER_LABEL)
         self.work_project_filter_var = tk.StringVar(value="All project codes")
         self.work_tag_filter_var = tk.StringVar(value="All work tags")
         self.configuration_signature_cache: tuple[tuple[str, int, int], ...] = ()
         self.search_var = tk.StringVar()
-        self.context_var = tk.StringVar(value="General")
-        self.focus_launcher_var = tk.StringVar(value="Context: All contexts")
         self.actions_heading_var = tk.StringVar(value="Actions")
         self.results_count_var = tk.StringVar(value="0 actions")
         self.surface_count_var = tk.StringVar(value="0 buttons")
@@ -520,58 +526,17 @@ class LauncherApp:
             self.main_split_ratio = position / available_width
             self.main_split_customized = True
 
-    def _select_context_scope(self, scope: str) -> None:
-        if scope not in {CONTEXT_SCOPE_EVERYWHERE, CONTEXT_SCOPE_THIS}:
-            raise ValueError(f"Unsupported context scope: {scope}")
-        if (
-            scope == CONTEXT_SCOPE_THIS
-            and self.palette_state.focus_context.casefold() == "general"
-        ):
-            scope = CONTEXT_SCOPE_EVERYWHERE
-            self.status_var.set(
-                "Choose a specific Working context before limiting results to it."
-            )
-        self.context_scope = scope
-        self._sync_context_scope_control()
-        self._refresh_results()
-        self.root.after_idle(self._focus_active_results)
-
-    def _selected_result_context(self) -> str | None:
-        if self.context_scope != CONTEXT_SCOPE_THIS:
-            return None
-        context = self.palette_state.focus_context
-        return None if context.casefold() == "general" else context
-
-    def _sync_context_scope_control(self) -> None:
-        specific = self.palette_state.focus_context.casefold() != "general"
-        if not specific and self.context_scope == CONTEXT_SCOPE_THIS:
-            self.context_scope = CONTEXT_SCOPE_EVERYWHERE
-        self.context_scope_var.set(
-            "This context"
-            if self.context_scope == CONTEXT_SCOPE_THIS
-            else "Everywhere"
-        )
-        panel = getattr(self, "action_discovery_panel", None)
-        if panel is None:
-            return
-        panel.context_scope_picker.configure(
-            style=(
-                "RailAccent.TButton"
-                if self.context_scope == CONTEXT_SCOPE_THIS
-                else "Compact.TButton"
-            )
-        )
-        panel.context_scope_menu.entryconfigure(
-            1,
-            state=tk.NORMAL if specific else tk.DISABLED,
-        )
-
     def _focus_active_results(self) -> None:
         """Move keyboard users into the result view they explicitly opened."""
         if self.results_view != "flat" and self.focus_tree.winfo_manager():
             self.focus_tree.focus_force()
-        elif self.discovery_scope == DISCOVERY_WORK_ITEMS:
+        elif self.results.winfo_manager():
             self.results.focus_force()
+
+    def _schedule_focus_active_results(self) -> None:
+        root = getattr(self, "root", None)
+        if root is not None:
+            root.after_idle(self._focus_active_results)
 
     def _toggle_password_actions(self) -> None:
         if getattr(self, "discovery_scope", DISCOVERY_ACTIONS) != DISCOVERY_ACTIONS:
@@ -598,6 +563,7 @@ class LauncherApp:
             )
         self._sync_filter_indicators()
         self._refresh_results()
+        self._schedule_focus_active_results()
 
     def _select_tag_filter(self, tag: str | None) -> None:
         self._select_item_tag_filter(tag)
@@ -611,6 +577,7 @@ class LauncherApp:
         self.work_tag_filter_var.set(tag or "All work tags")
         self._sync_filter_indicators()
         self._refresh_results()
+        self._schedule_focus_active_results()
 
     def _toggle_work_items(self) -> None:
         self._select_discovery_scope(
@@ -654,16 +621,43 @@ class LauncherApp:
             self.root.after_idle(self._sync_main_split)
         self._sync_filter_indicators()
         self._refresh_results()
-        self.root.after_idle(self._focus_active_results)
+        self._schedule_focus_active_results()
 
     def _select_work_project_filter(self, project_code: str | None) -> None:
         self.work_project_filter = project_code
         self.work_project_filter_var.set(project_code or "All project codes")
         self._sync_filter_indicators()
         self._refresh_results()
+        self._schedule_focus_active_results()
 
     def _select_work_tag_filter(self, tag: str | None) -> None:
         self._select_item_tag_filter(tag)
+
+    def _select_item_context_filter(self, context: str | None) -> None:
+        self.item_context_filter = context
+        self.item_context_filter_var.set(
+            context_filter_display_label(
+                tuple(getattr(self, "available_context_names", ())),
+                context,
+            )
+        )
+        self._sync_slot_context_to_filter()
+        self._sync_filter_indicators()
+        self._refresh_results()
+        self._schedule_focus_active_results()
+
+    def _sync_slot_context_to_filter(self) -> None:
+        """Use the selected Context filter as the in-memory shortcut bank."""
+
+        context = self.item_context_filter or "General"
+        state = self.palette_state
+        self.palette_state = PaletteState(
+            state.pinned_action_ids,
+            context,
+            state.context_slots,
+            state.context_membership_version,
+            state.context_item_slots,
+        )
 
     def _sync_filter_indicators(self) -> None:
         panel = getattr(self, "action_discovery_panel", None)
@@ -690,6 +684,7 @@ class LauncherApp:
                 if scope == DISCOVERY_ACTIONS
                 else None
             ),
+            context_value=getattr(self, "item_context_filter", None),
             tag_value=self.item_tag_filter,
             saved_values=tuple(saved_values),
         )
@@ -703,14 +698,12 @@ class LauncherApp:
             action_type_filter_var=self.action_type_filter_var,
             tag_filter_var=self.item_tag_filter_var,
             project_filter_var=self.work_project_filter_var,
-            focus_launcher_var=self.focus_launcher_var,
-            context_scope_var=self.context_scope_var,
+            context_filter_var=self.item_context_filter_var,
             tooltip_adder=self._tooltip,
             keypress_handler=self._handle_keypress,
             execute_selected=self._execute_selected,
             update_preview=self._update_preview,
             toggle_password_actions=self._toggle_password_actions,
-            select_context_scope=self._select_context_scope,
             select_scope=self._select_discovery_scope,
             create_action=self._show_action_creation,
             create_work_item=self._show_work_item_creation,
@@ -719,6 +712,8 @@ class LauncherApp:
             select_action_type_filter=self._select_action_type_filter,
             select_tag_filter=self._select_item_tag_filter,
             select_project_filter=self._select_work_project_filter,
+            select_context_filter=self._select_item_context_filter,
+            manage_contexts=self._show_focus_configuration,
             capture=self._capture_clipboard,
             show_inbox=self._show_inbox,
             edit_item=self._edit_selected,
@@ -748,9 +743,6 @@ class LauncherApp:
         self.run_button = discovery.run_button
         self.work_item_folder_button = discovery.work_item_folder_button
         self.action_help_button = discovery.help_button
-        self.context_picker = discovery.context_picker
-        self.context_menu = discovery.focus_menu
-        self.context_scope_picker = discovery.context_scope_picker
         self.new_action_button = discovery.new_action_button
         self.configure_button = discovery.configure_button
         self.global_help_button = discovery.help_button
@@ -904,17 +896,19 @@ class LauncherApp:
 
     def _reset_main_window(self, _event: tk.Event | None = None) -> str:
         """Restore the transient main-window state used by a fresh startup."""
-        self.context_scope = CONTEXT_SCOPE_EVERYWHERE
-        self._sync_context_scope_control()
         self.action_type_filter = None
         self.action_tag_filter = None
         self.work_project_filter = None
         self.work_tag_filter = None
         self.item_tag_filter = None
+        self.item_context_filter = None
+        self._sync_slot_context_to_filter()
         self.action_type_filter_var.set("All types")
         self.action_tag_filter_var.set("All tags")
         if hasattr(self, "item_tag_filter_var"):
             self.item_tag_filter_var.set("All tags")
+        if hasattr(self, "item_context_filter_var"):
+            self.item_context_filter_var.set(ALL_CONTEXTS_FILTER_LABEL)
         if hasattr(self, "work_project_filter_var"):
             self.work_project_filter_var.set("All project codes")
         if hasattr(self, "work_tag_filter_var"):
@@ -1125,7 +1119,10 @@ class LauncherApp:
 
     def _audit_tooltips(self) -> None:
         descriptions = {
-            "6–0  WORKING CONTEXT": "The five preferred Actions or Work Items for the current Working context.",
+            "6–0  CONTEXT SLOTS": (
+                "The preferred Actions or Work Items for the selected Context "
+                "filter; All contexts uses General."
+            ),
             "Selection, pasted input, and transformation results": (
                 "This editable text is read by input-aware actions and may contain clipboard or action output."
             ),
@@ -1437,8 +1434,9 @@ class LauncherApp:
             }
             matched_context = contexts.get(requested_context.casefold())
             if matched_context:
-                self.context_var.set(matched_context)
-                self._change_focus_context()
+                self._select_item_context_filter(
+                    None if matched_context.casefold() == "general" else matched_context
+                )
             else:
                 self.status_var.set(f"Unknown integration context: {requested_context}")
         search = request.get("search", "").strip()
@@ -1487,12 +1485,9 @@ class LauncherApp:
             self.root.geometry(f"{fitted_width}x{fitted_height}")
             self.root.update_idletasks()
             width, height = fitted_width, fitted_height
-        x, y = window_position_near_cursor(
-            (values[0], values[1]),
-            (width, height),
-            (values[2], values[3], values[4], values[5]),
-        )
-        self.root.geometry(f"+{x}+{y}")
+        work_area = (values[2], values[3], values[4], values[5])
+        x, y = centered_work_area_position((width, height), work_area)
+        self.root.geometry(f"{x:+d}{y:+d}")
 
     def _load_actions(self) -> None:
         try:
@@ -2372,15 +2367,29 @@ class LauncherApp:
 
     def _load_contexts(self) -> None:
         try:
-            self.context_definitions = load_combined_contexts(
+            loaded_contexts = load_combined_contexts(
                 self.contexts_path,
                 self.local_contexts_path,
             )
+            local_contexts = (
+                load_contexts(self.local_contexts_path)
+                if self.local_contexts_path.exists()
+                else []
+            )
+            self.context_definitions = loaded_contexts
+            self.local_context_names = {
+                context.name.casefold(): context.name
+                for context in local_contexts
+            }
             self.actions = actions_with_canonical_contexts(
                 self.actions,
                 self.context_definitions,
             )
         except ContextError as exc:
+            self.actions = actions_with_canonical_contexts(
+                self.actions,
+                self.context_definitions,
+            )
             self.status_var.set(
                 f"Contexts could not be loaded; kept {len(self.context_definitions)} previous context(s)."
             )
@@ -2391,16 +2400,23 @@ class LauncherApp:
             )
             LOGGER.exception("Context configuration failed to load")
 
+    def _active_authoring_context(self) -> str:
+        """Return a Context that can own a newly created personal Action."""
+
+        active = self.palette_state.focus_context
+        local_names = getattr(self, "local_context_names", {})
+        return local_names.get(active.casefold(), "General")
+
     def _load_palette_state(self, *, render: bool = True) -> None:
         try:
             loaded_state = load_palette_state(self.palette_path)
         except ActionError as exc:
             self.status_var.set(
-                "Palette settings could not be loaded; kept previous Working context and slots."
+                "Palette settings could not be loaded; kept the current Context filter and slots."
             )
             messagebox.showerror(
                 "Palette settings could not be loaded",
-                f"{exc}\n\nThe previous Working context and context slots remain active.",
+                f"{exc}\n\nThe current Context filter and shortcut slots remain active.",
                 parent=self.root,
             )
             LOGGER.exception("Palette configuration failed to load")
@@ -2413,72 +2429,31 @@ class LauncherApp:
         )
         self.palette_state = resolved.palette_state
         self.available_context_names = list(resolved.available_names)
-        self.context_var.set(self.palette_state.focus_context)
-        self._refresh_focus_controls()
+        specific_contexts = {
+            name.casefold(): name
+            for name in self.available_context_names
+            if name.casefold() != "general"
+        }
+        if hasattr(self, "action_discovery_panel"):
+            self.action_discovery_panel.set_contexts(
+                tuple(self.available_context_names)
+            )
+        selected_filter = getattr(self, "item_context_filter", None)
+        if selected_filter is not None:
+            canonical = specific_contexts.get(selected_filter.casefold())
+            self.item_context_filter = canonical
+            filter_var = getattr(self, "item_context_filter_var", None)
+            if filter_var is not None:
+                filter_var.set(
+                    context_filter_display_label(
+                        tuple(self.available_context_names),
+                        canonical,
+                    )
+                )
+        self._sync_slot_context_to_filter()
+        self._sync_filter_indicators()
         if render:
             self._render_command_surface()
-
-    def _refresh_focus_controls(self) -> None:
-        context = self.context_var.get().strip() or "General"
-        self.focus_launcher_var.set(
-            "Context: All contexts"
-            if context.casefold() == "general"
-            else f"Context: {context}"
-        )
-        self.context_menu.delete(0, tk.END)
-        for name in self.available_context_names:
-            self.context_menu.add_radiobutton(
-                label="All contexts" if name.casefold() == "general" else name,
-                variable=self.context_var,
-                value=name,
-                command=self._change_focus_context,
-            )
-        if self.available_context_names:
-            self.context_menu.add_separator()
-        self.context_menu.add_command(
-            label="Manage contexts…",
-            command=self._show_focus_configuration,
-        )
-        self._sync_context_scope_control()
-
-    def _change_focus_context(self) -> None:
-        context = self.context_var.get().strip() or "General"
-        previous_state = self.palette_state
-        updated_state = PaletteState(
-            self.palette_state.pinned_action_ids,
-            context,
-            self.palette_state.context_slots,
-            self.palette_state.context_membership_version,
-            self.palette_state.context_item_slots,
-        )
-        try:
-            save_palette_state(self.palette_path, updated_state)
-        except OSError as exc:
-            self.context_var.set(previous_state.focus_context)
-            if hasattr(self, "context_menu"):
-                self._refresh_focus_controls()
-            self.status_var.set("Working context was not changed because it could not be saved.")
-            messagebox.showerror(
-                "Context Palette",
-                f"Could not save the Working context.\n\n{exc}",
-            )
-            return
-        self.palette_state = updated_state
-        if hasattr(self, "context_menu"):
-            self._refresh_focus_controls()
-        self.configuration_signature_cache = self._configuration_signature()
-        self._refresh_results()
-        self.status_var.set(
-            "Searching all contexts."
-            if context.casefold() == "general"
-            else f"Working context: {context}"
-        )
-        definition = next(
-            (item for item in self.context_definitions if item.name.casefold() == context.casefold()),
-            None,
-        )
-        if definition and definition.description:
-            self.status_var.set(f"{context}: {definition.description}")
 
     def _refresh_results(self) -> None:
         started_at = time.perf_counter()
@@ -2506,7 +2481,7 @@ class LauncherApp:
             return
         self._show_flat_results()
         self.filtered_actions = search_actions(self.actions, self.search_var.get())
-        selected_context = self._selected_result_context()
+        selected_context = self.item_context_filter
         if selected_context is not None:
             self.filtered_actions = [
                 action
@@ -2581,19 +2556,40 @@ class LauncherApp:
             self.results.activate(0)
         count = len(self.filtered_actions)
         self.results_count_var.set(f"{count} action" if count == 1 else f"{count} actions")
+        type_label = (
+            ACTION_TYPES[self.action_type_filter].display_label
+            if self.action_type_filter is not None
+            else None
+        )
+        filter_descriptions: list[str] = []
+        filter_status: list[str] = []
+        if selected_context is not None:
+            filter_descriptions.append(f'Context “{selected_context}”')
+            filter_status.append(f"context: {selected_context}")
+        if type_label is not None:
+            filter_descriptions.append(f'type “{type_label}”')
+            filter_status.append(f"type: {type_label}")
+        if self.item_tag_filter is not None:
+            filter_descriptions.append(f'tag “{self.item_tag_filter}”')
+            filter_status.append(f"tag: {self.item_tag_filter}")
         if not self.displayed_actions:
             query = self.search_var.get().strip()
-            if (
-                self.action_type_filter is not None
-                and self.item_tag_filter is not None
-            ):
-                type_label = ACTION_TYPES[self.action_type_filter].display_label
+            if len(filter_descriptions) > 1:
+                filter_summary = " · ".join(filter_descriptions)
                 empty_message = (
-                    f'No {type_label} actions tagged “{self.item_tag_filter}” '
-                    f'match “{query}”.\nClear Find or choose another filter.'
+                    f'No actions match Find “{query}” with the active filters:\n'
+                    f"{filter_summary}.\nClear Find or change a filter."
                     if query
-                    else f'No {type_label} actions use the tag '
-                    f'“{self.item_tag_filter}”.\nChoose another type or tag.'
+                    else "No actions match the active filters:\n"
+                    f"{filter_summary}.\nChange or clear one filter."
+                )
+            elif selected_context is not None:
+                empty_message = (
+                    f'No actions in Context “{selected_context}” match “{query}”.\n'
+                    "Clear Find or choose another filter."
+                    if query
+                    else f'No actions belong to Context “{selected_context}”.\n'
+                    "Choose another Context filter or add members in Configure."
                 )
             elif self.item_tag_filter is not None:
                 empty_message = (
@@ -2604,7 +2600,7 @@ class LauncherApp:
                     "Choose another tag or add it in Configure."
                 )
             elif self.action_type_filter is not None:
-                type_label = ACTION_TYPES[self.action_type_filter].display_label
+                assert type_label is not None
                 empty_message = (
                     f'No {type_label} actions match “{query}”.\n'
                     "Clear Find or choose another type."
@@ -2623,45 +2619,18 @@ class LauncherApp:
                 foreground=COLORS["muted_text"],
                 background=COLORS["surface"],
             )
-            if (
-                self.action_type_filter is not None
-                and self.item_tag_filter is not None
-            ):
-                type_label = ACTION_TYPES[self.action_type_filter].display_label
+            if filter_status:
                 self.status_var.set(
-                    f"No matching actions · type: {type_label} · "
-                    f"tag: {self.item_tag_filter}"
-                )
-            elif self.item_tag_filter is not None:
-                self.status_var.set(
-                    f"No matching action tagged {self.item_tag_filter}."
-                )
-            elif self.action_type_filter is not None:
-                type_label = ACTION_TYPES[self.action_type_filter].display_label
-                self.status_var.set(
-                    f"No matching {type_label} action. Clear Find or choose another type."
+                    "No matching actions · " + " · ".join(filter_status)
                 )
             else:
                 self.status_var.set("No matching action. Clear Find or create one in Configure.")
         else:
-            if (
-                self.action_type_filter is not None
-                and self.item_tag_filter is not None
-            ):
-                type_label = ACTION_TYPES[self.action_type_filter].display_label
+            if filter_status:
                 self.status_var.set(
                     f"{count} action{'s' if count != 1 else ''} · "
-                    f"type: {type_label} · tag: {self.item_tag_filter}"
+                    + " · ".join(filter_status)
                 )
-            elif self.item_tag_filter is not None:
-                self.status_var.set(
-                    f"{count} action{'s' if count != 1 else ''} tagged "
-                    f"{self.item_tag_filter}"
-                )
-            elif self.action_type_filter is not None:
-                type_label = ACTION_TYPES[self.action_type_filter].display_label
-                label = f"{type_label} action" if count == 1 else f"{type_label} actions"
-                self.status_var.set(f"{count} {label}")
             else:
                 self.status_var.set(
                     f"{count} matches · context slots 6–0: {self.palette_state.focus_context}"
@@ -2710,7 +2679,7 @@ class LauncherApp:
         self.actions_heading_var.set("All items")
         query = self.search_var.get()
         actions = search_actions(self.actions, query)
-        selected_context = self._selected_result_context()
+        selected_context = self.item_context_filter
         if selected_context is not None:
             actions = [
                 action
@@ -2934,7 +2903,7 @@ class LauncherApp:
         self.displayed_actions = []
         self.displayed_slots = []
         self.displayed_action_rows = []
-        selected_context = self._selected_result_context()
+        selected_context = self.item_context_filter
         query = self.search_var.get()
         self.displayed_work_items = [
             item
@@ -2989,6 +2958,8 @@ class LauncherApp:
             else:
                 message = "No Work Items match Find and the selected filters."
                 details: list[str] = []
+                if selected_context is not None:
+                    details.append(f"context: {selected_context}")
                 if self.work_project_filter is not None:
                     details.append(f"project: {self.work_project_filter}")
                 if self.item_tag_filter is not None:
@@ -4049,8 +4020,8 @@ class LauncherApp:
             self.root,
             items,
             self.actions,
-            self.palette_state.focus_context,
-            self.available_context_names,
+            self._active_authoring_context(),
+            list(self.local_context_names.values()),
             self.local_actions_path,
             self.inbox_path,
             self._reload_after_external_action_change,
@@ -4063,8 +4034,8 @@ class LauncherApp:
         HarvestWindow(
             self.root,
             actions=self.actions,
-            context_names=self.available_context_names,
-            focus_context=self.palette_state.focus_context,
+            context_names=list(self.local_context_names.values()),
+            focus_context=self._active_authoring_context(),
             actions_path=self.local_actions_path,
             shared_contexts_path=self.contexts_path,
             local_contexts_path=self.local_contexts_path,
@@ -4114,6 +4085,7 @@ class LauncherApp:
                 exists = False
             if exists:
                 existing.show(
+                    focus_context=self.palette_state.focus_context,
                     initial_tab=initial_tab,
                     initial_action_id=initial_action_id,
                     initial_work_item_key=initial_work_item_key,

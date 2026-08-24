@@ -93,6 +93,28 @@ class InboxWindowTests(unittest.TestCase):
         window.on_change.assert_not_called()
         self.assertIn("locked", error.call_args.args[1])
 
+    def test_builtin_suggestion_is_not_prefilled_for_a_personal_action(self) -> None:
+        item = InboxItem(
+            ITEM.id,
+            ITEM.title,
+            ITEM.content,
+            ITEM.source,
+            ITEM.created_at,
+            suggested_context="Built-in project",
+        )
+        window = self._window()
+        window._selected_item.return_value = item
+        window.actions = []
+        window.focus_context = "General"
+        window.context_names = ("Personal review",)
+
+        with patch("context_palette.inbox_window.ActionCreator") as creator:
+            window._convert_selected()
+
+        safe_item = creator.call_args.args[1]
+        self.assertEqual(safe_item.suggested_context, "")
+        self.assertEqual(creator.call_args.args[3], "General")
+
 
 @unittest.skipUnless(sys.platform == "win32", "The Inbox UI requires Windows Tk.")
 class InboxWindowSmokeTests(unittest.TestCase):

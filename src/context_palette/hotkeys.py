@@ -53,20 +53,6 @@ def cursor_location() -> tuple[int, int, int, int, int, int]:
     )
 
 
-def window_position_near_cursor(
-    cursor: tuple[int, int],
-    window_size: tuple[int, int],
-    work_area: tuple[int, int, int, int],
-) -> tuple[int, int]:
-    """Use the cursor as top-left anchor, clamped inside its monitor."""
-    cursor_x, cursor_y = cursor
-    width, height = window_size
-    left, top, right, bottom = work_area
-    x = max(left, min(cursor_x, right - width))
-    y = max(top, min(cursor_y, bottom - height))
-    return x, y
-
-
 def send_copy_shortcut() -> None:
     """Ask the foreground application to copy its current selection."""
     user32 = ctypes.windll.user32

@@ -14,9 +14,9 @@ Context Palette is a portable Windows application that organizes reusable work a
 
 The intended experience has two equally important modes:
 
-- **Use:** choose a Working context and an explicit Everywhere/This-context
-  boundary, find an Action or Work Item, understand its effect, and invoke it
-  quickly.
+- **Use:** choose one explicit Context filter for both membership and
+  predictable shortcuts, narrow further with tag, type, or project, find an
+  Action or Work Item, understand its effect, and invoke it quickly.
 - **Build:** capture or drop useful material during real work, confirm a
   constrained action, and edit it directly whenever the workflow changes.
 
@@ -37,9 +37,9 @@ The long-term context model has four dimensions:
 | Capabilities | Preferred actions and transformations | Implemented at a basic level |
 | Activation | Visible bundle of reviewed applications, folders, files, URLs, and references | Proposed |
 
-One context is the explicit Working context. Supporting contexts may contribute
-knowledge or ranking in the future, but they must not make action retrieval
-unpredictable or switch the Working context silently.
+One transient Context filter is explicit at a time. Supporting contexts may
+contribute knowledge or ranking in the future, but they must not make action
+retrieval unpredictable or switch that filter silently.
 
 Every Action and available Work Item is visible through the General root.
 Specific Context membership is owned by the user's Context definitions, so each
@@ -48,12 +48,15 @@ without editing shipped Action records or external folders. Free-form tags
 provide quick cross-context discovery without turning classification into a
 fixed hierarchy.
 
-The Working context supplies only its genuine shortcuts in slots 6–0 while Find
-is empty. **Everywhere** retains the General root as the complete collection;
-**This context** deliberately restricts retrieval to canonical members. A
+The Context filter chooses both visible canonical membership and the contextual
+shortcut bank for slots 6–0. **All contexts** exposes the complete General-root
+collection and uses General's bank; a specific Context uses its own membership
+and bank. Tag applies across mixed, Action-only, and Work Item-only views;
+Action type and Work Item project remain kind-specific. Find and these
+non-Context filters may narrow visible results but never choose another bank. A
 non-empty Find query suppresses shortcut promotion and uses an explicit,
-deterministic relevance order. Context Palette never switches either the
-Working context or retrieval boundary silently.
+deterministic relevance order. Context Palette never switches the Context
+filter silently.
 
 ## Explicit effects
 
@@ -111,7 +114,8 @@ permanently only after confirmation.
 ## Product principles
 
 1. **Fast first:** repeated use must feel immediate.
-2. **Contextual, not hidden:** an explicit Working context and retrieval boundary improve relevance without silent automation.
+2. **Contextual, not hidden:** one explicit Context filter supplies membership
+   and shortcuts, while visible secondary filters refine results without silent automation.
 3. **Explicit effects:** powerful Windows targets remain visible and
    user-configured; the app does not invent or parse a compound command language.
 4. **Local ownership:** ordinary user organization lives in My configuration
@@ -133,7 +137,7 @@ The product succeeds when a user can:
 - retrieve a repeated action in seconds;
 - understand what it will read and do;
 - add a useful personal action without managing technical IDs;
-- keep stable muscle-memory actions while changing work focus;
+- keep stable muscle-memory actions while changing the visible Context;
 - capture improvements during real work without interrupting the task;
 - transfer reviewed portable configuration without leaking personal runtime data;
 - maintain the system as the number of contexts and actions grows.

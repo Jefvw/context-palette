@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -209,11 +210,14 @@ class InboxWindow:
         if item is None:
             return
 
+        safe_item = self._item_with_personal_suggestion(item)
+        initial_context = safe_item.suggested_context or self.focus_context
+
         ActionCreator(
             self.window,
-            item,
+            safe_item,
             self.actions,
-            item.suggested_context or self.focus_context,
+            initial_context,
             self.context_names,
             self._save_created_action,
         )
@@ -222,18 +226,21 @@ class InboxWindow:
         item = self._selected_item()
         if item is None:
             return
-        contexts = {
-            context
-            for action in self.actions
-            for context in action.effective_contexts
-        }
-        contexts.update((self.focus_context, item.suggested_context, "General"))
+        safe_item = self._item_with_personal_suggestion(item)
+        contexts = {*self.context_names, self.focus_context, "General"}
         AIGuidanceWindow(
             self.window,
-            item,
+            safe_item,
             contexts,
             self._save_ai_actions,
         )
+
+    def _item_with_personal_suggestion(self, item: InboxItem) -> InboxItem:
+        allowed_contexts = {
+            context.casefold(): context for context in self.context_names
+        }
+        suggested = allowed_contexts.get(item.suggested_context.casefold(), "")
+        return replace(item, suggested_context=suggested)
 
     def _delete_selected(self) -> None:
         item = self._selected_item()

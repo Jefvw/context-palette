@@ -40,9 +40,11 @@ This file contains actionable future work. Completed user-visible work belongs i
   scrollbars, and every command edge against the accepted
   [real-Tk baseline](docs/UI_MOCKUPS.md).
 - Manually validate the simplified retrieval model at 100%, 125%, and 150%:
-  switch the Working context, compare **Everywhere** with **This context** in
-  all three item scopes, verify query relevance and dormant-filter chips, and
-  confirm that Shift+1–5 never executes while context slots 6–0 still do.
+  choose **All contexts** and specific Context filters in all three item scopes;
+  confirm visible membership and slots 6–0 switch together; verify tag, Action
+  type, Work Item project, and Find narrow results without selecting another
+  slot bank; verify query relevance and dormant-filter chips; and confirm that
+  Shift+1–5 never executes while context slots 6–0 still do.
 - Manually validate complete deletion and disconnection wording: archive then
   permanently delete a disposable Action, delete a disposable Context and
   configured Quick menu, and disconnect/reconnect a disposable Work Item
@@ -97,9 +99,9 @@ This file contains actionable future work. Completed user-visible work belongs i
   use the shared Palette-item reference needed by a later design.
 - Add line-ending normalization and CSV/TSV column operations after real-use
   feedback on the expanded reusable text-operation catalogue.
-- Design supporting-context composition only after the explicit Working
-  context and relevance-ranked search have enough real-use feedback; never
-  make the retrieval boundary implicit.
+- Design supporting-context composition only after the explicit Context filter
+  and relevance-ranked search have enough real-use feedback; never apply or
+  switch a Context filter implicitly.
 - Extend the protected plain-text clipboard transaction to ordinary saved-text
   paste only after destination paste timing and manual-fallback recovery are
   defined; add rich/image formats only through format-specific snapshots.

@@ -119,8 +119,8 @@ It reuses current domain loaders and owns these aggregate checks:
 - stable identities are unique at their documented scope;
 - all hard Action references resolve;
 - Built-in records never depend on personal records;
-- palette Focus and context-slot names are classified as current, canonical,
-  or preserved historical references;
+- legacy palette `focus_context` and context-slot names are classified as
+  canonical or preserved historical references;
 - Work Item metadata and Quick-action identities reference known sources, with
   unavailable items reported as soft warnings;
 - absolute or external paths are listed as portability warnings without

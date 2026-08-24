@@ -132,7 +132,7 @@ its bundled default recognition models. This keeps setup repeatable across PCs
 and avoids exposing controls that the current engine cannot honor reliably.
 
 Other Context Palette settings remain available through **Configure** or
-`Ctrl+,`: Actions, Focuses, Quick actions, Work Items, and Backup and restore.
+`Ctrl+,`: Actions, Contexts, Quick actions, Work Items, and Backup and restore.
 
 ## Move configuration to another PC
 

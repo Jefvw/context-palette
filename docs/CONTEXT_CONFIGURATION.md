@@ -1,16 +1,17 @@
 # Context configuration
 
-A Context groups Actions and Work Items for a kind of work. The selected
-**Working context** supplies predictable shortcuts in slots 6–0. Retrieval stays
-global with **Everywhere** and becomes membership-only with **This context**.
+A Context groups Actions and Work Items for a kind of work. The transient
+Context selector in the main **Filter** menu controls both visible membership
+and the active shortcut bank in slots 6–0. **All contexts** uses General's bank;
+a specific Context uses its own.
 
 ## Recommended: Configure window
 
-Choose **Manage contexts…** in the Context selector to open **Contexts** directly,
-or choose **Configure** (or press `Ctrl+,`) and select **Contexts**. Create,
-edit, or delete a Context, choose every Action and Work Item that belongs to it,
-and select up to five preferred items. The form uses names instead of technical
-IDs.
+Open the main **Filter** menu and choose **Manage contexts…** to go directly to
+**Contexts**, or choose **Configure** (or press `Ctrl+,`) and select
+**Contexts**. Create, edit, or delete a Context, choose every Action and Work
+Item that belongs to it, and select up to five preferred items for slots 6–0.
+The form uses names instead of technical IDs.
 
 Normal user contexts belong in **My configuration** and stay on this PC. They
 may contain Built-in Actions, My configuration Actions, and personal Work Items
@@ -18,9 +19,10 @@ without editing the Actions or external folders themselves. **Built-in** is deve
 tracked through Git. General is implicit, and **Developing Context Palette** is
 the only shipped specific context.
 
-Deletion clears saved Working-context state and any legacy Action-side metadata before
-removing the definition. Removing a Context assignment never deletes its
-Actions, Work Item folders, or workbooks.
+Deletion clears that Context's slot configuration and any legacy Action-side
+metadata before removing the definition. It also normalizes compatibility-only
+legacy focus data when necessary. Removing a Context assignment never deletes
+its Actions, Work Item folders, or workbooks.
 
 ## Advanced JSON files
 
@@ -28,8 +30,8 @@ Actions, Work Item folders, or workbooks.
 - `data/local_contexts.json`: personal or work-specific contexts, ignored by Git.
 - `data/actions.json`: Built-in starter actions.
 - `data/local_actions.json`: personal or machine-specific actions, ignored by Git.
-- `data/palette.json`: per-machine Working context, explicit Context-slot
-  overrides, and legacy pin IDs retained only for compatible round-trip.
+- `data/palette.json`: explicit per-Context slot overrides plus legacy focus and
+  pin data retained only for compatible round-trip.
 
 Do not put internal URLs, customer names, work paths, or personal identifiers
 in Built-in files.
@@ -51,7 +53,7 @@ in Built-in files.
 ```
 
 `name` is the stable, case-insensitively unique context identity. `action_ids`
-is the ordered Action membership list used by **This context** retrieval.
+is the ordered Action membership list used by Context-filtered retrieval.
 `preferred_action_ids` supplies up to five default actions for slots 6–0 and
 should be a subset of `action_ids`. Explicit per-machine slots in
 `palette.json` override those defaults.
@@ -70,8 +72,12 @@ definitions. New and edited actions write their context choices back to those
 definitions and do not persist a second membership copy. A personal action
 cannot be assigned to a Built-in context because that would put a private ID
 in a Git-tracked file; use a My configuration context instead. Tags remain
-independent discovery terms. **Everywhere** searches globally; **This context**
-limits results to canonical members of the selected Working context.
+independent discovery terms. Context and tag filters apply to All items,
+Actions, and Work Items; Action type and Work Item project filters remain
+kind-specific. Only the Context filter chooses the 6–0 bank; Find, tag, type,
+and project merely narrow results. The Context filter is session-only UI state:
+it adds no persisted field and requires no data migration. Any legacy
+`focus_context` value remains compatibility data rather than current UI state.
 
 Do not create a General Context definition; it is implied for every Action and
 discovered Work Item.

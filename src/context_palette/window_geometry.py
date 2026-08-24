@@ -51,6 +51,19 @@ def centered_window_position(
     )
 
 
+def centered_work_area_position(
+    window_size: tuple[int, int],
+    work_area: WindowBounds,
+) -> tuple[int, int]:
+    """Center a fitted window in one monitor's usable work area."""
+    width, height = fit_window_size(window_size, work_area)
+    left, top, right, bottom = work_area
+    return (
+        left + (right - left - width) // 2,
+        top + (bottom - top - height) // 2,
+    )
+
+
 def window_position_below_owner(
     owner_bounds: WindowBounds,
     window_size: tuple[int, int],
@@ -135,29 +148,31 @@ def place_child_window(
     size: tuple[int, int] | None = None,
     below_owner: bool = False,
 ) -> tuple[int, int, int, int]:
-    """Place a child relative to its owner on the main window's monitor."""
+    """Center a child on its owner's monitor, or anchor a compact popup."""
     window.update_idletasks()
     owner.update_idletasks()
-    work_area = main_window_monitor_work_area(owner)
+    position_owner = owner if below_owner else owner.winfo_toplevel()
+    work_area = window_monitor_work_area(position_owner)
     if size is None:
         size = (
             max(int(window.winfo_width()), int(window.winfo_reqwidth())),
             max(int(window.winfo_height()), int(window.winfo_reqheight())),
         )
     width, height = fit_window_size(size, work_area)
-    position_owner = owner if below_owner else owner.winfo_toplevel()
-    owner_bounds = (
-        int(position_owner.winfo_rootx()),
-        int(position_owner.winfo_rooty()),
-        max(1, int(position_owner.winfo_width())),
-        max(1, int(position_owner.winfo_height())),
-    )
-    positioner = (
-        window_position_below_owner
-        if below_owner
-        else centered_window_position
-    )
-    x, y = positioner(owner_bounds, (width, height), work_area)
+    if below_owner:
+        owner_bounds = (
+            int(position_owner.winfo_rootx()),
+            int(position_owner.winfo_rooty()),
+            max(1, int(position_owner.winfo_width())),
+            max(1, int(position_owner.winfo_height())),
+        )
+        x, y = window_position_below_owner(
+            owner_bounds,
+            (width, height),
+            work_area,
+        )
+    else:
+        x, y = centered_work_area_position((width, height), work_area)
     window.geometry(f"{width}x{height}{x:+d}{y:+d}")
     return width, height, x, y
 
@@ -168,15 +183,17 @@ def configure_standard_window(
 ) -> None:
     """Give an application screen shared, monitor-safe dimensions and placement."""
     if owner is None:
-        screen_width = window.winfo_screenwidth()
-        screen_height = window.winfo_screenheight()
+        window.update_idletasks()
+        work_area = window_monitor_work_area(window)
     else:
-        left, top, right, bottom = main_window_monitor_work_area(owner)
-        screen_width = right - left
-        screen_height = bottom - top
+        work_area = window_monitor_work_area(owner.winfo_toplevel())
+    left, top, right, bottom = work_area
+    screen_width = right - left
+    screen_height = bottom - top
     width, height = standard_window_size(screen_width, screen_height)
     if owner is None:
-        window.geometry(f"{width}x{height}")
+        x, y = centered_work_area_position((width, height), work_area)
+        window.geometry(f"{width}x{height}{x:+d}{y:+d}")
     else:
         place_child_window(window, owner, size=(width, height))
     window.minsize(

@@ -8,6 +8,12 @@ page with collapsed pins, and the revised Work Items source/table layout.
 Action types remains a direct destination for compatibility; the remaining
 screen recommendations below are still an audit and roadmap, not completed UI.
 
+Update (2026-08-24): recommendations below that describe separate Focus,
+Working-context, Context-filter, or Everywhere/This-context controls are
+superseded. The implemented launcher has one transient Context filter; it
+controls both visible membership and slots 6–0, while All contexts uses
+General's bank. Those older passages remain only as dated audit history.
+
 ## Product goal used for the review
 
 Context Palette is a resident Windows work assistant for non-developers. Its

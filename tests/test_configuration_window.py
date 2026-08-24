@@ -750,6 +750,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         )
 
         configuration.show(
+            focus_context="Customer",
             initial_tab="actions",
             initial_action_id="EDIT-ME",
             start_action_edit=True,
@@ -759,6 +760,7 @@ class ConfigurationDialogTests(unittest.TestCase):
 
         self.assertEqual(configuration.action_filter_var.value, "")
         self.assertEqual(configuration.action_state_filter_var.value, "Active")
+        self.assertEqual(configuration.focus_context, "Customer")
         configuration._reload.assert_called_once_with()
         configuration.notebook.select.assert_called_once_with(1)
         configuration._edit_action_record.assert_called_once_with(action)
@@ -930,6 +932,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.window = Mock()
         configuration.actions = []
         configuration.contexts = [ContextDefinition("Customer")]
+        configuration.local_contexts = [ContextDefinition("Customer")]
         configuration._save_action = Mock()
         configuration.action_creation_dialog = None
 
@@ -945,6 +948,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.window = Mock()
         configuration.actions = []
         configuration.contexts = [ContextDefinition("Customer")]
+        configuration.local_contexts = [ContextDefinition("Customer")]
         configuration._save_action = Mock()
         configuration.action_creation_dialog = None
         suggestion = ActionCreationSuggestion(
@@ -966,6 +970,22 @@ class ConfigurationDialogTests(unittest.TestCase):
         )
         self.assertTrue(dialog.call_args.kwargs["suggested_from_workspace"])
         self.assertEqual(dialog.call_args.kwargs["initial_contexts"], ("Customer",))
+
+    def test_quick_creation_does_not_prefill_a_builtin_context(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.focus_context = "Built-in project"
+        configuration.local_actions_path = Path("local_actions.json")
+        configuration.window = Mock()
+        configuration.actions = []
+        configuration.contexts = [ContextDefinition("Built-in project")]
+        configuration.local_contexts = []
+        configuration._save_action = Mock()
+        configuration.action_creation_dialog = None
+
+        with patch("context_palette.configuration_window.ActionDialog") as dialog:
+            configuration._create_action_for_type("copy_text")
+
+        self.assertEqual(dialog.call_args.kwargs["initial_contexts"], ())
 
     def test_repeated_workspace_suggestions_coalesce_and_close_cancels_pending(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)

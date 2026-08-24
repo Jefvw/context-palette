@@ -17,7 +17,7 @@ Local files (ignored by Git):
 - `data/local_contexts.json`: personal or machine-specific contexts.
 - `data/local_actions.json`: personal/private actions.
 - `data/local_command_surface.json`: personal quick-action groups/items.
-- `data/palette.json`: per-machine state (Working context, legacy pin IDs, and optional explicit Context slots). Legacy `pinned_action_ids` still round-trip but are not shown or executed.
+- `data/palette.json`: per-machine slot configuration plus legacy focus/pin fields retained for compatible round-trip. The launcher Context filter is session-only and is not restored from `focus_context`; legacy `pinned_action_ids` are not shown or executed.
 
 Use Built-in files only for reviewed starter configuration intended to ship
 with Context Palette. Use My configuration files for the user's actual
@@ -61,7 +61,7 @@ Minimal example:
 Notes:
 
 - `name` must be unique across Built-in and My configuration context files.
-- `action_ids` owns every action shown by Focus Actions for this context.
+- `action_ids` owns every Action included when this Context filter is selected.
 - `preferred_action_ids` maps up to 5 defaults to slots `6-0`.
 - If `data/palette.json` has explicit slot assignments, those explicit local assignments win.
 

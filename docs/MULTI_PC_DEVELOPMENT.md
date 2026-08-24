@@ -221,8 +221,9 @@ previous contents in the ignored adjacent `.bak` file.
 - `data/local_actions.json`: personal or machine-specific actions.
 - `data/local_contexts.json`: personal or work-specific contexts.
 - `data/local_command_surface.json`: personal or machine-specific quick-action groups.
-- `data/palette.json`: Working context, per-PC Context slots, and legacy pin IDs
-  retained for compatible round-trip.
+- `data/palette.json`: per-PC Context slots plus legacy focus and pin fields
+  retained for compatible round-trip. The transient launcher Context filter is
+  not synchronized or restored from this file.
 - `data/context-palette.log*`: bounded local diagnostics.
 - `.venv`: the local Python environment.
 

@@ -1,7 +1,7 @@
 # Quick-action menu configuration
 
 Quick actions are compact global navigation menus that remain available when
-Focus or Find changes.
+the Context filter or Find changes.
 
 ## Recommended: Configure window
 

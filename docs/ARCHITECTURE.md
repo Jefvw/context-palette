@@ -71,15 +71,16 @@ Application entry point.
 Presentation and application orchestration.
 
 - Builds the Tkinter interface.
-- Maintains one explicitly selected Working context and a separate
-  Everywhere/This-context retrieval boundary through adjacent menu launchers.
-- Exposes the complete configuration workspace through one direct
-  **Configure** button. Its ordinary route opens a task-oriented Start page;
-  the Context selector retains a direct **Manage contexts…** route to the Contexts
-  section. All Configure routes reuse one live editor and retarget its section or
-  selected record; a new editor is created only after the previous one closes.
-- Renders Working-context shortcut rows 6–0 only when Find is empty, plus mixed
-  or kind-specific result projections bounded by Everywhere/This context.
+- Maintains one transient Context choice in the unified **Filter** menu. That
+  choice controls canonical visible membership and the active slot bank for
+  6–0; **All contexts** selects General's membership and bank.
+- Exposes the complete configuration workspace through **Configure**. Its
+  ordinary route opens a task-oriented Start page, while **Manage contexts…**
+  in the unified Filter menu routes directly to Contexts. All routes reuse one
+  live editor and retarget its section or selected record; a new editor is
+  created only after the previous one closes.
+- Renders the active Context bank's shortcut rows 6–0 when Find is empty, plus
+  mixed or kind-specific result projections constrained by that Context.
   Non-empty Find results use relevance ranking without shortcut promotion.
 - Renders the global JSON-configured Quick-action surface below discovery
   and the fixed action-bound Passwords, Folders, and Prompts hierarchies.
@@ -94,12 +95,14 @@ Presentation and application orchestration.
 - Connects platform-independent action execution to Windows-specific callbacks.
 - Ensures Tk operations stay on the Tk main thread.
 - Resets transient presentation state through the main-window `F5` shortcut
-  without changing the persisted Working context, legacy pin data, context
-  slots, Actions, or configuration.
+  without changing legacy focus/pin compatibility data, per-Context slot
+  assignments, Actions, or configuration. Context, tag, type, and project
+  filters are cleared because they are in-memory presentation state; General's
+  bank becomes active with **All contexts**.
 - Switches the existing discovery area among explicit **All items**,
   **Actions**, and **Work Items** scopes without changing the main-window
-  dimensions. Find, Working-context membership, shared tag filters,
-  project-code/type filters, selection,
+  dimensions. Find, shared Context/tag filters, kind-specific project-code/type
+  filters, selection,
   previews, and constrained open commands consume the immutable in-memory Work
   Item index; kind-specific filter state remains intact. All keyboard, default, and
   context-menu targets pass through one constrained Work Item opening boundary.
@@ -134,20 +137,19 @@ The launcher exposes the window from Inbox, while the Actions configuration sect
 is the primary route. No harvested candidate enters persistent data before the
 final confirmation.
 
-### Discovery scopes and Working context
+### Discovery scopes, Context, and secondary filters
 
-The shared discovery area combines three item-kind scopes with one explicit
-Working context and one retrieval boundary. **Everywhere** keeps results
-global; **This context** limits them to canonical membership in the selected
-specific Context. General disables This context because the two boundaries
-would be equivalent.
+The shared discovery area combines three item-kind scopes with one unified
+**Filter** menu. Its transient Context choice is the single current Context:
+**All contexts** uses the complete General-root collection and General's slot
+bank, while a specific Context uses its canonical membership and bank.
 
 | State | Heading/results | Secondary tools | Primary action |
 | --- | --- | --- | --- |
-| All items | Mixed Actions and discovered Work Items in the chosen context boundary | Filters menu: Tag | Run or Open, selected-kind specific |
-| Actions | Actions only in the chosen context boundary | Filters menu: Type and Tag | Run |
-| Work Items | Indexed Work Item folders in the chosen context boundary, never Action records | Filters/tools menu: New item, To inbox, Copy file, Project, and Tag | Open |
-| Empty Find | Context slots 6–0 may be projected before ordinary results | Scope-specific tools | Selected-kind specific |
+| All items | Mixed Actions and discovered Work Items, optionally limited by Context and tag | Filter menu: Context and Tag | Run or Open, selected-kind specific |
+| Actions | Actions only, optionally limited by Context, tag, and type | Filter menu: Context, Tag, and Type | Run |
+| Work Items | Indexed Work Item folders, optionally limited by Context, tag, and project; never Action records | Filter/tools menu: New item, To inbox, Copy file, Context, Tag, and Project | Open |
+| Empty Find | The active Context bank's slots 6–0 may be projected before ordinary results | Scope-specific tools | Selected-kind specific |
 | Non-empty Find | All matches ordered by relevance; no shortcut promotion | Scope-specific tools | Selected-kind specific |
 
 The scope selection, empty state, selection preview, toolbar state, status, and
@@ -162,9 +164,13 @@ Actions rank exact title or ID first, then title prefix, title substring,
 all-term title matches, exact Context/tag labels, and other metadata. Work
 Items similarly rank exact/prefix/substring display-name matches, then subject
 matches and other metadata. Stable visible-name and identity keys break ties.
-Type and project filters retain their scope-specific state; when dormant in
-another scope they remain named in the filter chip rather than becoming hidden
-state.
+Context and tag filter state is shared across all three item-kind scopes. Only
+Context chooses the slot bank. Find and tag narrow the current projection;
+type and project retain their kind-specific state and likewise never choose a
+bank. When dormant in another scope, type and project remain named in the
+filter chip rather than becoming hidden state. All filter state is in memory,
+is cleared by the normal transient reset, and adds no field or migration to
+persisted palette data.
 
 ### `actions.py`
 
@@ -357,21 +363,21 @@ execution and returns no suggestion for mixed or ambiguous content.
 ### `action_discovery_panel.py`
 
 Owns construction and event wiring for the left action-discovery presentation:
-readable Working-context, Everywhere/This-context, and item-scope rows; one Find
-row containing the search field and Filters menu; an active-filter chip; flat
-result list, scrollbar, row tooltips; and the stable `+A`, Edit, and Run/Open
-result toolbar. Action-only and Work
-Item-only commands live in the Filters menu instead of reshaping the toolbar.
+item-scope controls; one Find row containing the search field and unified
+Filter menu; an active-filter chip; flat result list, scrollbar, row tooltips;
+and the stable `+A`, Edit, and Run/Open result toolbar. Action-only and Work
+Item-only commands live in the Filter menu instead of reshaping the toolbar.
 Routine icon controls use retained 16-pixel Tk bitmap images with semantic
 tooltips, avoiding font-dependent Unicode toolbar symbols and new dependencies. Search
 policy, relevance ranking, Context membership, selection meaning, and execution remain in
 `launcher.py` and are supplied through narrow callbacks. Compatibility aliases
 allow existing launcher orchestration to migrate incrementally.
 
-Tag filters open the shared searchable single-selection popup from the Filters
-menu. Context membership is controlled only by the adjacent Working-context
-and Everywhere/This-context controls; the launcher remains the only owner of
-scope state and result refresh.
+Context and tag filters open shared searchable single-selection popups from the
+Filter menu. The Context choice also selects the slot bank; tag does not. A
+separate **Manage contexts…** menu command opens the existing Contexts
+configuration page without adding another selector or state. The launcher
+remains the only owner of transient filter state and result refresh.
 
 Right-click callbacks preserve the clicked flat row as the current
 selection, then route its stable action ID into the existing Configure Actions
@@ -393,8 +399,9 @@ Provides reusable comma-separated picker fields used by Configure, Inbox
 conversion, and action editing. Context membership combines an editable field
 with a checklist of canonical defined contexts. Tag selection uses a shared
 searchable multi-select picker for existing normalized tags but continues to
-allow new free-form values. The discovery Filters menu uses the same picker in
-single-select mode, including its explicit clear choice. Selection mechanics
+allow new free-form values. The discovery Filter menu separately reuses
+`searchable_selection.py` in single-select mode for Context and tag filters,
+including an explicit clear choice. Selection mechanics
 remain separate from domain validation in
 `actions.py`, so typed values and non-UI callers follow the same persistence
 rules. Underlined Windows mnemonics move focus directly to each field, and
@@ -406,7 +413,7 @@ tag picker.
 Owns the single source of truth for action-to-context membership. Context
 definitions supply the canonical ordered `action_ids`; action objects used by
 the launcher and Configure are projected from those definitions so search,
-the Actions table, slots, and This-context retrieval all see the same memberships.
+the Actions table, slots, and Context-filtered retrieval all see the same memberships.
 Action create/edit flows write the action record and context definitions as
 one recoverable operation, remove context metadata from newly persisted action
 records, and reject a My configuration action reference from a Built-in
@@ -417,10 +424,11 @@ membership source.
 
 ### `searchable_selection.py`
 
-Provides the compact searchable tag popup shared by guided multi-select tag
-fields and the discovery Filters menu's single-tag filter. It preserves selections
-while search narrows the visible list, provides an explicit clear choice for
-filters, and restores an owning dialog's modal grab when it closes.
+Provides the compact searchable selection popup shared by guided multi-select
+tag fields and the discovery Filter menu's single-Context and single-tag
+filters. It preserves selections while search narrows the visible list,
+provides an explicit clear choice for filters, and restores an owning dialog's
+modal grab when it closes.
 
 ### `action_picker.py`
 
@@ -770,11 +778,12 @@ launcher menu and Configure tree from the single Action source of truth.
 ### `context_deletion.py`
 
 Owns dependency-aware context deletion and renaming across the defining file,
-legacy project/local action metadata, and palette Working-context state. Canonical action
-membership is removed with the defining context itself. A material rename
-first writes a safe intermediate definition containing both names, updates
-legacy and palette references, and then removes the old definition. The final
-write preserves the true pre-rename definition as the context file's backup.
+legacy project/local action metadata, per-Context slots, and compatibility-only
+palette focus data. Canonical action membership is removed with the defining
+context itself. A material rename first writes a safe intermediate definition
+containing both names, updates legacy and palette references, and then removes
+the old definition. The final write preserves the true pre-rename definition
+as the context file's backup.
 
 ### `action_deletion.py`
 
@@ -803,13 +812,16 @@ Actions.
 
 Stores and calculates launcher organization.
 
+- Legacy `focus_context` is still validated, loaded, and serialized for
+  compatibility, but it does not select current launcher Context state.
 - Legacy `pinned_action_ids` for slots 1–5 are still validated, loaded, and
   serialized unchanged, but no runtime or Configure projection consumes them.
-- Slots 6–0: top five Actions or Work Items for the Working Context; internal slot 10 is
-  displayed and invoked with the physical `0` key.
+- Slots 6–0: top five Actions or Work Items for the active Context filter;
+  internal slot 10 is displayed and invoked with the physical `0` key.
 - Unfilled context slots use only other Actions or Work Items belonging to the
-  Working context and otherwise remain empty. General continues to treat all
-  Actions as global members; a specific Context never borrows unrelated Actions.
+  active Context and otherwise remain empty. **All contexts** uses General,
+  which treats all Actions and available Work Items as global members; a
+  specific Context never borrows unrelated items.
 
 ### `command_surface.py`
 
@@ -922,15 +934,16 @@ override configured defaults.
 
 ### `focus_model.py`
 
-Owns pure runtime Working-context policy independently of Tk and persistence.
-It discovers available Context names, resolves legacy Action-only slot values
-and typed mixed slots 6–0, reconciles saved slots against current explicit
-membership, handles unavailable-context fallbacks, and selects canonical
-visible Action plus configured Work Item membership. Stale references are
-ignored in memory rather than rewriting personal configuration during reload.
-The launcher uses that membership for This-context filtering and empty-Find
-context-slot rows. This remains the replacement boundary for future
-Context-model changes.
+Owns pure Context membership and slot-bank policy independently of Tk and
+persistence. It discovers available Context names, resolves legacy Action-only
+slot values and typed mixed slots 6–0, reconciles saved slots against current
+explicit membership, handles unavailable-context fallbacks, and selects
+canonical visible Actions plus configured Work Item membership. Stale
+references are ignored in memory rather than rewriting personal configuration
+during reload. The launcher asks for General's projection under **All
+contexts** and the matching specific projection otherwise; the same result
+supplies Context-filtered retrieval and empty-Find shortcut rows. This remains
+the replacement boundary for future Context-model changes.
 
 ### `work_items.py`
 
@@ -1287,18 +1300,17 @@ additional exact tag filter.
 This separation allows visual simplification without losing retrieval power.
 
 Secondary application screens share a `780x600` default and `700x480` minimum
-through `window_geometry.py`. Every application child resolves the Windows work
-area of the monitor containing the main Tk root. Standard dialogs center on
-their owning top-level and clamp completely into that work area; compact
-selection popups remain anchored to their control, move above it when needed,
-and use the same clamp. Auto-sized Work Item dialogs and the larger Harvest
-window use the same policy. Native menus and widget tooltips retain their
-control-anchored placement paths. The main window uses the same compact
-screen-aware `780x600` default and `700x480` minimum as other full screens.
-Hotkey placement still reduces an oversized user-resized window before
-clamping it into the cursor monitor's work area.
+through `window_geometry.py`. Every ordinary application window resolves the
+usable Windows work area of its own or its owner's current monitor, centers in
+that work area, and reduces only when the monitor cannot fit its requested
+size. This includes auto-sized Work Item dialogs and the larger Harvest
+window. The main window uses the same compact screen-aware `780x600` default
+and `700x480` minimum; F9 and Ctrl+Alt+P use the cursor to choose the monitor,
+then center the palette in that monitor's usable work area. Compact selection
+popups remain anchored to their control and move above it when needed. Native
+menus and widget tooltips also retain their control-anchored placement paths.
 
-The drop target is deliberately outside those full-screen presets. It is a
+The drop target is deliberately outside that centering policy. It is a
 small non-transient Toplevel positioned near the lower-right screen edge,
 movable by the user, and independently hideable. With the main root withdrawn,
 Windows/Tk keeps this non-transient child mapped; the main palette is never made
@@ -1317,22 +1329,24 @@ resizing in the session.
 
 The command console stacks discovery above the independently scrolling Quick
 actions. Discovery shows seven result rows at the standard size so the complete
-standard Quick-action grid remains visible. Working-context, retrieval-boundary,
-and item-scope navigation sit above Find; one Filters menu shares the Find row;
-and `+A`, Edit, and Run/Open form one stable row below the full-width results.
-Actions adds type filtering; Work Items adds New item, To inbox, Copy file,
-project filtering, Open, and Open folder through the same stable surface. Quick actions
+standard Quick-action grid remains visible. Item-scope navigation sits above
+Find; one unified Filter menu shares the Find row; and `+A`, Edit, and Run/Open
+form one stable row below the full-width results. All views offer Context and
+tag filters. Actions adds type filtering; Work Items adds New item, To inbox,
+Copy file, project filtering, Open, and Open folder through the same stable
+surface. Quick actions
 use two columns at the standard and supported minimum widths, falling back to
 one only when the console is narrower. Its canvas height follows the rendered
 row height instead of expanding; discovery owns the remaining vertical space
 and its result list grows with it. Input / Output consumes nearly the full
 right-pane height; its existing communication line sits at the bottom. Capture,
 Inbox, Create from Input, and Text tools use bitmap-icon controls in the
-workspace header. Configure, Help, and More follow Quick actions. Working-context,
-discovery scopes, Work Items, and Run/Open retain text because their state must
-remain immediately readable. Search text can be combined with one shared
-built-in action-type filter; credentials remain selectable through that type
-filter and the fixed Passwords Quick-action menu.
+workspace header. Configure, Help, and More follow Quick actions. Discovery
+scopes, Work Items, and Run/Open retain text because their state must remain
+immediately readable. Search text can be combined with one shared Context/tag
+filter set and the active kind-specific type or project filter; credentials
+remain selectable through the Action type filter and the fixed Passwords
+Quick-action menu.
 
 Each group renders in stable row-major order within a responsive one- or
 two-column grid. The
@@ -1511,20 +1525,23 @@ Treeview layout omits the unused expand/collapse indicator. Standard editing
 and transformations are available through the context menu and the visible
 catalogue-backed **Text tools** menu.
 
-## Working context and slots
+## Context filter, slots, and result narrowing
 
-The application implements one explicit Working context rather than automatic
-multi-context inference.
+The application implements one explicit transient Context choice rather than
+automatic multi-context inference or a separate shortcut-context control.
 
 ```text
-6–0  Working-context Actions or Work Items (empty Find only)
+6–0  Active-Context Actions or Work Items (empty Find only)
 other rows  relevance-ranked search matches
 ```
 
-Changing the Working context recalculates slots 6–0. **Everywhere** searches
-all Contexts; **This context** uses the selected Context definition's canonical
-Action and Work Item membership in every item-kind scope. The latter is disabled
-for General. Tags remain independent filters rather than structural ownership.
+**All contexts** uses General's canonical membership and slot bank. Choosing a
+specific Context in the unified Filter menu uses that definition's membership
+and bank in every item-kind scope. Context and tag apply across All items,
+Actions, and Work Items; Action type and Work Item project remain kind-specific.
+Find, tag, type, and project narrow the projection without selecting another
+bank. Tags remain independent filters rather than structural ownership. All
+result-filter state is transient and never enters `palette.json`.
 
 Configured Quick actions use Action IDs or an ordered personal mix of Actions
 and stable Work Item references. The launcher renders fixed **Standard** first,
@@ -1542,18 +1559,19 @@ Quick-action groups currently remain global. Context-based visibility or
 grouping is deliberately out of scope; a later design can reference Contexts
 without changing the typed Action/Work Item target identity.
 
-Working-context and slot changes are applied in memory only after the updated
-palette state has been persisted successfully. A write failure keeps the prior
-state visible and reports the failure to the user. Legacy pinned IDs are
-preserved unchanged by these writes but never projected.
+Per-Context slot changes are applied in memory only after updated palette state
+has been persisted successfully. A write failure keeps the prior assignments
+and reports the failure to the user. Legacy pinned IDs and `focus_context` are
+preserved unchanged for compatibility but never select current launcher state.
 
-Working-context names and matching `context_slots` keys are resolved case-insensitively
-to the current canonical spelling. This keeps older per-machine palette files
-usable after capitalization changes. Unknown slot keys are preserved, and an
-exact canonical key takes precedence if both spellings exist.
+Context names in `context_slots` keys are resolved case-insensitively to the
+current canonical spelling. This keeps older per-machine palette files usable
+after capitalization changes. Unknown slot keys are preserved, and an exact
+canonical key takes precedence if both spellings exist.
 
 The longer-term context model includes identity, knowledge, capabilities, and
-optional activation, with one Working context and multiple supporting contexts.
+optional activation, with one explicit Context filter and possible supporting
+contexts.
 
 ## Storage
 
@@ -1602,8 +1620,10 @@ Ignored captured material awaiting or recording conversion.
 
 ### `data/palette.json`
 
-Ignored per-machine Working context, preserved legacy pinned IDs, and explicit
-context-slot references. Runtime reads but does not project the legacy pins.
+Ignored explicit per-Context slot references plus preserved legacy
+`focus_context` and pinned IDs. Runtime reads and round-trips the compatibility
+fields but does not use them to select current Context state or project global
+pins.
 
 ### `data/cheatsheets/*.json`
 
@@ -1640,8 +1660,8 @@ without probing their current targets. This matches snapshot/restore
 portability policy; creation, editing, and execution retain their stricter
 target validation.
 Invalid or temporarily unreadable palette state follows the same last-known-good
-rule: the Working context, legacy pin data, and context slots remain in memory while the local
-file is corrected or becomes accessible again.
+rule: legacy focus/pin compatibility data and per-Context slots remain in memory
+while the local file is corrected or becomes accessible again.
 The domain default always contains an empty context-slot mapping, so a missing
 or initially invalid palette file cannot fail first-start normalization.
 Coordinated startup and reload defer command-surface rendering until both
@@ -1745,9 +1765,10 @@ When adding an action type:
 
 When adding context behavior:
 
-1. Keep the Everywhere/This-context boundary explicit.
-2. Do not silently switch the user's Working context or search boundary.
-3. Preserve context slots 6–0 and round-trip legacy pin IDs without projecting them.
+1. Keep Context membership and slots 6–0 coupled to one explicit filter.
+2. Do not silently switch the user's Context filter.
+3. Preserve context slots 6–0 and round-trip legacy focus/pin data without
+   using it as current Context state or projecting global pins.
 4. Explain inputs, outputs, clipboard effects, opened targets, and persistence.
 5. Prefer composition over duplicating actions.
 

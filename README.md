@@ -14,11 +14,15 @@ actions remain editable there but stay outside normal retrieval. See
 ## What it does today
 
 - Opens instantly from a resident process with `F9` or `Ctrl+Alt+P`.
-- Searches Actions and Work Items together by text and tag, with one explicit
-  **Working context** and an **Everywhere / This context** search scope.
-- Keeps five mixed Action/Work Item slots, 6–0, for the selected Working
-  context. Historical pin IDs remain readable for rollback, but global slots
-  1–5 are no longer shown or executed.
+- Searches Actions and Work Items together by text, with one transient Context
+  choice in the unified **Filter** menu controlling both visible membership and
+  the active mixed Action/Work Item slots 6–0. **All contexts** uses General's
+  slots; a specific Context uses its own.
+- Keeps Context and tag filters available across all item views; Action type
+  and Work Item project remain kind-specific. Find, tag, type, and project can
+  narrow results without selecting another slot bank. Historical pin IDs
+  remain readable for rollback, but global slots 1–5 are no longer shown or
+  executed.
 - Runs the explicit, allow-listed [standard action types](docs/ACTION_TYPES.md).
 - Opens or runs user-configured Windows targets through ShellExecute, including
   registered protocols such as `vscode:`, `shell:` targets, `file:` URIs,
@@ -185,12 +189,14 @@ After the application starts:
 2. Type in **Find**, select an action, and press `Enter`.
 3. Drag a useful file, folder, browser link, desktop shortcut, or text object
    onto **Drop into Context Palette** when clipboard capture is inconvenient.
-3. Choose a **Working context** to change mixed Action/Work Item slots 6–0,
-   then choose **Everywhere** or **This context** for the result boundary.
-4. Choose **Configure**, or press `Ctrl+,`, to add personal actions, contexts,
-   or Quick actions. **Manage contexts…** in the context selector opens the
-   relevant context tab directly.
-5. Use **Capture** when material should enter the Inbox before becoming an action.
+4. Use **Filter by context…** to choose both the visible Context and its mixed
+   Action/Work Item slots 6–0. Clear it to **All contexts** for global results
+   and General's slots. Add tag, Action type, or Work Item project filters to
+   narrow results without changing that slot bank.
+5. Choose **Configure**, or press `Ctrl+,`, to add personal actions, contexts,
+   or Quick actions. For a direct route to Context configuration, open the
+   unified Filter menu and choose **Manage contexts…**.
+6. Use **Capture** when material should enter the Inbox before becoming an action.
 
 Configure supports adding, editing, deleting, and ordering actions, contexts,
 Quick-action groups, and menu items. Normal user records default to **My
@@ -244,7 +250,7 @@ Personal and runtime files are ignored by Git:
 | `data/local_contexts.json` | Personal contexts |
 | `data/local_command_surface.json` | Personal Quick-action menu records |
 | `data/inbox.json` | Captured material |
-| `data/palette.json` | Working context, legacy pin IDs, and per-machine context-slot choices |
+| `data/palette.json` | Per-machine context-slot choices plus legacy focus/pin compatibility data |
 | `data/context-palette.log*` | Bounded local diagnostics |
 
 Captured Inbox material can be removed without editing JSON: open **Inbox**,
@@ -291,7 +297,8 @@ It validates shared and personal configuration, compiles the source, and runs al
 
 ## External integration
 
-The supported external bridge can show the resident palette and optionally select a context or search term:
+The supported external bridge can show the resident palette and optionally
+select the transient Context filter or a search term:
 
 ```powershell
 .\integrations\Invoke-ContextPalette.ps1 -Context "Database" -Search "SQL"

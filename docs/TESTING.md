@@ -138,13 +138,16 @@ links, email links, heading-only anchors, inline-code examples, and fenced code
 blocks.
 
 `tests.test_launcher_smoke` exercises the real Tk view transitions among All
-items, Actions, and Work Items with Everywhere/This-context retrieval. Its
+items, Actions, and Work Items with the unified transient Filter menu. Its
 temporary fixture proves that one Context or tag can return both an Action and
-a Work Item, only canonical Context members enter This-context results, General
-cannot enable the redundant This-context boundary, and a Working-context change
-does not silently limit Everywhere. It also verifies non-empty Find results are
-relevance-ranked without context-slot promotion and dormant type/project
-filters remain visible in the filter chip.
+a Work Item and only canonical Context members enter Context-filtered results.
+It also verifies that **All contexts** uses General's slot bank, a specific
+Context selects its own bank, Context and tag operate across all item scopes,
+type and project remain kind-specific without changing banks, non-empty Find
+results are relevance-ranked without context-slot promotion, and dormant
+type/project filters remain visible in the filter chip.
+`tests.test_launcher_interactions` verifies that F5 returns to **All contexts**
+while preserving per-Context slot assignments and compatibility palette data.
 `tests.test_action_preview` requires every supported Action type to produce a
 bounded, readable **Input → Effect** summary and structured details without
 technical type IDs. It protects current-input, captured-selection, destination,
@@ -215,16 +218,24 @@ source and different-computer/path checks remain outstanding.
 Run this when launcher behavior, styling, hotkeys, clipboard handling, or configuration windows change:
 
 1. Start with `run-context-palette.bat`; verify only one resident instance is created.
-2. Press `F9`, then `Ctrl+Alt+P`; verify the palette appears and selected text is captured where the source application permits simulated copy.
+2. Press `F9`, then `Ctrl+Alt+P`; verify the palette appears centered in the
+   usable area of the cursor's monitor and selected text is captured where the
+   source application permits simulated copy. Repeat on a secondary monitor,
+   including one with negative desktop coordinates. Move Configure to that
+   monitor and open an Action editor; confirm the editor centers on the same
+   monitor. Confirm compact filter pickers, menus, and tooltips remain attached
+   to their controls, and the separate drop target retains its lower-right,
+   user-movable placement.
 3. Verify `Esc` hides, `Ctrl+L` focuses Find, `Ctrl+N` opens the Action-type
    chooser, `Ctrl+,` opens Configure on **Start**, and `F1` opens Help. On
    Start, verify all six primary tasks are visible without scrolling. Open each
    destination and confirm it reuses the same Configure window. Verify
    **Create an Action...** opens the existing type chooser, while direct Edit,
-   Manage contexts, Work Item, and Diagnostics routes bypass Start. In the chooser,
+   Work Item, Diagnostics, and Filter-menu **Manage contexts…** routes bypass
+   Start. In the chooser,
    verify typing filters types, arrows and Enter choose one, and Escape or
    Cancel changes nothing. Repeat with **New Action…** and `Ctrl+N` on Configure
-   → Actions; confirm a non-General Working context is offered as the initial Context,
+   → Actions; confirm a specific active Context filter is offered as the initial Context,
    an existing Configure workspace is reused, and backup/restore busy state
    refuses the request.
    Put one absolute file path in Input / Output, including a quoted path with
@@ -245,8 +256,9 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    there is no separate top toolbar or bottom command bar. Confirm **All items**
    contains both Actions and Work Items. Select one of
    each and verify the primary command changes between Run and Open. Choose one
-   Context and one tag that each belong to both kinds and verify both remain in
-   the mixed results. Switch to Actions, then Work Items, and back; verify the
+   Context filter and one tag that each belong to both kinds and verify both
+   remain in the mixed results. Switch to Actions, then Work Items, and back;
+   verify the shared Context/tag filters and chosen slot bank remain active and the
    filter menu changes between Action type tools and Work Item/project tools
    without moving Find, the result list, or the stable `+A`/Edit/Run toolbar.
    Verify Configure, Help, and More remain below Quick actions. Resize to the
@@ -263,10 +275,12 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    source, and folder fallback remain visible. Hover and click the line to
    verify structured details, then run an item and confirm its operational
    result temporarily replaces the preview. Select again to restore it.
-4. Enter Find text, choose **This context**, activate tag/type/project filters,
+4. Enter Find text, choose a Context filter, activate tag/type/project filters,
    and put text in Input / Output. Press `F5`; verify transient values clear,
-   Find regains focus, and the saved Working context, legacy pin data, and
-   context slots remain unchanged.
+   Find regains focus, **All contexts** and General's slot bank become active,
+   and legacy focus/pin data plus every per-Context slot assignment remain
+   unchanged. Restart and confirm no result filter is restored or added to
+   `data/palette.json`.
 5. From a disposable text field, open the palette with the hotkey and run a
    saved-text action. Verify the palette hides, the original window regains
    focus, and the text is pasted. Open Context Palette without a captured
@@ -302,20 +316,24 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    Items, verify **Manage sources…** contains Add, Edit, Remove, and Creation
    template while Refresh remains visible; with no sources, Add and template
    stay available while Edit, Remove, and Refresh are disabled.
-7. Select a specific Working context while **All items** is active. Compare
-   **Everywhere** with **This context** and verify only the latter limits both
-   Actions and Work Items to canonical membership. Repeat in Actions and Work
-   Items. Select General and verify This context is disabled. With Find empty,
-   confirm genuine context slots 6–0 can appear first and unused slots remain
-   empty. Enter queries matching an exact name, prefix, visible-name substring,
-   and metadata only; verify relevance order and no shortcut promotion. Confirm
-   Shift+1–5 never executes and legacy pin IDs survive a palette-state save.
+7. While **All items** is active, choose a specific **Filter by context…** value
+   and verify Actions and Work Items are limited to canonical membership while
+   slots 6–0 switch to that Context's bank. Repeat in Actions and Work Items;
+   verify the same Context and tag remain active across all three views. Apply
+   Action type, Work Item project, tag, and Find values in turn and verify they
+   narrow results without selecting another slot bank. Choose **All contexts**
+   and verify global results plus General's bank return. With Find empty,
+   confirm genuine slots 6–0 can appear first and unused slots remain empty.
+   Enter queries matching an exact name, prefix, visible-name substring, and
+   metadata only; verify relevance order and no shortcut promotion. Confirm
+   Shift+1–5 never executes and legacy focus/pin IDs survive a palette-state
+   save without restoring a Context filter.
 8. At the standard `780x600` size and supported minimum, verify Quick actions
    use two readable columns without clipping beneath discovery. Narrow the
    command console until one column is genuinely necessary, then verify stable
    row-major order returns. Confirm fixed Standard is first, personal configured
    menus precede shared configured menus, automatic Passwords/Folders/Prompts
-   follow them, and every launcher remains menu-only. Tab through the visible Working-context/scope controls,
+   follow them, and every launcher remains menu-only. Tab through the visible scope controls,
    Find/filter/results, item toolbar, Quick actions, app controls, workspace
    header controls, and Input / Output. Press Enter or Space on a
    Quick-action launcher and verify it opens the menu without running an
@@ -330,8 +348,8 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
 9. Create disposable actions and contexts in both **My configuration** and
    **Built-in**; reload and confirm each uses the selected file. In a My
    configuration Context, assign a Built-in Action, a personal Action, and a
-   disposable Work Item, then verify all three appear in This-context results without
-   editing either Action or the Work Item folder. Put the Work Item in slot 6,
+   disposable Work Item, then verify all three appear under that Context filter
+   without editing either Action or the Work Item folder. Put the Work Item in slot 6,
    verify `Shift+6` opens its workbook/folder, disconnect its source, and verify
    the unavailable reference remains saved and recoverable after reconnection. Create
    two Quick-action groups, add more than four ordered Actions to one item,
@@ -339,7 +357,7 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    launcher right-click offers Add/Organize. Inside the menu, verify Action
    left-click runs only the selected Action and Action right-click opens only
    its editor. Rename and delete an item and group. Delete a
-   disposable Context and verify its Action memberships and Working-context state clear.
+   disposable Context and verify its Action memberships and slot configuration clear.
    Assign an Action to a context slot, Context preference, and Quick action.
    Choose **Delete permanently…**, verify the
    confirmation reports its references, cancel once, then accept and verify the
@@ -404,9 +422,10 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
     description, Contexts, tags, target, and the prefilled menu location. Clear
     the location and verify the Action appears at the menu root with no
     **Unsorted** submenu. Archive/delete the disposable Action afterward.
-    Select a specific Working context with fewer than five genuine members and confirm
-    slots 6–0 remain empty after its final member instead of showing unrelated
-    global Actions.
+    Select a specific Context filter with fewer than five genuine members and
+    confirm slots 6–0 remain empty after its final member instead of showing
+    unrelated global Actions. Clear to **All contexts** and confirm General's
+    bank returns.
     Run **UAT: Run a harmless sequence**, inspect its two project-folder steps
     and five-second wait, cancel once, then confirm and use **Stop remaining**
     during the wait. Verify the in-app step progress; Explorer may reuse one

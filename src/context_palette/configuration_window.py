@@ -749,6 +749,7 @@ class ConfigurationWindow:
     def show(
         self,
         *,
+        focus_context: str | None = None,
         initial_tab: str = "start",
         initial_action_id: str | None = None,
         initial_work_item_key: str | None = None,
@@ -758,6 +759,8 @@ class ConfigurationWindow:
         start_action_edit: bool = False,
     ) -> None:
         """Refresh, navigate, and raise an already-open Configure workspace."""
+        if focus_context is not None:
+            self.focus_context = focus_context
         self.initial_action_id = initial_action_id
         if initial_action_id and self.action_filter_var.get():
             self.action_filter_var.set("")
@@ -1383,8 +1386,8 @@ class ConfigurationWindow:
         HarvestWindow(
             self.window,
             actions=self.actions,
-            context_names=[context.name for context in self.contexts],
-            focus_context=self.focus_context,
+            context_names=[context.name for context in self.local_contexts],
+            focus_context=self._authoring_context(),
             actions_path=self.local_actions_path,
             shared_contexts_path=self.contexts_path,
             local_contexts_path=self.local_contexts_path,
@@ -1455,8 +1458,8 @@ class ConfigurationWindow:
         ttk.Label(
             heading,
             text=(
-                "A Context organizes items; the Working context is the one "
-                "currently selected in the palette."
+                "A Context filters items and selects their preferred shortcuts 6–0 "
+                "in the palette."
             ),
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(2, 0))
@@ -1919,8 +1922,9 @@ class ConfigurationWindow:
                     parent=self.window,
                 )
                 return
+        authoring_context = self._authoring_context()
         initial_contexts = (
-            () if self.focus_context.casefold() == "general" else (self.focus_context,)
+            () if authoring_context.casefold() == "general" else (authoring_context,)
         )
         dialog = ActionDialog(
             self.window,
@@ -1943,6 +1947,19 @@ class ConfigurationWindow:
                 event, created
             ),
             add="+",
+        )
+
+    def _authoring_context(self) -> str:
+        """Use the active Context only when a personal Action can join it."""
+
+        key = self.focus_context.casefold()
+        return next(
+            (
+                context.name
+                for context in self.local_contexts
+                if context.name.casefold() == key
+            ),
+            "General",
         )
 
     def _clear_action_creation_dialog(
@@ -4926,7 +4943,7 @@ class ContextDialog:
             form,
             text=(
                 "Choose up to five Context members for the numbered shortcuts "
-                "shown when this Context is the Working context."
+                "shown when this Context filter is selected."
             ),
             style="Muted.TLabel",
             wraplength=610,

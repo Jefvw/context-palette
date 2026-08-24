@@ -16,10 +16,12 @@ from context_palette.action_sequences import SequenceStep
 from context_palette.action_suggestions import ActionCreationSuggestion
 from context_palette.action_types import ACTION_TYPES
 from context_palette.action_discovery_panel import (
-    CONTEXT_SCOPE_EVERYWHERE,
-    CONTEXT_SCOPE_THIS,
+    ALL_CONTEXTS_FILTER_LABEL,
+    ActionDiscoveryPanel,
     DISCOVERY_ALL,
     FOCUS_SLOT_ROW_TAG,
+    context_filter_choices,
+    context_filter_display_label,
     slot_row_tag,
     visible_result_row_count,
 )
@@ -116,6 +118,27 @@ class FakeKeyEvent:
 
 
 class LauncherInteractionTests(unittest.TestCase):
+    def test_hotkey_centers_palette_in_the_cursor_monitor_work_area(self) -> None:
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.root.winfo_width.return_value = 780
+        app.root.winfo_reqwidth.return_value = 780
+        app.root.winfo_height.return_value = 600
+        app.root.winfo_reqheight.return_value = 600
+
+        app._position_for_hotkey(
+            {
+                "cursor_x": "-100",
+                "cursor_y": "900",
+                "work_left": "-1920",
+                "work_top": "40",
+                "work_right": "0",
+                "work_bottom": "1040",
+            }
+        )
+
+        app.root.geometry.assert_called_once_with("-1350+240")
+
     def test_ocr_request_uses_clipboard_image_and_places_background_result(self):
         app = LauncherApp.__new__(LauncherApp)
         app.root = Mock()
@@ -381,6 +404,7 @@ class LauncherInteractionTests(unittest.TestCase):
         app.actions = []
         app.palette_state = PaletteState()
         app.available_context_names = []
+        app.local_context_names = {}
         app.local_actions_path = Path("local_actions.json")
         app.contexts_path = Path("contexts.json")
         app.local_contexts_path = Path("local_contexts.json")
@@ -402,6 +426,16 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertEqual(load.call_count, 2)
         self.assertIs(window.call_args_list[0].args[1], first)
         self.assertIs(window.call_args_list[1].args[1], restored)
+
+    def test_personal_context_is_the_only_non_general_authoring_default(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.local_context_names = {"review": "Review"}
+
+        app.palette_state = PaletteState(focus_context="Review")
+        self.assertEqual(app._active_authoring_context(), "Review")
+
+        app.palette_state = PaletteState(focus_context="Built-in project")
+        self.assertEqual(app._active_authoring_context(), "General")
 
     def test_quit_is_blocked_while_each_work_item_write_is_running(self):
         for file_copy_running, inbox_running, expected in (
@@ -1002,12 +1036,14 @@ class LauncherInteractionTests(unittest.TestCase):
         app.action_type_filter = "open_url"
         app.work_project_filter = "AB9C"
         app.item_tag_filter = "urgent"
+        app.item_context_filter = "Database"
 
         app._sync_filter_indicators()
 
         app.action_discovery_panel.set_filter_indicators.assert_called_once_with(
             scope=DISCOVERY_ALL,
             primary_value=None,
+            context_value="Database",
             tag_value="urgent",
             saved_values=(
                 f"Actions: {ACTION_TYPES['open_url'].display_label}",
@@ -1157,58 +1193,62 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertEqual(app.passwords_button.options["style"], "RailIcon.TButton")
         self.assertEqual(refreshes, [True, True])
 
-    def test_context_scope_switches_between_everywhere_and_working_context(self):
+    def test_context_filter_selects_the_matching_shortcut_bank(self):
         app = LauncherApp.__new__(LauncherApp)
-        app.context_scope = CONTEXT_SCOPE_EVERYWHERE
+        app.item_context_filter = None
+        app.item_context_filter_var = FakeVariable()
         app.palette_state = PaletteState((), "Developing", {})
-        app.status_var = FakeVariable()
         app.root = Mock()
         refreshes: list[bool] = []
         synchronizations: list[bool] = []
-        app._sync_context_scope_control = lambda: synchronizations.append(True)
+        app._sync_filter_indicators = lambda: synchronizations.append(True)
         app._refresh_results = lambda: refreshes.append(True)
         app._focus_active_results = Mock()
 
-        app._select_context_scope(CONTEXT_SCOPE_THIS)
+        app._select_item_context_filter("Database")
 
-        self.assertEqual(app.context_scope, CONTEXT_SCOPE_THIS)
+        self.assertEqual(app.item_context_filter, "Database")
+        self.assertEqual(app.item_context_filter_var.value, "Database")
+        self.assertEqual(app.palette_state.focus_context, "Database")
 
-        app._select_context_scope(CONTEXT_SCOPE_EVERYWHERE)
+        app._select_item_context_filter(None)
 
-        self.assertEqual(app.context_scope, CONTEXT_SCOPE_EVERYWHERE)
+        self.assertIsNone(app.item_context_filter)
+        self.assertEqual(app.item_context_filter_var.value, "All contexts")
+        self.assertEqual(app.palette_state.focus_context, "General")
         self.assertEqual(synchronizations, [True, True])
         self.assertEqual(refreshes, [True, True])
         self.assertEqual(app.root.after_idle.call_count, 2)
 
-    def test_this_context_scope_requires_a_specific_working_context(self):
-        app = LauncherApp.__new__(LauncherApp)
-        app.context_scope = CONTEXT_SCOPE_EVERYWHERE
-        app.palette_state = PaletteState((), "General", {})
-        app.status_var = FakeVariable()
-        app.root = Mock()
-        app._sync_context_scope_control = Mock()
-        app._refresh_results = Mock()
-        app._focus_active_results = Mock()
+    def test_context_filter_disambiguates_a_context_named_all_contexts(self):
+        contexts = ("General", "All contexts", "All contexts — Context")
 
-        app._select_context_scope(CONTEXT_SCOPE_THIS)
+        choices, values_by_display, _displays_by_value = context_filter_choices(
+            contexts
+        )
 
-        self.assertEqual(app.context_scope, CONTEXT_SCOPE_EVERYWHERE)
-        self.assertIn("specific Working context", app.status_var.value)
-        app._sync_context_scope_control.assert_called_once_with()
-        app._refresh_results.assert_called_once_with()
+        self.assertEqual(
+            choices,
+            ("All contexts — Context", "All contexts — Context — Context"),
+        )
+        self.assertEqual(
+            values_by_display["all contexts — context"],
+            "All contexts",
+        )
+        self.assertEqual(
+            context_filter_display_label(contexts, "All contexts"),
+            "All contexts — Context",
+        )
+        self.assertEqual(context_filter_display_label(contexts, None), "All contexts")
 
-    def test_selected_result_context_uses_only_this_context_scope(self):
-        app = LauncherApp.__new__(LauncherApp)
-        app.palette_state = PaletteState((), "Developing", {})
-        app.context_scope = CONTEXT_SCOPE_EVERYWHERE
-
-        self.assertIsNone(app._selected_result_context())
-
-        app.context_scope = CONTEXT_SCOPE_THIS
-        self.assertEqual(app._selected_result_context(), "Developing")
-
-        app.palette_state = PaletteState((), "General", {})
-        self.assertIsNone(app._selected_result_context())
+        panel = ActionDiscoveryPanel.__new__(ActionDiscoveryPanel)
+        panel._context_values_by_display = values_by_display
+        panel.select_context_filter = Mock()
+        panel._select_context_from_picker(("All contexts — Context",))
+        panel.select_context_filter.assert_called_once_with("All contexts")
+        panel.select_context_filter.reset_mock()
+        panel._select_context_from_picker((ALL_CONTEXTS_FILTER_LABEL,))
+        panel.select_context_filter.assert_called_once_with(None)
 
     def test_any_action_type_can_be_selected_as_a_filter(self):
         app = LauncherApp.__new__(LauncherApp)
@@ -1228,7 +1268,7 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertEqual(app.passwords_button.options["style"], "RailIcon.TButton")
         self.assertEqual(refreshes, [True])
 
-    def test_this_context_includes_a_preferred_only_work_item(self):
+    def test_context_filter_includes_a_preferred_only_work_item(self):
         reference = WorkItemReference("cap40", "QST-CAP40-question")
         item = DiscoveredWorkItem(
             "cap40",
@@ -1258,8 +1298,8 @@ class LauncherInteractionTests(unittest.TestCase):
 
     def test_f5_reset_clears_transient_state_but_preserves_palette_state(self):
         app = LauncherApp.__new__(LauncherApp)
-        app.context_scope = CONTEXT_SCOPE_THIS
-        app.context_scope_var = FakeVariable()
+        app.item_context_filter = "Database"
+        app.item_context_filter_var = FakeVariable()
         app.action_type_filter = "open_url"
         app.action_tag_filter = "database"
         app.work_project_filter = "AB9C"
@@ -1287,8 +1327,8 @@ class LauncherInteractionTests(unittest.TestCase):
         result = app._reset_main_window()
 
         self.assertEqual(result, "break")
-        self.assertEqual(app.context_scope, CONTEXT_SCOPE_EVERYWHERE)
-        self.assertEqual(app.context_scope_var.value, "Everywhere")
+        self.assertIsNone(app.item_context_filter)
+        self.assertEqual(app.item_context_filter_var.value, "All contexts")
         self.assertIsNone(app.action_type_filter)
         self.assertIsNone(app.action_tag_filter)
         self.assertIsNone(app.work_project_filter)
@@ -1305,7 +1345,7 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertEqual(reloads, [True])
         self.assertEqual(refreshes, [True])
         self.assertEqual(focus_requests, [True])
-        self.assertEqual(app.palette_state, PaletteState(("pinned",), "Database", {}))
+        self.assertEqual(app.palette_state, PaletteState(("pinned",), "General", {}))
         self.assertEqual(app.status_var.value, "Reset to the startup view.")
 
     def test_protected_clipboard_is_never_synchronized_into_workspace(self):
@@ -1499,6 +1539,29 @@ class LauncherInteractionTests(unittest.TestCase):
         app._handle_external_request({"command": "show"})
 
         self.assertIsNone(app.source_foreground_handle)
+
+    def test_external_context_request_selects_filter_bank_or_general(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.source_foreground_handle = 123
+        app.show_window = Mock()
+        app.available_context_names = ["General", "Database"]
+        app._select_item_context_filter = Mock()
+        app.status_var = FakeVariable()
+        app.search_var = FakeVariable()
+        app.root = Mock()
+        app.focus_search = Mock()
+
+        app._handle_external_request({"command": "show", "context": "database"})
+        app._select_item_context_filter.assert_called_once_with("Database")
+
+        app._select_item_context_filter.reset_mock()
+        app._handle_external_request({"command": "show", "context": "General"})
+        app._select_item_context_filter.assert_called_once_with(None)
+
+        app._select_item_context_filter.reset_mock()
+        app._handle_external_request({"command": "show", "context": "missing"})
+        app._select_item_context_filter.assert_not_called()
+        self.assertEqual(app.status_var.value, "Unknown integration context: missing")
 
     def test_drop_reveal_never_synchronizes_clipboard(self):
         app = LauncherApp.__new__(LauncherApp)
@@ -1835,37 +1898,24 @@ class LauncherInteractionTests(unittest.TestCase):
             "Protected credential paste was cancelled.",
         )
 
-    def test_successful_focus_change_persists_before_applying_and_refreshes(self):
-        previous = PaletteState(("existing",), "General", {})
-        app = LauncherApp.__new__(LauncherApp)
-        app.palette_state = previous
-        app.context_var = FakeVariable()
-        app.context_var.set("Developing")
-        app.context_definitions = []
-        app.status_var = FakeVariable()
-        app.palette_path = Path("palette.json")
-        app._configuration_signature = lambda: (("palette.json", 1, 1),)
-        refreshes: list[bool] = []
-        app._refresh_results = lambda: refreshes.append(True)
-        saved_states: list[PaletteState] = []
-
-        def save(_path: Path, state: PaletteState) -> None:
-            self.assertIs(app.palette_state, previous)
-            saved_states.append(state)
-
-        with patch("context_palette.launcher.save_palette_state", side_effect=save):
-            app._change_focus_context()
-
-        self.assertEqual(saved_states[0].focus_context, "Developing")
-        self.assertEqual(saved_states[0].pinned_action_ids, ("existing",))
-        self.assertIs(app.palette_state, saved_states[0])
-        self.assertEqual(refreshes, [True])
-        self.assertEqual(app.status_var.value, "Working context: Developing")
-
     def test_failed_context_reload_preserves_last_known_good_contexts(self):
         app = LauncherApp.__new__(LauncherApp)
-        existing = ContextDefinition("General", "Existing context")
+        existing = ContextDefinition(
+            "Database",
+            "Existing context",
+            action_ids=("existing",),
+        )
         app.context_definitions = [existing]
+        app.actions = [
+            Action(
+                "existing",
+                "Existing",
+                "General",
+                "copy_text",
+                "text",
+                "Active",
+            )
+        ]
         app.contexts_path = Path("contexts.json")
         app.local_contexts_path = Path("local_contexts.json")
         app.status_var = FakeVariable()
@@ -1881,6 +1931,7 @@ class LauncherInteractionTests(unittest.TestCase):
             app._load_contexts()
 
         self.assertEqual(app.context_definitions, [existing])
+        self.assertEqual(app.actions[0].effective_contexts, ("Database",))
         self.assertIn("kept 1 previous context", app.status_var.value)
         showerror.assert_called_once()
 
@@ -1904,10 +1955,9 @@ class LauncherInteractionTests(unittest.TestCase):
             )
         ]
         app.context_definitions = []
-        app.context_var = FakeVariable()
+        app.item_context_filter = None
         app.status_var = FakeVariable()
         app.root = object()
-        app._refresh_focus_controls = lambda: None
         app._render_command_surface = lambda: None
 
         with (
@@ -1920,8 +1970,64 @@ class LauncherInteractionTests(unittest.TestCase):
             app._load_palette_state()
 
         self.assertEqual(app.palette_state, previous)
-        self.assertIn("kept previous", app.status_var.value)
+        self.assertIn("kept the current Context filter", app.status_var.value)
         showerror.assert_called_once()
+
+    def test_palette_reload_canonicalizes_or_clears_context_filter(self):
+        app = LauncherApp.__new__(LauncherApp)
+        state = PaletteState((), "General", {})
+        app.palette_state = state
+        app.palette_path = Path("palette.json")
+        app.actions = [
+            Action("database", "Database", "General", "copy_text", "text")
+        ]
+        app.context_definitions = [
+            ContextDefinition("Database", action_ids=("database",))
+        ]
+        app.item_context_filter = "database"
+        app.item_context_filter_var = FakeVariable()
+        app.action_type_filter = None
+        app.work_project_filter = None
+        app.item_tag_filter = None
+        app.action_discovery_panel = Mock()
+        app._render_command_surface = Mock()
+
+        with patch(
+            "context_palette.launcher.load_palette_state",
+            return_value=state,
+        ):
+            app._load_palette_state(render=False)
+
+        self.assertEqual(app.item_context_filter, "Database")
+        self.assertEqual(app.item_context_filter_var.value, "Database")
+        self.assertEqual(app.palette_state.focus_context, "Database")
+        app.action_discovery_panel.set_contexts.assert_called_with(
+            ("General", "Database")
+        )
+        self.assertEqual(
+            app.action_discovery_panel.set_filter_indicators.call_args.kwargs[
+                "context_value"
+            ],
+            "Database",
+        )
+
+        app.context_definitions = []
+        app.action_discovery_panel.reset_mock()
+        with patch(
+            "context_palette.launcher.load_palette_state",
+            return_value=state,
+        ):
+            app._load_palette_state(render=False)
+
+        self.assertIsNone(app.item_context_filter)
+        self.assertEqual(app.item_context_filter_var.value, "All contexts")
+        self.assertEqual(app.palette_state.focus_context, "General")
+        app.action_discovery_panel.set_contexts.assert_called_with(("General",))
+        self.assertIsNone(
+            app.action_discovery_panel.set_filter_indicators.call_args.kwargs[
+                "context_value"
+            ]
+        )
 
     def test_failed_initial_palette_load_keeps_usable_empty_slots(self):
         app = LauncherApp.__new__(LauncherApp)
@@ -1929,10 +2035,9 @@ class LauncherInteractionTests(unittest.TestCase):
         app.palette_path = Path("palette.json")
         app.actions = []
         app.context_definitions = []
-        app.context_var = FakeVariable()
+        app.item_context_filter = None
         app.status_var = FakeVariable()
         app.root = object()
-        app._refresh_focus_controls = lambda: None
         app._render_command_surface = lambda: None
 
         with (
@@ -1945,28 +2050,6 @@ class LauncherInteractionTests(unittest.TestCase):
             app._load_palette_state()
 
         self.assertEqual(app.palette_state.context_slots, {})
-
-    def test_failed_focus_save_restores_previous_context(self):
-        app = LauncherApp.__new__(LauncherApp)
-        app.palette_state = PaletteState(("existing",), "General", {})
-        app.context_var = FakeVariable()
-        app.context_var.set("Developing")
-        app.status_var = FakeVariable()
-        app.palette_path = Path("palette.json")
-
-        with (
-            patch(
-                "context_palette.launcher.save_palette_state",
-                side_effect=OSError("file is locked"),
-            ),
-            patch("context_palette.launcher.messagebox.showerror") as showerror,
-        ):
-            app._change_focus_context()
-
-        self.assertEqual(app.palette_state.focus_context, "General")
-        self.assertEqual(app.context_var.value, "General")
-        self.assertIn("not changed", app.status_var.value)
-        showerror.assert_called_once()
 
     def test_failed_action_reload_preserves_last_known_good_actions(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -35,7 +35,7 @@ def integration_request(arguments: list[str]) -> dict[str, str]:
     parser.add_argument(
         "--context",
         default=os.environ.get("CONTEXT_PALETTE_CONTEXT", ""),
-        help="Initial focus context name.",
+        help="Initial Context filter and matching 6–0 shortcut bank.",
     )
     options = parser.parse_args(arguments)
     request = {"command": "show"}

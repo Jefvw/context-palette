@@ -30,10 +30,6 @@ SIZE_KEYS = (SIZE_NORMAL, SIZE_MINIMUM)
 SCALE_PERCENTAGES = (100, 125, 150)
 SYSTEM_SCALING = "system"
 BASE_TK_SCALING = 96 / 72
-CONTEXT_SCOPE_EVERYWHERE = "everywhere"
-CONTEXT_SCOPE_THIS = "this"
-
-
 @dataclass(frozen=True)
 class MockupDefinition:
     key: str
@@ -60,11 +56,11 @@ MOCKUP_DEFINITIONS = {
             ("no-selection", "Populated, no selection"),
             ("selected", "Selected Action"),
             ("work-item", "Selected Work Item"),
-            ("context-slots", "Working context slots 6–0"),
-            ("this-context", "This context results"),
+            ("context-slots", "All contexts with General slots 6–0"),
+            ("context-filter", "Context-filtered results"),
             ("zero-match", "Find with no matches"),
             ("sequence", "Sequence waiting"),
-            ("empty-context", "This context has no members"),
+            ("empty-context", "Context filter has no members"),
             ("sequence-stopped", "Sequence stopped"),
         ),
     ),
@@ -290,7 +286,7 @@ PALETTE_EXAMPLES = (
         "Professional greeting",
         "action",
         ("General", "Mail"),
-        (),
+        (("General", 6),),
         ("communication",),
         "paste saved text into the captured app; clipboard fallback",
     ),
@@ -326,7 +322,7 @@ PALETTE_EXAMPLES = (
         "Current date and time",
         "action",
         ("General", "Developing"),
-        (("Developing", 7),),
+        (("General", 7), ("Developing", 7)),
         ("date",),
         "replace Input / Output with the current date and time",
     ),
@@ -485,7 +481,7 @@ class ConfigureMockup(MockupView):
         self._build_placeholder_page(
             "contexts",
             "Manage Contexts",
-            "A Context organizes items; the Working context is highlighted in the palette.",
+            "A Context filters items and selects their preferred shortcuts 6–0 in the palette.",
         )
         self._build_placeholder_page(
             "quick-actions",
@@ -1084,8 +1080,7 @@ class MainPaletteMockup(MockupView):
         self.size_key = size_key
         self.scaling = scaling or 100
         self.scope = "all"
-        self.current_context = "General"
-        self.context_scope = CONTEXT_SCOPE_EVERYWHERE
+        self.item_context_filter: str | None = None
         self.tag_filter: str | None = None
         self.sequence_running = False
         self._placeholder_active = True
@@ -1123,7 +1118,7 @@ class MainPaletteMockup(MockupView):
         self._split_after_id: str | None = None
         self.panes.bind("<Configure>", self._queue_split, add="+")
         self.discovery.columnconfigure(0, weight=1)
-        self.discovery.rowconfigure(3, weight=1)
+        self.discovery.rowconfigure(2, weight=1)
         self.workspace.columnconfigure(0, weight=1)
         self.workspace.rowconfigure(1, weight=1)
         self._build_discovery()
@@ -1131,59 +1126,8 @@ class MainPaletteMockup(MockupView):
         self._apply_initial_scenario()
 
     def _build_discovery(self) -> None:
-        context_row = ttk.Frame(self.discovery)
-        context_row.grid(row=0, column=0, sticky=tk.EW, pady=(0, 4))
-        context_row.columnconfigure(0, weight=1)
-        self.context_var = tk.StringVar(value="Context: All contexts")
-        self.context_picker = ttk.Menubutton(
-            context_row,
-            textvariable=self.context_var,
-            style="Compact.TButton",
-        )
-        self.context_menu = tk.Menu(self.context_picker, tearoff=False)
-        for context in ("General", "Developing", "CAP40 delivery", "Empty UAT"):
-            self.context_menu.add_command(
-                label="All contexts" if context == "General" else context,
-                command=lambda value=context: self._set_working_context(value),
-            )
-        self.context_menu.add_separator()
-        self.context_menu.add_command(
-            label="Manage contexts...",
-            command=lambda: self._mock_preview("Mockup: Context management would open."),
-        )
-        self.context_picker.configure(menu=self.context_menu)
-        self.context_picker.grid(row=0, column=0, sticky=tk.EW, padx=(0, 3))
-        self._hint(
-            self.context_picker,
-            "Context — Choose your Working context. It supplies slots 6–0 when Find is empty.",
-        )
-
-        self.context_scope_var = tk.StringVar(value="Everywhere")
-        self.context_scope_picker = ttk.Menubutton(
-            context_row,
-            textvariable=self.context_scope_var,
-            style="Compact.TButton",
-            takefocus=True,
-        )
-        self.context_scope_menu = tk.Menu(self.context_scope_picker, tearoff=False)
-        self.context_scope_menu.add_command(
-            label="Everywhere",
-            command=lambda: self._set_context_scope(CONTEXT_SCOPE_EVERYWHERE),
-        )
-        self.context_scope_menu.add_command(
-            label="This context",
-            command=lambda: self._set_context_scope(CONTEXT_SCOPE_THIS),
-        )
-        self.context_scope_picker.configure(menu=self.context_scope_menu)
-        self.context_scope_picker.grid(row=0, column=1, sticky=tk.EW)
-        self._hint(
-            self.context_scope_picker,
-            "Search scope — Choose Everywhere to browse all Contexts, or This context to limit results to the Working context.",
-        )
-        self._sync_context_scope_control()
-
         scopes = ttk.Frame(self.discovery)
-        scopes.grid(row=1, column=0, sticky=tk.EW, pady=(0, 4))
+        scopes.grid(row=0, column=0, sticky=tk.EW, pady=(0, 4))
         for column in range(3):
             scopes.columnconfigure(column, weight=1, uniform="scope")
         self.scope_buttons: dict[str, ttk.Button] = {}
@@ -1206,7 +1150,7 @@ class MainPaletteMockup(MockupView):
             self._hint(button, hint)
 
         find = ttk.Frame(self.discovery)
-        find.grid(row=2, column=0, sticky=tk.EW, pady=(0, 4))
+        find.grid(row=1, column=0, sticky=tk.EW, pady=(0, 4))
         find.columnconfigure(0, weight=1)
         self.find_var = tk.StringVar(value="Find items...")
         self.find_entry = ttk.Entry(find, textvariable=self.find_var)
@@ -1216,11 +1160,19 @@ class MainPaletteMockup(MockupView):
         self.find_entry.bind("<KeyRelease>", lambda _event: self._render_results())
         self.filter_menu = tk.Menu(find, tearoff=False)
         self.filter_menu.add_command(
+            label="Filter by context: Developing",
+            command=lambda: self._set_context_filter("Developing"),
+        )
+        self.filter_menu.add_command(
             label="Filter by tag: project",
             command=lambda: self._set_tag_filter("project"),
         )
         self.filter_menu.add_separator()
-        self.filter_menu.add_command(label="Clear filters", command=lambda: self._set_tag_filter(None))
+        self.filter_menu.add_command(label="Clear filters", command=self._clear_filters)
+        self.filter_menu.add_command(
+            label="Manage contexts...",
+            command=lambda: self._mock_preview("Mockup: Context management would open."),
+        )
         self.filter_button = ttk.Menubutton(
             find,
             image=self.icons["filters"],
@@ -1231,18 +1183,18 @@ class MainPaletteMockup(MockupView):
         self.filter_button.grid(row=0, column=1)
         self._hint(
             self.filter_button,
-            "Filters narrow results without changing the Working context or search scope.",
+            "Filter results by Context, tag, Action type, or Work Item project. Context also selects shortcuts 6–0.",
         )
 
         self.filter_chip = ttk.Button(
-            self.discovery,
+            find,
             text="",
-            command=lambda: self._set_tag_filter(None),
+            command=self._clear_filters,
             style="Compact.TButton",
         )
 
         self.results_host = ttk.Frame(self.discovery)
-        self.results_host.grid(row=3, column=0, sticky=tk.NSEW)
+        self.results_host.grid(row=2, column=0, sticky=tk.NSEW)
         self.results_host.rowconfigure(0, weight=1)
         self.results_host.columnconfigure(0, weight=1)
         self.results_tree_frame, self.results = _scrollable_tree(self.results_host, ())
@@ -1268,7 +1220,7 @@ class MainPaletteMockup(MockupView):
         ).grid(row=0, column=0, sticky=tk.EW)
 
         toolbar = ttk.Frame(self.discovery)
-        toolbar.grid(row=4, column=0, sticky=tk.EW, pady=(6, 0))
+        toolbar.grid(row=3, column=0, sticky=tk.EW, pady=(6, 0))
         toolbar.columnconfigure(2, weight=1)
         self.new_action_button = ttk.Button(
             toolbar,
@@ -1306,7 +1258,7 @@ class MainPaletteMockup(MockupView):
         self._hint(self.folder_button, "Open the selected Work Item folder.")
 
         self.quick_host = ttk.Frame(self.discovery)
-        self.quick_host.grid(row=5, column=0, sticky=tk.EW, pady=(7, 0))
+        self.quick_host.grid(row=4, column=0, sticky=tk.EW, pady=(7, 0))
         self.quick_host.columnconfigure(0, weight=1)
         self.quick_canvas = tk.Canvas(
             self.quick_host,
@@ -1355,7 +1307,7 @@ class MainPaletteMockup(MockupView):
         self.root.after_idle(self._size_quick_actions)
 
         app_controls = ttk.Frame(self.discovery)
-        app_controls.grid(row=6, column=0, sticky=tk.EW, pady=(6, 0))
+        app_controls.grid(row=5, column=0, sticky=tk.EW, pady=(6, 0))
         self.configure_button = ttk.Button(
             app_controls,
             image=self.icons["configure"],
@@ -1386,8 +1338,6 @@ class MainPaletteMockup(MockupView):
         self._hint(self.more_button, "Keyboard shortcuts, Hide, and Quit.")
 
         self.critical(
-            self.context_picker,
-            self.context_scope_picker,
             *self.scope_buttons.values(),
             self.find_entry,
             self.filter_button,
@@ -1534,48 +1484,10 @@ class MainPaletteMockup(MockupView):
             self.find_var.set("Find items...")
             self._placeholder_active = True
 
-    def _set_working_context(self, context: str) -> None:
-        self.current_context = context
-        self.context_var.set(
-            "Context: All contexts"
-            if context.casefold() == "general"
-            else f"Context: {context}"
-        )
-        self._sync_context_scope_control()
+    def _set_context_filter(self, context: str | None) -> None:
+        self.item_context_filter = context
+        self._sync_filter_chip()
         self._render_results()
-
-    def _set_context_scope(self, scope: str) -> None:
-        if scope not in {CONTEXT_SCOPE_EVERYWHERE, CONTEXT_SCOPE_THIS}:
-            raise ValueError(f"Unsupported Context scope: {scope}")
-        if scope == CONTEXT_SCOPE_THIS and self.current_context.casefold() == "general":
-            scope = CONTEXT_SCOPE_EVERYWHERE
-            self._mock_preview(
-                "Choose a specific Working context before limiting results to it."
-            )
-        self.context_scope = scope
-        self._sync_context_scope_control()
-        self._render_results()
-
-    def _sync_context_scope_control(self) -> None:
-        specific_context = self.current_context.casefold() != "general"
-        if not specific_context and self.context_scope == CONTEXT_SCOPE_THIS:
-            self.context_scope = CONTEXT_SCOPE_EVERYWHERE
-        self.context_scope_var.set(
-            "This context"
-            if self.context_scope == CONTEXT_SCOPE_THIS
-            else "Everywhere"
-        )
-        self.context_scope_picker.configure(
-            style=(
-                "Mockup.ScopeSelected.TButton"
-                if self.context_scope == CONTEXT_SCOPE_THIS
-                else "Compact.TButton"
-            )
-        )
-        self.context_scope_menu.entryconfigure(
-            1,
-            state=tk.NORMAL if specific_context else tk.DISABLED,
-        )
 
     def _set_scope(self, scope: str) -> None:
         self.scope = scope
@@ -1587,12 +1499,35 @@ class MainPaletteMockup(MockupView):
 
     def _set_tag_filter(self, tag: str | None) -> None:
         self.tag_filter = tag
-        if tag is None:
+        self._sync_filter_chip()
+        self._render_results()
+
+    def _clear_filters(self) -> None:
+        self.item_context_filter = None
+        self.tag_filter = None
+        self._sync_filter_chip()
+        self._render_results()
+
+    def _sync_filter_chip(self) -> None:
+        parts: list[str] = []
+        if self.item_context_filter:
+            parts.append(f"Context: {self.item_context_filter}")
+        if self.tag_filter:
+            parts.append(f"Tag: {self.tag_filter}")
+        self.filter_button.configure(
+            style="RailIconAccent.TButton" if parts else "Icon.TButton"
+        )
+        if not parts:
             self.filter_chip.grid_remove()
         else:
-            self.filter_chip.configure(text=f"Tag: {tag}  x")
-            self.filter_chip.grid(row=3, column=0, sticky=tk.W, pady=(0, 4))
-        self._render_results()
+            self.filter_chip.configure(text=" | ".join(parts) + "  x")
+            self.filter_chip.grid(
+                row=1,
+                column=0,
+                columnspan=2,
+                sticky=tk.EW,
+                pady=(4, 0),
+            )
 
     def _query(self) -> str:
         if self._placeholder_active:
@@ -1600,8 +1535,9 @@ class MainPaletteMockup(MockupView):
         return self.find_var.get().strip().casefold()
 
     def _context_slot(self, item: PaletteExample) -> int | None:
+        active_context = self.item_context_filter or "General"
         for context, slot in item.context_slots:
-            if context.casefold() == self.current_context.casefold():
+            if context.casefold() == active_context.casefold():
                 return slot
         return None
 
@@ -1635,8 +1571,8 @@ class MainPaletteMockup(MockupView):
             if self.scope == "work-items" and item.kind != "work-item":
                 continue
             if (
-                self.context_scope == CONTEXT_SCOPE_THIS
-                and self.current_context.casefold()
+                self.item_context_filter is not None
+                and self.item_context_filter.casefold()
                 not in {context.casefold() for context in item.contexts}
             ):
                 continue
@@ -1687,8 +1623,8 @@ class MainPaletteMockup(MockupView):
         else:
             self.results_tree_frame.grid_remove()
             self.empty_state_var.set(
-                f"This context ({self.current_context}) has no members."
-                if self.context_scope == CONTEXT_SCOPE_THIS and not query
+                f"Context filter ({self.item_context_filter}) has no members."
+                if self.item_context_filter is not None and not query
                 else "No items match Find and the active filters."
             )
             self.empty_state.grid(row=0, column=0, sticky=tk.NSEW)
@@ -1794,15 +1730,12 @@ class MainPaletteMockup(MockupView):
             self._set_scope("all")
             self._select_result("work-item-kilit")
         elif self.scenario == "context-slots":
-            self._set_working_context("Developing")
             self._select_first_result()
-        elif self.scenario == "this-context":
-            self._set_working_context("Developing")
-            self._set_context_scope(CONTEXT_SCOPE_THIS)
+        elif self.scenario == "context-filter":
+            self._set_context_filter("Developing")
             self._select_first_result()
         elif self.scenario == "zero-match":
-            self._set_working_context("Developing")
-            self._set_context_scope(CONTEXT_SCOPE_THIS)
+            self._set_context_filter("Developing")
             self._placeholder_active = False
             self.find_var.set("nothing can match this")
             self._render_results()
@@ -1810,8 +1743,7 @@ class MainPaletteMockup(MockupView):
             self._select_result("sequence")
             self._activate_primary()
         elif self.scenario == "empty-context":
-            self._set_working_context("Empty UAT")
-            self._set_context_scope(CONTEXT_SCOPE_THIS)
+            self._set_context_filter("Empty UAT")
         elif self.scenario == "sequence-stopped":
             self._select_result("sequence")
             self.sequence_running = False

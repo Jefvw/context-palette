@@ -10,6 +10,7 @@ from context_palette.window_geometry import (
     MINIMUM_WINDOW_HEIGHT,
     MINIMUM_WINDOW_WIDTH,
     centered_window_position,
+    centered_work_area_position,
     configure_main_window,
     configure_standard_window,
     fit_window_size,
@@ -120,9 +121,13 @@ class WindowGeometryTests(unittest.TestCase):
     def test_configuration_sets_matching_geometry_and_safe_minimum(self) -> None:
         window = FakeWindow(1920, 1080)
 
-        configure_standard_window(window)  # type: ignore[arg-type]
+        with patch(
+            "context_palette.window_geometry.window_monitor_work_area",
+            return_value=(0, 0, 1920, 1040),
+        ):
+            configure_standard_window(window)  # type: ignore[arg-type]
 
-        self.assertEqual(window.geometry_value, "780x600")
+        self.assertEqual(window.geometry_value, "780x600+570+220")
         self.assertEqual(
             window.minimum_size,
             (MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT),
@@ -131,25 +136,46 @@ class WindowGeometryTests(unittest.TestCase):
     def test_minimum_never_exceeds_small_screen_geometry(self) -> None:
         window = FakeWindow(640, 400)
 
-        configure_standard_window(window)  # type: ignore[arg-type]
+        with patch(
+            "context_palette.window_geometry.window_monitor_work_area",
+            return_value=(0, 0, 640, 400),
+        ):
+            configure_standard_window(window)  # type: ignore[arg-type]
 
-        self.assertEqual(window.geometry_value, "592x304")
+        self.assertEqual(window.geometry_value, "592x304+24+48")
         self.assertEqual(window.minimum_size, (592, 304))
 
     def test_main_window_uses_compact_standard_size(self) -> None:
         window = FakeWindow(1920, 1080)
 
-        configure_main_window(window)  # type: ignore[arg-type]
+        with patch(
+            "context_palette.window_geometry.window_monitor_work_area",
+            return_value=(0, 0, 1920, 1040),
+        ):
+            configure_main_window(window)  # type: ignore[arg-type]
 
-        self.assertEqual(window.geometry_value, "780x600")
+        self.assertEqual(window.geometry_value, "780x600+570+220")
         self.assertEqual(window.minimum_size, (700, 480))
 
     def test_large_monitor_does_not_inflate_main_window(self) -> None:
         window = FakeWindow(2560, 1440)
 
-        configure_main_window(window)  # type: ignore[arg-type]
+        with patch(
+            "context_palette.window_geometry.window_monitor_work_area",
+            return_value=(0, 0, 2560, 1400),
+        ):
+            configure_main_window(window)  # type: ignore[arg-type]
 
-        self.assertEqual(window.geometry_value, "780x600")
+        self.assertEqual(window.geometry_value, "780x600+890+400")
+
+    def test_work_area_center_respects_taskbar_and_negative_coordinates(self) -> None:
+        self.assertEqual(
+            centered_work_area_position(
+                (780, 600),
+                (-1920, 40, 0, 1040),
+            ),
+            (-1350, 240),
+        )
 
     def test_centered_position_uses_negative_coordinate_monitor(self) -> None:
         position = centered_window_position(
@@ -236,20 +262,21 @@ class WindowGeometryTests(unittest.TestCase):
         monitor_work_area.assert_called_once_with(root)
         self.assertEqual(result, (0, 0, 1920, 1040))
 
-    def test_standard_child_uses_main_monitor_and_owner_center(self) -> None:
+    def test_standard_child_uses_owner_monitor_and_work_area_center(self) -> None:
         window = FakeWindow(1920, 1080)
         owner = FakeOwner(2100, 100, 800, 700)
 
         with patch(
-            "context_palette.window_geometry.main_window_monitor_work_area",
+            "context_palette.window_geometry.window_monitor_work_area",
             return_value=(1920, 0, 3520, 900),
-        ):
+        ) as monitor_work_area:
             configure_standard_window(  # type: ignore[arg-type]
                 window,
                 owner,  # type: ignore[arg-type]
             )
 
-        self.assertEqual(window.geometry_value, "780x600+2110+150")
+        monitor_work_area.assert_called_with(owner)
+        self.assertEqual(window.geometry_value, "780x600+2330+150")
         self.assertEqual(
             window.minimum_size,
             (MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT),
@@ -260,7 +287,7 @@ class WindowGeometryTests(unittest.TestCase):
         owner = FakeOwner(-1700, 200, 800, 700)
 
         with patch(
-            "context_palette.window_geometry.main_window_monitor_work_area",
+            "context_palette.window_geometry.window_monitor_work_area",
             return_value=(-1920, 0, 0, 1040),
         ):
             result = place_child_window(  # type: ignore[arg-type]
@@ -269,8 +296,8 @@ class WindowGeometryTests(unittest.TestCase):
                 size=(500, 300),
             )
 
-        self.assertEqual(result, (500, 300, -1550, 400))
-        self.assertEqual(window.geometry_value, "500x300-1550+400")
+        self.assertEqual(result, (500, 300, -1210, 370))
+        self.assertEqual(window.geometry_value, "500x300-1210+370")
 
     def test_dialog_uses_owner_toplevel_but_popup_uses_control(self) -> None:
         window = FakeWindow(1920, 1080)
@@ -278,7 +305,7 @@ class WindowGeometryTests(unittest.TestCase):
         control = FakeOwner(2500, 700, 120, 30, toplevel=toplevel)
 
         with patch(
-            "context_palette.window_geometry.main_window_monitor_work_area",
+            "context_palette.window_geometry.window_monitor_work_area",
             return_value=(1920, 0, 3520, 900),
         ):
             dialog = place_child_window(  # type: ignore[arg-type]
@@ -293,7 +320,7 @@ class WindowGeometryTests(unittest.TestCase):
                 below_owner=True,
             )
 
-        self.assertEqual(dialog, (500, 300, 2150, 300))
+        self.assertEqual(dialog, (500, 300, 2470, 300))
         self.assertEqual(popup, (300, 160, 2500, 730))
 
 

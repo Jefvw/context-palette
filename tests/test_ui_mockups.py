@@ -7,8 +7,6 @@ import unittest
 
 from context_palette.ui_mockups import (
     BASE_TK_SCALING,
-    CONTEXT_SCOPE_EVERYWHERE,
-    CONTEXT_SCOPE_THIS,
     MOCKUP_ACTIONS,
     MOCKUP_DEFINITIONS,
     MOCKUP_KEYS,
@@ -168,22 +166,32 @@ class UiMockupTkTests(unittest.TestCase):
                 finally:
                     root.destroy()
 
-    def test_working_context_scope_and_relevance_are_explicit(self) -> None:
+    def test_context_filter_controls_membership_and_shortcut_slots(self) -> None:
         root, view = self.build(MOCKUP_MAIN, scenario="selected")
         try:
             self.assertIsInstance(view, MainPaletteMockup)
             self.assertFalse(hasattr(view, "focus_only_button"))
-            self.assertFalse(hasattr(view, "context_filter"))
-            self.assertEqual(view.context_var.get(), "Context: All contexts")
-            self.assertEqual(view.context_scope_var.get(), "Everywhere")
-            self.assertEqual(view.context_scope_menu.entrycget(1, "state"), "disabled")
+            self.assertFalse(hasattr(view, "context_scope_picker"))
+            self.assertFalse(hasattr(view, "context_var"))
+            self.assertIsNone(view.item_context_filter)
+            self.assertTrue(
+                any(
+                    "context_slot" in view.results.item(item, "tags")
+                    for item in view.results.get_children("")
+                )
+            )
+            self.assertIn("cart", view.results.get_children(""))
 
-            view._set_working_context("Developing")
-            self.assertEqual(view.context_var.get(), "Context: Developing")
-            self.assertEqual(view.context_scope_menu.entrycget(1, "state"), "normal")
-            self.assertEqual(
-                view.results.get_children("")[:5],
-                ("vscode", "current-date", "project-folder", "python-docs", "work-item-kilit"),
+            view._set_context_filter("Developing")
+            root.update_idletasks()
+            self.assertEqual(view.item_context_filter, "Developing")
+            self.assertIn("Context: Developing", view.filter_chip.cget("text"))
+            self.assertEqual(view.filter_button.cget("style"), "RailIconAccent.TButton")
+            self.assertTrue(
+                all(
+                    "Developing" in view.result_items[item].contexts
+                    for item in view.results.get_children("")
+                )
             )
             self.assertTrue(
                 all(
@@ -191,33 +199,30 @@ class UiMockupTkTests(unittest.TestCase):
                     for item in view.results.get_children("")[:5]
                 )
             )
+            chip_bottom = view.filter_chip.winfo_rooty() + view.filter_chip.winfo_height()
+            self.assertLessEqual(chip_bottom, view.results_host.winfo_rooty())
 
-            view._set_context_scope(CONTEXT_SCOPE_THIS)
-            self.assertEqual(view.context_scope, CONTEXT_SCOPE_THIS)
-            self.assertTrue(
-                all(
-                    "Developing" in view.result_items[item].contexts
-                    for item in view.results.get_children("")
-                )
-            )
-            view._set_context_scope(CONTEXT_SCOPE_EVERYWHERE)
+            view._set_context_filter(None)
             self.assertIn("cart", view.results.get_children(""))
-
-            view._placeholder_active = False
-            view.find_var.set("open")
-            view._render_results()
-            self.assertEqual(view.results.get_children("")[0], "cart")
-            self.assertFalse(
+            self.assertEqual(view.filter_button.cget("style"), "Icon.TButton")
+            self.assertTrue(
                 any(
                     "context_slot" in view.results.item(item, "tags")
                     for item in view.results.get_children("")
                 )
             )
 
-            view._set_working_context("General")
-            view._set_context_scope(CONTEXT_SCOPE_THIS)
-            self.assertEqual(view.context_scope, CONTEXT_SCOPE_EVERYWHERE)
-            self.assertEqual(view.context_scope_var.get(), "Everywhere")
+            view._set_context_filter("Developing")
+            view._placeholder_active = False
+            view.find_var.set("open")
+            view._render_results()
+            self.assertFalse(
+                any(
+                    "context_slot" in view.results.item(item, "tags")
+                    for item in view.results.get_children("")
+                )
+            )
+            self.assertEqual(view.item_context_filter, "Developing")
         finally:
             root.destroy()
 
@@ -288,7 +293,7 @@ class UiMockupDefinitionTests(unittest.TestCase):
     def test_scenarios_describe_the_current_retrieval_model(self) -> None:
         main_scenarios = dict(MOCKUP_DEFINITIONS[MOCKUP_MAIN].scenarios)
         self.assertIn("context-slots", main_scenarios)
-        self.assertIn("this-context", main_scenarios)
+        self.assertIn("context-filter", main_scenarios)
         self.assertIn("empty-context", main_scenarios)
         self.assertNotIn("pins", dict(MOCKUP_DEFINITIONS[MOCKUP_ACTIONS].scenarios))
 

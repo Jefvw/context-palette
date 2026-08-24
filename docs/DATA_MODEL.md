@@ -13,7 +13,7 @@ The application works with three kinds of data:
 1. **Persisted application data** — actions, contexts, Quick actions, palette
    choices, captured Inbox items, Work Item configuration, and cheat sheets.
 2. **Runtime projections** — combined Built-in/My configuration lists, resolved
-   Focus slots, the mixed All-items discovery view, generated Quick-action
+   Context slot banks, the mixed All-items discovery view, generated Quick-action
    menus, and the discovered Work Item index. These can be rebuilt from
    persisted data and the local environment.
 3. **External resources** — files, folders, applications, URLs, Windows
@@ -41,7 +41,7 @@ erDiagram
 
     PALETTE_STATE ||--o{ PINNED_ACTION : "retains legacy IDs"
     ACTION ||--o{ PINNED_ACTION : "fills"
-    PALETTE_STATE }o--|| CONTEXT : "selects Focus"
+    PALETTE_STATE }o--o| CONTEXT : "retains legacy focus key"
     PALETTE_STATE ||--o{ CONTEXT_SLOT_OVERRIDE : "stores per-context slots"
     CONTEXT ||--o{ CONTEXT_SLOT_OVERRIDE : "identifies context"
     PALETTE_ITEM_REFERENCE ||--o{ CONTEXT_SLOT_OVERRIDE : "fills slots 6-0"
@@ -115,7 +115,7 @@ There is one machine-local `PaletteState` aggregate.
 | Field | Meaning |
 | --- | --- |
 | `pinned_action_ids` | Up to five legacy Action references retained for compatible round-trip and rollback; no current runtime slots consume them |
-| `focus_context` | Current Context name, or implicit `General` |
+| `focus_context` | Legacy Context name retained for compatible round-trip and rollback; the transient launcher Context filter is not restored from it |
 | `context_slots` | Context-name to ordered Action-reference overrides for slots 6–0 |
 | `context_item_slots` | Context-name to ordered typed Action/Work Item overrides for slots 6–0 |
 | `context_membership_version` | Marker for the completed membership migration, not a general file schema version |
@@ -188,7 +188,7 @@ Action, but the resulting Action is independent.
 | Personal Context membership/preference → Work Item | Soft; retained while its source/item is unavailable |
 | Legacy palette pin → Action | Compatibility-only hard reference; still cleaned during Action lifecycle changes but not projected or executed |
 | Palette Context slot → Action or Work Item | Action is hard; Work Item is soft |
-| Palette Focus/context-slot key → Context | Canonicalized case-insensitively; unknown historical slot keys are currently preserved |
+| Legacy palette focus/context-slot key → Context | Canonicalized case-insensitively for compatibility; unknown historical slot keys are currently preserved |
 | Quick-action Action target → Action | Hard; the Action must exist |
 | Built-in Context/Quick action → personal Action or Work Item | Forbidden |
 | Quick-action Work Item target → Work Item source/item | Soft; it remains configured while unavailable |

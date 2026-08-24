@@ -22,8 +22,6 @@ from context_palette.launcher import (
 )
 from context_palette.actions import Action, transform_text_file
 from context_palette.action_discovery_panel import (
-    CONTEXT_SCOPE_EVERYWHERE,
-    CONTEXT_SCOPE_THIS,
     FOCUS_SLOT_ROW_TAG,
 )
 from context_palette.action_types import ACTION_TYPES, CREATABLE_ACTION_TYPES
@@ -38,7 +36,7 @@ from context_palette.configuration_window import (
 )
 from context_palette.contexts import ContextDefinition
 from context_palette.data_catalog import AppDataPaths
-from context_palette.palette_state import PaletteState
+from context_palette.palette_items import PaletteItemReference
 from context_palette.workspace_transforms import WORKSPACE_TRANSFORM_GROUPS
 from context_palette.workspace_panel import (
     OcrPlacementDialog,
@@ -925,7 +923,37 @@ class LauncherSmokeTests(unittest.TestCase):
                     ]
                 },
             )
-            palette_path = self._write_json(data / "palette.json", {})
+            palette_path = self._write_json(
+                data / "palette.json",
+                {
+                    # The saved focus is compatibility-only. A new launcher
+                    # session must still start at All contexts / General slots.
+                    "focus_context": "Review",
+                    "context_item_slots": {
+                        "General": [
+                            {"type": "action", "action_id": "general-first"},
+                        ],
+                        "Database": [
+                            {"type": "action", "action_id": "database-only"},
+                            {
+                                "type": "work_item",
+                                "source_id": "cap40",
+                                "relative_folder": "QST-CAP40-question",
+                            },
+                        ],
+                        "Review": [
+                            {"type": "action", "action_id": "general-first"},
+                            {
+                                "type": "work_item",
+                                "source_id": "cap40",
+                                "relative_folder": (
+                                    "ISS-CAP40-AB9C-age-verification"
+                                ),
+                            },
+                        ],
+                    },
+                },
+            )
             inbox_path = self._write_json(data / "inbox.json", {"items": []})
             cheatsheets_dir = data / "cheatsheets"
             cheatsheets_dir.mkdir()
@@ -1087,12 +1115,15 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     self.assertTrue(root.bind("<F5>"))
                     self.assertTrue(root.bind("<Control-Shift-D>"))
+                    self.assertFalse(hasattr(app, "context_picker"))
+                    self.assertFalse(hasattr(app, "context_scope_picker"))
                     focus_chain = (
-                        app.context_picker,
-                        app.context_scope_picker,
                         app.all_items_button,
                         app.actions_button,
                         app.work_items_button,
+                        app.search_entry,
+                        app.scope_options_button,
+                        app.focus_tree,
                     )
                     for current, following in zip(focus_chain, focus_chain[1:]):
                         self.assertIs(current.tk_focusNext(), following)
@@ -1117,9 +1148,35 @@ class LauncherSmokeTests(unittest.TestCase):
                         ),
                         2,
                     )
-                    app.palette_state = PaletteState(focus_context="Database")
-                    app.context_var.set("Database")
-                    app._refresh_focus_controls()
+                    self.assertIsNone(app.item_context_filter)
+                    self.assertEqual(app.item_context_filter_var.get(), "All contexts")
+                    self.assertEqual(app.palette_state.focus_context, "General")
+                    self.assertEqual(
+                        {
+                            slot: reference.stable_key
+                            for slot, reference in app.slot_items.items()
+                        },
+                        {
+                            6: "action:general-first",
+                            7: "action:database-only",
+                            8: "action:general-second",
+                        },
+                    )
+                    self.assertEqual(
+                        json.loads(palette_path.read_text(encoding="utf-8"))[
+                            "focus_context"
+                        ],
+                        "Review",
+                    )
+                    first_global_row = app.focus_tree.get_children()[0]
+                    self.assertEqual(
+                        app.focus_tree_items[first_global_row],
+                        PaletteItemReference(action_id="general-first"),
+                    )
+                    self.assertIn(
+                        FOCUS_SLOT_ROW_TAG,
+                        app.focus_tree.item(first_global_row, "tags"),
+                    )
                     database_work_item = next(
                         item
                         for item in app.work_item_index.items
@@ -1139,8 +1196,8 @@ class LauncherSmokeTests(unittest.TestCase):
                             for reference in app.focus_tree_items.values()
                         ],
                         [
-                            "database-only",
                             "general-first",
+                            "database-only",
                             "general-second",
                             "ISS-CAP40-AB9C-age-verification",
                             "QST-CAP40-question",
@@ -1149,9 +1206,20 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(app.actions_heading_var.get(), "All items")
                     self.assertEqual(app.results_count_var.get(), "5 items")
 
-                    app._select_context_scope(CONTEXT_SCOPE_THIS)
-                    self.assertEqual(app.context_scope, CONTEXT_SCOPE_THIS)
-                    self.assertEqual(app.context_scope_var.get(), "This context")
+                    app._select_item_context_filter("Database")
+                    self.assertEqual(app.item_context_filter, "Database")
+                    self.assertEqual(app.item_context_filter_var.get(), "Database")
+                    self.assertEqual(app.palette_state.focus_context, "Database")
+                    self.assertEqual(
+                        {
+                            slot: reference.stable_key
+                            for slot, reference in app.slot_items.items()
+                        },
+                        {
+                            6: "action:database-only",
+                            7: "work_item:cap40/QST-CAP40-question",
+                        },
+                    )
                     self.assertEqual(app.results_count_var.get(), "2 items")
                     self.assertEqual(
                         [
@@ -1164,11 +1232,35 @@ class LauncherSmokeTests(unittest.TestCase):
                             "QST-CAP40-question",
                         ],
                     )
+                    self.assertTrue(
+                        all(
+                            FOCUS_SLOT_ROW_TAG
+                            in app.focus_tree.item(item_id, "tags")
+                            for item_id in app.focus_tree.get_children()
+                        )
+                    )
 
                     app.search_var.set("question")
                     self._wait_for_search_refresh(root)
                     self.assertEqual(app.results_count_var.get(), "1 item")
                     self.assertEqual(app.actions_heading_var.get(), "All items")
+                    self.assertTrue(
+                        all(
+                            FOCUS_SLOT_ROW_TAG
+                            not in app.focus_tree.item(item_id, "tags")
+                            for item_id in app.focus_tree.get_children()
+                        )
+                    )
+                    self.assertEqual(
+                        {
+                            slot: reference.stable_key
+                            for slot, reference in app.slot_items.items()
+                        },
+                        {
+                            6: "action:database-only",
+                            7: "work_item:cap40/QST-CAP40-question",
+                        },
+                    )
 
                     app.search_var.set("age verification")
                     self._wait_for_search_refresh(root)
@@ -1177,25 +1269,34 @@ class LauncherSmokeTests(unittest.TestCase):
 
                     app.search_var.set("")
                     self._wait_for_search_refresh(root)
-                    app._select_context_scope(CONTEXT_SCOPE_EVERYWHERE)
-                    self.assertEqual(app.context_scope, CONTEXT_SCOPE_EVERYWHERE)
+                    app._select_item_context_filter(None)
+                    self.assertIsNone(app.item_context_filter)
+                    self.assertEqual(app.item_context_filter_var.get(), "All contexts")
+                    self.assertEqual(app.palette_state.focus_context, "General")
+                    self.assertEqual(
+                        {
+                            slot: reference.stable_key
+                            for slot, reference in app.slot_items.items()
+                        },
+                        {
+                            6: "action:general-first",
+                            7: "action:database-only",
+                            8: "action:general-second",
+                        },
+                    )
                     self.assertEqual(app.results_count_var.get(), "5 items")
 
-                    app.palette_state = PaletteState(
-                        ("general-first",),
-                        "Database",
-                        {"Database": ("database-only",)},
-                    )
-                    app._refresh_results()
                     ordinary_row = next(
                         item_id
                         for item_id, reference in app.focus_tree_items.items()
-                        if reference.action_id == "general-first"
+                        if reference.work_item_ref is not None
+                        and reference.work_item_ref.relative_folder
+                        == "QST-CAP40-question"
                     )
                     focus_row = next(
                         item_id
                         for item_id, reference in app.focus_tree_items.items()
-                        if reference.action_id == "database-only"
+                        if reference.action_id == "general-first"
                     )
                     self.assertFalse(app.focus_tree.item(ordinary_row, "text").startswith("1. "))
                     self.assertFalse(app.focus_tree.item(focus_row, "text").startswith("6. "))
@@ -1215,8 +1316,6 @@ class LauncherSmokeTests(unittest.TestCase):
                         "Shortcut: Shift+6",
                         app._focus_tree_tooltip_text(focus_row),
                     )
-                    app.palette_state = PaletteState()
-                    app._refresh_results()
                     work_item_row = next(
                         item_id
                         for item_id, reference in app.focus_tree_items.items()
@@ -1270,11 +1369,53 @@ class LauncherSmokeTests(unittest.TestCase):
                     root.update()
                     self.assertTrue(app.status_var.get().startswith("Input: saved text → Effect:"))
 
-                    app.palette_state = PaletteState(focus_context="Review")
-                    app.context_var.set("Review")
-                    app._refresh_focus_controls()
-                    app._select_context_scope(CONTEXT_SCOPE_THIS)
+                    all_filter_menu = root.nametowidget(
+                        app.scope_options_button.cget("menu")
+                    )
+                    self.assertEqual(
+                        [
+                            all_filter_menu.entrycget(index, "label")
+                            for index in range(all_filter_menu.index(tk.END) + 1)
+                            if all_filter_menu.type(index) != "separator"
+                        ],
+                        [
+                            "Filter by context…",
+                            "Filter by tag…",
+                            "Manage contexts…",
+                        ],
+                    )
+                    all_filter_menu.invoke(0)
+                    root.update()
+                    context_popup = app.action_discovery_panel.context_picker_popup
+                    review_index = context_popup.visible_values.index("Review")
+                    context_popup.listbox.selection_clear(0, tk.END)
+                    context_popup.listbox.selection_set(review_index)
+                    context_popup.apply()
+                    root.update()
                     self.assertEqual(app.results_count_var.get(), "2 items")
+                    self.assertEqual(app.palette_state.focus_context, "Review")
+                    self.assertEqual(
+                        {
+                            slot: reference.stable_key
+                            for slot, reference in app.slot_items.items()
+                        },
+                        {
+                            6: "action:general-first",
+                            7: (
+                                "work_item:cap40/"
+                                "ISS-CAP40-AB9C-age-verification"
+                            ),
+                        },
+                    )
+                    self.assertIs(root.focus_get(), app.focus_tree)
+                    self.assertIn(
+                        "Context: Review",
+                        app.action_discovery_panel.filter_chip.cget("text"),
+                    )
+                    self.assertEqual(
+                        app.scope_options_button.cget("style"),
+                        "RailIconAccent.TButton",
+                    )
                     self.assertEqual(
                         {
                             "action" if reference.action_id else "work_item"
@@ -1282,17 +1423,102 @@ class LauncherSmokeTests(unittest.TestCase):
                         },
                         {"action", "work_item"},
                     )
-                    app._select_context_scope(CONTEXT_SCOPE_EVERYWHERE)
+                    self.assertTrue(
+                        all(
+                            FOCUS_SLOT_ROW_TAG
+                            in app.focus_tree.item(item_id, "tags")
+                            for item_id in app.focus_tree.get_children()
+                        )
+                    )
+                    self.assertIs(
+                        app.scope_options_button.tk_focusNext(),
+                        app.action_discovery_panel.filter_chip,
+                    )
+                    self.assertIs(
+                        app.action_discovery_panel.filter_chip.tk_focusNext(),
+                        app.focus_tree,
+                    )
+                    app.actions_button.invoke()
+                    root.update()
+                    self.assertEqual(app.results_count_var.get(), "1 action")
+                    self.assertEqual(app.palette_state.focus_context, "Review")
+                    self.assertEqual(app.displayed_slots, [6])
+                    self.assertIs(root.focus_get(), app.results)
+                    app.work_items_button.invoke()
+                    root.update()
+                    self.assertEqual(app.results_count_var.get(), "1 work item")
+                    self.assertEqual(app.palette_state.focus_context, "Review")
+                    self.assertIs(root.focus_get(), app.results)
+                    self.assertEqual(
+                        tuple(app.slot_items),
+                        (6, 7),
+                    )
+                    app.all_items_button.invoke()
+                    root.update()
+                    self.assertEqual(app.results_count_var.get(), "2 items")
+                    self.assertEqual(app.palette_state.focus_context, "Review")
+                    self.assertIs(root.focus_get(), app.focus_tree)
                     app._select_item_tag_filter("database")
-                    self.assertEqual(app.results_count_var.get(), "2 items")
+                    self.assertEqual(app.results_count_var.get(), "1 item")
                     self.assertEqual(
                         {
                             "action" if reference.action_id else "work_item"
                             for reference in app.focus_tree_items.values()
                         },
-                        {"action", "work_item"},
+                        {"work_item"},
                     )
-                    app._select_item_tag_filter(None)
+                    app.actions_button.invoke()
+                    root.update()
+                    self.assertEqual(app.results_count_var.get(), "0 actions")
+                    self.assertIn("No actions match the active filters", app.results.get(0))
+                    self.assertIn('Context “Review”', app.results.get(0))
+                    self.assertIn('tag “database”', app.results.get(0))
+                    app.work_items_button.invoke()
+                    root.update()
+                    self.assertEqual(app.results_count_var.get(), "1 work item")
+                    app._select_work_project_filter("AB9C")
+                    self.assertEqual(app.results_count_var.get(), "1 work item")
+                    app._select_action_type_filter("open_url")
+                    self.assertEqual(app.results_count_var.get(), "1 work item")
+                    chip_text = app.action_discovery_panel.filter_chip.cget("text")
+                    for expected in (
+                        "Context: Review",
+                        "Tag: database",
+                        "Proj: AB9C",
+                        f"Actions: {ACTION_TYPES['open_url'].display_label}",
+                    ):
+                        self.assertIn(expected, chip_text)
+                    app.action_discovery_panel.filter_chip.invoke()
+                    root.update()
+                    self.assertIsNone(app.item_context_filter)
+                    self.assertEqual(app.item_context_filter_var.get(), "All contexts")
+                    self.assertEqual(app.palette_state.focus_context, "General")
+                    self.assertEqual(
+                        {
+                            slot: reference.stable_key
+                            for slot, reference in app.slot_items.items()
+                        },
+                        {
+                            6: "action:general-first",
+                            7: "action:database-only",
+                            8: "action:general-second",
+                        },
+                    )
+                    self.assertIsNone(app.item_tag_filter)
+                    self.assertIsNone(app.work_project_filter)
+                    self.assertIsNone(app.action_type_filter)
+                    self.assertFalse(
+                        app.action_discovery_panel.filter_chip.winfo_manager()
+                    )
+                    self.assertEqual(
+                        app.scope_options_button.cget("style"),
+                        "Icon.TButton",
+                    )
+                    self.assertEqual(app.results_count_var.get(), "2 work items")
+                    self.assertIs(root.focus_get(), app.results)
+
+                    app.all_items_button.invoke()
+                    root.update()
 
                     app.work_items_button.invoke()
                     root.update()
@@ -1324,24 +1550,11 @@ class LauncherSmokeTests(unittest.TestCase):
                             "Send Input / Output to Inbox",
                             "Copy file into Work Item",
                             "Filter by project",
+                            "Filter by context…",
                             "Filter by tag…",
+                            "Manage contexts…",
                         ],
                     )
-                    context_scope_menu = root.nametowidget(
-                        app.context_scope_picker.cget("menu")
-                    )
-                    self.assertEqual(
-                        [
-                            context_scope_menu.entrycget(index, "label")
-                            for index in range(context_scope_menu.index(tk.END) + 1)
-                        ],
-                        ["Everywhere", "This context"],
-                    )
-                    context_scope_menu.invoke(1)
-                    self.assertEqual(app.context_scope, CONTEXT_SCOPE_THIS)
-                    self.assertEqual(app.context_scope_var.get(), "This context")
-                    context_scope_menu.invoke(0)
-                    self.assertEqual(app.context_scope, CONTEXT_SCOPE_EVERYWHERE)
                     self.assertEqual(
                         {
                             widget: (widget.winfo_x(), widget.winfo_y())
@@ -1418,7 +1631,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     flat_index, (flat_action, _flat_slot) = next(
                         (index, row)
                         for index, row in enumerate(app.displayed_action_rows)
-                        if row[0] is not None and row[1] is None
+                        if row[0] is not None
                     )
                     assert flat_action is not None
                     expected_flat_action = flat_action.id
@@ -1443,8 +1656,21 @@ class LauncherSmokeTests(unittest.TestCase):
                             for index in range(action_tools_menu.index(tk.END) + 1)
                             if action_tools_menu.type(index) != "separator"
                         ],
-                        ["Filter by type", "Filter by tag…"],
+                        [
+                            "Filter by type",
+                            "Filter by context…",
+                            "Filter by tag…",
+                            "Manage contexts…",
+                        ],
                     )
+                    action_tools_menu.invoke(2)
+                    root.update()
+                    context_popup = app.action_discovery_panel.context_picker_popup
+                    self.assertEqual(
+                        context_popup.visible_values,
+                        ("All contexts", "Database", "Review"),
+                    )
+                    context_popup.close()
 
                     type_menu = root.nametowidget(app.type_filter.cget("menu"))
                     open_url_index = next(
@@ -1498,12 +1724,15 @@ class LauncherSmokeTests(unittest.TestCase):
                     app.search_var.set("")
                     root.update()
 
-                    app.context_var.set("Database")
-                    app._change_focus_context()
-                    app._select_context_scope(CONTEXT_SCOPE_THIS)
+                    app._select_item_context_filter("Database")
                     root.update()
                     self.assertEqual(app.results_view, "all")
-                    self.assertEqual(app.context_scope_var.get(), "This context")
+                    self.assertEqual(app.item_context_filter_var.get(), "Database")
+                    self.assertEqual(app.palette_state.focus_context, "Database")
+                    self.assertEqual(
+                        tuple(app.slot_items),
+                        (6, 7),
+                    )
                     self.assertIs(root.focus_get(), app.focus_tree)
                     self.assertEqual(
                         {action.id for action in app.focus_tree_actions.values()},
@@ -1529,10 +1758,8 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     self.assertEqual(app.focus_tree.selection(), (focus_item,))
                     app._show_configuration = original_show_configuration
-                    app.context_var.set("General")
-                    app._change_focus_context()
-                    self.assertEqual(app.context_scope, CONTEXT_SCOPE_EVERYWHERE)
-                    self.assertEqual(app.context_scope_var.get(), "Everywhere")
+                    self.assertEqual(app.item_context_filter, "Database")
+                    self.assertEqual(app.item_context_filter_var.get(), "Database")
 
                     app.search_var.set("Database only")
                     self._wait_for_search_refresh(root)
@@ -1541,18 +1768,20 @@ class LauncherSmokeTests(unittest.TestCase):
                         [action.id for action in app.displayed_actions],
                         ["database-only"],
                     )
-
-                    app.context_var.set("Database")
-                    app._change_focus_context()
-                    self.assertEqual(app.results_view, "all")
                     self.assertEqual(
-                        [action.id for action in app.displayed_actions],
-                        ["database-only"],
+                        tuple(app.slot_items),
+                        (6, 7),
+                    )
+                    self.assertTrue(
+                        all(
+                            FOCUS_SLOT_ROW_TAG
+                            not in app.focus_tree.item(item_id, "tags")
+                            for item_id in app.focus_tree.get_children()
+                        )
                     )
 
                     app.search_var.set("")
                     self._wait_for_search_refresh(root)
-                    app._select_context_scope(CONTEXT_SCOPE_THIS)
                     self.assertEqual(app.results_view, "all")
                     self.assertEqual(
                         {action.id for action in app.focus_tree_actions.values()},
@@ -1560,10 +1789,22 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     self.assertEqual(app.results_count_var.get(), "2 items")
 
-                    app._select_context_scope(CONTEXT_SCOPE_EVERYWHERE)
+                    app._select_item_context_filter(None)
                     root.update()
                     self.assertEqual(app.results_view, "all")
-                    self.assertEqual(app.context_scope_var.get(), "Everywhere")
+                    self.assertEqual(app.item_context_filter_var.get(), "All contexts")
+                    self.assertEqual(app.palette_state.focus_context, "General")
+                    self.assertEqual(
+                        {
+                            slot: reference.stable_key
+                            for slot, reference in app.slot_items.items()
+                        },
+                        {
+                            6: "action:general-first",
+                            7: "action:database-only",
+                            8: "action:general-second",
+                        },
+                    )
                     self.assertEqual(app.results_count_var.get(), "5 items")
                     self._assert_input_first_layout(app)
 
@@ -1946,11 +2187,22 @@ class LauncherSmokeTests(unittest.TestCase):
                     diagnostic_window.destroy()
                     root.update()
 
+                    def open_context_configuration() -> None:
+                        menu = root.nametowidget(
+                            app.scope_options_button.cget("menu")
+                        )
+                        manage_index = next(
+                            index
+                            for index in range(menu.index(tk.END) + 1)
+                            if menu.type(index) != "separator"
+                            and menu.entrycget(index, "label")
+                            == "Manage contexts…"
+                        )
+                        menu.invoke(manage_index)
+
                     configuration_routes = (
                         (
-                            lambda: app.context_menu.invoke(
-                                app.context_menu.index("end")
-                            ),
+                            open_context_configuration,
                             "Contexts",
                         ),
                         (app.configure_button.invoke, "Start"),
@@ -2152,7 +2404,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     }
                     self.assertIn("Manage Contexts", context_labels)
                     self.assertIn(
-                        "A Context organizes items; the Working context is the one currently selected in the palette.",
+                        "A Context filters items and selects their preferred shortcuts 6–0 in the palette.",
                         context_labels,
                     )
                     self.assertEqual(

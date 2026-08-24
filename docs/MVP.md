@@ -6,16 +6,16 @@ This document defines the implemented minimum product baseline and distinguishes
 
 Context Palette helps a Windows user capture useful material, turn it into a
 constrained permanent Action after confirmation, edit stored configuration,
-and retrieve an Action or Work Item quickly from search, a Working context, or
-an organized Quick-action menu.
+and retrieve an Action or Work Item quickly from search, an explicit Context
+filter, or an organized Quick-action menu.
 
 ## Status
 
 | Capability | Status | Current boundary |
 | --- | --- | --- |
 | Resident launcher and global shortcut | Implemented | `F9` primary, `Ctrl+Alt+P` fallback |
-| Global search and keyboard execution | Implemented | All items searches Actions and Work Items together; one Working context plus Everywhere/This context sets the search boundary; explicit kind scopes retain tag and type/project controls; non-empty Find results are relevance-ranked and do not promote context slots |
-| Context slots | Implemented | Context slots 6–0 accept Actions or Work Items and follow the selected Working context; global runtime pins 1–5 are retired while legacy IDs remain round-trippable for rollback |
+| Global search and keyboard execution | Implemented | All items searches Actions and Work Items together; one transient Context choice in the unified Filter menu controls visible membership and slots 6–0; Context and tag span every item scope, Action type applies in Actions, and project applies in Work Items; non-empty Find results are relevance-ranked and do not promote context slots |
+| Context slots | Implemented | Context slots 6–0 accept Actions or Work Items; All contexts selects General's bank and a specific Context selects its own, while Find/tag/type/project narrow results without selecting another bank; global runtime pins 1–5 are retired while legacy IDs remain round-trippable for rollback |
 | Guided configuration | Implemented | A task-oriented Start page routes ordinary Configure use into Actions, Contexts, Quick actions, Work Items, backup, and diagnostics; records use My configuration or Built-in ownership; one obvious website or absolute file/folder/application path in Input / Output can prefill the reviewed Action form without probing the target |
 | Confirm → Active → Archived | Implemented | Creation and editing save immediately; an Active Action must be archived before permanent deletion; Configure can inspect, edit, restore, or permanently delete Archived Actions, while only Active Actions appear in runtime discovery and assignment pickers |
 | Explicit action execution | Implemented | 17 allow-listed types with standard icons and current-state Input → Effect previews, including two copy-and-open URL builders, user-owned Windows targets, preview-first text-file transformations, and an attended optional Python Excel CSV export |
@@ -26,8 +26,8 @@ an organized Quick-action menu.
 | Text-file transformations | Implemented | One configured existing local text source; result is reviewed in Input / Output; guarded explicit replace or save-as preserves encoding and refuses stale overwrites |
 | Cheat sheets and promotion | Implemented | Structured local JSON sheets |
 | Attended AI assistance | Partial | Reviewable stored prompt templates and manual clipboard handoff; `copy_text` and `open_url` proposals only |
-| Context model | Partial | General root, per-PC Context membership for Actions and Work Items, tags, one explicit Working context, Everywhere/This context retrieval, and mixed preferred items; Developing Context Palette is the only shipped specific context |
-| Work Items discovery | Implemented | Bounded local discovery, mixed or Work Item-only main-window search/opening, Working-context/tag/project filtering, guided private source/tag configuration, stable personal Quick-action references, non-destructive source disconnection that retains organization, and transactional Forget of Palette-only organization without external-file deletion |
+| Context model | Partial | General root, per-PC Context membership for Actions and Work Items, tags, and one transient Context filter coupled to mixed preferred slots; legacy saved focus data remains compatibility-only; Developing Context Palette is the only shipped specific context |
+| Work Items discovery | Implemented | Bounded local discovery, mixed or Work Item-only main-window search/opening, Context/tag/project filtering, guided private source/tag configuration, stable personal Quick-action references, non-destructive source disconnection that retains organization, and transactional Forget of Palette-only organization without external-file deletion |
 | Work Item creation | Implemented | Editable suggested name, one local generic `.xlsx` template, collision-safe folder/workbook creation, optional tags |
 | Work Item Inbox | Implemented | Attended append of Input / Output to the selected exact-name `.xlsx`; creates `Inbox` and offers template-based workbook creation when missing |
 | Work Item file copy | Implemented | Copies one exact absolute file path from Input / Output into the selected Work Item folder; background, collision-safe, no overwrite |
@@ -37,7 +37,7 @@ an organized Quick-action menu.
 | Clipboard transactions | Partial | Protected credential paste atomically captures and conditionally restores prior plain text; non-text-only content stops safely; ordinary saved text and rich/image formats are not preserved |
 | Safe action sequences | Implemented with limits | 2–12 references to reviewed launch/open Actions, bounded waits, complete confirmation, Stop remaining, and dependency-safe lifecycle; no paste/keys, loops, conditions, inline commands, completion checks, retry, or rollback |
 | Rich clipboard/image actions | Partial | Image content is not persisted as an Action, but a local clipboard or file image can produce editable Input / Output text; rich HTML, reusable image Actions, and typed image pipelines remain deferred |
-| Automatic context inference | Deferred | The user chooses focus explicitly |
+| Automatic context inference | Deferred | The user chooses the Context filter explicitly |
 
 ## Acceptance criteria
 

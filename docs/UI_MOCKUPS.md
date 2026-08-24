@@ -48,31 +48,31 @@ The direct developer command is:
 The main mockup deliberately has no repeated pane title, count, Find label, or
 Quick-actions heading. Its order is:
 
-1. One `Context: <name>` Working-context selector and the adjacent
-   `Everywhere` / `This context` retrieval selector.
-2. Compact `All items / Actions / Work Items` scope choices.
-3. Find and Filter on one line.
-4. An explicit removable tag/type/project filter chip when a non-context
-   filter is active.
-5. The dominant result list.
-6. Selection commands and Run/Open or Stop remaining.
-7. A bounded, scrollable Quick-action region with no heading.
-8. Configure, Help, and More controls that never scroll off screen.
+1. Compact `All items / Actions / Work Items` scope choices.
+2. Find and one unified Filter menu on the same line; that menu also contains
+   the direct **Manage contexts…** configuration route.
+3. An explicit removable Context/tag/type/project filter chip when a filter is
+   active.
+4. The dominant result list.
+5. Selection commands and Run/Open or Stop remaining.
+6. A bounded, scrollable Quick-action region with no heading.
+7. Configure, Help, and More controls that never scroll off screen.
 
 Input / Output keeps the two session-history arrows plus its five
 content-dependent icon controls above the editor and a permanently readable
 Input -> Effect strip below it.
 
-The Working context and retrieval boundary are deliberately one coherent
-model:
+The Context filter is the single Context model in the launcher:
 
-- the Working context supplies its genuine slots 6-0 only while Find is empty;
-- **Everywhere** keeps Find global, while **This context** limits results to
-  the selected specific Context; General disables the latter because it would
-  be equivalent to Everywhere;
+- **All contexts** shows global membership and selects General's slots 6-0;
+- a specific Context filter shows its canonical members and selects its slots;
+- Context and tag filters apply to All items, Actions, and Work Items; Action
+  type and Work Item project remain kind-specific;
+- Find, tag, type, and project narrow results without choosing another slot
+  bank;
 - a non-empty Find ranks useful matches by relevance and never promotes a
   context-slot row above a better ordinary match;
-- Context membership is not repeated as a separate filter control.
+- filter state is not persisted and is cleared by the normal transient reset.
 
 Quick-action launchers remain menu-only and are ordered as **Standard**, then
 personal configured menus, shared configured menus, and automatic
@@ -143,8 +143,8 @@ simulated 100%, 125%, and 150% text scaling. They currently protect:
 - five visible main results at the harshest minimum-size stress case;
 - bounded Quick actions and a permanently visible application footer;
 - Find and Filter sharing one visual row;
-- explicit Working-context and Everywhere/This-context behavior, context
-  slots 6-0, and relevance-ranked Find results;
+- coupled Context membership/slots plus unified Context/tag/type/project
+  filtering and relevance-ranked Find results;
 - fixed Standard, personal, shared, then automatic Quick-action ordering;
 - one mapped Configure page with no `ttk.Notebook`;
 - useful table rows at the current minimum under normal scaling;
@@ -163,8 +163,8 @@ For each screen and size, check:
 2. Results or the main table receive the largest useful area.
 3. Quick actions and application controls remain reachable.
 4. Only the page's intended primary command is visually dominant.
-5. Working context, Everywhere, and This context answer distinct questions
-   without an overlapping membership filter.
+5. The Context filter changes membership and slots 6–0 together; other visible
+   filters narrow results without changing that bank.
 6. The selected item's details and next safe command remain visible.
 7. Empty, unavailable, and in-progress states explain what changed.
 8. Tab focus is visible; Enter and Space operate only inert mockup controls.

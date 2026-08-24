@@ -1,5 +1,86 @@
 # Decisions
 
+## 2026-08-24 - Center ordinary windows in their current monitor
+
+**Decision:** Center the main palette and every ordinary Context Palette
+screen or dialog in the usable work area of the monitor selected by the window
+or its owner. F9 and Ctrl+Alt+P keep using the captured cursor monitor, but
+center the palette there instead of treating the cursor as its top-left
+corner. Keep compact filter pickers, native menus, and tooltips attached to
+their invoking controls. Keep **Drop into Context Palette** as the one ordinary
+product-window exception: it remains independently movable near the
+lower-right and only clamps when its complete frame would leave the work area.
+
+**Reason:** A consistent center position makes each attended screen easy to
+find and prevents a chain of owner-relative dialogs from drifting around a
+multi-monitor desktop. The cursor still expresses which monitor has the user's
+attention without becoming a fragile placement coordinate.
+
+**Consequences:** Moving an owning window to another monitor changes where its
+next child centers. Users may still move and resize windows after they open.
+Operating-system file choosers and message boxes retain their native Windows
+placement behavior. This supersedes the 2026-07-12 cursor-anchor decisions and
+the 2026-07-30 owner-centered child placement while preserving their
+monitor-selection and work-area safety goals.
+
+## 2026-08-24 - Let one Context filter choose results and shortcut slots
+
+**Decision:** Remove the separate Working-context/**Shortcuts** control. Use
+the transient Context choice in the unified **Filter** menu as the single
+launcher Context state. **All contexts** searches the complete General-root
+collection and selects General's configured slot bank for 6–0. Choosing a
+specific Context limits results to its canonical Action and Work Item members
+and selects that Context's configured slot bank. Context and tag remain
+available in All items, Actions, and Work Items; Action type stays
+Action-specific and project stays Work Item-specific. Find, tag, type, and
+project may narrow visible results but never select a different slot bank.
+
+**Reason:** A separate shortcut-context state still required the user to
+coordinate two Context choices and explain their interaction. The useful
+mental model is one explicit question—“which Context am I viewing?”—with the
+answer governing both membership and the five contextual shortcuts. Other
+filters describe items inside that Context rather than selecting another work
+bank.
+
+**Consequences:** Context selection remains session-only. F5 and a new process
+return to **All contexts** and therefore the General slot bank. Context
+definitions, preferred items, and per-context slot overrides keep their
+existing persisted formats. Continue round-tripping `palette.json`'s legacy
+`focus_context` value for compatibility and rollback, but it has no visible
+selector and does not restore the transient Context filter. This decision
+supersedes the earlier same-day decision to keep a saved Working context
+independent from result filters. It retains slots 6–0, retired global pins 1–5,
+relevance-ranked Find results, and the removal of the adjacent **Everywhere /
+This context** control.
+
+## 2026-08-24 - Separate shortcut context from transient result filters
+
+**Decision:** Keep the saved Working context solely as the source of mixed
+Action/Work Item shortcut slots 6–0 and label its launcher control
+**Shortcuts: <context>**. Remove the adjacent **Everywhere / This context**
+control. Add a transient Context choice to the existing unified **Filter** menu
+instead. Context and tag filters apply in All items, Actions, and Work Items;
+Action type remains Action-specific and project remains Work Item-specific.
+With no Context filter, results use the complete General-root collection.
+
+**Reason:** The adjacent retrieval control tied a result constraint visually
+to the Working context even though shortcut selection and discovery filtering
+answer different questions. A single visible filter system makes Context
+composable with tag, type, and project, while the explicit Shortcuts label
+preserves the useful 6–0 muscle-memory set without implying that it limits
+ordinary results.
+
+**Consequences:** Changing **Shortcuts** recalculates slots 6–0 but never
+selects a Context filter. Choosing or clearing a Context filter limits visible
+canonical membership but never changes the Working context or its slot
+assignments. Context and tag remain active across item-kind view changes;
+retained type or project state is disclosed while dormant outside its relevant
+view. All result filters are in-memory launcher state, clear through the normal
+transient reset, add no persisted field, and require no data migration. This supersedes
+the **Everywhere / This context** UI and retrieval-boundary portion of the
+2026-08-21 decision while retaining its Working-context slots, relevance
+ranking, retired global pins, and rollback-compatible palette data.
+
 ## 2026-08-23 - Let Python Excel own reviewed CSV collision handling
 
 **Decision:** Target exact automation version
