@@ -55,10 +55,45 @@ cannot be installed, the current source distribution cannot run there.
 Power Automate Desktop setup is documented in
 [Power Automate integration](../integrations/README.md).
 
-## Harvest actions from documents
+## Create Actions from Excel
+
+Press `Ctrl+,`, open **Actions**, then choose **Other ways to create → Get blank
+Actions workbook…**. Save the generated standard `.xlsx`, fill one Action per
+row on its **Actions** sheet, save it, and choose **Create Actions from Excel…**.
+The same review window can save a blank workbook or choose another one.
+
+The workbook includes Instructions and a Reference sheet of supported Action
+type IDs and labels. Blank **Import** means Yes; enter No to keep a row visible
+but excluded. Separate Contexts and Tags with semicolons, Quick-menu levels with
+`>`, and Arguments with line breaks. Leave Contexts blank for General only.
+Only already-defined My configuration Contexts can be assigned.
+Arguments and **Working folder** are accepted only for application and
+Windows-target Actions; irrelevant hidden fields are reported as row errors.
+
+Context Palette reads at most 1,000 populated rows from the exact versioned
+workbook. It does not start Excel or Python Excel, run macros, follow links, or
+evaluate formulas. Formula cells, changed headers, unsafe/corrupt packages, and
+unsupported Action types are rejected. Sequences and fixed Excel automation
+Actions are intentionally outside this generic workbook. Text-file transforms
+also stay in their guided editor because their operation parameters can include
+meaningful empty or whitespace-only values that a simple Excel cell cannot
+represent safely.
+
+The review lists Ready, possible-duplicate, exact-existing, excluded, and error
+rows. Ready rows start selected; duplicate warnings require an explicit choice.
+Inspect the selected row's complete value, Contexts, tags, and messages. The
+workbook and saved Action collection are rechecked immediately before the one
+effect-labelled **Create N Actions** operation. Created records are personal
+Active Actions and nothing is run during import.
+
+Bulk update and permanent deletion are not part of this create-only workbook.
+Those future operations require exported stable IDs and stale-edit protection;
+permanent deletion continues to require an Archived Action.
+
+## Harvest website links from documents
 
 For the primary route, press `Ctrl+,`, then open **Actions** and choose
-**Other ways to create → Harvest documents…**. You can also choose **Harvest documents...** in
+**Other ways to create → Harvest website links…**. You can also choose **Harvest website links...** in
 Inbox. The workflow extracts possible website actions from several documents
 at once. Supported files are Markdown (`.md`), text (`.txt`), Word (`.docx`),
 and Excel (`.xlsx`). Context Palette reads these files locally; it does not
@@ -93,7 +128,7 @@ Per-file failures do not discard successful results from other files, and
 size, compression, worksheet, cell, occurrence, and candidate limits keep
 scans bounded.
 
-Folder scanning or source drag-and-drop inside Harvest, OneNote document
+Folder scanning or source drag-and-drop inside website Harvest, OneNote document
 extraction, PDF/HTML/email parsing, recursive crawling, remote fetching, and
 automatic trust are not part of this version. The separate general drop target
 can place dropped paths, links, or text in Input / Output; it does not add a
@@ -458,8 +493,8 @@ under **Set up** and backup or troubleshooting destinations under **Support**:
   **View diagnostics** remain available as secondary choices. Each choice
   opens the existing editor; it does not create a second configuration window.
 - **Actions:** choose **New Action…** for the normal creation flow. **Other ways
-  to create** contains the educational Action-type catalogue and attended
-  document Harvest. Find, lifecycle, and selection commands surround one
+  to create** contains bulk Excel creation/template commands, website-link
+  Harvest, and the educational Action-type catalogue. Find, lifecycle, and selection commands surround one
   Actions table; Contexts and tags for the selection appear below it. Use
   **Archive…** to remove an Active Action from runtime. Configure then switches
   to **Show: Archived**, keeps that Action selected, and reveals **Delete
@@ -925,7 +960,7 @@ Select an unused capture and choose **Delete capture…** to permanently remove
 only that local Inbox copy. Context Palette confirms the selected title first.
 An Action already created from the capture remains unchanged because conversion
 copies the reviewed data into the Action; it does not retain an Inbox reference.
-**Other ways to create** contains the attended Ask AI and document-Harvest
+**Other ways to create** contains the attended Ask AI and website-link Harvest
 routes so the normal **Create action** path remains primary.
 
 This Capture Inbox and `data/inbox.json` are separate from the **Inbox** sheet

@@ -32,6 +32,11 @@ actions remain editable there but stay outside normal retrieval. See
 - Configures My configuration or Built-in actions, contexts, groups, and menu
   items through a guided window without exposing technical IDs.
 - Captures clipboard material into an Inbox and converts it into permanent actions.
+- Generates and imports a versioned standard Excel workbook for attended bulk
+  creation of personal Active Actions. Import is local, formula-free, bounded,
+  and uses the same validation as the ordinary Action editor without starting
+  Excel or requiring Python Excel. Sequence, fixed Excel-automation, and
+  whitespace-sensitive text-file-transform Actions keep their guided editors.
 - Keeps a separate always-on-top drop target for files, folders, shortcuts,
   links, and text. A successful drop reveals the ordinary non-topmost palette
   and offers the normalized result to Input / Output without changing the

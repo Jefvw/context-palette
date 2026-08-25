@@ -101,6 +101,7 @@ class BulkActionPlanningTests(unittest.TestCase):
                     workbook_row(3, title="", action_type="copy_text"),
                     workbook_row(4, action_type="sequence"),
                     workbook_row(5, action_type="excel_automation"),
+                    workbook_row(6, action_type="transform_file_text"),
                 ),
                 (),
                 (),
@@ -108,11 +109,45 @@ class BulkActionPlanningTests(unittest.TestCase):
 
         self.assertEqual(
             [item.status for item in plan.candidates],
-            ["Not selected", "Error", "Error", "Error"],
+            ["Not selected", "Error", "Error", "Error", "Error"],
         )
         self.assertTrue(all(not item.selected_by_default for item in plan.candidates))
         self.assertIsNone(plan.candidates[0].action)
         self.assertIn("cannot be created in bulk", plan.candidates[2].messages[0])
+
+    def test_rejects_hidden_irrelevant_fields_and_allows_target_options(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "actions.xlsx"
+            path.write_bytes(b"workbook")
+            plan = plan_bulk_action_create(
+                workbook(
+                    path,
+                    workbook_row(2, arguments=("--hidden",)),
+                    workbook_row(3, title="Hidden folder", working_directory=r"C:\hidden"),
+                    workbook_row(
+                        4,
+                        title="Windows target",
+                        action_type="open_windows_target",
+                        value="vscode:",
+                        arguments=("--new-window",),
+                        working_directory=r"C:\My  Folder",
+                    ),
+                ),
+                (),
+                (),
+            )
+
+        self.assertEqual(
+            [candidate.status for candidate in plan.candidates],
+            ["Error", "Error", "Ready"],
+        )
+        self.assertIn("Arguments are not supported", plan.candidates[0].messages[0])
+        self.assertIn("Working folder is supported only", plan.candidates[1].messages[0])
+        self.assertEqual(plan.candidates[2].action.arguments, ("--new-window",))
+        self.assertEqual(
+            plan.candidates[2].action.working_directory,
+            r"C:\My  Folder",
+        )
 
     def test_only_canonical_personal_contexts_are_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

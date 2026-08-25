@@ -2389,9 +2389,14 @@ class LauncherSmokeTests(unittest.TestCase):
                                 index,
                                 "label",
                             )
-                            for index in (0, 1)
+                            for index in (0, 1, 3, 4)
                         ],
-                        ["Browse Action types…", "Harvest documents…"],
+                        [
+                            "Create Actions from Excel…",
+                            "Get blank Actions workbook…",
+                            "Harvest website links…",
+                            "Browse Action types…",
+                        ],
                     )
                     reused_configuration_window.geometry("900x520")
                     app.configuration_window.notebook.select(3)

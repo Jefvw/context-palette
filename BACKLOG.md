@@ -4,6 +4,13 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Now
 
+- Validate **Create Actions from Excel…** with a generated standard workbook:
+  edit it in desktop Excel, create mixed Action types, use General and personal
+  Contexts/tags, review duplicates/errors/excluded rows, modify the workbook
+  after review, and confirm one guarded rollback-capable personal-Action creation
+  at 100%, 125%, and 150% scaling. Repeat without Excel installed by editing a
+  fixture copy.
+
 - Manually validate the live **Apply Excel format template** Action with a
   disposable workbook against Python Excel commit `e405e14`. The one-sheet
   happy path and preservation of an existing filter passed on 2026-08-25.
@@ -119,6 +126,13 @@ This file contains actionable future work. Completed user-visible work belongs i
   boundary benefits; avoid line-count-only refactors.
 
 ## Later
+
+- Add transactional bulk Action maintenance after create-import use is proven:
+  in-app Context/tag changes and Archive/Restore first, then an exported Excel
+  round trip with stable Action IDs, original fingerprints, and explicit
+  Update/Archive/Restore/Delete-permanently operations. Preserve the permanent
+  Active → Archived → Delete lifecycle and all sequence/reference safeguards;
+  do not infer identity from titles or targets or loop single-record writes.
 
 - Consider direct source drag-and-drop and folder selection inside Harvest
   after its explicit multi-file workflow has real-use feedback. The implemented

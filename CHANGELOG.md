@@ -4,6 +4,14 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Added attended **Create Actions from Excel…** bulk creation. Context Palette
+  generates a versioned standard `.xlsx` workbook, reads up to 1,000 reviewed
+  rows locally without starting Office or evaluating formulas, validates them
+  through the ordinary Action catalogue, explains duplicates and errors, and
+  creates the selected personal Active Actions with synchronized Context
+  memberships in one guarded operation. The existing document workflow is now
+  labelled **Harvest website links…** to reflect its URL-only purpose.
+
 - Added **Apply Excel format template**, an optional attended Action for an
   already-open Excel workbook. It inventories live workbooks, formats one
   selected worksheet or all visible worksheets with the fixed Standard data

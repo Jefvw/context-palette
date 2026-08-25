@@ -94,7 +94,31 @@ Actions notification settings, not by Context Palette. A message saying that
 all jobs failed can still represent one failed test when the workflow contains
 only one job.
 
-## Harvest actions manual check
+## Bulk Actions workbook manual check
+
+1. Open Configure → Actions → **Other ways to create → Get blank Actions
+   workbook…** and save the generated `.xlsx`.
+2. In Excel, add Ready rows for several supported types, General and personal
+   Contexts, normalized and mixed-case tags, descriptions, a supported Quick
+   menu, multiline arguments, and a Working folder. Add Import=No, an undefined
+   Context, unknown/excluded type, exact duplicate, possible duplicate, and
+   same-workbook duplicate rows. Put Arguments and a Working folder on an
+   Action type that does not support them and confirm they are row errors. Save
+   and close the workbook.
+3. Choose **Create Actions from Excel…**. Confirm row/status counts, complete
+   selected-row details, default selection of only Ready rows, and explicit
+   selection for a possible duplicate. Errors and exact-existing rows must not
+   become selectable.
+4. Change the workbook after review and confirm creation stops until Reload.
+   Change an Action or Context store after review and confirm the same stale
+   stop. Restore the review, choose **Create N Actions**, and confirm there is no
+   second Yes/No dialog, all selected personal Active Actions and Context
+   memberships appear together, and no Action executes.
+5. Confirm formulas, changed headers, corrupt/encrypted or oversized packages,
+   data outside A–J, and more than 1,000 populated rows stop without writes.
+   Repeat at 100%, 125%, and 150% scaling and on a PC without Excel installed.
+
+## Harvest website links manual check
 
 Last completed: **Passed on Windows on 2026-07-21.** The attended check used
 representative Markdown, text, Word, and Excel files, including cross-format
@@ -112,7 +136,7 @@ bindings, action-preview Close control, and focus-restoration callbacks are
 covered by real-Tk and focused unit tests.
 
 1. Press `Ctrl+,`, open **Actions**, choose **Other ways to create → Harvest
-   documents…**, and select
+   website links…**, and select
    several representative `.md`, `.txt`, `.docx`, and `.xlsx` files.
 2. Confirm progress remains responsive, Cancel stops safely, and a corrupt or
    unavailable file reports its own failure without hiding successful sources.
@@ -436,7 +460,7 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
     select that capture, and cancel **Delete capture…** once; confirm it remains.
     Delete it after confirmation and verify only the captured copy disappears
     while the created Action remains. Confirm **Other ways to create** still
-    exposes Ask AI and Harvest documents. Do not use this check to delete a Work
+    exposes Ask AI and Harvest website links. Do not use this check to delete a Work
     Item workbook Inbox row; those remain Excel-managed.
 15. Open Help, verify in-document search, resize it, maximize it, restore it,
     and confirm responsive tables remain readable.

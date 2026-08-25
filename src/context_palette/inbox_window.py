@@ -96,7 +96,7 @@ class InboxWindow:
         )
         self._ask_ai_menu_index = int(self.other_creation_menu.index(tk.END))
         self.other_creation_menu.add_command(
-            label="Harvest documents…",
+            label="Harvest website links…",
             command=self.on_harvest or (lambda: None),
         )
         self.other_creation_button.configure(menu=self.other_creation_menu)

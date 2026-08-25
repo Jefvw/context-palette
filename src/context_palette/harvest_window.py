@@ -51,7 +51,7 @@ class HarvestWindow:
         self.poll_after_id: str | None = None
 
         self.window = tk.Toplevel(parent)
-        self.window.title("Harvest actions")
+        self.window.title("Harvest website links")
         configure_standard_window(self.window, parent)
         self.window.geometry("900x700")
         self.window.minsize(760, 560)
@@ -63,7 +63,7 @@ class HarvestWindow:
 
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(outer, text="Harvest actions", style="Title.TLabel").pack(anchor=tk.W)
+        ttk.Label(outer, text="Harvest website links", style="Title.TLabel").pack(anchor=tk.W)
         ttk.Label(
             outer,
             text="Extract explicit links locally, review them, then create selected permanent personal actions.",
@@ -288,7 +288,7 @@ class HarvestWindow:
         try:
             self.coordinator.start(self.source_paths)
         except (HarvestError, OSError) as exc:
-            messagebox.showerror("Harvest actions", str(exc), parent=self.window)
+            messagebox.showerror("Harvest website links", str(exc), parent=self.window)
             self.scan_button.focus_set()
             return
         self.scan_button.configure(state=tk.DISABLED)
@@ -591,10 +591,10 @@ class HarvestWindow:
         try:
             actions = self._actions_to_create()
         except HarvestError as exc:
-            messagebox.showerror("Harvest actions", str(exc), parent=self.window)
+            messagebox.showerror("Harvest website links", str(exc), parent=self.window)
             return
         preview = tk.Toplevel(self.window)
-        preview.title("Harvest action preview")
+        preview.title("Harvest website Action preview")
         configure_standard_window(preview, self.window)
         def close_preview() -> None:
             preview.destroy()
@@ -624,10 +624,10 @@ class HarvestWindow:
         try:
             actions = self._actions_to_create()
         except HarvestError as exc:
-            messagebox.showerror("Harvest actions", str(exc), parent=self.window)
+            messagebox.showerror("Harvest website links", str(exc), parent=self.window)
             return
         if not messagebox.askyesno(
-            "Create harvested actions",
+            "Create harvested website Actions",
             f"Create {len(actions)} selected permanent personal action(s) in one atomic write?",
             parent=self.window,
         ):
@@ -636,7 +636,7 @@ class HarvestWindow:
             actions = self._actions_to_create()
         except HarvestError as exc:
             messagebox.showerror(
-                "Harvest actions",
+                "Harvest website links",
                 "The selected actions changed while confirmation was open.\n\n" + str(exc),
                 parent=self.window,
             )
@@ -655,7 +655,7 @@ class HarvestWindow:
         except (ActionError, ContextError, OSError) as exc:
             self.submitting = False
             self._update_create_state()
-            messagebox.showerror("Harvest actions", str(exc), parent=self.window)
+            messagebox.showerror("Harvest website links", str(exc), parent=self.window)
             return
         selected = [candidate for candidate in self.batch.candidates if candidate.selected]
         for candidate in selected:
@@ -663,7 +663,11 @@ class HarvestWindow:
             candidate.classification = "Created"
             candidate.duplicate_state = "Already available"
         self.status_var.set(f"Created {len(actions)} permanent personal action(s).")
-        messagebox.showinfo("Harvest actions", f"Created {len(actions)} permanent personal action(s).", parent=self.window)
+        messagebox.showinfo(
+            "Harvest website links",
+            f"Created {len(actions)} permanent personal website Action(s).",
+            parent=self.window,
+        )
         self._render_candidates()
 
     def _update_create_state(self) -> None:

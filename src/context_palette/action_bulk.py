@@ -32,7 +32,11 @@ from .context_membership import (
 from .contexts import ContextError
 
 
-EXCLUDED_BULK_TYPES = frozenset({"sequence", "excel_automation"})
+EXCLUDED_BULK_TYPES = frozenset(
+    {"sequence", "excel_automation", "transform_file_text"}
+)
+ARGUMENT_ACTION_TYPES = frozenset({"launch_app", "open_windows_target"})
+WORKING_FOLDER_ACTION_TYPES = frozenset({"launch_app", "open_windows_target"})
 
 
 class BulkActionError(ValueError):
@@ -254,6 +258,15 @@ def _action_from_row(
     if action_type in EXCLUDED_BULK_TYPES:
         raise BulkActionError(
             f"{ACTION_TYPES[action_type].label} Actions cannot be created in bulk."
+        )
+    if row.arguments and action_type not in ARGUMENT_ACTION_TYPES:
+        raise BulkActionError(
+            f"Arguments are not supported for {ACTION_TYPES[action_type].label} Actions."
+        )
+    if row.working_folder and action_type not in WORKING_FOLDER_ACTION_TYPES:
+        raise BulkActionError(
+            "Working folder is supported only for Run an application and "
+            "Open or run a Windows target Actions."
         )
     contexts = validate_context_memberships(row.contexts, local_context_names)
     return configured_action(

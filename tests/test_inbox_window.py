@@ -149,7 +149,7 @@ class InboxWindowSmokeTests(unittest.TestCase):
                         window.other_creation_menu.entrycget(index, "label")
                         for index in (0, 1)
                     ],
-                    ["Ask AI…", "Harvest documents…"],
+                    ["Ask AI…", "Harvest website links…"],
                 )
                 window.window.destroy()
                 root.update()

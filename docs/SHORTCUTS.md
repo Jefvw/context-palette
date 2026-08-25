@@ -87,7 +87,16 @@ number-row, and numpad input never execute Action slots.
 | `Alt+Home` in document viewer | Return to the Help, Shortcuts, or action document that opened the viewer. |
 | `Esc` | Close Help, Sheets, Inbox, and editing windows. |
 
-### Harvest actions
+### Bulk Actions workbook
+
+| Shortcut | Result |
+| --- | --- |
+| `Ctrl+O` | Choose an Actions `.xlsx` workbook. |
+| `F5` | Reload and revalidate the selected workbook. |
+| `Space` in the review table | Include or exclude an eligible highlighted row. |
+| `Esc` | Close the bulk-create window. |
+
+### Harvest website links
 
 | Shortcut | Result |
 | --- | --- |

@@ -42,6 +42,8 @@ from .action_sequences import (
 from .action_suggestions import ActionCreationSuggestion
 from .action_type_picker import ActionTypePickerDialog, ActionTypePickerOption
 from .action_bound_quick_actions import action_bound_quick_groups
+from .action_bulk_window import ActionBulkWindow
+from .action_workbook import ActionWorkbookError, write_action_import_template
 from .action_picker import ActionPickerField, ActionPickerOption
 from .backup_restore_ui import BackupRestorePanel
 from .command_surface import (
@@ -1218,12 +1220,21 @@ class ConfigurationWindow:
             tearoff=False,
         )
         self.other_action_creation_menu.add_command(
-            label="Browse Action types…",
-            command=lambda: self._show_config_named_tab("types"),
+            label="Create Actions from Excel…",
+            command=self._show_bulk_action_import,
         )
         self.other_action_creation_menu.add_command(
-            label="Harvest documents…",
+            label="Get blank Actions workbook…",
+            command=self._save_bulk_action_template,
+        )
+        self.other_action_creation_menu.add_separator()
+        self.other_action_creation_menu.add_command(
+            label="Harvest website links…",
             command=self._show_harvest,
+        )
+        self.other_action_creation_menu.add_command(
+            label="Browse Action types…",
+            command=lambda: self._show_config_named_tab("types"),
         )
         self.other_action_creation_button.configure(
             menu=self.other_action_creation_menu
@@ -1396,7 +1407,47 @@ class ConfigurationWindow:
             on_change=self._harvest_changed,
         )
 
+    def _show_bulk_action_import(self) -> None:
+        ActionBulkWindow(
+            self.window,
+            actions=self.stored_actions,
+            local_context_names=[context.name for context in self.local_contexts],
+            local_actions_path=self.local_actions_path,
+            shared_actions_path=self.shared_actions_path,
+            shared_contexts_path=self.contexts_path,
+            local_contexts_path=self.local_contexts_path,
+            on_change=self._bulk_actions_changed,
+        )
+
+    def _save_bulk_action_template(self) -> None:
+        selected = filedialog.asksaveasfilename(
+            parent=self.window,
+            title="Save blank Actions workbook",
+            defaultextension=".xlsx",
+            initialfile="Context Palette Actions.xlsx",
+            filetypes=(("Excel workbooks", "*.xlsx"),),
+        )
+        if not selected:
+            return
+        try:
+            saved = write_action_import_template(Path(selected))
+        except (ActionWorkbookError, OSError) as exc:
+            messagebox.showerror(
+                "Actions workbook was not saved",
+                str(exc),
+                parent=self.window,
+            )
+            return
+        self.feedback_var.set(f"Blank Actions workbook saved: {saved}")
+        self.feedback_label.configure(style="Success.TLabel")
+
+    def _bulk_actions_changed(self) -> None:
+        self._created_actions_changed("bulk-created")
+
     def _harvest_changed(self) -> None:
+        self._created_actions_changed("harvested")
+
+    def _created_actions_changed(self, source: str) -> None:
         try:
             self.actions, self.local_action_ids = load_combined_actions(
                 self.shared_actions_path,
@@ -1406,7 +1457,7 @@ class ConfigurationWindow:
         except ActionError as exc:
             messagebox.showerror(
                 "Context Palette",
-                f"The harvested actions were saved, but Configure could not reload them.\n\n{exc}",
+                f"The {source} Actions were saved, but Configure could not reload them.\n\n{exc}",
                 parent=self.window,
             )
             self.on_change()

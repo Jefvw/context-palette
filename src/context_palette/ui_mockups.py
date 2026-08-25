@@ -753,12 +753,21 @@ class ConfigureMockup(MockupView):
         self.actions_page = page
         other_menu = tk.Menu(page, tearoff=False)
         other_menu.add_command(
-            label="Browse Action types...",
-            command=lambda: self._mock_status("Mockup: the Action type catalogue would open within Actions."),
+            label="Create Actions from Excel...",
+            command=lambda: self._mock_status("Mockup: the attended bulk Action review would open."),
         )
         other_menu.add_command(
-            label="Harvest documents...",
-            command=lambda: self._mock_status("Mockup: attended document harvesting would open."),
+            label="Get blank Actions workbook...",
+            command=lambda: self._mock_status("Mockup: a versioned blank Actions workbook would be saved."),
+        )
+        other_menu.add_separator()
+        other_menu.add_command(
+            label="Harvest website links...",
+            command=lambda: self._mock_status("Mockup: attended website-link harvesting would open."),
+        )
+        other_menu.add_command(
+            label="Browse Action types...",
+            command=lambda: self._mock_status("Mockup: the Action type catalogue would open within Actions."),
         )
         other_button = ttk.Menubutton(page, text="Other ways to create", menu=other_menu)
         self.actions_new_button = self._page_header(

@@ -147,6 +147,41 @@ class HarvestRefreshTests(unittest.TestCase):
         configuration._reload.assert_called_once_with()
         configuration.on_change.assert_called_once_with()
 
+    def test_bulk_refresh_uses_the_same_external_creation_path(self):
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration._created_actions_changed = Mock()
+
+        configuration._bulk_actions_changed()
+
+        configuration._created_actions_changed.assert_called_once_with("bulk-created")
+
+    def test_bulk_import_receives_all_stored_actions_and_personal_contexts(self):
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.window = object()
+        configuration.stored_actions = [
+            Action("archived", "Archived", "General", "open_url", "https://example.test", "Archived")
+        ]
+        configuration.local_contexts = [ContextDefinition("Finance")]
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.shared_actions_path = Path("actions.json")
+        configuration.contexts_path = Path("contexts.json")
+        configuration.local_contexts_path = Path("local-contexts.json")
+        configuration._bulk_actions_changed = Mock()
+
+        with patch("context_palette.configuration_window.ActionBulkWindow") as bulk_window:
+            configuration._show_bulk_action_import()
+
+        bulk_window.assert_called_once_with(
+            configuration.window,
+            actions=configuration.stored_actions,
+            local_context_names=["Finance"],
+            local_actions_path=configuration.local_actions_path,
+            shared_actions_path=configuration.shared_actions_path,
+            shared_contexts_path=configuration.contexts_path,
+            local_contexts_path=configuration.local_contexts_path,
+            on_change=configuration._bulk_actions_changed,
+        )
+
 
 class ContextMembershipCountTests(unittest.TestCase):
     def test_selection_summary_is_bounded(self) -> None:

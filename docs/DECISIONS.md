@@ -1,5 +1,29 @@
 # Decisions
 
+## 2026-08-25 - Separate structured bulk Action workbooks from website Harvest
+
+**Decision:** Add **Create Actions from Excel…** as a create-only, attended
+personal-Action workflow. Generate and consume one versioned standard `.xlsx`
+contract locally with no Excel, Python Excel, macro, link, or formula execution.
+Validate every included row through the ordinary Action catalogue and existing
+personal Context definitions, review duplicates/errors before effects, then use
+one **Create N Actions** button and the existing Action/Context membership
+mutation boundary. Exclude sequences and fixed Excel automation Actions.
+
+Keep the prior document extractor as **Harvest website links…**. It remains a
+URL/provenance workflow rather than becoming a conditional general importer.
+
+**Reason:** Structured spreadsheet rows and unstructured document-link
+discovery have different identities, validation, duplicate semantics, and
+review needs. A separate create-only workbook delivers useful bulk entry
+without prematurely treating Excel as a bidirectional configuration database.
+
+**Lifecycle consequence:** Bulk update and deletion are deferred until they can
+use stable exported Action IDs, original fingerprints, and a true multi-file
+transaction. They must preserve Active → Archived → Delete permanently and the
+existing dependency/reference safeguards; bulk creation does not weaken that
+permanent lifecycle.
+
 ## 2026-08-25 - Keep direct live Excel formatting attended and narrowly scoped
 
 **Decision:** Add **Apply Excel format template** as a separate optional

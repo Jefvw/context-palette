@@ -121,6 +121,31 @@ Inbox and Inbox-action-creation presentation lives in `inbox_window.py`;
 
 The launcher does not implement action transformations or window matching directly. Those responsibilities live in specialized modules.
 
+### `action_workbook.py`, `action_bulk.py`, and `action_bulk_window.py`
+
+`action_workbook.py` owns the dependency-free, versioned Excel interchange
+boundary for bulk Action creation. It writes a standard `.xlsx` template with
+Instructions, Actions, and Reference sheets and reads only that exact bounded
+contract through ZIP/XML. It never starts Office, follows links, evaluates
+formulas, or accepts macros. Formula cells and changed headers are rejected;
+the file and expanded-package, entry, row, cell, and text limits are fixed.
+
+`action_bulk.py` converts workbook rows through `configured_action()`, validates
+only existing personal Context memberships, and classifies Ready, excluded,
+invalid, exact-existing, and possible-duplicate records. The reviewed plan is
+tied to the complete workbook digest and canonical stored-Action signature.
+Commit rechecks both, then appends the selected personal Active Actions through
+`append_actions_with_context_memberships()` so ordinary Action and Context
+validation/rollback remains authoritative. Sequences, fixed Excel automation
+Actions, and lossless-parameter text-file transforms are excluded from the
+generic workbook contract.
+
+`action_bulk_window.py` owns the centered attended review table, row selection,
+details, template save/choose/reload routes, and the single effect-labelled
+**Create N Actions** confirmation. It writes no state during review and does
+not add a redundant Yes/No dialog. Configure → Actions → **Other ways to
+create** is the primary route.
+
 ### `harvest.py` and `harvest_window.py`
 
 `harvest.py` is the platform-independent bulk document-harvesting boundary. It
@@ -133,9 +158,11 @@ Office or evaluating formulas.
 `harvest_window.py` owns the attended review workflow: multi-file selection,
 progress and cancellation, source and candidate filters, provenance, individual
 and bulk edits, preview, and one atomic append to the personal action store.
-The launcher exposes the window from Inbox, while the Actions configuration section
-is the primary route. No harvested candidate enters persistent data before the
-final confirmation.
+The visible route is **Harvest website links…** because every candidate is an
+HTTP/HTTPS `open_url` Action. The launcher exposes the window from Inbox, while
+the Actions configuration section is the primary route. No harvested candidate
+enters persistent data before the final confirmation. This URL-specific model
+is deliberately separate from structured bulk Action workbooks.
 
 ### Discovery scopes, Context, and secondary filters
 
@@ -691,8 +718,9 @@ visible final columns and consistent vertical scrolling at the supported
 minimum window size.
 
 The Actions page keeps its single primary **New Action** command in the page
-header and moves the type catalogue and Harvest behind **Other ways to
-create**. Global pin configuration is retired. Selection titles are display-bounded so arbitrary
+header and moves the bulk Excel importer/template, website-link Harvest, and
+type catalogue behind **Other ways to create**. Global pin configuration is
+retired. Selection titles are display-bounded so arbitrary
 names cannot displace lifecycle commands at minimum width. Tags remain searchable
 and appear in the selected-Action strip instead of consuming a permanent table
 column. The lifecycle filter controls which records are listed; the State
