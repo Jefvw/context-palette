@@ -4,6 +4,12 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Now
 
+- Manually validate the live **Apply Excel format template** Action with a
+  disposable workbook against Python Excel commit `e405e14`. The one-sheet
+  happy path and preservation of an existing filter passed on 2026-08-25.
+  Complete the remaining setup/missing-engine, all-visible, AutoSave rejection,
+  added-filter, hidden-sheet, stale, partial/unknown, no-retry, Return-to-Excel,
+  no-save/no-close, and 100%/125%/150% display-scaling matrix.
 - Manually validate the first Python Excel CSV automation vertical slice on a
   second standard-user PC. Cover missing/invalid local engine setup,
   Input/Output and Drop-into exact `.xlsx` intake, the 100-workbook limit,

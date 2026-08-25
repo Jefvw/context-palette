@@ -86,6 +86,21 @@ def window_title(handle: int) -> str:
     return buffer.value.strip()
 
 
+def window_process_id(handle: int) -> int | None:
+    """Return the owning process ID for a valid top-level window handle."""
+
+    if not handle:
+        return None
+    user32 = ctypes.windll.user32
+    if not user32.IsWindow(handle):
+        return None
+    process_id = wintypes.DWORD()
+    thread_id = user32.GetWindowThreadProcessId(handle, ctypes.byref(process_id))
+    if not thread_id or not process_id.value:
+        return None
+    return int(process_id.value)
+
+
 class GlobalHotkey:
     def __init__(self, on_activate: Callable[[], None]) -> None:
         self.on_activate = on_activate

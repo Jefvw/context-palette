@@ -782,6 +782,18 @@ The bottom communication line always stays one row high. Hover over it for the c
   Replacement publication is atomic per file, but there is no recovery backup
   or batch rollback. This integration also has no progress display,
   cancellation, live Excel support, or Action-sequence support.
+- To format an already-open workbook, run **Apply Excel format template** from
+  the Standard menu or its normal Action location. This does not read Input /
+  Output. The screen lists workbooks currently open in Excel; select one
+  visible worksheet or **All visible worksheets** and choose **Apply**. The
+  fixed Standard data template applies Aptos 11 to the used range, treats row
+  1 as a header, freezes its top row, and adds a filter only where none exists.
+  Turn AutoSave off first. Apply is the confirmation, and Context Palette never
+  saves or closes the workbook. Direct formatting may clear Excel Undo and has
+  no backup, rollback, progress, cancellation, or automatic retry. If Excel
+  changes before Apply, Refresh and select it again. For partial or unknown
+  results, inspect the workbook before retrying. **Return to Excel** only tries
+  to return focus to the window captured when you opened the Action.
 - A transform changes the selection, or the complete field when nothing is selected.
 - Every transform result is copied to the clipboard automatically and can be reverted with one Undo.
 - Transform groups provide case and naming styles, whitespace cleanup, literal

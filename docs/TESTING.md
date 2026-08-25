@@ -512,6 +512,20 @@ Perform only when relevant:
   cancellation/progress claim, sequence route, Context Palette filename
   allocation, or desktop Excel launch.
 
+- With a separately bootstrapped Python Excel engine at commit `e405e14`, use
+  a disposable already-open workbook to run **Apply Excel format template**.
+  Confirm missing/invalid launcher setup disables only Excel Actions; inventory
+  finds the active workbook; one-worksheet and all-visible choices act only on
+  the displayed target; AutoSave is rejected; and Standard data applies Aptos
+  11 to the used range, row-1 header treatment, freeze top row, and a filter
+  only when absent. Verify hidden sheets are skipped, stale inventory requires
+  Refresh, and exact partial/unknown results require inspection rather than an
+  automatic retry. Confirm Context Palette never saves or closes Excel, Apply
+  has no second confirmation, and Return to Excel is only a best-effort focus
+  request. The disposable one-worksheet path with an existing filter passed on
+  2026-08-25. Repeat the complete matrix at 100%, 125%, and 150% display
+  scaling.
+
 - With the optional OCR component prepared, copy a Snipping Tool bitmap and
   choose **Extract text**. Verify the UI stays responsive, useful text appears
   in Input / Output, the original image remains on the clipboard, and Undo

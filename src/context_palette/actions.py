@@ -37,6 +37,10 @@ VISIBLE_STATES = {ACTIVE_STATE}
 LEGACY_ACTIVE_STATES = {"Draft", "Trusted"}
 MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024
 LEGACY_ACTION_TYPE_ALIASES = {"build_url_copy": "build_url_open"}
+LIVE_FORMAT_PROFILE_AUTOMATION_ID = "excel.apply_live_format_profile"
+EXCEL_AUTOMATION_IDS = frozenset(
+    (EXCEL_AUTOMATION_ID, LIVE_FORMAT_PROFILE_AUTOMATION_ID)
+)
 ACTION_BOUND_QUICK_MENU_SPECS = (
     ("passwords", "Passwords", "paste_credential"),
     ("folders", "Folders", "open_folder"),
@@ -1015,7 +1019,7 @@ def validate_action_value(
             raise ActionError("Sequence data uses an unsupported version.")
         return
     if action_type == "excel_automation":
-        if clean_value != EXCEL_AUTOMATION_ID:
+        if clean_value not in EXCEL_AUTOMATION_IDS:
             raise ActionError("Choose a supported Excel automation.")
         return
     if not clean_value:

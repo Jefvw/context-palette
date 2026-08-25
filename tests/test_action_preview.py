@@ -92,6 +92,29 @@ class ActionPreviewTests(unittest.TestCase):
                 self.assertIn("\n\nRecovery / limitations\n", detail)
                 self.assertIn(ACTION_TYPES[action_type].label, detail)
 
+    def test_live_excel_format_preview_names_direct_effect_and_limitations(self):
+        preview = build_action_preview(
+            self._action("excel_automation", "excel.apply_live_format_profile")
+        )
+
+        self.assertIn("open Excel workbooks", preview.input_text)
+        self.assertIn("all visible worksheets", preview.input_text)
+        self.assertIn("directly", preview.effect_text)
+        self.assertIn("not saved or closed", preview.effect_text)
+        self.assertIn("may clear Excel Undo", preview.limitations)
+        self.assertIn("no recovery", preview.limitations)
+        self.assertIn("AutoSave must be off", preview.limitations)
+
+    def test_csv_preview_keeps_closed_file_limitations(self):
+        preview = build_action_preview(
+            self._action("excel_automation", "excel.export_workbooks_to_csv"),
+            workspace_has_text=True,
+        )
+
+        self.assertIn("Source workbooks stay unchanged", preview.limitations)
+        self.assertIn("Overwrite is off by default", preview.limitations)
+        self.assertNotIn("AutoSave", preview.limitations)
+
     def test_runtime_state_changes_input_and_failure_explanation(self):
         transform = self._action("transform_text", "uppercase")
         empty = build_action_preview(transform, workspace_has_text=False)

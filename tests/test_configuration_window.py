@@ -2464,6 +2464,32 @@ class ConfigurationDialogTests(unittest.TestCase):
 
         self.assertEqual(dialog.window.destroy_calls, 1)
 
+    def test_excel_automation_dialog_saves_the_selected_fixed_operation(self) -> None:
+        dialog = ActionDialog.__new__(ActionDialog)
+        dialog.action_type = "excel_automation"
+        dialog.action = None
+        dialog.context_names = ()
+        dialog.title_var = FakeVariable("Apply Excel format template")
+        dialog.description_var = FakeVariable()
+        dialog.contexts_var = FakeVariable()
+        dialog.tags_var = FakeVariable()
+        dialog.arguments_var = FakeVariable()
+        dialog.working_directory_var = FakeVariable()
+        dialog.excel_automation_choices = {
+            "Export Excel workbooks to CSV": "excel.export_workbooks_to_csv",
+            "Apply Excel format template": "excel.apply_live_format_profile",
+        }
+        dialog.excel_automation_var = FakeVariable("Apply Excel format template")
+        dialog.window = FakeWindow()
+        saved: list[Action] = []
+        dialog.on_save = lambda action: saved.append(action) or True
+
+        dialog._save()
+
+        self.assertEqual(saved[0].value, "excel.apply_live_format_profile")
+        self.assertEqual(saved[0].arguments, ())
+        self.assertIsNone(saved[0].working_directory)
+
     def test_new_action_passes_explicit_project_destination(self) -> None:
         dialog = ActionDialog.__new__(ActionDialog)
         dialog.action_type = "copy_text"

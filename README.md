@@ -46,6 +46,11 @@ actions remain editable there but stay outside normal retrieval. See
   produces `report(1).csv`, then `report(2).csv`, and so on; turning it on
   reviews exact unsuffixed create/replace effects before one labelled execution
   button. Source workbooks are never changed.
+- Optionally applies the fixed **Standard data** format template to an
+  already-open Excel workbook. The attended Action inventories the live Excel
+  session, lets you choose one worksheet or all visible worksheets, and uses
+  one **Apply** click as confirmation. It does not use Input / Output and never
+  saves or closes Excel; AutoSave must be off.
 - Turns one clear website or absolute file, folder, or application path in
   Input / Output into a prefilled, review-before-save Action without probing a
   mapped drive or changing the general Action type chooser.

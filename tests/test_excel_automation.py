@@ -26,11 +26,17 @@ from context_palette.excel_automation import (
     ExcelAutomationSettings,
     ExcelAutomationSettingsError,
     ExecuteAutomationResult,
+    LiveExcelInventoryLimits,
+    LiveExcelInventoryResult,
+    LiveFormatProfileInvocation,
+    LiveFormatProfileResult,
     PlanAutomationResult,
     PythonExcelProcessClient,
     build_describe_automations_request,
     build_execute_automation_request,
+    build_apply_live_format_profile_request,
     build_plan_automation_request,
+    build_inventory_live_excel_request,
     csv_invocation,
     discover_direct_sibling_python_excel_launcher,
     load_excel_automation_settings,
@@ -50,6 +56,7 @@ def _envelope(
     *,
     status: str = "success",
     error: dict[str, object] | None = None,
+    warnings: list[dict[str, object]] | None = None,
 ) -> bytes:
     return (
         json.dumps(
@@ -62,7 +69,7 @@ def _envelope(
                 "duration_ms": 3,
                 "paths": {"input": None, "output": None, "backup": None},
                 "result": result,
-                "warnings": [],
+                "warnings": warnings or [],
                 "error": error,
             },
             ensure_ascii=False,
@@ -272,6 +279,75 @@ def _execution_result(
     }
 
 
+def _live_inventory_result() -> dict[str, object]:
+    return {
+        "applications_total": 1,
+        "applications_returned": 1,
+        "applications_truncated": False,
+        "applications": [
+            {
+                "process_id": 7812,
+                "foreground": True,
+                "visible": True,
+                "workbooks_total": 1,
+                "workbooks_returned": 1,
+                "workbooks_truncated": False,
+                "workbooks": [
+                    {
+                        "token": "live-workbook-v1.classeur-é",
+                        "process_id": 7812,
+                        "name": "Classeur été.xlsx",
+                        "full_path": "C:/Users/Élodie/Classeur été.xlsx",
+                        "saved": True,
+                        "read_only": False,
+                        "autosave_enabled": False,
+                        "active_sheet": "Données",
+                        "sheets_total": 2,
+                        "sheets_returned": 2,
+                        "sheets_truncated": False,
+                        "sheets": [
+                            {"position": 1, "name": "Données", "state": "visible"},
+                            {"position": 2, "name": "Caché", "state": "hidden"},
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def _live_format_result(*, state: str = "succeeded") -> dict[str, object]:
+    formatted = ["Données"] if state != "failed" else []
+    failures = (
+        []
+        if state == "succeeded"
+        else [
+            {
+                "worksheet": "Résumé",
+                "code": "operation.live_format_failed",
+                "message": "Excel rejected the format profile.",
+            }
+        ]
+    )
+    return {
+        "state": state,
+        "target": {
+            "workbook_token": "live-workbook-v1.classeur-é",
+            "workbook_name": "Classeur été.xlsx",
+            "scope": "workbook" if state == "partial_failure" else "worksheet",
+        },
+        "profile": {"profile_id": "standard_data", "profile_version": "1.0"},
+        "formatted_sheets": formatted,
+        "skipped_hidden_sheets": ["Caché"] if state == "partial_failure" else [],
+        "filter_added_sheets": formatted,
+        "existing_filter_sheets": [],
+        "failures": failures,
+        "workbook_saved": False,
+        "workbook_closed": False,
+        "application_closed": False,
+    }
+
+
 class ExcelAutomationSettingsAndInputTests(unittest.TestCase):
     def test_missing_settings_are_optional_and_valid_settings_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -369,6 +445,48 @@ class ExcelAutomationSettingsAndInputTests(unittest.TestCase):
 
 
 class ExcelAutomationRequestTests(unittest.TestCase):
+    def test_live_request_builders_preserve_opaque_unicode_tokens_and_scope(self) -> None:
+        limits = LiveExcelInventoryLimits(2, 3, 4)
+        inventory = build_inventory_live_excel_request("inventory-é", limits)
+        apply = build_apply_live_format_profile_request(
+            "apply-é",
+            LiveFormatProfileInvocation(
+                "live-workbook-v1.classeur-é",
+                scope="workbook",
+            ),
+        )
+
+        self.assertEqual(inventory["operation"], "inventory_live_excel")
+        self.assertEqual(
+            inventory["arguments"],
+            {
+                "maximum_applications": 2,
+                "maximum_workbooks_per_application": 3,
+                "maximum_sheets_per_workbook": 4,
+            },
+        )
+        self.assertEqual(apply["operation"], "apply_live_format_profile")
+        self.assertEqual(
+            apply["arguments"],
+            {
+                "workbook_token": "live-workbook-v1.classeur-é",
+                "scope": "workbook",
+                "worksheet": None,
+                "profile_id": "standard_data",
+                "profile_version": "1.0",
+            },
+        )
+
+    def test_live_request_builders_reject_invalid_bounds_and_scope(self) -> None:
+        with self.assertRaises(ExcelAutomationInputError):
+            LiveExcelInventoryLimits(maximum_applications=65)
+        with self.assertRaises(ExcelAutomationInputError):
+            LiveFormatProfileInvocation("token", scope="worksheet")
+        with self.assertRaises(ExcelAutomationInputError):
+            LiveFormatProfileInvocation("token", scope="workbook", worksheet="Data")
+        with self.assertRaises(ExcelAutomationInputError):
+            LiveFormatProfileInvocation(" \t ", worksheet="Data")
+
     def test_request_builders_use_generic_facade_stable_ids_and_all_columns(self) -> None:
         inputs = (Path("C:/data/one.xlsx"), Path("C:/data/two.xlsx"))
         invocation = csv_invocation(
@@ -433,6 +551,193 @@ class ExcelAutomationRequestTests(unittest.TestCase):
 
 
 class ExcelAutomationResponseTests(unittest.TestCase):
+    def test_live_inventory_is_immutable_bounded_and_preserves_unicode(self) -> None:
+        result = parse_automation_response(
+            phase="inventory",
+            request_id="inventory-é",
+            return_code=0,
+            stdout=_envelope(
+                "inventory_live_excel",
+                "inventory-é",
+                _live_inventory_result(),
+                warnings=[
+                    {
+                        "code": "warning.live_inventory_truncated",
+                        "message": "Bounded.",
+                        "details": {"maximum": 1},
+                    }
+                ],
+            ),
+        )
+
+        self.assertEqual(result.classification, "inventory_succeeded", result.reason)
+        self.assertIsInstance(result.result, LiveExcelInventoryResult)
+        assert isinstance(result.result, LiveExcelInventoryResult)
+        workbook = result.result.applications[0].workbooks[0]
+        self.assertEqual(workbook.token, "live-workbook-v1.classeur-é")
+        self.assertEqual(workbook.sheets[0].name, "Données")
+        self.assertEqual(result.result.warnings[0].details["maximum"], 1)
+        with self.assertRaises(TypeError):
+            result.result.warnings[0].details["maximum"] = 2  # type: ignore[index]
+
+    def test_live_inventory_accepts_disappearing_items_and_unknown_sheet_state(
+        self,
+    ) -> None:
+        document = _live_inventory_result()
+        document["applications_total"] = 2
+        applications = document["applications"]
+        assert isinstance(applications, list)
+        application = applications[0]
+        assert isinstance(application, dict)
+        application["workbooks_total"] = 2
+        workbooks = application["workbooks"]
+        assert isinstance(workbooks, list)
+        workbook = workbooks[0]
+        assert isinstance(workbook, dict)
+        sheets = workbook["sheets"]
+        assert isinstance(sheets, list)
+        sheets[1]["state"] = "unknown"
+
+        result = parse_automation_response(
+            phase="inventory",
+            request_id="inventory-race",
+            return_code=0,
+            stdout=_envelope(
+                "inventory_live_excel",
+                "inventory-race",
+                document,
+            ),
+        )
+
+        self.assertEqual(result.classification, "inventory_succeeded", result.reason)
+        assert isinstance(result.result, LiveExcelInventoryResult)
+        self.assertFalse(result.result.applications_truncated)
+        application_result = result.result.applications[0]
+        self.assertEqual(application_result.workbooks_total, 2)
+        self.assertFalse(application_result.workbooks_truncated)
+        self.assertEqual(
+            application_result.workbooks[0].sheets[1].state,
+            "unknown",
+        )
+
+    def test_live_success_rejects_any_file_path_claim(self) -> None:
+        for phase, operation, result_document, classification in (
+            (
+                "inventory",
+                "inventory_live_excel",
+                _live_inventory_result(),
+                "inventory_failed",
+            ),
+            (
+                "apply",
+                "apply_live_format_profile",
+                _live_format_result(),
+                "apply_unknown",
+            ),
+        ):
+            with self.subTest(phase=phase):
+                envelope = json.loads(
+                    _envelope(operation, "live-path", result_document)
+                )
+                envelope["paths"]["input"] = "C:/unexpected.xlsx"
+                parsed = parse_automation_response(
+                    phase=phase,  # type: ignore[arg-type]
+                    request_id="live-path",
+                    return_code=0,
+                    stdout=json.dumps(envelope).encode("utf-8"),
+                )
+
+                self.assertEqual(parsed.classification, classification)
+                self.assertIn("file path", parsed.reason)
+
+    def test_live_format_states_and_stable_outer_errors_are_distinct(self) -> None:
+        succeeded = parse_automation_response(
+            phase="apply",
+            request_id="apply-1",
+            return_code=0,
+            stdout=_envelope(
+                "apply_live_format_profile", "apply-1", _live_format_result()
+            ),
+        )
+        partial = parse_automation_response(
+            phase="apply",
+            request_id="apply-2",
+            return_code=0,
+            stdout=_envelope(
+                "apply_live_format_profile",
+                "apply-2",
+                _live_format_result(state="partial_failure"),
+            ),
+        )
+        autosave = parse_automation_response(
+            phase="apply",
+            request_id="apply-3",
+            return_code=2,
+            stdout=_envelope(
+                "apply_live_format_profile",
+                "apply-3",
+                None,
+                status="error",
+                error={
+                    "code": "conflict.live_autosave_enabled",
+                    "category": "conflict",
+                    "message": "AutoSave is enabled.",
+                    "retryable": False,
+                    "details": {},
+                },
+            ),
+        )
+        stale = parse_automation_response(
+            phase="apply",
+            request_id="apply-4",
+            return_code=2,
+            stdout=_envelope(
+                "apply_live_format_profile",
+                "apply-4",
+                None,
+                status="error",
+                error={
+                    "code": "conflict.live_workbook_stale",
+                    "category": "conflict",
+                    "message": "Workbook changed.",
+                    "retryable": True,
+                    "details": {},
+                },
+            ),
+        )
+
+        self.assertEqual(succeeded.classification, "apply_succeeded")
+        self.assertIsInstance(succeeded.result, LiveFormatProfileResult)
+        self.assertEqual(partial.classification, "apply_partial_failure")
+        assert isinstance(partial.result, LiveFormatProfileResult)
+        self.assertEqual(partial.result.failures[0].worksheet, "Résumé")
+        self.assertEqual(autosave.classification, "outer_error")
+        self.assertEqual(autosave.error.code, "conflict.live_autosave_enabled")  # type: ignore[union-attr]
+        self.assertEqual(stale.error.code, "conflict.live_workbook_stale")  # type: ignore[union-attr]
+
+    def test_live_format_protocol_loss_and_lifecycle_contradiction_are_unknown(self) -> None:
+        malformed = parse_automation_response(
+            phase="apply",
+            request_id="apply-loss",
+            return_code=70,
+            stdout=b"not json",
+        )
+        contradiction = _live_format_result()
+        contradiction["workbook_saved"] = True
+        lifecycle = parse_automation_response(
+            phase="apply",
+            request_id="apply-life",
+            return_code=0,
+            stdout=_envelope(
+                "apply_live_format_profile", "apply-life", contradiction
+            ),
+        )
+
+        self.assertEqual(malformed.classification, "apply_unknown")
+        self.assertTrue(malformed.unknown_outcome)
+        self.assertEqual(lifecycle.classification, "apply_unknown")
+        self.assertIn("lifecycle", lifecycle.reason)
+
     def test_describe_plan_and_execution_states_are_typed(self) -> None:
         source = Path("C:/data/book.xlsx")
         output = Path("C:/data/csv")
@@ -917,15 +1222,26 @@ class ExcelAutomationResponseTests(unittest.TestCase):
 class ExcelAutomationProcessClientTests(unittest.TestCase):
     def test_missing_launcher_is_a_known_start_failure(self) -> None:
         client = PythonExcelProcessClient()
-        result = client.call(
+        inventory = client.call(
             Path("C:/missing/python-excel.bat"),
-            build_describe_automations_request("describe-1"),
-            phase="describe",
+            build_inventory_live_excel_request("inventory-1"),
+            phase="inventory",
             timeout_seconds=1,
         )
 
-        self.assertEqual(result.classification, "start_failed")
-        self.assertFalse(result.process_started)
+        self.assertEqual(inventory.classification, "start_failed")
+        self.assertFalse(inventory.process_started)
+
+        apply = client.call(
+            Path("C:/missing/python-excel.bat"),
+            build_apply_live_format_profile_request(
+                "apply-1", LiveFormatProfileInvocation("opaque", worksheet="Data")
+            ),
+            phase="apply",
+            timeout_seconds=1,
+        )
+        self.assertEqual(apply.classification, "start_failed")
+        self.assertFalse(apply.unknown_outcome)
 
     @unittest.skipUnless(os.name == "nt", "Real .bat child boundary requires Windows")
     def test_real_child_drains_stdout_and_stderr_concurrently(self) -> None:
@@ -1016,6 +1332,37 @@ class ExcelAutomationProcessClientTests(unittest.TestCase):
 
 
 class ExcelAutomationCoordinatorTests(unittest.TestCase):
+    def test_apply_completion_is_single_call_without_an_automatic_retry(self) -> None:
+        expected = AutomationCallResult("apply", "apply_unknown", True, 70)
+
+        class Client:
+            calls = 0
+
+            def call(self, *_args, **_kwargs):
+                self.calls += 1
+                return expected
+
+        client = Client()
+        coordinator = ExcelAutomationCoordinator(client)  # type: ignore[arg-type]
+        completions: list[AutomationCallResult] = []
+        self.assertTrue(
+            coordinator.start(
+                Path("C:/python-excel.bat"),
+                build_apply_live_format_profile_request(
+                    "apply-1", LiveFormatProfileInvocation("opaque", worksheet="Data")
+                ),
+                phase="apply",
+                timeout_seconds=1,
+                on_complete=completions.append,
+            )
+        )
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline and not coordinator.drain():
+            time.sleep(0.005)
+
+        self.assertEqual(completions, [expected])
+        self.assertEqual(client.calls, 1)
+
     def test_single_flight_delivers_completion_only_during_drain(self) -> None:
         expected = AutomationCallResult(
             "plan", "plan_blocked", True, 0, result=None

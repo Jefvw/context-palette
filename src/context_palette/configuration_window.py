@@ -17,6 +17,8 @@ from .actions import (
     configured_action,
     edited_configured_action,
     ensure_default_text_action_file,
+    EXCEL_AUTOMATION_ID,
+    LIVE_FORMAT_PROFILE_AUTOMATION_ID,
     load_combined_actions,
     load_combined_stored_actions,
     validate_context_memberships,
@@ -117,7 +119,7 @@ ACTION_TYPE_EXAMPLES = {
     "open_file": r"Example: Open %PROJECT_ROOT%\README.md in its associated application.",
     "open_folder": r"Example: Open %PROJECT_ROOT%\docs in File Explorer.",
     "launch_app": r"Example: Start C:\Tools\Example\Example.exe with reviewed arguments.",
-    "excel_automation": "Example: Export exact .xlsx paths from Input / Output to reviewed CSV create or replace effects.",
+    "excel_automation": "Example: Choose CSV export from Input / Output, or apply Standard data directly to one worksheet or all visible sheets in an already-open Excel workbook.",
     "sequence": "Example: Start an import Action, wait briefly, then open its results folder.",
     "paste_credential": "Example: Paste the Windows or generic credential target oracle-pc17.",
     "build_url_open": "Example: Ask for ABC 123, then copy and open its generated website address.",
@@ -4194,6 +4196,7 @@ class ActionDialog:
             "transform_slashes": "Mode",
         }.get(action_type, "Text")
         self.transform_operation_choices: dict[str, str] = {}
+        self.excel_automation_choices: dict[str, str] = {}
         self.transform_parameter_vars: list[tk.StringVar] = []
         self.transform_parameters_frame: ttk.Frame | None = None
         self.value: tk.Text | None = None
@@ -4205,6 +4208,31 @@ class ActionDialog:
                 form,
                 action,
                 file_source=action_type == "transform_file_text",
+            )
+        elif action_type == "excel_automation":
+            self.excel_automation_choices = {
+                "Export Excel workbooks to CSV": EXCEL_AUTOMATION_ID,
+                "Apply Excel format template": LIVE_FORMAT_PROFILE_AUTOMATION_ID,
+            }
+            selected_label = next(
+                (
+                    choice
+                    for choice, automation_id in self.excel_automation_choices.items()
+                    if automation_id == (action.value if action else initial_value)
+                ),
+                "Export Excel workbooks to CSV",
+            )
+            self.excel_automation_var = tk.StringVar(value=selected_label)
+            self._compact_combobox(
+                form,
+                label,
+                self.excel_automation_var,
+                tuple(self.excel_automation_choices),
+                help_text=(
+                    "CSV export reads exact .xlsx paths from Input / Output. "
+                    "Apply Excel format template inventories open Excel, then "
+                    "formats one chosen worksheet or all visible worksheets directly."
+                ),
             )
         else:
             value_height = (
@@ -4230,10 +4258,6 @@ class ActionDialog:
                 self.value.insert("1.0", "vscode:")
             elif action_type in {"build_url_open", "build_url_selection_open"}:
                 self.value.insert("1.0", "https://example.com/items/{id_url}")
-            elif action_type == "excel_automation":
-                self.value.insert("1.0", "excel.export_workbooks_to_csv")
-            if action_type == "excel_automation":
-                self.value.configure(state=tk.DISABLED)
         if action_type in {"launch_app", "open_windows_target"}:
             self.arguments_text = self._compact_text(
                 form,
@@ -4706,6 +4730,9 @@ class ActionDialog:
                 else:
                     value = operation
                     arguments = parameters
+            elif self.action_type == "excel_automation":
+                value = self.excel_automation_choices[self.excel_automation_var.get()]
+                arguments = []
             else:
                 assert self.value is not None
                 value = self.value.get("1.0", "end-1c")

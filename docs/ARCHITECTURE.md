@@ -1079,9 +1079,11 @@ Provides the optional machine-local boundary to the separately installed
 Python Excel engine. It accepts only exact existing absolute `.xlsx` paths
 from Input / Output or the general drop intake (up to 100 closed workbooks),
 then performs the engine's `describe`, `plan`, and reviewed `execute` protocol
-off the Tk thread. Standard input carries structured requests; stdout and
-stderr are drained concurrently with bounded capture, so a verbose child
-cannot block the Palette process.
+off the Tk thread. The same bounded client also supports the separate direct
+live-Excel `inventory_live_excel` and `apply_live_format_profile` protocol.
+Standard input carries structured requests; stdout and stderr are drained
+concurrently with bounded capture, so a verbose child cannot block the Palette
+process.
 
 `excel_automation` is an ordinary constrained Action type for discovery,
 Contexts, tags, and Quick-action menus, but it is not eligible for sequences
@@ -1116,6 +1118,28 @@ subprocess owns a batch. The configured engine path is stored only in ignored
 `data/local_excel_automation_settings.json`.
 Absence, misconfiguration, or a failed engine leaves every non-Excel feature
 available.
+
+### `excel_live_format_window.py`
+
+Owns the centered attended **Apply Excel format template** workflow against
+the Python Excel engine at commit `e405e14`. It reuses the same optional,
+machine-local launcher resolution as CSV export, inventories only already-open
+Excel workbooks, and offers a selected visible worksheet or all visible
+worksheets. It has one fixed **Standard data** profile: Aptos 11 in the used
+range, a row-1 header, freeze top row, and an AutoFilter only when none already
+exists. Its **Apply** button is the one confirmation.
+
+This is deliberately not a planner: it neither consumes Input / Output nor
+creates a fingerprint, backup, recovery point, progress/cancellation channel,
+or automatic retry. The engine requires AutoSave to be off; direct formatting
+may clear Excel Undo. Context Palette never saves, closes, or launches Excel.
+A stale inventory requires Refresh and reselection; partial or unknown process
+outcomes tell the user to inspect Excel before deciding whether to run again.
+When the main action captured an F9 destination handle, **Return to Excel** is
+a best-effort focus request only. The workflow's coordinator keeps engine work
+off the Tk thread. A disposable real-Excel one-worksheet smoke confirmed the
+formatting path and preservation of an existing filter against that engine
+commit.
 
 ### `excel_automation_window.py`
 
@@ -1436,6 +1460,7 @@ Input / Output workspace <---- Paste / manual edit
         +-- file-transform preview -> review/edit -> replace source or save as
         +-- URL builder -> prompt or consume workspace -> copy + open URL
         +-- Excel CSV automation -> describe -> plan -> attended review -> execute
+        +-- Live Excel format -> inventory -> one attended Apply
         `-- saved-text action -> clipboard -> fresh captured destination, or manual-paste fallback
 
 Windows Credential Manager -- exact target --> protected clipboard --> captured destination

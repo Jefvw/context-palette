@@ -14,6 +14,8 @@ from .actions import (
     ACTION_BOUND_QUICK_MENU_SPECS,
     Action,
     ActionError,
+    EXCEL_AUTOMATION_ID,
+    LIVE_FORMAT_PROFILE_AUTOMATION_ID,
     action_search_rank,
     execute_action,
     load_combined_actions,
@@ -79,6 +81,7 @@ from .hotkeys import (
     focus_window,
     send_copy_shortcut,
     send_paste_shortcut,
+    window_process_id,
     window_title,
 )
 from .help_window import HelpWindow
@@ -97,6 +100,7 @@ from .excel_automation import (
     workbook_paths_from_workspace,
 )
 from .excel_automation_window import ExcelAutomationWindow
+from .excel_live_format_window import ExcelLiveFormatWindow
 from .inbox import InboxError, append_inbox_item, create_clipboard_item, load_inbox_items
 from .inbox_window import ActionCreator, InboxWindow, suggest_url_template
 from .ocr import (
@@ -385,7 +389,9 @@ class LauncherApp:
         self.command_surface_columns = 1
         self.configuration_window: ConfigurationWindow | None = None
         self.drop_target_window: DropTargetWindow | None = None
-        self.excel_automation_window: ExcelAutomationWindow | None = None
+        self.excel_automation_window: (
+            ExcelAutomationWindow | ExcelLiveFormatWindow | None
+        ) = None
         self.action_info_full = (
             "Select an Action or Work Item to see what it will do."
         )
@@ -3185,7 +3191,10 @@ class LauncherApp:
                 ),
                 opener=self._open_action_target,
                 sequence_runner=self._run_action_sequence,
-                excel_automation_runner=self._run_excel_automation,
+                excel_automation_runner=lambda selected: self._run_excel_automation(
+                    selected,
+                    source_window_handle=destination,
+                ),
             )
             if action.type == "copy_text":
                 message = self._paste_saved_text_if_destination(destination)
@@ -3195,12 +3204,12 @@ class LauncherApp:
             messagebox.showerror("Context Palette", str(exc))
             LOGGER.exception("Action failed: id=%s type=%s", action.id, action.type)
 
-    def _run_excel_automation(self, action: Action) -> str:
-        try:
-            workbooks = workbook_paths_from_workspace(self._workspace_text())
-        except ExcelAutomationInputError as exc:
-            raise ActionError(str(exc)) from exc
-
+    def _run_excel_automation(
+        self,
+        action: Action,
+        *,
+        source_window_handle: int | None = None,
+    ) -> str:
         existing = getattr(self, "excel_automation_window", None)
         if existing is not None:
             if existing.busy:
@@ -3210,6 +3219,29 @@ class LauncherApp:
                     "result before starting a new one."
                 )
             existing.close()
+
+        if action.value == LIVE_FORMAT_PROFILE_AUTOMATION_ID:
+            source_process_id = window_process_id(source_window_handle or 0)
+            source_title = window_title(source_window_handle or 0)
+            workflow = ExcelLiveFormatWindow(
+                self.root,
+                settings_path=self.excel_automation_settings_path,
+                status_setter=self.status_var.set,
+                source_window_handle=source_window_handle,
+                source_process_id=source_process_id,
+                source_window_title=source_title,
+                on_close=self._excel_automation_closed,
+            )
+            self.excel_automation_window = workflow
+            return "Opened the attended live Excel format workflow."
+
+        if action.value != EXCEL_AUTOMATION_ID:
+            raise ActionError("The selected Excel automation is unsupported.")
+
+        try:
+            workbooks = workbook_paths_from_workspace(self._workspace_text())
+        except ExcelAutomationInputError as exc:
+            raise ActionError(str(exc)) from exc
 
         workflow = ExcelAutomationWindow(
             self.root,

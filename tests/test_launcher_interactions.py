@@ -1717,6 +1717,83 @@ class LauncherInteractionTests(unittest.TestCase):
             self.assertIs(app.excel_automation_window, workflow)
             self.assertIn("2 workbook(s)", message)
 
+    def test_live_excel_action_uses_open_workbooks_without_workspace_input(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.status_var = FakeVariable()
+        app.excel_automation_settings_path = Path("C:/settings.json")
+        app.excel_automation_window = None
+        app._workspace_text = Mock(return_value="not workbook input")
+        app._excel_automation_closed = Mock()
+        workflow = Mock(busy=False)
+
+        with (
+            patch(
+                "context_palette.launcher.ExcelLiveFormatWindow",
+                return_value=workflow,
+            ) as window,
+            patch("context_palette.launcher.window_process_id", return_value=55),
+            patch(
+                "context_palette.launcher.window_title",
+                return_value="Budget.xlsx - Excel",
+            ),
+        ):
+            message = app._run_excel_automation(
+                Action(
+                    "excel-live-format",
+                    "Apply Excel format template",
+                    "General",
+                    "excel_automation",
+                    "excel.apply_live_format_profile",
+                ),
+                source_window_handle=123,
+            )
+
+        app._workspace_text.assert_not_called()
+        self.assertEqual(window.call_args.kwargs["source_window_handle"], 123)
+        self.assertEqual(window.call_args.kwargs["source_process_id"], 55)
+        self.assertEqual(
+            window.call_args.kwargs["source_window_title"],
+            "Budget.xlsx - Excel",
+        )
+        self.assertIs(app.excel_automation_window, workflow)
+        self.assertIn("live Excel format", message)
+
+    def test_excel_runner_receives_and_consumes_the_captured_window(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.source_foreground_handle = 123
+        app.status_var = FakeVariable()
+        app.captured_selection = None
+        app._workspace_text = Mock(return_value="")
+        app._set_clipboard = Mock()
+        app._get_clipboard_text = Mock()
+        app._ask_for_action_input = Mock()
+        app._set_workspace_text = Mock()
+        app._run_excel_automation = Mock(return_value="Opened live Excel format")
+        action = Action(
+            "excel-live-format",
+            "Apply Excel format template",
+            "General",
+            "excel_automation",
+            "excel.apply_live_format_profile",
+        )
+
+        def execute_with_runner(selected, **kwargs):
+            return kwargs["excel_automation_runner"](selected)
+
+        with patch(
+            "context_palette.launcher.execute_action",
+            side_effect=execute_with_runner,
+        ):
+            app._execute_action(action)
+
+        app._run_excel_automation.assert_called_once_with(
+            action,
+            source_window_handle=123,
+        )
+        self.assertIsNone(app.source_foreground_handle)
+        self.assertEqual(app.status_var.value, "Opened live Excel format")
+
     def test_excel_action_rejects_mixed_workspace_without_opening_workflow(self):
         app = LauncherApp.__new__(LauncherApp)
         app._workspace_text = Mock(return_value="notes and not a workbook")

@@ -4,6 +4,15 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Added **Apply Excel format template**, an optional attended Action for an
+  already-open Excel workbook. It inventories live workbooks, formats one
+  selected worksheet or all visible worksheets with the fixed Standard data
+  template, and returns to the Excel window when possible. One **Apply** click
+  is the confirmation; Context Palette never saves or closes Excel. The direct
+  operation may clear Excel Undo and has no plan, backup, rollback, progress,
+  cancellation, or automatic retry. A disposable one-worksheet real-Excel
+  smoke passed against Python Excel `e405e14`, including preservation of an
+  existing filter; the broader manual matrix remains pending.
 - Centered the main palette and ordinary application windows in the usable
   area of their current monitor. F9 and Ctrl+Alt+P still use the cursor to
   choose a monitor, but no longer use it as the window's top-left corner.

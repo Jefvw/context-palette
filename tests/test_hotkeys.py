@@ -13,6 +13,7 @@ from context_palette.hotkeys import (
     VK_F9,
     VK_P,
     WM_HOTKEY,
+    window_process_id,
 )
 
 
@@ -24,6 +25,9 @@ class HotkeyTests(unittest.TestCase):
         self.assertEqual(VK_F9, 0x78)
         self.assertEqual(MOD_NOREPEAT, 0x4000)
         self.assertEqual(WM_HOTKEY, 0x0312)
+
+    def test_zero_window_handle_has_no_process(self):
+        self.assertIsNone(window_process_id(0))
 
 if __name__ == "__main__":
     unittest.main()

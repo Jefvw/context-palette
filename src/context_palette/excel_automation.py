@@ -28,6 +28,8 @@ EXCEL_AUTOMATION_VERSION = "2.0"
 DESCRIBE_OPERATION = "describe_automations"
 PLAN_OPERATION = "plan_automation"
 EXECUTE_OPERATION = "execute_automation"
+LIVE_INVENTORY_OPERATION = "inventory_live_excel"
+LIVE_FORMAT_PROFILE_OPERATION = "apply_live_format_profile"
 OPERATION_VERSION = "1.0"
 MAX_WORKBOOKS = 100
 MAX_REQUEST_BYTES = 1024 * 1024
@@ -36,7 +38,7 @@ DEFAULT_MAX_STDERR_BYTES = 256 * 1024
 PYTHON_EXCEL_SIBLING_DIRECTORY = "python-excel"
 PYTHON_EXCEL_LAUNCHER_NAME = "python-excel.bat"
 
-AutomationPhase = Literal["describe", "plan", "execute"]
+AutomationPhase = Literal["describe", "plan", "execute", "inventory", "apply"]
 CallClassification = Literal[
     "start_failed",
     "outer_error",
@@ -50,6 +52,12 @@ CallClassification = Literal[
     "execute_failed_before_effect",
     "execute_failed_after_partial_effect",
     "execute_unknown",
+    "inventory_succeeded",
+    "inventory_failed",
+    "apply_succeeded",
+    "apply_failed",
+    "apply_partial_failure",
+    "apply_unknown",
 ]
 
 
@@ -291,6 +299,107 @@ def build_execute_automation_request(
     return _request(request_id, EXECUTE_OPERATION, arguments)
 
 
+@dataclass(frozen=True, slots=True)
+class LiveExcelInventoryLimits:
+    """Bounded inventory limits accepted by Python Excel 1.0."""
+
+    maximum_applications: int = 16
+    maximum_workbooks_per_application: int = 100
+    maximum_sheets_per_workbook: int = 250
+
+    def __post_init__(self) -> None:
+        _live_limit(
+            self.maximum_applications,
+            maximum=64,
+            label="maximum_applications",
+        )
+        _live_limit(
+            self.maximum_workbooks_per_application,
+            maximum=256,
+            label="maximum_workbooks_per_application",
+        )
+        _live_limit(
+            self.maximum_sheets_per_workbook,
+            maximum=1000,
+            label="maximum_sheets_per_workbook",
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class LiveFormatProfileInvocation:
+    """One attended direct-format target; its token is intentionally opaque."""
+
+    workbook_token: str
+    scope: Literal["worksheet", "workbook"] = "worksheet"
+    worksheet: str | None = None
+    profile_id: str = "standard_data"
+    profile_version: str = "1.0"
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.workbook_token, str)
+            or not self.workbook_token.strip()
+        ):
+            raise ExcelAutomationInputError("The live workbook token must be text.")
+        if self.scope not in {"worksheet", "workbook"}:
+            raise ExcelAutomationInputError(
+                "The live format scope must be worksheet or workbook."
+            )
+        if self.scope == "worksheet" and (
+            not isinstance(self.worksheet, str) or not self.worksheet
+        ):
+            raise ExcelAutomationInputError(
+                "A worksheet name is required for worksheet scope."
+            )
+        if self.scope == "workbook" and self.worksheet is not None:
+            raise ExcelAutomationInputError(
+                "Workbook scope must not include a worksheet name."
+            )
+        if (self.profile_id, self.profile_version) != ("standard_data", "1.0"):
+            raise ExcelAutomationInputError(
+                "The selected live format profile is unsupported."
+            )
+
+
+def build_inventory_live_excel_request(
+    request_id: str,
+    limits: LiveExcelInventoryLimits | None = None,
+) -> dict[str, object]:
+    """Build the bounded read-only inventory request for the Tk chooser."""
+
+    selected = limits or LiveExcelInventoryLimits()
+    return _request(
+        request_id,
+        LIVE_INVENTORY_OPERATION,
+        {
+            "maximum_applications": selected.maximum_applications,
+            "maximum_workbooks_per_application": (
+                selected.maximum_workbooks_per_application
+            ),
+            "maximum_sheets_per_workbook": selected.maximum_sheets_per_workbook,
+        },
+    )
+
+
+def build_apply_live_format_profile_request(
+    request_id: str,
+    invocation: LiveFormatProfileInvocation,
+) -> dict[str, object]:
+    """Build one direct profile application request without a retry protocol."""
+
+    return _request(
+        request_id,
+        LIVE_FORMAT_PROFILE_OPERATION,
+        {
+            "workbook_token": invocation.workbook_token,
+            "scope": invocation.scope,
+            "worksheet": invocation.worksheet,
+            "profile_id": invocation.profile_id,
+            "profile_version": invocation.profile_version,
+        },
+    )
+
+
 def _request(
     request_id: str,
     operation: str,
@@ -504,8 +613,85 @@ class ExecuteAutomationResult:
     retryable: bool
 
 
+@dataclass(frozen=True, slots=True)
+class LiveExcelWarning:
+    code: str
+    message: str
+    details: Mapping[str, object]
+
+
+@dataclass(frozen=True, slots=True)
+class LiveExcelSheet:
+    position: int
+    name: str
+    state: Literal["visible", "hidden", "very_hidden", "unknown"]
+
+
+@dataclass(frozen=True, slots=True)
+class LiveExcelWorkbook:
+    token: str
+    process_id: int
+    name: str
+    full_path: str | None
+    saved: bool
+    read_only: bool
+    autosave_enabled: bool | None
+    active_sheet: str | None
+    sheets_total: int
+    sheets_truncated: bool
+    sheets: tuple[LiveExcelSheet, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LiveExcelApplication:
+    process_id: int
+    foreground: bool
+    visible: bool
+    workbooks_total: int
+    workbooks_truncated: bool
+    workbooks: tuple[LiveExcelWorkbook, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LiveExcelInventoryResult:
+    applications_total: int
+    applications_truncated: bool
+    applications: tuple[LiveExcelApplication, ...]
+    warnings: tuple[LiveExcelWarning, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LiveFormatFailure:
+    worksheet: str
+    code: str
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
+class LiveFormatProfileResult:
+    state: Literal["succeeded", "failed", "partial_failure"]
+    workbook_token: str
+    workbook_name: str
+    scope: Literal["worksheet", "workbook"]
+    profile_id: str
+    profile_version: str
+    formatted_sheets: tuple[str, ...]
+    skipped_hidden_sheets: tuple[str, ...]
+    filter_added_sheets: tuple[str, ...]
+    existing_filter_sheets: tuple[str, ...]
+    failures: tuple[LiveFormatFailure, ...]
+    workbook_saved: bool
+    workbook_closed: bool
+    application_closed: bool
+    warnings: tuple[LiveExcelWarning, ...]
+
+
 AutomationResult = (
-    DescribeAutomationsResult | PlanAutomationResult | ExecuteAutomationResult
+    DescribeAutomationsResult
+    | PlanAutomationResult
+    | ExecuteAutomationResult
+    | LiveExcelInventoryResult
+    | LiveFormatProfileResult
 )
 
 
@@ -522,7 +708,7 @@ class AutomationCallResult:
 
     @property
     def unknown_outcome(self) -> bool:
-        return self.classification == "execute_unknown"
+        return self.classification in {"execute_unknown", "apply_unknown"}
 
 
 class _ProtocolError(ValueError):
@@ -551,8 +737,15 @@ def parse_automation_response(
         if document.get("operation_version") != OPERATION_VERSION:
             raise _ProtocolError("The response operation version did not match.")
         _nonnegative_int(document.get("duration_ms"), "duration_ms")
-        _object(document.get("paths"), "paths")
-        _array(document.get("warnings"), "warnings")
+        paths = _object(document.get("paths"), "paths")
+        if phase in {"inventory", "apply"} and (
+            set(paths) != {"input", "output", "backup"}
+            or any(value is not None for value in paths.values())
+        ):
+            raise _ProtocolError(
+                "The live Excel response unexpectedly reported a file path."
+            )
+        envelope_warnings = _array(document.get("warnings"), "warnings")
         status = document.get("status")
         if status == "error":
             if return_code == 0 or document.get("result") is not None:
@@ -571,7 +764,11 @@ def parse_automation_response(
         if return_code != 0:
             raise _ProtocolError("The success response contradicted its exit code.")
         result_document = _object(document.get("result"), "result")
-        result, classification = _parse_success_result(phase, result_document)
+        result, classification = _parse_success_result(
+            phase,
+            result_document,
+            envelope_warnings,
+        )
         return AutomationCallResult(
             phase,
             classification,
@@ -610,6 +807,7 @@ def _parse_outer_error(value: object) -> AutomationCallError:
 def _parse_success_result(
     phase: AutomationPhase,
     document: dict[str, object],
+    envelope_warnings: list[object],
 ) -> tuple[AutomationResult, CallClassification]:
     if phase == "describe":
         result = _parse_describe_result(document)
@@ -620,6 +818,18 @@ def _parse_success_result(
             "needs_parameters": "plan_needs_parameters",
             "blocked": "plan_blocked",
             "ready": "plan_ready",
+        }[result.state]
+    if phase == "inventory":
+        return (
+            _parse_live_inventory_result(document, envelope_warnings),
+            "inventory_succeeded",
+        )
+    if phase == "apply":
+        result = _parse_live_format_profile_result(document, envelope_warnings)
+        return result, {
+            "succeeded": "apply_succeeded",
+            "failed": "apply_failed",
+            "partial_failure": "apply_partial_failure",
         }[result.state]
     result = _parse_execute_result(document)
     return result, {
@@ -658,6 +868,197 @@ def _parse_describe_result(document: dict[str, object]) -> DescribeAutomationsRe
             )
         )
     return DescribeAutomationsResult(contract, tuple(automations))
+
+
+def _parse_live_inventory_result(
+    document: dict[str, object],
+    warnings: list[object],
+) -> LiveExcelInventoryResult:
+    applications = tuple(
+        _parse_live_application(value, index)
+        for index, value in enumerate(_array(document.get("applications"), "applications"))
+    )
+    returned = _nonnegative_int(
+        document.get("applications_returned"), "applications_returned"
+    )
+    total = _nonnegative_int(
+        document.get("applications_total"), "applications_total"
+    )
+    truncated = _boolean(document.get("applications_truncated"), "applications_truncated")
+    if (
+        returned != len(applications)
+        or total < returned
+        or (truncated and total == returned)
+    ):
+        raise _ProtocolError("The live inventory application counts are inconsistent.")
+    return LiveExcelInventoryResult(
+        total,
+        truncated,
+        applications,
+        _parse_live_warnings(warnings),
+    )
+
+
+def _parse_live_application(value: object, index: int) -> LiveExcelApplication:
+    item = _object(value, f"applications[{index}]")
+    workbooks = tuple(
+        _parse_live_workbook(raw, index, workbook_index)
+        for workbook_index, raw in enumerate(
+            _array(item.get("workbooks"), f"applications[{index}].workbooks")
+        )
+    )
+    returned = _nonnegative_int(
+        item.get("workbooks_returned"), "workbooks_returned"
+    )
+    total = _nonnegative_int(item.get("workbooks_total"), "workbooks_total")
+    truncated = _boolean(item.get("workbooks_truncated"), "workbooks_truncated")
+    if (
+        returned != len(workbooks)
+        or total < returned
+        or (truncated and total == returned)
+    ):
+        raise _ProtocolError("The live inventory workbook counts are inconsistent.")
+    return LiveExcelApplication(
+        _positive_int(item.get("process_id"), "application.process_id"),
+        _boolean(item.get("foreground"), "application.foreground"),
+        _boolean(item.get("visible"), "application.visible"),
+        total,
+        truncated,
+        workbooks,
+    )
+
+
+def _parse_live_workbook(
+    value: object,
+    application_index: int,
+    workbook_index: int,
+) -> LiveExcelWorkbook:
+    label = f"applications[{application_index}].workbooks[{workbook_index}]"
+    item = _object(value, label)
+    sheets = tuple(
+        _parse_live_sheet(raw, label, sheet_index)
+        for sheet_index, raw in enumerate(_array(item.get("sheets"), f"{label}.sheets"))
+    )
+    returned = _nonnegative_int(item.get("sheets_returned"), "sheets_returned")
+    total = _nonnegative_int(item.get("sheets_total"), "sheets_total")
+    truncated = _boolean(item.get("sheets_truncated"), "sheets_truncated")
+    if (
+        returned != len(sheets)
+        or total < returned
+        or (truncated and total == returned)
+    ):
+        raise _ProtocolError("The live inventory worksheet counts are inconsistent.")
+    return LiveExcelWorkbook(
+        _text(item.get("token"), "workbook.token"),
+        _positive_int(item.get("process_id"), "workbook.process_id"),
+        _text(item.get("name"), "workbook.name"),
+        _optional_text(item.get("full_path"), "workbook.full_path"),
+        _boolean(item.get("saved"), "workbook.saved"),
+        _boolean(item.get("read_only"), "workbook.read_only"),
+        _optional_boolean(item.get("autosave_enabled"), "workbook.autosave_enabled"),
+        _optional_text(item.get("active_sheet"), "workbook.active_sheet"),
+        total,
+        truncated,
+        sheets,
+    )
+
+
+def _parse_live_sheet(value: object, label: str, index: int) -> LiveExcelSheet:
+    item = _object(value, f"{label}.sheets[{index}]")
+    state = _text(item.get("state"), "worksheet.state")
+    if state not in {"visible", "hidden", "very_hidden", "unknown"}:
+        raise _ProtocolError("The live inventory worksheet state is unsupported.")
+    return LiveExcelSheet(
+        _positive_int(item.get("position"), "worksheet.position"),
+        _text(item.get("name"), "worksheet.name"),
+        state,  # type: ignore[arg-type]
+    )
+
+
+def _parse_live_format_profile_result(
+    document: dict[str, object],
+    warnings: list[object],
+) -> LiveFormatProfileResult:
+    state = _text(document.get("state"), "result.state")
+    if state not in {"succeeded", "failed", "partial_failure"}:
+        raise _ProtocolError("The live format result state is unsupported.")
+    target = _object(document.get("target"), "result.target")
+    scope = _text(target.get("scope"), "target.scope")
+    if scope not in {"worksheet", "workbook"}:
+        raise _ProtocolError("The live format result scope is unsupported.")
+    profile = _object(document.get("profile"), "result.profile")
+    if (profile.get("profile_id"), profile.get("profile_version")) != (
+        "standard_data",
+        "1.0",
+    ):
+        raise _ProtocolError("The live format profile is unsupported.")
+    formatted = _text_tuple(document.get("formatted_sheets"), "formatted_sheets")
+    hidden = _text_tuple(document.get("skipped_hidden_sheets"), "skipped_hidden_sheets")
+    filters_added = _text_tuple(document.get("filter_added_sheets"), "filter_added_sheets")
+    existing_filters = _text_tuple(
+        document.get("existing_filter_sheets"), "existing_filter_sheets"
+    )
+    failures = tuple(
+        _parse_live_format_failure(value, index)
+        for index, value in enumerate(_array(document.get("failures"), "failures"))
+    )
+    if (
+        not set(filters_added).issubset(formatted)
+        or not set(existing_filters).issubset(formatted)
+        or set(formatted) & set(hidden)
+        or set(formatted) & {item.worksheet for item in failures}
+    ):
+        raise _ProtocolError("The live format worksheet effects are contradictory.")
+    if (
+        state == "succeeded" and failures
+        or state == "failed" and (not failures or formatted)
+        or state == "partial_failure" and (not failures or not formatted)
+    ):
+        raise _ProtocolError("The live format result state contradicts its effects.")
+    lifecycle = (
+        _boolean(document.get("workbook_saved"), "workbook_saved"),
+        _boolean(document.get("workbook_closed"), "workbook_closed"),
+        _boolean(document.get("application_closed"), "application_closed"),
+    )
+    if any(lifecycle):
+        raise _ProtocolError("The live format response contradicted its lifecycle contract.")
+    return LiveFormatProfileResult(
+        state,  # type: ignore[arg-type]
+        _text(target.get("workbook_token"), "target.workbook_token"),
+        _text(target.get("workbook_name"), "target.workbook_name"),
+        scope,  # type: ignore[arg-type]
+        "standard_data",
+        "1.0",
+        formatted,
+        hidden,
+        filters_added,
+        existing_filters,
+        failures,
+        *lifecycle,
+        _parse_live_warnings(warnings),
+    )
+
+
+def _parse_live_format_failure(value: object, index: int) -> LiveFormatFailure:
+    item = _object(value, f"failures[{index}]")
+    return LiveFormatFailure(
+        _text(item.get("worksheet"), "failure.worksheet"),
+        _text(item.get("code"), "failure.code"),
+        _text(item.get("message"), "failure.message"),
+    )
+
+
+def _parse_live_warnings(values: list[object]) -> tuple[LiveExcelWarning, ...]:
+    return tuple(
+        LiveExcelWarning(
+            _text(_object(value, "warning").get("code"), "warning.code"),
+            _text(_object(value, "warning").get("message"), "warning.message"),
+            MappingProxyType(
+                dict(_object(_object(value, "warning").get("details"), "warning.details"))
+            ),
+        )
+        for value in values
+    )
 
 
 def _parse_plan_result(document: dict[str, object]) -> PlanAutomationResult:
@@ -1063,6 +1464,8 @@ def _operation_for_phase(phase: AutomationPhase) -> str:
         "describe": DESCRIBE_OPERATION,
         "plan": PLAN_OPERATION,
         "execute": EXECUTE_OPERATION,
+        "inventory": LIVE_INVENTORY_OPERATION,
+        "apply": LIVE_FORMAT_PROFILE_OPERATION,
     }[phase]
 
 
@@ -1096,10 +1499,34 @@ def _boolean(value: object, label: str) -> bool:
     return value
 
 
+def _optional_boolean(value: object, label: str) -> bool | None:
+    if value is None:
+        return None
+    return _boolean(value, label)
+
+
 def _nonnegative_int(value: object, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise _ProtocolError(f"{label} must be a non-negative integer.")
     return value
+
+
+def _positive_int(value: object, label: str) -> int:
+    result = _nonnegative_int(value, label)
+    if result < 1:
+        raise _ProtocolError(f"{label} must be a positive integer.")
+    return result
+
+
+def _text_tuple(value: object, label: str) -> tuple[str, ...]:
+    return tuple(_text(item, label) for item in _array(value, label))
+
+
+def _live_limit(value: object, *, maximum: int, label: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
+        raise ExcelAutomationInputError(
+            f"{label} must be an integer from 1 through {maximum}."
+        )
 
 
 def _optional_nonnegative_int(value: object, label: str) -> int | None:
@@ -1381,6 +1808,8 @@ def _failure_classification(phase: AutomationPhase) -> CallClassification:
         "describe": "describe_failed",
         "plan": "plan_failed",
         "execute": "execute_unknown",
+        "inventory": "inventory_failed",
+        "apply": "apply_unknown",
     }[phase]
 
 

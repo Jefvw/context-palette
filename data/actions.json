@@ -225,6 +225,19 @@
       "description": "Plan and review exact CSV create or replace outputs for .xlsx paths from Input / Output, then run the reviewed Python Excel automation."
     },
     {
+      "id": "excel-apply-format-template",
+      "title": "Apply Excel format template",
+      "type": "excel_automation",
+      "value": "excel.apply_live_format_profile",
+      "state": "Active",
+      "tags": [
+        "excel",
+        "formatting",
+        "open workbook"
+      ],
+      "description": "Choose an already-open Excel workbook and one worksheet or all visible worksheets, then apply Standard data directly. Excel is not saved or closed."
+    },
+    {
       "id": "developing-uat-sequence",
       "title": "UAT: Run a harmless sequence",
       "description": "Test sequence preview, confirmation, progress, and Stop remaining by dispatching the Context Palette project folder twice with a five-second wait. Windows may reuse one Explorer window.",

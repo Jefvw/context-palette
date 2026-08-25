@@ -1,5 +1,34 @@
 # Decisions
 
+## 2026-08-25 - Keep direct live Excel formatting attended and narrowly scoped
+
+**Decision:** Add **Apply Excel format template** as a separate optional
+`excel_automation` Action against Python Excel commit `e405e14`. Reuse the
+machine-local launcher setup, inventory already-open workbooks, offer one
+visible worksheet or all visible worksheets, and expose only the fixed
+**Standard data** profile: Aptos 11 in the used range, row-1 header, freeze top
+row, and add a filter only when none exists. The single **Apply** click is the
+confirmation. Do not route it through Input / Output, CSV planning, or a
+generic automation form.
+
+**Reason:** The value is a fast, findable, contextual entry point for a common
+live workbook task. Reusing the established optional engine boundary avoids an
+arbitrary local-command capability while keeping the flow shorter than the
+reviewed closed-workbook export.
+
+**Safety boundary:** The direct action mutates Excel and can clear Undo, so it
+requires AutoSave off. It provides no plan/fingerprint, backup, rollback,
+progress, cancellation, recovery, or automatic retry. Context Palette never
+saves, closes, or launches Excel. A stale inventory requires Refresh; partial
+or unknown outcomes require manual inspection. **Return to Excel** is only a
+best-effort focus request to the F9-captured window handle.
+
+**Consequences:** The new standard centered window depends on the exact engine
+commit and reuses only its machine-local launcher setting. A disposable
+one-worksheet real-Excel smoke passed after the engine corrected its live
+filter application; the broader AutoSave, stale, all-visible, partial/unknown,
+and display-scaling matrix remains manual UAT.
+
 ## 2026-08-24 - Center ordinary windows in their current monitor
 
 **Decision:** Center the main palette and every ordinary Context Palette

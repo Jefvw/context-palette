@@ -151,6 +151,26 @@ class ActionTests(unittest.TestCase):
                 value="excel.unknown",
             )
 
+    def test_excel_live_format_profile_is_an_allow_listed_automation(self):
+        action = configured_action(
+            title="Apply Excel format template",
+            context="General",
+            action_type="excel_automation",
+            value="excel.apply_live_format_profile",
+        )
+
+        self.assertEqual(action.value, "excel.apply_live_format_profile")
+
+    def test_built_in_live_excel_format_action_has_no_process_configuration(self):
+        actions = load_actions(ROOT / "data" / "actions.json")
+        action = next(
+            item for item in actions if item.id == "excel-apply-format-template"
+        )
+
+        self.assertEqual(action.value, "excel.apply_live_format_profile")
+        self.assertEqual(action.arguments, ())
+        self.assertIsNone(action.working_directory)
+
     def test_context_membership_validation_canonicalizes_and_rejects_unknown_names(self):
         self.assertEqual(
             validate_context_memberships(

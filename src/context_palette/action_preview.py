@@ -129,18 +129,33 @@ def build_action_preview(
             limitations,
         )
     if action.type == "excel_automation":
+        if action.value == "excel.apply_live_format_profile":
+            return ActionPreview(
+                "open Excel workbooks, then one worksheet or all visible worksheets you choose",
+                "apply Standard data formatting directly; Excel is not saved or closed",
+                details,
+                (
+                    "Changes the open workbook directly, may clear Excel Undo, "
+                    "has no recovery or rollback. AutoSave must be off. Context "
+                    "Palette never saves or closes Excel."
+                ),
+            )
+        csv_limitations = (
+            "Source workbooks stay unchanged. Overwrite is off by default; "
+            "checked replacements have no recovery backup or batch rollback."
+        )
         if not workspace_has_text:
             return ActionPreview(
                 "needed: exact .xlsx paths in Input / Output",
                 "Run will stop without changes",
                 details,
-                limitations,
+                csv_limitations,
             )
         return ActionPreview(
             "exact .xlsx paths from Input / Output",
             "plan exact CSV create or replace effects, show every output for review, then export only after confirmation",
             details,
-            limitations,
+            csv_limitations,
         )
     if action.type == "sequence":
         try:
@@ -285,7 +300,12 @@ def _configured_details(action: Action) -> tuple[tuple[str, str], ...]:
     elif action.type == "launch_app":
         label = "Configured application"
     elif action.type == "excel_automation":
-        return (("Automation", "Export Excel files to CSV"),)
+        label = (
+            "Apply Excel format template"
+            if action.value == "excel.apply_live_format_profile"
+            else "Export Excel files to CSV"
+        )
+        return (("Automation", label),)
     elif action.type == "paste_credential":
         return (("Credential target", action.value),)
     elif action.type == "transform_file_text":
