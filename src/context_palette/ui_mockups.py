@@ -760,16 +760,29 @@ class ConfigureMockup(MockupView):
             label="Get blank Actions workbook...",
             command=lambda: self._mock_status("Mockup: a versioned blank Actions workbook would be saved."),
         )
-        other_menu.add_separator()
         other_menu.add_command(
             label="Harvest website links...",
             command=lambda: self._mock_status("Mockup: attended website-link harvesting would open."),
         )
+        other_menu.add_separator()
+        other_menu.add_command(
+            label="Export personal Actions for update...",
+            command=lambda: self._mock_status("Mockup: personal Active Actions would be exported for review."),
+        )
+        other_menu.add_command(
+            label="Review updated Actions workbook...",
+            command=lambda: self._mock_status("Mockup: the attended bulk update review would open."),
+        )
+        other_menu.add_command(
+            label="Remove multiple personal Actions...",
+            command=lambda: self._mock_status("Mockup: the attended two-stage Action removal review would open."),
+        )
+        other_menu.add_separator()
         other_menu.add_command(
             label="Browse Action types...",
             command=lambda: self._mock_status("Mockup: the Action type catalogue would open within Actions."),
         )
-        other_button = ttk.Menubutton(page, text="Other ways to create", menu=other_menu)
+        other_button = ttk.Menubutton(page, text="More Action tasks", menu=other_menu)
         self.actions_new_button = self._page_header(
             page,
             title="Manage Actions",
@@ -1366,6 +1379,40 @@ class MainPaletteMockup(MockupView):
         tool_commands = ttk.Frame(tools)
         tool_commands.pack(side=tk.RIGHT)
         self.workspace_buttons: list[ttk.Button | ttk.Menubutton] = []
+        send_menu = tk.Menu(tool_commands, tearoff=False)
+        send_menu.add_command(
+            label="Finance reports",
+            command=lambda: self._mock_preview(
+                "Mockup: Input / Output files would be copied to Finance reports."
+            ),
+        )
+        send_menu.add_command(
+            label="Choose another folder…",
+            command=lambda: self._mock_preview(
+                "Mockup: a one-off destination folder would be chosen."
+            ),
+        )
+        send_menu.add_separator()
+        send_menu.add_command(label="Open with:", state=tk.DISABLED)
+        send_menu.add_command(
+            label="Open folder in VS Code",
+            command=lambda: self._mock_preview(
+                "Mockup: the folder path, or a file's containing folder, would open in VS Code."
+            ),
+        )
+        self.send_to_menu = send_menu
+        self.send_to_button = ttk.Menubutton(
+            tool_commands,
+            text="Send to…",
+            menu=send_menu,
+            takefocus=True,
+        )
+        self.send_to_button.pack(side=tk.LEFT, padx=(0, 8))
+        self._hint(
+            self.send_to_button,
+            "Copy file paths to a destination, or open one path's folder in VS Code.",
+        )
+        self.workspace_buttons.append(self.send_to_button)
         tool_specs = (
             ("capture", "Capture clipboard text to Inbox", "Mockup only: clipboard was not read."),
             ("inbox", "Open Inbox", "Mockup: Inbox would open."),

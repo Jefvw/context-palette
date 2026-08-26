@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from context_palette.actions import (
     Action,
     ActionError,
+    action_uses_clipboard_template,
     append_action,
     append_actions,
     build_url,
@@ -28,6 +29,7 @@ from context_palette.actions import (
     execute_action,
     expand_template,
     load_actions,
+    load_stored_actions,
     list_to_comma_separated,
     list_to_comma_values,
     list_to_sql_values,
@@ -35,11 +37,13 @@ from context_palette.actions import (
     load_combined_stored_actions,
     open_action_target,
     replace_text_file_from_preview,
+    resolve_local_folder_path,
     save_text_file_preview_as,
     search_actions,
     transform_text_file,
     transform_text,
     update_action,
+    update_actions,
     validate_credential_target,
     validate_context_memberships,
     validate_windows_target,
@@ -54,6 +58,54 @@ from context_palette.action_sequences import (
 
 
 class ActionTests(unittest.TestCase):
+    def test_update_actions_replaces_a_batch_in_one_saved_collection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "actions.json"
+            append_actions(
+                path,
+                (
+                    Action("one", "One", "General", "copy_text", "one"),
+                    Action("two", "Two", "General", "copy_text", "two"),
+                    Action("keep", "Keep", "General", "copy_text", "keep"),
+                ),
+            )
+
+            update_actions(
+                path,
+                (
+                    Action("one", "One updated", "General", "copy_text", "1"),
+                    Action("two", "Two updated", "General", "copy_text", "2"),
+                ),
+            )
+
+            loaded = load_stored_actions(path)
+            self.assertEqual(
+                [(action.id, action.title, action.value) for action in loaded],
+                [
+                    ("one", "One updated", "1"),
+                    ("two", "Two updated", "2"),
+                    ("keep", "Keep", "keep"),
+                ],
+            )
+
+    def test_update_actions_rejects_missing_or_repeated_ids_without_writing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "actions.json"
+            original = Action("one", "One", "General", "copy_text", "one")
+            append_action(path, original)
+            before = path.read_bytes()
+
+            with self.assertRaisesRegex(ActionError, "not found: missing"):
+                update_actions(
+                    path,
+                    (Action("missing", "Missing", "General", "copy_text", "x"),),
+                )
+            self.assertEqual(path.read_bytes(), before)
+
+            with self.assertRaisesRegex(ActionError, "supplied more than once"):
+                update_actions(path, (original, original))
+            self.assertEqual(path.read_bytes(), before)
+
     def test_built_in_uat_sequence_is_bounded_and_opens_only_the_project_folder(self):
         actions = load_actions(ROOT / "data" / "actions.json")
         sequence = next(
@@ -901,6 +953,45 @@ class ActionTests(unittest.TestCase):
         )
 
         self.assertEqual(opened[0].value, "C:\\config.json")
+
+    def test_normal_folder_action_still_expands_its_clipboard_template(self):
+        opened = []
+        action = Action(
+            "customer-folder",
+            "Customer folder",
+            "General",
+            "open_folder",
+            r"D:\customers\%CLIPBOARD%",
+        )
+
+        execute_action(
+            action,
+            clipboard_getter=lambda: "acme",
+            opener=opened.append,
+        )
+
+        self.assertTrue(action_uses_clipboard_template(action))
+        self.assertEqual(opened[0].value, r"D:\customers\acme")
+
+    def test_folder_resolver_accepts_relative_paths_and_file_uris(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            relative_folder = root / "relative reports"
+            uri_folder = root / "URI reports"
+            relative_folder.mkdir()
+            uri_folder.mkdir()
+
+            with patch(
+                "context_palette.actions.Path.cwd",
+                return_value=root,
+            ):
+                relative_result = resolve_local_folder_path("relative reports")
+
+            self.assertEqual(relative_result, relative_folder)
+            self.assertEqual(
+                resolve_local_folder_path(uri_folder.as_uri()),
+                uri_folder,
+            )
 
     def test_open_file_accepts_percent_encoded_spaces_and_file_uris(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -31,6 +31,7 @@ from context_palette.drop_adapter import DropProblem, DropResult
 from context_palette.drop_extraction import DropItem
 from context_palette.launcher import (
     LauncherApp,
+    _SendDestination,
     bounded_sash_position,
     ordered_configured_quick_groups,
     quick_action_column_count,
@@ -50,6 +51,7 @@ from context_palette.work_item_file_copy import (
 )
 from context_palette.work_item_inbox import WorkItemInboxError, WorkItemInboxResult
 from context_palette.work_items import DiscoveredWorkItem, WorkItemReference
+from context_palette.vscode_integration import VsCodeIntegrationError
 
 
 class FakeVariable:
@@ -69,6 +71,37 @@ class FakeButton:
 
     def configure(self, **options: str) -> None:
         self.options.update(options)
+
+
+class RecordingMenu:
+    """Small menu double that retains commands and cascades for inspection."""
+
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        self.entries: list[tuple[str, dict[str, object]]] = []
+
+    def add_command(self, **options: object) -> None:
+        self.entries.append(("command", options))
+
+    def add_separator(self) -> None:
+        self.entries.append(("separator", {}))
+
+    def add_cascade(self, **options: object) -> None:
+        self.entries.append(("cascade", options))
+
+    @property
+    def labels(self) -> list[str]:
+        return [
+            str(options["label"])
+            for kind, options in self.entries
+            if kind != "separator"
+        ]
+
+    def options_for(self, label: str) -> dict[str, object]:
+        return next(
+            options
+            for kind, options in self.entries
+            if kind != "separator" and options.get("label") == label
+        )
 
 
 class FakeRoot:
@@ -2229,6 +2262,467 @@ class LauncherInteractionTests(unittest.TestCase):
 
         self.assertEqual(result, "break")
         app._post_group_menu.assert_called_once_with(group, 4, 11)
+
+    def test_send_to_menu_guides_empty_input(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.workspace_component = Mock()
+        app.workspace_component.raw_text.return_value = " \n\t"
+        menu = RecordingMenu()
+
+        app._populate_send_to_menu(menu)
+
+        self.assertEqual(
+            menu.labels,
+            ["Paste or drop one or more file paths first"],
+        )
+        self.assertEqual(
+            menu.options_for(menu.labels[0])["state"],
+            "disabled",
+        )
+
+    def test_send_to_menu_prioritizes_selected_work_item_and_context_folders(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            work_item_folder = root / "ISS-CAP40-report"
+            finance_folder = root / "finance"
+            other_folder = root / "other"
+            work_item_folder.mkdir()
+            finance_folder.mkdir()
+            other_folder.mkdir()
+            selected_item = DiscoveredWorkItem(
+                "cap40",
+                "CAP40",
+                work_item_folder.name,
+                work_item_folder,
+                work_item_folder.name,
+                "ISS",
+                "Issue",
+                "CAP40",
+                "report",
+                ("CAP40",),
+                None,
+            )
+            finance_action = Action(
+                "finance-folder",
+                "Finance reports",
+                "Finance",
+                "open_folder",
+                str(finance_folder),
+                contexts=("Finance",),
+                quick_action_path=("Reports",),
+            )
+            other_action = Action(
+                "other-folder",
+                "Other reports",
+                "Other",
+                "open_folder",
+                str(other_folder),
+                contexts=("Other",),
+            )
+            app = LauncherApp.__new__(LauncherApp)
+            app.workspace_component = Mock()
+            app.workspace_component.raw_text.return_value = (
+                f'"{root / "first.txt"}"\n"{root / "second.txt"}"'
+            )
+            app._selected_work_item = Mock(return_value=selected_item)
+            app.actions = [
+                finance_action,
+                other_action,
+                Action(
+                    "archived",
+                    "Archived folder",
+                    "Finance",
+                    "open_folder",
+                    str(root / "archived"),
+                    state="Archived",
+                ),
+                Action(
+                    "not-folder",
+                    "Not a folder",
+                    "Finance",
+                    "copy_text",
+                    "text",
+                ),
+            ]
+            app.context_definitions = []
+            app.item_context_filter = "Finance"
+            app.recent_send_destinations = []
+            app._open_send_destination = Mock()
+            menu = RecordingMenu()
+
+            with patch(
+                "context_palette.launcher.tk.Menu",
+                side_effect=lambda *_args, **_kwargs: RecordingMenu(),
+            ):
+                app._populate_send_to_menu(menu)
+
+            self.assertEqual(menu.labels[0], "Copy 2 file paths to:")
+            self.assertIn(
+                f"Selected Work Item — {selected_item.display_name}",
+                menu.labels,
+            )
+            self.assertIn("Context: Finance", menu.labels)
+            self.assertIn("Finance reports", menu.labels)
+            self.assertNotIn("Other reports", menu.labels)
+            self.assertIn("All Folder Actions", menu.labels)
+            all_menu = menu.options_for("All Folder Actions")["menu"]
+            self.assertIsInstance(all_menu, RecordingMenu)
+            self.assertIn("Other reports", all_menu.labels)
+            self.assertIn("Reports", all_menu.labels)
+            reports_menu = all_menu.options_for("Reports")["menu"]
+            self.assertIsInstance(reports_menu, RecordingMenu)
+            self.assertIn("Finance reports", reports_menu.labels)
+
+            selected_command = menu.options_for(
+                f"Selected Work Item — {selected_item.display_name}"
+            )["command"]
+            self.assertTrue(callable(selected_command))
+            selected_command()
+            destination = app._open_send_destination.call_args.args[0]
+            self.assertEqual(destination.folder_path, work_item_folder)
+            self.assertIn("Work Item", destination.label)
+
+    def test_send_to_folder_actions_use_normal_relative_and_file_uri_resolution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            relative_folder = root / "relative destination"
+            uri_folder = root / "URI destination"
+            relative_folder.mkdir()
+            uri_folder.mkdir()
+            app = LauncherApp.__new__(LauncherApp)
+            app.actions = [
+                Action(
+                    "relative-folder",
+                    "Relative folder",
+                    "General",
+                    "open_folder",
+                    "relative destination",
+                ),
+                Action(
+                    "uri-folder",
+                    "URI folder",
+                    "General",
+                    "open_folder",
+                    uri_folder.as_uri(),
+                ),
+            ]
+
+            with patch(
+                "context_palette.actions.Path.cwd",
+                return_value=root,
+            ):
+                destinations = app._folder_send_destinations()
+
+        self.assertEqual(
+            {destination.key: destination.folder_path for destination in destinations},
+            {
+                "action:relative-folder": relative_folder,
+                "action:uri-folder": uri_folder,
+            },
+        )
+        self.assertTrue(
+            all(destination.folder_path.is_absolute() for destination in destinations)
+        )
+
+    def test_send_to_excludes_clipboard_folder_without_starting_a_copy(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.workspace_component = Mock()
+        app.workspace_component.raw_text.return_value = r"C:\source\report.txt"
+        app.actions = [
+            Action(
+                "customer-folder",
+                "Current customer",
+                "General",
+                "open_folder",
+                r"D:\customers\%CLIPBOARD%",
+            )
+        ]
+        app.item_context_filter = None
+        app.recent_send_destinations = []
+        app.work_item_index = Mock(items=())
+        app.send_to_destination_picker = None
+        app.send_to_button = Mock()
+        app.status_var = FakeVariable()
+        app._selected_work_item = Mock(return_value=None)
+        app._open_send_destination = Mock()
+        menu = RecordingMenu()
+
+        with (
+            patch(
+                "context_palette.launcher.tk.Menu",
+                side_effect=lambda *_args, **_kwargs: RecordingMenu(),
+            ),
+            patch("context_palette.launcher.FileTransferWindow") as transfer_window,
+            patch(
+                "context_palette.launcher.SearchableSelectionPopup"
+            ) as destination_picker,
+        ):
+            app._populate_send_to_menu(menu)
+            menu.options_for("Find destination…")["command"]()
+
+        self.assertNotIn("Current customer", menu.labels)
+        self.assertIn(
+            "1 clipboard-based Folder Action unavailable here — run normally",
+            menu.labels,
+        )
+        self.assertIn("cannot receive Send-to files", app.status_var.value)
+        app._open_send_destination.assert_not_called()
+        destination_picker.assert_not_called()
+        transfer_window.assert_not_called()
+        app.root.clipboard_get.assert_not_called()
+
+    def test_send_to_menu_exposes_search_one_off_and_management_routes(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.workspace_component = Mock()
+        app.workspace_component.raw_text.return_value = r"C:\source\report.txt"
+        app._selected_work_item = Mock(return_value=None)
+        app.actions = []
+        app.context_definitions = []
+        app.item_context_filter = None
+        app.recent_send_destinations = []
+        app._show_send_destination_picker = Mock()
+        app._choose_send_destination_folder = Mock()
+        app._find_automatic_quick_actions = Mock()
+        app._open_workspace_folder_in_vscode = Mock()
+        menu = RecordingMenu()
+
+        app._populate_send_to_menu(menu)
+
+        for label in (
+            "Find destination…",
+            "Choose another folder…",
+            "Manage Folder Actions…",
+            "Open folder in VS Code",
+        ):
+            command = menu.options_for(label)["command"]
+            self.assertTrue(callable(command))
+            command()
+        app._show_send_destination_picker.assert_called_once_with()
+        app._choose_send_destination_folder.assert_called_once_with()
+        app._find_automatic_quick_actions.assert_called_once_with(
+            "Folders",
+            "open_folder",
+        )
+        app._open_workspace_folder_in_vscode.assert_called_once_with()
+
+    def test_send_to_vscode_uses_one_workspace_path_without_changing_workspace(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory) / "project"
+            folder.mkdir()
+            source = folder / "app.py"
+            source.write_text("print('hello')", encoding="utf-8")
+            app = LauncherApp.__new__(LauncherApp)
+            app.root = Mock()
+            app.workspace_component = Mock()
+            app.workspace_component.raw_text.return_value = f'"{source}"'
+            app.status_var = FakeVariable()
+
+            with patch(
+                "context_palette.launcher.open_workspace_path_in_vscode",
+                return_value=folder,
+            ) as opener:
+                app._open_workspace_folder_in_vscode()
+
+        opener.assert_called_once_with(f'"{source}"')
+        app.workspace_component.set_text.assert_not_called()
+        app.root.clipboard_get.assert_not_called()
+        app.root.clipboard_clear.assert_not_called()
+        app.root.clipboard_append.assert_not_called()
+        self.assertIn("project", app.status_var.value)
+
+    def test_send_to_vscode_shows_an_actionable_path_error(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.workspace_component = Mock()
+        app.workspace_component.raw_text.return_value = "two\npaths"
+        app.status_var = FakeVariable()
+
+        with (
+            patch(
+                "context_palette.launcher.open_workspace_path_in_vscode",
+                side_effect=VsCodeIntegrationError("Choose exactly one path."),
+            ),
+            patch("context_palette.launcher.messagebox.showerror") as showerror,
+        ):
+            app._open_workspace_folder_in_vscode()
+
+        self.assertIn("exactly one", showerror.call_args.args[1])
+        self.assertEqual(app.status_var.value, "VS Code could not be opened.")
+
+    def test_send_to_search_and_one_off_folder_open_the_selected_destination(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.send_to_destination_picker = None
+        app.send_to_button = Mock()
+        app.status_var = FakeVariable()
+        app._open_send_destination = Mock()
+        destination = _SendDestination(
+            "action:reports",
+            "Reports",
+            Path(r"C:\destination\reports"),
+            search_text="Reports Finance monthly",
+        )
+        app._all_send_destinations = Mock(return_value=[destination])
+
+        with patch("context_palette.launcher.SearchableSelectionPopup") as popup:
+            app._show_send_destination_picker()
+
+        labels = popup.call_args.args[1]
+        self.assertEqual(len(labels), 1)
+        self.assertIn("Finance monthly", labels[0])
+        self.assertEqual(popup.call_args.kwargs["title"], "Find copy destination")
+        popup.call_args.kwargs["on_select"]((labels[0],))
+        app._open_send_destination.assert_called_once_with(destination)
+
+        app._open_send_destination.reset_mock()
+        with patch(
+            "context_palette.launcher.filedialog.askdirectory",
+            return_value=r"C:\destination\one-off",
+        ):
+            app._choose_send_destination_folder()
+        one_off = app._open_send_destination.call_args.args[0]
+        self.assertEqual(one_off.folder_path, Path(r"C:\destination\one-off"))
+        self.assertTrue(one_off.key.startswith("folder:"))
+
+    def test_send_to_uses_one_workspace_snapshot_without_clipboard_or_text_changes(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.workspace_component = Mock()
+        snapshot = '  "C:\\source\\one.txt"\nC:\\source\\two.txt  '
+        app.workspace_component.raw_text.return_value = snapshot
+        app.file_transfer_window = None
+        app.status_var = FakeVariable()
+        app.recent_send_destinations = []
+        destination = _SendDestination(
+            "action:reports",
+            "Reports",
+            Path(r"C:\destination\reports"),
+        )
+        workflow = Mock(busy=False)
+
+        with patch(
+            "context_palette.launcher.FileTransferWindow",
+            return_value=workflow,
+        ) as window:
+            app._open_send_destination(destination)
+
+        self.assertEqual(window.call_args.kwargs["workspace_text"], snapshot)
+        self.assertEqual(
+            window.call_args.kwargs["destination_folder"],
+            destination.folder_path,
+        )
+        app.workspace_component.set_text.assert_not_called()
+        app.workspace_component.get_text.assert_not_called()
+        app.root.clipboard_get.assert_not_called()
+        app.root.clipboard_clear.assert_not_called()
+        app.root.clipboard_append.assert_not_called()
+        self.assertEqual(app.recent_send_destinations, [])
+        workflow.show.assert_called_once_with()
+
+        window.call_args.kwargs["on_success"](destination.folder_path)
+        self.assertEqual(
+            [item.folder_path for item in app.recent_send_destinations],
+            [destination.folder_path],
+        )
+
+    def test_send_to_recent_destinations_are_deduped_bounded_and_runtime_only(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.recent_send_destinations = []
+        destinations = [
+            _SendDestination(
+                f"folder:{index}",
+                f"Folder {index}",
+                Path(f"C:/destinations/{index}"),
+            )
+            for index in range(12)
+        ]
+
+        with patch.object(
+            Path,
+            "write_text",
+            side_effect=AssertionError("recent destinations must not be persisted"),
+        ):
+            for destination in destinations:
+                app._remember_send_destination(
+                    destination,
+                    destination.folder_path,
+                )
+            renamed = _SendDestination(
+                "folder:renamed",
+                "Most recent name",
+                destinations[-3].folder_path,
+            )
+            app._remember_send_destination(renamed, renamed.folder_path)
+
+        self.assertEqual(len(app.recent_send_destinations), 10)
+        self.assertEqual(
+            app.recent_send_destinations[0].label,
+            "Most recent name",
+        )
+        self.assertEqual(
+            sum(
+                item.folder_path == renamed.folder_path
+                for item in app.recent_send_destinations
+            ),
+            1,
+        )
+
+    def test_send_to_single_flight_reuses_busy_workflow(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.workspace_component = Mock()
+        app.status_var = FakeVariable()
+        current = Mock(busy=True)
+        current.window.winfo_exists.return_value = True
+        app.file_transfer_window = current
+        destination = _SendDestination(
+            "action:reports",
+            "Reports",
+            Path(r"C:\destination\reports"),
+        )
+
+        with patch("context_palette.launcher.FileTransferWindow") as window:
+            app._open_send_destination(destination)
+
+        window.assert_not_called()
+        current.show.assert_called_once_with()
+        app.workspace_component.raw_text.assert_not_called()
+        self.assertIn("already running", app.status_var.value)
+
+    def test_quit_is_blocked_while_send_to_copy_is_running(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.hotkey = Mock()
+        app.instance_server = Mock()
+        app.work_item_file_copy = Mock(running=False)
+        app.work_item_inbox = Mock(running=False)
+        app.file_transfer_window = Mock(busy=True)
+        app.status_var = FakeVariable()
+        app._finish_protected_clipboard = Mock()
+
+        with patch("context_palette.launcher.messagebox.showwarning") as warning:
+            app.quit_app()
+
+        self.assertIn("Send-to file copy", warning.call_args.args[1])
+        self.assertIn("Quit blocked", app.status_var.value)
+        app._finish_protected_clipboard.assert_not_called()
+        app.root.destroy.assert_not_called()
+
+    def test_folder_action_still_opens_normally_outside_send_to(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        action = Action(
+            "reports",
+            "Reports",
+            "General",
+            "open_folder",
+            r"C:\destination\reports",
+        )
+
+        with patch("context_palette.launcher.open_action_target") as opener:
+            app._open_action_target(action)
+
+        opener.assert_called_once_with(action)
 
 
 if __name__ == "__main__":

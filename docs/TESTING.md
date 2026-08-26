@@ -96,7 +96,7 @@ only one job.
 
 ## Bulk Actions workbook manual check
 
-1. Open Configure → Actions → **Other ways to create → Get blank Actions
+1. Open Configure → Actions → **More Action tasks → Get blank Actions
    workbook…** and save the generated `.xlsx`.
 2. In Excel, add Ready rows for several supported types, General and personal
    Contexts, normalized and mixed-case tags, descriptions, a supported Quick
@@ -118,6 +118,152 @@ only one job.
    data outside A–J, and more than 1,000 populated rows stop without writes.
    Repeat at 100%, 125%, and 150% scaling and on a PC without Excel installed.
 
+## Bulk Action update workbook manual check
+
+Status: **Manual UAT pending.**
+
+1. Open Configure → Actions → **More Action tasks → Export personal
+   Actions for update…** and save the deterministic version-1 `.xlsx`. Confirm
+   it contains only eligible personal Active ordinary Actions. Built-in,
+   Archived, sequence, Excel-automation, and text-file-transform Actions must
+   not appear.
+2. In Excel, edit Name, Value, personal Contexts, tags, description, Quick menu,
+   lossless Arguments JSON (including an empty and whitespace-only argument),
+   and Working folder on representative compatible types. Include a quoted
+   Context or tag containing a semicolon and a Context containing repeated
+   spaces. Leave one row
+   unchanged. Remove another complete row. Save and close the workbook.
+3. Choose **More Action tasks → Review updated Actions workbook…**. Confirm
+   only real valid changes are Ready and selected by default, the unchanged row
+   is not selectable, every exact Before/After value is readable, and the
+   removed row causes no deletion or lifecycle change. Clear and restore one
+   Ready selection with mouse and keyboard.
+4. On separate fresh exports, change Action ID, State, Action type, Original
+   fingerprint, a header, a formula cell, and workbook/package structure.
+   Confirm each tampered, macro/link-bearing, corrupt, or unsafe workbook is
+   rejected without writes. Also confirm undefined/shared Contexts and invalid
+   type-specific fields become row errors.
+5. Change the workbook after review, then separately change the saved Action or
+   Context configuration after review. Confirm **Update N Actions** stops and a
+   fresh review/export is required. Restore a Ready review and update selected
+   rows; confirm the labelled button is the only confirmation, all changes land
+   together, no Action runs, and Archive/Restore/Delete remain unchanged.
+6. In the automated failure fixture, make Context persistence fail after the
+   Action write and compare the local Action file byte-for-byte with its prior
+   contents. No partial Action update may remain. Then inject a rollback write
+   failure and confirm the window says configuration may have changed, disables
+   export/choose/reload/update, and never says that no Actions were updated or
+   offers a generic retry. Repeat the attended UI at 100%, 125%, and 150%
+   scaling and on a PC without Excel installed.
+
+## Bulk Action removal manual check
+
+Status: **Manual UAT pending.**
+
+1. Create several disposable personal Active Actions and place them in a
+   personal Context, Context slots, and configured Quick menus. Add one
+   sequence that refers to another disposable Action. Keep the external test
+   files, folders, URLs, or applications easy to inspect afterward.
+2. Open Configure → Actions → **More Action tasks → Remove multiple
+   personal Actions…**. Confirm Built-in Actions are absent. Use Find,
+   **Select all shown**, **Clear selection**, mouse selection, and `Space`.
+   Verify the footer buttons, status, and selected-Action details remain visible
+   at 100%, 125%, and 150% scaling. Use **Show prepared Actions** to reach an
+   Action prepared in an earlier session and **Show Active Actions** to return.
+3. Select an Action that an unselected sequence uses. Confirm it is blocked and
+   names the dependent sequence. Select that personal sequence too and confirm
+   the batch becomes Ready. Review the combined saved-reference, empty
+   Quick-action-item, and changed-file counts. No Action may execute.
+4. Choose **Prepare N Actions for deletion**. Confirm this effect-labelled
+   button is the only confirmation, the same window advances to permanent
+   deletion, and the same reviewed Actions remain selected. Close at this point
+   once and confirm those Actions remain recoverable Archived records. Also
+   confirm a double-click on Prepare cannot activate the separately positioned
+   permanent-delete control.
+5. Repeat preparation, review the second-stage impact, and choose **Delete N
+   Actions permanently**. Confirm there is no extra Yes/No dialog; the exact
+   selected records and saved placements disappear; unrelated Actions and
+   empty root Quick menus remain; and every external target is unchanged.
+6. In separate automated fixtures, change a participating Action, Context,
+   palette, or Quick-menu file after review and confirm the stage stops as
+   stale. Make a later configuration write fail and compare every participating
+   primary file and `.bak` sidecar byte-for-byte with its prior state. No
+   partial stage may remain.
+
+## Send files to a folder manual check
+
+Use disposable source and destination folders only. Include small text files,
+a larger file, two same-named files from different folders, and pre-existing
+destination files.
+
+1. Put one exact absolute file path in Input / Output and choose **Send to…**.
+   Confirm the menu exposes a selected Work Item when applicable,
+   Context-relevant Folder Actions first, session recents, hierarchical all
+   Folder Actions, **Find destination…**, **Choose another folder…**, and
+   **Manage Folder Actions…**. Confirm ordinary execution of that same Folder
+   Action still opens its folder and copies nothing. Include one relative
+   Folder Action and one `file:` URI and confirm they resolve like ordinary Run.
+   Include one Folder Action containing `%CLIPBOARD%`; confirm it is visibly
+   unavailable as a copy destination, the clipboard is not read, and no copy
+   workflow starts, while ordinary Run still expands it normally.
+2. Choose an empty destination. Confirm choosing it is the only confirmation,
+   copying begins in the background, the source and Input / Output remain
+   unchanged, and the exact created file plus **Open destination folder** are
+   shown. Confirm the successful destination enters Recent; cancel/error and
+   partial results must not enter it. Restart the app and verify Recent is
+   empty.
+3. Create an existing `report.txt`, then send another `report.txt` with
+   overwrite off. Confirm review shows the exact `report(1).txt` mapping and
+   one **Copy 1 file** button. Add `report(1).txt` and confirm `report(2).txt`.
+   Check **Allow overwrite** and confirm the plan targets unsuffixed
+   `report.txt`, identifies one replacement, and uses **Replace 1 file** with
+   no further Yes/No dialog.
+4. Send two sources with the same basename. Confirm they never target the same
+   final path, including with overwrite checked. Send a source already in the
+   destination and confirm it is skipped rather than duplicated. Change a
+   source or destination after review and verify copying stops as stale before
+   an unreviewed effect.
+5. Exercise quoted paths, Unicode, UNC availability, blank lines, a relative
+   path, missing file, folder, URL/prose, duplicate source, 100 files, and 101
+   files. Invalid input must produce no destination effects. Verify no source
+   path is copied to the clipboard, logs, configuration, or recent-destination
+   state.
+6. During a multi-file copy choose **Stop remaining**. Confirm the current file
+   completes, later files do not start, completed destinations remain, exact
+   effects are reported, and no rollback/retry is claimed. Confirm Hide remains
+   available but Quit is blocked until the operation's outcome is delivered.
+7. Repeat the header, conflict review, busy, stopped, partial, and result states
+   at 100%, 125%, and 150% display scaling and the supported minimum window.
+   Confirm the literal Send-to label, status, review controls, and fixed footer
+   never disappear.
+
+## Open one Input / Output path in VS Code manual check
+
+Use disposable local paths and close without saving anything VS Code may show.
+This is an operating-system protocol handoff, not a file-copy test.
+
+1. Put one existing absolute folder path in Input / Output and choose **Send
+   to… → Open with → Open folder in VS Code**. Confirm VS Code opens that exact
+   folder and no copy-review window appears.
+2. Repeat with one existing file path, including matching outer quotes and a
+   path containing spaces and Unicode. Confirm VS Code opens the file's
+   containing folder, not a new copy and not a persisted recent destination.
+3. Exercise empty, two-line, relative, missing, unavailable network, and
+   unmatched-quote input. Confirm each invalid case opens nothing and explains
+   how to provide one existing absolute file or folder.
+4. On a disposable standard-user machine without VS Code or without a
+   registered `vscode:` handler, confirm the handoff reports that setup problem
+   without administrator rights or raw operating-system details. The rest of
+   Context Palette must continue to work.
+5. Before and after every case, compare Input / Output and the clipboard and
+   inspect the source path. Confirm they are unchanged, no file was copied or
+   moved, no copy destination was added to Recent, and no Folder Action ran.
+   Run the same **Open a folder** Action normally and confirm it still performs
+   only its ordinary open-folder effect.
+6. Repeat the menu at 100%, 125%, and 150% scaling and at the supported minimum
+   window. Confirm **Open with:** visually separates the opener from copy
+   destinations and **Open folder in VS Code** remains readable and reachable.
+
 ## Harvest website links manual check
 
 Last completed: **Passed on Windows on 2026-07-21.** The attended check used
@@ -135,7 +281,7 @@ editing. The isolated check created no personal action store. The remaining
 bindings, action-preview Close control, and focus-restoration callbacks are
 covered by real-Tk and focused unit tests.
 
-1. Press `Ctrl+,`, open **Actions**, choose **Other ways to create → Harvest
+1. Press `Ctrl+,`, open **Actions**, choose **More Action tasks → Harvest
    website links…**, and select
    several representative `.md`, `.txt`, `.docx`, and `.xlsx` files.
 2. Confirm progress remains responsive, Cancel stops safely, and a corrupt or

@@ -4,6 +4,54 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Added a constrained **Send to… → Open with → Open folder in VS Code** route.
+  It accepts one existing absolute folder or file path from Input / Output,
+  opens a folder itself or a file's containing folder through Windows'
+  registered `vscode:` protocol, and explains missing or ambiguous input and
+  unavailable protocol registration. It does not copy files, change the
+  workspace or clipboard, execute a Folder Action, persist a receiver, or add
+  a generic plugin framework.
+- Added outbound **Send to…** for Input / Output file paths. The destination
+  menu reuses Context-relevant Folder Actions and Work Items, offers searchable
+  all-destination, one-off-folder, and session-only recent routes, and keeps
+  ordinary Folder Actions as open-folder commands everywhere else. Copy
+  planning and publication run off the Tk thread for up to 100 exact files.
+  Existing names receive `(1)`, `(2)` suffixes by default; conflict review has
+  one unchecked **Allow overwrite** choice and one effect-labelled copy button.
+  Complete temporary files are published only after review and revalidation;
+  exact created, replaced, skipped, stopped, and failed outcomes are shown,
+  sources stay unchanged, replaced destinations receive no recovery backup,
+  and Quit is blocked while publication is active. A file that is already its
+  own destination now produces a clear no-effect screen instead of an
+  irrelevant overwrite choice and green Skip button. Folder Actions that need
+  clipboard-template expansion are excluded from Send-to destinations with
+  visible guidance, and fixed relative paths plus `file:` URIs share the
+  ordinary Folder Action resolver.
+- Added one-window bulk removal for personal Actions. **More Action tasks →
+  Remove multiple personal Actions…** reviews an explicit multi-selection,
+  sequence dependencies, and the exact combined Context/slot/Quick-menu
+  cleanup. **Prepare N Actions for deletion** removes Active Actions from use
+  while keeping them recoverable, then the same centered window carries the
+  selection to **Delete N Actions permanently** without navigating to an
+  Archived view or showing redundant Yes/No dialogs. Separate effect controls
+  prevent a double-click from applying both stages, while **Show prepared
+  Actions** reaches records prepared earlier. Every participating file is
+  rechecked, each changed file is written once, and failed writes restore exact
+  primary and `.bak` bytes. External targets are never changed.
+- Added attended bulk update for eligible personal Active Actions. Configure's
+  renamed **More Action tasks** menu can export a separate deterministic
+  version-1 standard `.xlsx` and review it after editing. Stable Action ID,
+  type, state, and original fingerprint are immutable; Name, Value, personal
+  Contexts, tags, description, Quick menu, lossless JSON arguments, and working
+  folder can be reviewed as exact before/after changes. Selected Ready rows are
+  applied once after workbook/configuration rechecks with exact-byte rollback,
+  no Action execution, and no second confirmation. Missing workbook rows never
+  delete Actions; Built-in, Archived, sequence, Excel-automation, and
+  text-file-transform Actions stay outside this first update contract, while
+  Archive, Restore, and Delete permanently remain separate lifecycle commands.
+  An incomplete rollback is a structured unknown-effect outcome that locks the
+  reviewed workbook and directs backup and Diagnostics inspection instead of
+  claiming that no Actions were updated.
 - Added attended **Create Actions from Excel…** bulk creation. Context Palette
   generates a versioned standard `.xlsx` workbook, reads up to 1,000 reviewed
   rows locally without starting Office or evaluating formulas, validates them

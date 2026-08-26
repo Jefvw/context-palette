@@ -11,15 +11,25 @@ from .actions import (
     delete_actions,
     load_stored_actions,
     update_action,
+    update_actions,
 )
 from .configuration_data import save_contexts
 from .configuration_mutation import gated_configuration_mutation
 from .contexts import ContextDefinition, ContextError, load_contexts
 from .palette_items import PaletteItemReference
 from .palette_state import PaletteState, load_palette_state, save_palette_state
+from .persistence import atomic_replace_bytes
 
 
 CONTEXT_MEMBERSHIP_VERSION = 1
+
+
+class ContextMembershipUpdateError(ContextError):
+    """Report whether a failed batch membership update restored every file."""
+
+    def __init__(self, message: str, *, rollback_completed: bool) -> None:
+        super().__init__(message)
+        self.rollback_completed = rollback_completed
 
 
 @dataclass(frozen=True)
@@ -289,6 +299,84 @@ def update_action_with_context_memberships(
                 f"action could not be restored: {rollback_exc}"
             ) from exc
         raise
+
+
+@gated_configuration_mutation
+def update_actions_with_context_memberships(
+    action_path: Path,
+    actions: Iterable[Action],
+    previous_actions: Iterable[Action],
+    *,
+    actions_are_local: bool,
+    shared_contexts_path: Path,
+    local_contexts_path: Path,
+) -> None:
+    """Update a reviewed Action batch and its memberships with rollback."""
+
+    updated = tuple(actions)
+    previous = tuple(previous_actions)
+    updated_ids = tuple(action.id for action in updated)
+    previous_ids = tuple(action.id for action in previous)
+    if not updated:
+        return
+    if len(set(updated_ids)) != len(updated_ids):
+        raise ActionError("An Action was supplied more than once for update.")
+    if set(updated_ids) != set(previous_ids) or len(previous_ids) != len(updated_ids):
+        raise ActionError(
+            "The original Action batch does not match the reviewed updates."
+        )
+
+    membership_update = prepare_context_membership_update(
+        {action.id: action.effective_contexts for action in updated},
+        local_action_ids=set(updated_ids) if actions_are_local else set(),
+        shared_contexts_path=shared_contexts_path,
+        local_contexts_path=local_contexts_path,
+    )
+    participating = tuple(
+        dict.fromkeys(
+            (
+                action_path,
+                action_path.with_name(action_path.name + ".bak"),
+                shared_contexts_path,
+                shared_contexts_path.with_name(shared_contexts_path.name + ".bak"),
+                local_contexts_path,
+                local_contexts_path.with_name(local_contexts_path.name + ".bak"),
+            )
+        )
+    )
+    originals = {
+        path: path.read_bytes() if path.exists() else None
+        for path in participating
+    }
+    try:
+        update_actions(
+            action_path,
+            (action_without_context_metadata(action) for action in updated),
+        )
+        membership_update.apply()
+    except (ActionError, ContextError, OSError) as exc:
+        rollback_errors: list[str] = []
+        for path in reversed(participating):
+            payload = originals[path]
+            try:
+                if payload is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    atomic_replace_bytes(path, payload, preserve_previous=False)
+            except OSError as rollback_exc:
+                rollback_errors.append(f"{path.name}: {rollback_exc}")
+        if rollback_errors:
+            raise ContextMembershipUpdateError(
+                "Context memberships could not be saved and the original "
+                "files could not be restored completely: "
+                + "; ".join(rollback_errors),
+                rollback_completed=False,
+            ) from exc
+        raise ContextMembershipUpdateError(
+            "Context memberships could not be saved; the original files were "
+            f"restored: {exc}",
+            rollback_completed=True,
+        ) from exc
 
 
 @gated_configuration_mutation

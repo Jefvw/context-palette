@@ -1,5 +1,147 @@
 # Decisions
 
+## 2026-08-26 - Keep Send-to Folder destinations independent of clipboard state
+
+**Decision:** Reuse only Folder Actions whose destination can be resolved
+without clipboard-template input as outbound Send-to destinations. Exclude
+Actions containing `%CLIPBOARD%`, `%CLIPBOARD_URL%`, `%pptxt%`, or
+`%cpy_txt_urlencode%` with visible guidance to run them normally. Resolve fixed
+relative paths and `file:` URIs through the same local-folder boundary as
+ordinary Folder Action execution.
+
+**Reason:** Send to treats choosing a conflict-free destination as the copy
+confirmation. Expanding a clipboard token without an explicit clipboard
+snapshot could collapse `D:\customers\%CLIPBOARD%` to `D:\customers` and copy
+files to an unintended parent without another review. Exclusion preserves the
+ordinary dynamic Folder Action while keeping the copy destination fixed and
+previewable.
+
+## 2026-08-26 - Treat incomplete bulk-update rollback as an unknown effect
+
+**Decision:** Carry a structured rollback-completed outcome from the combined
+Action/Context mutation boundary into bulk update. When rollback is incomplete,
+do not claim that no Actions were updated and do not permit the reviewed
+workbook to be retried. Lock its mutation controls and direct the user to the
+latest backups and Diagnostics before further configuration changes.
+
+**Reason:** A failed Context write can follow an Action write. If restoring any
+participating primary or backup file also fails, neither generic failure copy
+nor a fresh workbook replan can truthfully prove the saved configuration. The
+attended workflow must distinguish a known restored failure from a possible
+partial configuration effect.
+
+## 2026-08-26 - Add VS Code as one constrained non-copying Send-to receiver
+
+**Decision:** Add **Open with → Open folder in VS Code** beneath the existing
+Input / Output **Send to…** copy destinations. Accept exactly one existing
+absolute folder or file path: a folder opens itself and a file opens its
+containing folder. Delegate the resolved, percent-encoded folder only to
+Windows' registered `vscode:` protocol. Do not search for an executable,
+persist a receiver, execute a Folder Action, or introduce a generic receiver
+or plugin framework.
+
+**Reason:** A path already in Input / Output has an immediate, proven second
+use besides copying: opening its working folder in the editor. Keeping that
+explicit operation in the same path-oriented menu makes it quick to reach,
+while the **Open with** separator prevents it from looking like a copy
+destination. One path and one fixed protocol keep the effect understandable
+and testable.
+
+**Safety consequence:** Resolve an existing absolute path before handing off;
+reject empty, multiple, relative, missing, unavailable, or ambiguously quoted
+input. The command copies and writes nothing, leaves Input / Output and the
+clipboard unchanged, never adds copy recents, and reports missing VS Code
+protocol registration without exposing raw operating-system detail. Other
+receiver types still require their own concrete use case and reviewed boundary.
+
+## 2026-08-26 - Make outbound Send to a constrained file-copy workflow
+
+**Decision:** Add a literal **Send to…** menu to Input / Output for copying
+1–100 exact file paths to an existing folder. Reuse Active `open_folder`
+Actions as named, Context-aware destinations only inside this explicit effect;
+retain their normal open-folder behavior everywhere else. Also expose the
+selected and searchable Work Items, a one-off folder, and at most ten
+successful session-only recent destinations. Do not add a second persistent
+destination model or a generic receiver/plugin contract.
+
+**Interaction:** Choosing a destination is the confirmation when no filename
+conflicts exist. A conflict opens one centered mapping review with unchecked
+**Allow overwrite** and one effect-labelled copy button. Overwrite off assigns
+deterministic `(1)`, `(2)` suffixes; overwrite on reviews exact unsuffixed
+replacements. Do not add a second Yes/No confirmation.
+
+**Safety consequence:** Parse and plan off the Tk thread, fingerprint and
+revalidate source content plus destination state, stage complete files beside
+the destination, and publish with no-clobber creation or atomic reviewed
+replacement. Sources, Input / Output, and clipboard remain unchanged. Exact
+partial results are retained after a later failure or Stop; no batch rollback
+or automatic retry is claimed, replaced destinations receive no recovery
+backup, and Quit is blocked while publication runs.
+Folder recursion, move/delete, upload/email, arbitrary commands, persistent
+source history, and receiver types beyond the separately reviewed VS Code
+folder opener remain deferred until a specific reviewed use case exists.
+
+## 2026-08-26 - Keep bulk Action removal in one attended two-stage window
+
+**Decision:** Add **Remove multiple personal Actions…** as an in-app workflow,
+not as spreadsheet row deletion. The user explicitly selects personal Actions
+and reviews their combined sequence and saved-placement effects. One
+**Prepare N Actions for deletion** button moves an Active batch out of runtime
+and removes its placements; the same window then carries that selection into a
+second **Delete N Actions permanently** review. Already-Archived personal
+Actions can start at the second stage. The effect-labelled buttons are the two
+confirmations; there is no generic Yes/No dialog and no trip through
+Configure's Archived filter. The two stages use separate controls in different
+footer positions, so a double-click cannot prepare and permanently delete the
+same batch. **Show prepared Actions** and **Show Active Actions** expose either
+stage without leaving the removal window.
+
+**Reason:** Missing rows in an update workbook are ambiguous and must never
+mean deletion. A live in-app selection is faster, uses stable Action IDs, and
+can show current sequence and reference effects. Keeping both stages in one
+window removes the navigation friction without weakening the enforced
+Active → Archived → permanent-delete domain boundary or eliminating the user's
+chance to close after preparation and retain recoverable records.
+
+**Safety consequence:** The workflow is personal-only, never executes an
+Action, and never touches external targets. Planning and commit treat the
+selected IDs as one set, allow selected dependent sequences to move together,
+recheck every Action/reference participant under the mutation gate, write each
+changed file once, and restore exact primary and backup-sidecar bytes after a
+failure. Spreadsheet removal, title/target identity, and loops over the
+single-record mutation API remain prohibited. This completes the bulk-
+lifecycle deferral recorded by the bulk create and update decisions below.
+
+## 2026-08-25 - Add a separate identity-bound workbook for bulk Action updates
+
+**Decision:** Add a first attended bulk-update slice for eligible personal
+Active Actions. Keep it separate from the create-only workbook and use a
+deterministic version-1 standard `.xlsx` with immutable Action ID, type, state,
+and original fingerprint. Allow edits to Name, Value, personal Contexts, tags,
+description, Quick menu, lossless JSON arguments, and working folder. Export
+ordinary supported types only; exclude Built-in and Archived Actions plus
+sequence, `excel_automation`, and `transform_file_text`.
+
+The Configure Actions menu becomes **More Action tasks** and exposes **Export
+personal Actions for update…** and **Review updated Actions workbook…**. Review
+classifies exact changes and selects Ready rows by default. One **Update N
+Actions** button is the confirmation; there is no extra Yes/No dialog and no
+Action execution. Removing a row from the workbook has no effect.
+
+**Reason:** Stable IDs and original fingerprints make a spreadsheet round trip
+safe enough for repeated field edits without treating titles or targets as
+identity. A separate contract keeps create semantics simple and makes stale or
+tampered updates fail before persistence.
+
+**Safety and lifecycle consequence:** Formula, macro, link, structurally unsafe,
+and identity-modified workbooks are rejected. Commit rechecks the workbook and
+current configuration, applies selected Ready rows in one guarded operation,
+and restores the exact previous Action bytes if Context persistence fails.
+Archive, Restore, and Delete permanently stay outside the workbook and retain
+their existing lifecycle/reference safeguards. The later one-window removal
+decision above supersedes the remaining bulk-lifecycle deferral without making
+workbook row removal destructive.
+
 ## 2026-08-25 - Separate structured bulk Action workbooks from website Harvest
 
 **Decision:** Add **Create Actions from Excel…** as a create-only, attended

@@ -155,6 +155,22 @@ class HarvestRefreshTests(unittest.TestCase):
 
         configuration._created_actions_changed.assert_called_once_with("bulk-created")
 
+    def test_bulk_update_refresh_uses_the_same_external_change_path(self):
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration._created_actions_changed = Mock()
+
+        configuration._bulk_actions_updated()
+
+        configuration._created_actions_changed.assert_called_once_with("bulk-updated")
+
+    def test_bulk_removal_refresh_uses_the_same_external_change_path(self):
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration._created_actions_changed = Mock()
+
+        configuration._bulk_actions_removed()
+
+        configuration._created_actions_changed.assert_called_once_with("bulk-removed")
+
     def test_bulk_import_receives_all_stored_actions_and_personal_contexts(self):
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         configuration.window = object()
@@ -181,6 +197,106 @@ class HarvestRefreshTests(unittest.TestCase):
             local_contexts_path=configuration.local_contexts_path,
             on_change=configuration._bulk_actions_changed,
         )
+
+    def test_bulk_update_review_receives_personal_identity_and_selected_workbook(self):
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.window = object()
+        configuration.stored_actions = [
+            Action("personal", "Personal", "General", "copy_text", "text")
+        ]
+        configuration.local_action_ids = {"personal"}
+        configuration.local_contexts = [ContextDefinition("Finance")]
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.shared_actions_path = Path("actions.json")
+        configuration.contexts_path = Path("contexts.json")
+        configuration.local_contexts_path = Path("local-contexts.json")
+        configuration._bulk_actions_updated = Mock()
+
+        with (
+            patch(
+                "context_palette.configuration_window.filedialog.askopenfilename",
+                return_value="updates.xlsx",
+            ),
+            patch(
+                "context_palette.configuration_window.ActionBulkUpdateWindow"
+            ) as update_window,
+        ):
+            configuration._show_bulk_action_update()
+
+        update_window.assert_called_once_with(
+            configuration.window,
+            actions=configuration.stored_actions,
+            local_action_ids=configuration.local_action_ids,
+            local_context_names=["Finance"],
+            local_actions_path=configuration.local_actions_path,
+            shared_actions_path=configuration.shared_actions_path,
+            shared_contexts_path=configuration.contexts_path,
+            local_contexts_path=configuration.local_contexts_path,
+            on_change=configuration._bulk_actions_updated,
+            initial_workbook_path=Path("updates.xlsx"),
+        )
+
+    def test_bulk_removal_receives_personal_identity_and_all_reference_paths(self):
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.window = object()
+        configuration.stored_actions = [
+            Action("personal", "Personal", "General", "copy_text", "text")
+        ]
+        configuration.local_action_ids = {"personal"}
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.shared_actions_path = Path("actions.json")
+        configuration.contexts_path = Path("contexts.json")
+        configuration.local_contexts_path = Path("local-contexts.json")
+        configuration.command_surface_path = Path("commands.json")
+        configuration.local_command_surface_path = Path("local-commands.json")
+        configuration.palette_path = Path("palette.json")
+        configuration._bulk_actions_removed = Mock()
+
+        with patch(
+            "context_palette.configuration_window.ActionBulkLifecycleWindow"
+        ) as lifecycle_window:
+            configuration._show_bulk_action_lifecycle()
+
+        lifecycle_window.assert_called_once_with(
+            configuration.window,
+            actions=configuration.stored_actions,
+            local_action_ids=configuration.local_action_ids,
+            local_actions_path=configuration.local_actions_path,
+            shared_actions_path=configuration.shared_actions_path,
+            shared_contexts_path=configuration.contexts_path,
+            local_contexts_path=configuration.local_contexts_path,
+            shared_command_surface_path=configuration.command_surface_path,
+            local_command_surface_path=configuration.local_command_surface_path,
+            palette_path=configuration.palette_path,
+            on_change=configuration._bulk_actions_removed,
+        )
+
+    def test_bulk_update_export_uses_only_supported_personal_active_actions(self):
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.window = object()
+        personal = Action("personal", "Personal", "General", "copy_text", "text")
+        built_in = Action("built-in", "Built in", "General", "copy_text", "text")
+        archived = Action(
+            "archived", "Archived", "General", "copy_text", "text", "Archived"
+        )
+        configuration.stored_actions = [personal, built_in, archived]
+        configuration.local_action_ids = {"personal", "archived"}
+        configuration.feedback_var = Mock()
+        configuration.feedback_label = Mock()
+
+        with (
+            patch(
+                "context_palette.configuration_window.filedialog.asksaveasfilename",
+                return_value="updates.xlsx",
+            ),
+            patch(
+                "context_palette.configuration_window.write_action_update_workbook",
+                return_value=Path("updates.xlsx"),
+            ) as writer,
+        ):
+            configuration._save_bulk_action_update_workbook()
+
+        writer.assert_called_once_with(Path("updates.xlsx"), (personal,))
 
 
 class ContextMembershipCountTests(unittest.TestCase):

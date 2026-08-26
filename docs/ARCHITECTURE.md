@@ -143,8 +143,74 @@ generic workbook contract.
 `action_bulk_window.py` owns the centered attended review table, row selection,
 details, template save/choose/reload routes, and the single effect-labelled
 **Create N Actions** confirmation. It writes no state during review and does
-not add a redundant Yes/No dialog. Configure → Actions → **Other ways to
-create** is the primary route.
+not add a redundant Yes/No dialog. Configure → Actions → **More Action
+tasks** is the primary route.
+
+### `action_update_workbook.py`, `action_bulk_update.py`, and `action_bulk_update_window.py`
+
+`action_update_workbook.py` owns a separate deterministic version-1 standard
+`.xlsx` round-trip contract for eligible personal Active Actions. Its immutable
+identity columns are Action ID, type, state, and the original canonical-record
+fingerprint. Name, Value, personal Contexts, tags, description, Quick menu,
+lossless JSON arguments, and working folder are editable. Only ordinary types
+supported by this contract are exported; sequence, `excel_automation`, and
+`transform_file_text` remain in their guided editors. Built-in and Archived
+Actions are never exported. The bounded ZIP/XML reader rejects formula cells,
+macros, links, changed structure, unsafe packages, and changed identity.
+
+`action_bulk_update.py` maps each verified row back to its stable personal
+Action ID, validates edits through the ordinary Action catalogue, and produces
+Ready, no-change, or error candidates with exact changed fields. Planning is
+read-only. Commit rechecks the complete workbook digest, current Action
+signature, per-row identity, and current personal Contexts while holding the
+configuration mutation gate. Selected Ready changes are written as one Action
+and Context operation; a failed Context write restores the exact prior Action
+bytes. Removed workbook rows have no meaning and never delete records.
+
+`action_bulk_update_window.py` owns export, choose/reload, exact before/after
+review, selected-Ready-row toggles, and one effect-labelled **Update N Actions**
+button. That button is the confirmation: there is no redundant Yes/No dialog
+and no Action executes. A successful update makes the review stale and requires
+a fresh export before another operation. Archive, Restore, and Delete
+permanently remain the ordinary separate lifecycle controls. Configure exposes
+**Export personal Actions for update…** and **Review updated Actions
+workbook…** under **More Action tasks**.
+
+### `action_bulk_lifecycle.py` and `action_bulk_lifecycle_window.py`
+
+`action_bulk_lifecycle.py` owns read-only, identity-based review plans and
+guarded batch commits for personal Action removal. An archive-stage plan accepts
+personal Active IDs; a delete-stage plan accepts personal Archived IDs. It
+loads Active and Archived Actions together, identifies unselected dependent
+sequences, inventories the selected set's combined Context, slot, legacy-pin,
+and configured Quick-menu effects, and fingerprints every participating Action,
+Context, command-surface, and palette file. Commit holds the configuration
+mutation gate, recreates the plan, rejects stale state, and delegates to the
+set-aware lifecycle transaction in `action_deletion.py`. Selected dependent
+sequences may move with the Actions they reference; unselected dependencies
+remain blockers.
+
+`action_deletion.py` processes a selected ID set against each reference file
+once, writes every changed primary file at most once, and snapshots both primary
+and `.bak` bytes before effects. Failed writes restore those exact bytes or
+report incomplete rollback. The plural boundary also compares the freshly
+computed aggregate report with the reviewed report before its transaction
+writes anything, so an impact mismatch is a known no-write result rather than
+a post-commit error. Singular Archive/Delete commands remain wrappers over the
+same set-aware boundary.
+
+`action_bulk_lifecycle_window.py` owns the centered attended selection, Find,
+impact review, and two effect-labelled stages. **Prepare N Actions for
+deletion** archives Active records and removes placements. The same window then
+carries the selected records into **Delete N Actions permanently** without a
+second picker, a generic confirmation dialog, or navigation to Configure's
+Archived filter. Separate footer widgets and a focus handoff prevent one
+double-click from invoking both effects. **Show prepared Actions** and **Show
+Active Actions** switch stages inside the same window. Closing after
+preparation intentionally retains recoverable Archived records. Built-in
+Actions, workbook row removal, Action execution, and external target mutation
+are outside this workflow. Configure exposes it as **More Action tasks → Remove
+multiple personal Actions…**.
 
 ### `harvest.py` and `harvest_window.py`
 
@@ -286,8 +352,8 @@ Pure transformation algorithms and validation remain in `actions.py`.
 ### `workspace_panel.py`
 
 Owns the complete Input / Output UI component: text widget, edit menu, visible
-Back, Forward, Capture, Inbox, **Create from Input**, **Extract text**, and
-**Text tools** bitmap controls; selection-first source choice and replacement;
+Back, Forward, literal **Send to…**, Capture, Inbox, **Create from Input**,
+**Extract text**, and **Text tools** controls; selection-first source choice and replacement;
 undo boundaries; prompting;
 clipboard copy and replacement, transformation feedback, and file-transform
 preview provenance. Its separate session-only history retains at most ten
@@ -299,7 +365,8 @@ boundary used by OCR and drag-and-drop, including explicit Replace, Append,
 and Cancel for a non-empty workspace. A file preview exposes explicit replace, save-as, and
 dismiss commands; ordinary workspace replacement clears that provenance. It
 depends on small injected callbacks for Action suggestion orchestration,
-clipboard access, status messages, and tooltip registration. `launcher.py`
+clipboard access, status messages, tooltip registration, and on-demand Send-to
+menu population. `launcher.py`
 retains compatibility delegates for action execution and integration flows,
 but no longer owns workspace widget mechanics.
 
@@ -444,7 +511,10 @@ the Actions table, slots, and Context-filtered retrieval all see the same member
 Action create/edit flows write the action record and context definitions as
 one recoverable operation, remove context metadata from newly persisted action
 records, and reject a My configuration action reference from a Built-in
-context. Startup performs an idempotent one-time union of compatible legacy
+context. Batch updates expose a structured rollback-completed outcome: an
+incomplete restore is propagated as an unknown configuration effect so its
+attended window locks retry and directs backup/Diagnostics inspection. Startup
+performs an idempotent one-time union of compatible legacy
 action-side memberships into context definitions. Legacy metadata remains
 readable for pre-migration definitions but is not an independent current
 membership source.
@@ -718,8 +788,8 @@ visible final columns and consistent vertical scrolling at the supported
 minimum window size.
 
 The Actions page keeps its single primary **New Action** command in the page
-header and moves the bulk Excel importer/template, website-link Harvest, and
-type catalogue behind **Other ways to create**. Global pin configuration is
+header and moves the bulk create/update Excel routes, website-link Harvest,
+and type catalogue behind **More Action tasks**. Global pin configuration is
 retired. Selection titles are display-bounded so arbitrary
 names cannot displace lifecycle commands at minimum width. Tags remain searchable
 and appear in the selected-Action strip instead of consuming a permanent table
@@ -1094,7 +1164,70 @@ files are never changed. Metadata preservation is best effort because not all
 local and network filesystems support the same Windows attributes. A
 single-flight coordinator returns completion to Tk through main-thread polling.
 
-`LauncherApp.quit_app()` checks both Work Item write coordinators before
+### `file_transfer.py`
+
+Owns the UI-independent outbound **Send to…** boundary. It accepts 1–100
+nonblank Input / Output lines, each one matching-quote-tolerant absolute
+existing regular file, and rejects folders, prose/relative paths, URLs,
+duplicates, and unavailable sources before writing. Planning validates one
+existing absolute destination folder, reads bounded source/destination
+snapshots, and assigns one exact destination per source. Existing or
+same-batch names receive deterministic `(1)`, `(2)` suffixes by default;
+explicit overwrite plans the unsuffixed existing file as a replacement.
+Same-location sources are skipped rather than duplicated.
+
+The reviewed plan fingerprints source content/identity, destination state,
+mapping, disposition, and overwrite choice. Execution replans before effects,
+stages every complete source in a private destination-side temporary file,
+rechecks source hashes and reviewed destination state, then uses no-clobber
+creation or atomic reviewed replacement. It cleans its own temporary files and
+returns exact created, replaced, skipped, stopped, and failed effects. A later
+publication failure does not roll back earlier completed copies. The
+single-flight coordinator performs filesystem work off the Tk thread and
+delivers completion only through main-thread draining; it never logs source or
+destination values.
+
+### `file_transfer_window.py`
+
+Owns the centered attended Send-to workflow. Selecting a destination is enough
+confirmation for a conflict-free plan and starts copying automatically.
+Conflicts render exact mappings, an unchecked **Allow overwrite** choice, and
+one effect-labelled copy button; no redundant message box is added. The fixed
+footer remains visible while review/result content scrolls. The window exposes
+Stop remaining, exact partial-result guidance, Open destination folder, and a
+busy state used by Launcher Quit protection. Only a completely successful
+result may add that destination to the launcher's bounded session-only recent
+list.
+
+### `vscode_integration.py`
+
+Owns the UI-independent, non-copying VS Code receiver exposed under the
+Input / Output **Send to…** menu. It accepts at most one bounded nonblank line,
+allows matching outer quotes, requires one existing absolute regular folder or
+file, and resolves the path without interpreting command text. A folder remains
+the target; a file is reduced to its existing containing folder.
+
+The adapter percent-encodes that resolved folder into a `vscode://file/` URI
+and asks Windows to open the registered protocol through `ShellExecute` via
+`os.startfile`. It does not discover or run a VS Code executable, copy or write
+files, change Input / Output or the clipboard, execute an `open_folder` Action,
+persist receiver/source state, or define a general receiver/plugin contract.
+Missing protocol registration is contained as an actionable, sanitized error.
+
+`launcher.py` builds destinations dynamically from the currently selected Work
+Item, Context-relevant Active `open_folder` Actions, all Folder Actions,
+discovered Work Items, recent successful destination folders, and a one-off
+folder picker. A separate **Open with** section exposes the constrained VS Code
+receiver only when Input / Output has one nonblank line. Using an `open_folder`
+Action as a copy destination never changes its ordinary run behavior. Input /
+Output is snapshotted once when a destination is chosen and is not rewritten or
+synchronized through the clipboard. Folder Actions that require clipboard
+template expansion are excluded with visible guidance; Send to never resolves
+those tokens with an empty clipboard. Fixed relative paths and `file:` URIs use
+the same local-folder resolver as ordinary Action execution.
+
+`LauncherApp.quit_app()` checks both Work Item write coordinators and the
+active Send-to workflow before
 stopping the hotkey, instance server, or Tk root. A running file copy or Excel
 Inbox update blocks complete process termination with an actionable warning;
 ordinary Hide remains available. This keeps daemon-backed work from being
@@ -1527,7 +1660,7 @@ credential targets, usernames, passwords, or window titles. Successful and
 clipboard-only outcomes use informational logging, unavailable destinations use
 warning logging, and dispatch failures retain their exception at error level.
 
-Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown normally and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. A successful drop uses a separate reveal path that deliberately skips clipboard synchronization, invalidates stale captured selection/destination state, and places only the normalized result. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `workspace_panel.py` owns selection ranges, one-step Undo grouping, clipboard updates, menus, and a last-ten session history of meaningful complete states. Back/Forward navigation clears file-preview provenance rather than reconnecting historical text to a stale source hash. The launcher injects clipboard, status, and content-change callbacks and retains orchestration delegates. A selected item places its current-state **Input → Effect** summary in the slim bottom communication line; progress, success, and errors temporarily replace it. Hovering or clicking that line exposes the full structured explanation and current operational message.
+Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown normally and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. A successful drop uses a separate reveal path that deliberately skips clipboard synchronization, invalidates stale captured selection/destination state, and places only the normalized result. The outbound **Send to…** route snapshots exact path lines without changing Input / Output or the clipboard: copy destinations delegate reviewed background publication to `file_transfer.py`, while the one-path VS Code receiver delegates only registered-protocol opening to `vscode_integration.py`. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `workspace_panel.py` owns selection ranges, one-step Undo grouping, clipboard updates, menus, and a last-ten session history of meaningful complete states. Back/Forward navigation clears file-preview provenance rather than reconnecting historical text to a stale source hash. The launcher injects clipboard, status, and content-change callbacks and retains orchestration delegates. A selected item places its current-state **Input → Effect** summary in the slim bottom communication line; progress, success, and errors temporarily replace it. Hovering or clicking that line exposes the full structured explanation and current operational message.
 
 The legacy generic `transform_text` action persists one catalogue operation key
 and only that operation's ordered parameters. It remains loadable and editable

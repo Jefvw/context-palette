@@ -10,10 +10,12 @@ from context_palette.actions import Action, load_stored_actions
 from context_palette.configuration_data import save_contexts
 from context_palette.context_membership import (
     CONTEXT_MEMBERSHIP_VERSION,
+    ContextMembershipUpdateError,
     actions_with_canonical_contexts,
     append_actions_with_context_memberships,
     migrate_legacy_action_contexts,
     update_action_with_context_memberships,
+    update_actions_with_context_memberships,
 )
 from context_palette.contexts import ContextDefinition, ContextError, load_contexts
 from context_palette.palette_state import load_palette_state
@@ -59,6 +61,172 @@ class CanonicalContextProjectionTests(unittest.TestCase):
 
 
 class ContextMembershipPersistenceTests(unittest.TestCase):
+    def test_batch_edit_updates_actions_and_contexts_together(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            actions_path = root / "local_actions.json"
+            shared_contexts_path = root / "contexts.json"
+            local_contexts_path = root / "local_contexts.json"
+            write_actions(
+                actions_path,
+                [
+                    {"id": "one", "title": "One", "type": "copy_text", "value": "1", "state": "Active"},
+                    {"id": "two", "title": "Two", "type": "copy_text", "value": "2", "state": "Archived"},
+                ],
+            )
+            save_contexts(shared_contexts_path, [])
+            save_contexts(
+                local_contexts_path,
+                [
+                    ContextDefinition("Before", action_ids=("one", "two")),
+                    ContextDefinition("After", action_ids=()),
+                ],
+            )
+            previous = (
+                Action("one", "One", "Before", "copy_text", "1", contexts=("Before",)),
+                Action("two", "Two", "Before", "copy_text", "2", state="Archived", contexts=("Before",)),
+            )
+            updated = (
+                Action("one", "One updated", "After", "copy_text", "one", contexts=("After",)),
+                Action("two", "Two updated", "General", "copy_text", "two", state="Archived"),
+            )
+
+            update_actions_with_context_memberships(
+                actions_path,
+                updated,
+                previous,
+                actions_are_local=True,
+                shared_contexts_path=shared_contexts_path,
+                local_contexts_path=local_contexts_path,
+            )
+
+            self.assertEqual(
+                [(action.id, action.title, action.state) for action in load_stored_actions(actions_path)],
+                [("one", "One updated", "Active"), ("two", "Two updated", "Archived")],
+            )
+            contexts = {item.name: item for item in load_contexts(local_contexts_path)}
+            self.assertEqual(contexts["Before"].action_ids, ())
+            self.assertEqual(contexts["After"].action_ids, ("one",))
+
+    def test_batch_edit_rolls_back_every_action_when_context_write_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            actions_path = root / "local_actions.json"
+            shared_contexts_path = root / "contexts.json"
+            local_contexts_path = root / "local_contexts.json"
+            write_actions(
+                actions_path,
+                [
+                    {"id": "one", "title": "One", "type": "copy_text", "value": "1", "state": "Active"},
+                    {"id": "two", "title": "Two", "type": "copy_text", "value": "2", "state": "Active"},
+                ],
+            )
+            save_contexts(shared_contexts_path, [])
+            save_contexts(local_contexts_path, [ContextDefinition("After", action_ids=())])
+            previous = tuple(load_stored_actions(actions_path))
+            original_action_bytes = actions_path.read_bytes()
+            original_context_bytes = local_contexts_path.read_bytes()
+            action_backup = actions_path.with_name("local_actions.json.bak")
+            shared_context_backup = shared_contexts_path.with_name(
+                "contexts.json.bak"
+            )
+            local_context_backup = local_contexts_path.with_name(
+                "local_contexts.json.bak"
+            )
+            action_backup.write_bytes(b"prior action backup")
+            shared_context_backup.write_bytes(b"prior shared context backup")
+            local_context_backup.write_bytes(b"prior local context backup")
+            updated = tuple(
+                Action(action.id, action.title + " updated", "After", action.type, action.value, contexts=("After",))
+                for action in previous
+            )
+
+            with patch(
+                "context_palette.context_membership.save_contexts",
+                side_effect=ContextError("locked"),
+            ):
+                with self.assertRaises(ContextMembershipUpdateError) as captured:
+                    update_actions_with_context_memberships(
+                        actions_path,
+                        updated,
+                        previous,
+                        actions_are_local=True,
+                        shared_contexts_path=shared_contexts_path,
+                        local_contexts_path=local_contexts_path,
+                    )
+
+            self.assertTrue(captured.exception.rollback_completed)
+            self.assertIn("locked", str(captured.exception))
+            self.assertEqual(actions_path.read_bytes(), original_action_bytes)
+            self.assertEqual(local_contexts_path.read_bytes(), original_context_bytes)
+            self.assertEqual(action_backup.read_bytes(), b"prior action backup")
+            self.assertEqual(
+                shared_context_backup.read_bytes(),
+                b"prior shared context backup",
+            )
+            self.assertEqual(
+                local_context_backup.read_bytes(),
+                b"prior local context backup",
+            )
+
+    def test_batch_edit_reports_incomplete_rollback_structurally(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            actions_path = root / "local_actions.json"
+            shared_contexts_path = root / "contexts.json"
+            local_contexts_path = root / "local_contexts.json"
+            write_actions(
+                actions_path,
+                [
+                    {
+                        "id": "one",
+                        "title": "One",
+                        "type": "copy_text",
+                        "value": "1",
+                        "state": "Active",
+                    }
+                ],
+            )
+            save_contexts(shared_contexts_path, [])
+            save_contexts(
+                local_contexts_path,
+                [ContextDefinition("After", action_ids=())],
+            )
+            previous = tuple(load_stored_actions(actions_path))
+            updated = (
+                Action(
+                    "one",
+                    "One updated",
+                    "After",
+                    "copy_text",
+                    "1",
+                    contexts=("After",),
+                ),
+            )
+
+            with (
+                patch(
+                    "context_palette.context_membership.save_contexts",
+                    side_effect=ContextError("locked"),
+                ),
+                patch(
+                    "context_palette.context_membership.atomic_replace_bytes",
+                    side_effect=OSError("restore denied"),
+                ),
+                self.assertRaises(ContextMembershipUpdateError) as captured,
+            ):
+                update_actions_with_context_memberships(
+                    actions_path,
+                    updated,
+                    previous,
+                    actions_are_local=True,
+                    shared_contexts_path=shared_contexts_path,
+                    local_contexts_path=local_contexts_path,
+                )
+
+            self.assertFalse(captured.exception.rollback_completed)
+            self.assertIn("could not be restored completely", str(captured.exception))
+
     def test_append_stores_membership_only_in_context_definition(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

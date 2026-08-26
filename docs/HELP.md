@@ -57,10 +57,11 @@ Power Automate Desktop setup is documented in
 
 ## Create Actions from Excel
 
-Press `Ctrl+,`, open **Actions**, then choose **Other ways to create → Get blank
+Press `Ctrl+,`, open **Actions**, then choose **More Action tasks → Get blank
 Actions workbook…**. Save the generated standard `.xlsx`, fill one Action per
-row on its **Actions** sheet, save it, and choose **Create Actions from Excel…**.
-The same review window can save a blank workbook or choose another one.
+row on its **Actions** sheet, save it, and choose **More Action tasks → Create
+Actions from Excel…**. The same review window can save a blank workbook or
+choose another one.
 
 The workbook includes Instructions and a Reference sheet of supported Action
 type IDs and labels. Blank **Import** means Yes; enter No to keep a row visible
@@ -86,19 +87,86 @@ workbook and saved Action collection are rechecked immediately before the one
 effect-labelled **Create N Actions** operation. Created records are personal
 Active Actions and nothing is run during import.
 
-Bulk update and permanent deletion are not part of this create-only workbook.
-Those future operations require exported stable IDs and stale-edit protection;
+This workbook remains create-only. Updating uses the separate identity-bound
+workbook below. Archive, Restore, and Delete permanently remain separate;
 permanent deletion continues to require an Archived Action.
+
+## Update personal Actions from Excel
+
+Press `Ctrl+,`, open **Actions**, then choose **More Action tasks → Export
+personal Actions for update…**. Save the generated version-1 standard `.xlsx`,
+edit it, and save it without changing its structure. Then choose **More Action
+tasks → Review updated Actions workbook…** and select that file. This is a
+separate contract from the blank creation workbook.
+
+The workbook contains only eligible **My configuration**, Active Actions. It
+does not export Built-in or Archived Actions, sequences, fixed Excel-automation
+Actions, or text-file transformations. **Action ID**, **State**, **Action type**,
+and **Original fingerprint** are verified identity fields; do not edit them. You may edit
+**Name**, **Value**, personal **Contexts**, **Tags**, **Description**, **Quick
+menu**, **Arguments (JSON)**, and **Working folder**. JSON arguments preserve
+empty and whitespace-only values that a line-based cell cannot represent
+losslessly. Leave Contexts blank for General only; only existing personal
+Contexts are accepted.
+Separate Contexts and tags with semicolons. If a Context or tag itself contains
+a semicolon, enclose that one value in double quotes, for example
+`"Client; Europe"; Monthly`.
+
+Context Palette reads the workbook locally through the same bounded ZIP/XML
+boundary as bulk creation. It never starts Excel or Python Excel, runs an
+Action, evaluates a formula, follows a link, or runs a macro. Formula cells,
+macros, links, changed headers/identity, corrupt or unsafe packages, and stale
+original fingerprints are rejected. Removing an exported row does not delete
+or otherwise change its Action.
+
+The attended review marks only real valid changes **Ready** and selects those
+rows by default. Select a row to compare exact Before and After values; clear
+any Ready row you do not want. **Update N Actions** is the one confirmation,
+with no second Yes/No dialog. Immediately before writing, Context Palette
+rechecks the workbook and current Action/Context configuration. Selected Ready
+changes are applied together; if Context persistence fails, the exact previous
+Action bytes are restored. If that rollback cannot restore every participating
+Action, Context, or backup file, the review is locked and reports that saved
+configuration may have changed. Do not retry that workbook; inspect the latest
+backups and Diagnostics, then verify the saved configuration first. After
+success, export a fresh workbook before making another batch. Removing a
+workbook row still never deletes an Action.
+
+## Remove multiple personal Actions
+
+Press `Ctrl+,`, open **Actions**, then choose **More Action tasks → Remove
+multiple personal Actions…**. This is an in-app review; no spreadsheet is
+required. Only **My configuration** Actions are offered. Use Find, select the
+exact rows you intend to remove, and inspect the combined number of Context,
+slot, and configured Quick-menu references plus any dependent sequences.
+
+For Active selections, **Prepare N Actions for deletion** removes the Actions
+from runtime and clears their saved placements while retaining recoverable
+Archived records. The same window then shows those exact Actions in the
+permanent-delete stage—there is no need to open Show: Archived or select them
+again. **Delete N Actions permanently** is the second and final confirmation;
+there is no extra Yes/No dialog. Close after preparation if you want to keep
+the recoverable records. Use **Show prepared Actions** to review personal
+Actions that were already prepared earlier, and **Show Active Actions** to
+return to preparation.
+
+A referenced Action is blocked unless its dependent sequence is also selected
+in the same stage or edited first. Every file is rechecked immediately before
+the batch write. If a write fails, Context Palette restores the exact previous
+configuration and backup-sidecar bytes when possible. The workflow never runs
+an Action and never deletes or changes its target file, folder, website,
+workbook, application, credential, or Inbox item. Built-in Actions retain their
+ordinary guided lifecycle controls because their changes travel through Git.
 
 ## Harvest website links from documents
 
-For the primary route, press `Ctrl+,`, then open **Actions** and choose
-**Other ways to create → Harvest website links…**. You can also choose **Harvest website links...** in
-Inbox. The workflow extracts possible website actions from several documents
-at once. Supported files are Markdown (`.md`), text (`.txt`), Word (`.docx`),
-and Excel (`.xlsx`). Context Palette reads these files locally; it does not
-start Office, evaluate formulas, run macros, fetch links, or execute discovered
-content.
+For the primary route, press `Ctrl+,`, then open **Actions** and choose **More
+Action tasks → Harvest website links…**. You can also choose **Harvest website
+links...** in Inbox. The workflow extracts possible website actions from
+several documents at once. Supported files are Markdown (`.md`), text (`.txt`),
+Word (`.docx`), and Excel (`.xlsx`). Context Palette reads these files locally;
+it does not start Office, evaluate formulas, run macros, fetch links, or execute
+discovered content.
 
 The review window shows each source and every candidate URL with its label and
 location. Search or filter the list, inspect provenance, edit one candidate,
@@ -436,6 +504,75 @@ For safety:
 - A source file already inside the Work Item is rejected.
 - Missing, unavailable, or failed copies produce an actionable error.
 
+### Send files to a folder
+
+Put one or more exact absolute file paths in **Input / Output**, one per
+nonblank line, then choose the clearly labelled **Send to…** menu above the
+editor or in its right-click menu. Matching outer quotes from Explorer's
+**Copy as path** are accepted. The first slice accepts files only, with a
+maximum of 100; folders, relative paths, URLs, prose, missing files, and a
+duplicate source path are explained before anything is copied.
+
+The destination menu can contain:
+
+- the currently selected Work Item;
+- Active **Open a folder** Actions that belong to the current Context filter;
+- the last ten successful destination folders from this app session;
+- a hierarchical **All Folder Actions** menu;
+- **Find destination…**, which searches Folder Actions and discovered Work
+  Items;
+- **Choose another folder…** for a one-off copy; and
+- **Manage Folder Actions…** for editing the reusable destinations.
+
+A Folder Action is reused only as a destination record inside **Send to…**.
+Running that same Action from Find or a Quick menu still opens its folder; it
+does not copy anything. Recent destinations are never written to configuration
+or backups, and source paths are never added to recent-destination state.
+Only Folder Actions whose destination can be resolved without clipboard text
+are offered here. An Action containing `%CLIPBOARD%`, `%CLIPBOARD_URL%`,
+`%pptxt%`, or `%cpy_txt_urlencode%` remains available through its ordinary Run
+route but is excluded from copy destinations. This prevents a missing clipboard
+value from silently changing a destination to its parent folder. Relative
+folder values and `file:` URIs use the same resolution as ordinary Folder
+Actions.
+
+Choosing a destination is the confirmation when every destination filename is
+new, so copying starts without another dialog. If a name already exists, a
+centered review shows every source-to-destination mapping. With **Allow
+overwrite** off (the default), `report.txt` becomes `report(1).txt`, then
+`report(2).txt`. Turning overwrite on replans the exact unsuffixed replacements
+and changes the one effect-labelled button, for example to **Replace 1 and copy
+2 files**. There is no additional Yes/No question. A replaced destination does
+not receive a recovery backup, so leave overwrite off unless replacing that
+exact file is intentional.
+
+Planning and copying happen in the background. Context Palette stages complete
+temporary files in the destination, rechecks the reviewed sources and
+destinations, and only then publishes them. **Stop remaining** finishes the
+current file and prevents later files from starting. The result lists exact
+created, replaced, skipped, and failed destinations. Earlier completed copies
+remain after a later failure or stop; no batch rollback or automatic retry is
+claimed. Source files, Input / Output, and the clipboard remain unchanged.
+If every source is already the exact file in the selected destination, the
+window says **Nothing to copy** and offers neither overwrite nor a copy button.
+
+#### Open one path's folder in VS Code
+
+When Input / Output has exactly one nonblank line, the **Send to…** menu also
+shows **Open with → Open folder in VS Code**. Use it with one existing absolute
+folder or file path. Matching outer quotation marks from Explorer are accepted.
+A folder opens as that VS Code workspace; a file opens its containing folder,
+not only the individual file.
+
+This is an open operation, not a copy destination. It does not copy or move the
+path, change Input / Output or the clipboard, add a recent destination, or run
+an **Open a folder** Action. Windows opens the percent-encoded folder through
+the registered `vscode:` protocol, so VS Code must already be installed and
+registered for those links. Context Palette does not search for or invoke a VS
+Code executable and does not request administrator rights. Empty, relative,
+missing, unavailable, unmatched-quote, and multiple paths are explained
+without opening anything.
+
 ## Quick-action surface
 
 Quick actions appear below discovery on the left side of the main palette and
@@ -492,9 +629,10 @@ under **Set up** and backup or troubleshooting destinations under **Support**:
   **Set up Work Items**, or **Back up or restore**. **Browse Action types** and
   **View diagnostics** remain available as secondary choices. Each choice
   opens the existing editor; it does not create a second configuration window.
-- **Actions:** choose **New Action…** for the normal creation flow. **Other ways
-  to create** contains bulk Excel creation/template commands, website-link
-  Harvest, and the educational Action-type catalogue. Find, lifecycle, and selection commands surround one
+- **Actions:** choose **New Action…** for the normal creation flow. **More Action
+  tasks** contains bulk Excel creation/template and update commands,
+  website-link Harvest, and the educational Action-type catalogue. Find,
+  lifecycle, and selection commands surround one
   Actions table; Contexts and tags for the selection appear below it. Use
   **Archive…** to remove an Active Action from runtime. Configure then switches
   to **Show: Archived**, keeps that Action selected, and reveals **Delete
@@ -743,9 +881,9 @@ areas shrink and retain their scrolling. Divider movement is bounded so
 neither side can be accidentally collapsed. A fresh
 application start leaves the workspace empty. Reopening the resident palette
 can show the current clipboard or captured selection. Actions can read or
-  replace it. Its compact heading includes bitmap controls for Back, Forward,
-  Capture, Inbox, **Create from Input**, **Extract text**, and **Text tools**
-  without consuming label space.
+  replace it. Its compact heading includes Back and Forward, the literal
+  **Send to…** destination menu, and bitmap controls for Capture, Inbox,
+  **Create from Input**, **Extract text**, and **Text tools**.
 
 Numbered Action triggering is deliberately active only for Shift+6–0 while
 Find has focus. Shift+1–5 is retired, and in every other control—including
@@ -768,6 +906,10 @@ The bottom communication line always stays one row high. Hover over it for the c
   is not persisted, and is separate from native Undo/Redo.
 - The right-click command `Clear` empties it.
 - The right-click menu also provides Undo, Redo, Cut, Copy, Paste, Select all, and Copy all.
+- Choose **Send to…** in the header or right-click menu to copy exact file
+  paths to a reviewed folder destination without changing the workspace, or
+  use its separate **Open with → Open folder in VS Code** command for one
+  existing folder/file path without copying it.
 - Open `Transform` through the right-click menu or choose **Text tools**.
 - Choose the **Create from Input** icon to turn one clear target into a reusable Action.
   A non-blank selection is used first; otherwise Context Palette checks the

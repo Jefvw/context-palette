@@ -37,6 +37,16 @@ actions remain editable there but stay outside normal retrieval. See
   and uses the same validation as the ordinary Action editor without starting
   Excel or requiring Python Excel. Sequence, fixed Excel-automation, and
   whitespace-sensitive text-file-transform Actions keep their guided editors.
+- Exports eligible personal Active Actions to a separate versioned Excel
+  workbook for attended bulk updates. Stable IDs, type, state, and original
+  fingerprints remain immutable; changed Ready rows update once after exact
+  workbook/configuration rechecks and no Action is run. Archive, restore, and
+  permanent deletion remain outside workbook semantics.
+- Removes multiple personal Actions through one attended window. Explicit
+  Active selections are prepared first, then the same reviewed selection can
+  be deleted permanently without navigating to an Archived view. Sequence and
+  saved-placement effects are shown, stale state is rejected, failed writes
+  restore exact configuration bytes, and external targets remain untouched.
 - Keeps a separate always-on-top drop target for files, folders, shortcuts,
   links, and text. A successful drop reveals the ordinary non-topmost palette
   and offers the normalized result to Input / Output without changing the
@@ -74,6 +84,17 @@ actions remain editable there but stay outside normal retrieval. See
   Item workbook's `Inbox` sheet, creating that sheet when necessary.
 - Copies the one exact Windows file path in Input / Output into the selected
   Work Item folder without replacing an existing file.
+- Copies up to 100 exact file paths from Input / Output through the visible
+  **Send to…** menu. Destinations come from Context-relevant Folder Actions,
+  Work Items, recent successful destinations, or a one-off folder. Existing
+  names receive deterministic `(1)`, `(2)` suffixes by default; an explicit
+  reviewed **Allow overwrite** choice may replace only the unsuffixed files.
+  Source files are never moved or changed.
+- The same **Send to…** menu has a separate **Open with → Open folder in VS
+  Code** command for one existing absolute folder or file path. A folder opens
+  itself; a file opens its containing folder through Windows' registered
+  `vscode:` protocol. This command copies nothing and leaves Input / Output,
+  the clipboard, and ordinary Folder Action execution unchanged.
 - Creates deterministic, validated complete-configuration backup archives from
   a service-level command, with explicit Inbox and managed-text privacy scope.
 - Stores personal data locally and writes application-managed JSON atomically.

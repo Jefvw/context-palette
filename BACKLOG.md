@@ -4,12 +4,48 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Now
 
+- Manually validate **Send to… → Open with → Open folder in VS Code** with one
+  existing absolute folder, one file whose parent should open, outer quotes,
+  spaces, Unicode, and an unavailable network path. Cover empty, multiple,
+  relative, missing, and unmatched-quote input plus a machine without a
+  registered `vscode:` handler. Confirm the command copies nothing, leaves
+  Input / Output and the clipboard unchanged, does not add a recent copy
+  destination or run a Folder Action, and stays visible at 100%, 125%, and
+  150% scaling.
+- Manually validate Input / Output **Send to…** with one and many local files,
+  quoted paths, Unicode, UNC paths, duplicate basenames, same-folder sources,
+  missing/changed sources, and 100-file input. Cover a Context-relevant Folder
+  Action, selected and searchable Work Items, all Folder Actions, recent
+  destinations, and a one-off folder. Verify default `(1)`, `(2)` collision
+  suffixes, explicit overwrite review and exact button wording, destination
+  changes after review, stop/partial outcomes, Open destination folder, Quit
+  blocking, unchanged sources/Input/Output/clipboard, fixed relative/file-URI
+  Folder resolution, exclusion of clipboard-templated Folder Actions, and
+  visible controls at 100%, 125%, and 150% scaling.
 - Validate **Create Actions from Excel…** with a generated standard workbook:
   edit it in desktop Excel, create mixed Action types, use General and personal
   Contexts/tags, review duplicates/errors/excluded rows, modify the workbook
   after review, and confirm one guarded rollback-capable personal-Action creation
   at 100%, 125%, and 150% scaling. Repeat without Excel installed by editing a
   fixture copy.
+- Validate the separate personal-Action update round trip: choose **Export
+  personal Actions for update…**, edit every supported field in desktop Excel,
+  then choose **Review updated Actions workbook…**. Cover Ready/no-change/error
+  rows, immutable identity columns, removed rows, lossless JSON arguments,
+  personal Contexts, stale workbook and configuration changes, selected-row
+  commit, exact-byte rollback after an injected Context-write failure, and no
+  Action execution or second confirmation. Confirm Built-in, Archived,
+  sequence, Excel-automation, and text-file-transform Actions are excluded.
+  Repeat at 100%, 125%, and 150% scaling and without Excel installed.
+- Validate **More Action tasks → Remove multiple personal Actions…** with
+  personal Active, already-Archived, sequence, Context, slot, and configured
+  Quick-menu fixtures. Confirm the same centered window prepares the selected
+  Active batch, carries that selection into the permanent-delete review, and
+  deletes only after the second effect-labelled button. Cover selected and
+  unselected dependent sequences, shared Quick items, stale configuration,
+  injected write/rollback failure, closing after preparation, keyboard-only
+  selection, and 100%, 125%, and 150% scaling. Confirm every external target
+  remains untouched.
 
 - Manually validate the live **Apply Excel format template** Action with a
   disposable workbook against Python Excel commit `e405e14`. The one-sheet
@@ -126,13 +162,6 @@ This file contains actionable future work. Completed user-visible work belongs i
   boundary benefits; avoid line-count-only refactors.
 
 ## Later
-
-- Add transactional bulk Action maintenance after create-import use is proven:
-  in-app Context/tag changes and Archive/Restore first, then an exported Excel
-  round trip with stable Action IDs, original fingerprints, and explicit
-  Update/Archive/Restore/Delete-permanently operations. Preserve the permanent
-  Active → Archived → Delete lifecycle and all sequence/reference safeguards;
-  do not infer identity from titles or targets or loop single-record writes.
 
 - Consider direct source drag-and-drop and folder selection inside Harvest
   after its explicit multi-file workflow has real-use feedback. The implemented

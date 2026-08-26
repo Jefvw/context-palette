@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import ctypes
+from dataclasses import dataclass
 import logging
 import queue
 import time
@@ -12,15 +13,19 @@ from typing import Callable
 
 from .actions import (
     ACTION_BOUND_QUICK_MENU_SPECS,
+    ACTIVE_STATE,
     Action,
     ActionError,
     EXCEL_AUTOMATION_ID,
     LIVE_FORMAT_PROFILE_AUTOMATION_ID,
+    action_uses_clipboard_template,
     action_search_rank,
+    expanded_action,
     execute_action,
     load_combined_actions,
     load_actions,
     open_action_target,
+    resolve_local_folder_path,
     search_actions,
 )
 from .action_preview import (
@@ -101,6 +106,7 @@ from .excel_automation import (
 )
 from .excel_automation_window import ExcelAutomationWindow
 from .excel_live_format_window import ExcelLiveFormatWindow
+from .file_transfer_window import FileTransferWindow
 from .inbox import InboxError, append_inbox_item, create_clipboard_item, load_inbox_items
 from .inbox_window import ActionCreator, InboxWindow, suggest_url_template
 from .ocr import (
@@ -114,8 +120,13 @@ from .ocr import (
     image_source_from_text,
 )
 from .single_instance import SingleInstanceServer
+from .searchable_selection import SearchableSelectionPopup
 from .style import COLORS, configure_theme
 from .tooltips import WidgetTooltip
+from .vscode_integration import (
+    VsCodeIntegrationError,
+    open_workspace_path_in_vscode,
+)
 from .window_geometry import (
     centered_work_area_position,
     configure_main_window,
@@ -203,6 +214,17 @@ ACTION_BOUND_QUICK_NOUNS = {
     "open_folder": "folder",
     "ai_prompt": "prompt",
 }
+
+
+@dataclass(frozen=True, slots=True)
+class _SendDestination:
+    """One runtime-only folder that can receive Input / Output files."""
+
+    key: str
+    label: str
+    folder_path: Path
+    menu_path: tuple[str, ...] = ()
+    search_text: str = ""
 
 
 def bounded_sash_position(
@@ -392,6 +414,9 @@ class LauncherApp:
         self.excel_automation_window: (
             ExcelAutomationWindow | ExcelLiveFormatWindow | None
         ) = None
+        self.file_transfer_window: object | None = None
+        self.send_to_destination_picker: SearchableSelectionPopup | None = None
+        self.recent_send_destinations: list[_SendDestination] = []
         self.action_info_full = (
             "Select an Action or Work Item to see what it will do."
         )
@@ -968,6 +993,7 @@ class LauncherApp:
             extract_text=self._extract_text_from_image,
             capture=self._capture_clipboard,
             show_inbox=self._show_inbox,
+            populate_send_to_menu=self._populate_send_to_menu,
             text_change_callback=self._update_preview,
         )
         # Compatibility aliases keep launcher orchestration and integrations
@@ -982,6 +1008,7 @@ class LauncherApp:
         self.ocr_button = self.workspace_component.ocr_button
         self.capture_button = self.workspace_component.capture_button
         self.inbox_button = self.workspace_component.inbox_button
+        self.send_to_button = self.workspace_component.send_to_button
         self.footer_action_buttons = [
             self.workspace_component.capture_button,
             self.workspace_component.inbox_button,
@@ -1300,6 +1327,7 @@ class LauncherApp:
             self._active_work_item_writes()
             + self._active_configuration_operations()
             + self._active_excel_automation_operations()
+            + self._active_file_transfer_operations()
             + ocr_operations
         )
         if active_operations:
@@ -1375,6 +1403,12 @@ class LauncherApp:
         workflow = getattr(self, "excel_automation_window", None)
         if workflow is not None and workflow.busy:
             return ("an Excel automation",)
+        return ()
+
+    def _active_file_transfer_operations(self) -> tuple[str, ...]:
+        workflow = getattr(self, "file_transfer_window", None)
+        if workflow is not None and workflow.busy:
+            return ("a Send-to file copy",)
         return ()
 
     def _quit_for_restore_recovery_when_safe(self) -> bool:
@@ -3834,6 +3868,412 @@ class LauncherApp:
 
     def _workspace_text(self) -> str:
         return self.workspace_component.get_text()
+
+    def _populate_send_to_menu(self, menu: tk.Menu) -> None:
+        """Build the current outbound file-copy destinations on demand."""
+
+        workspace_text = self.workspace_component.raw_text()
+        path_line_count = sum(
+            1 for line in workspace_text.splitlines() if line.strip()
+        )
+        if path_line_count == 0:
+            menu.add_command(
+                label="Paste or drop one or more file paths first",
+                state=tk.DISABLED,
+            )
+            return
+
+        menu.add_command(
+            label=(
+                f"Copy {path_line_count} file path"
+                f"{'s' if path_line_count != 1 else ''} to:"
+            ),
+            state=tk.DISABLED,
+        )
+        menu.add_separator()
+
+        selected_work_item = self._selected_work_item()
+        if selected_work_item is not None:
+            self._add_send_destination_command(
+                menu,
+                self._work_item_send_destination(selected_work_item),
+                label=f"Selected Work Item — {selected_work_item.display_name}",
+            )
+            menu.add_separator()
+
+        relevant = self._folder_send_destinations(
+            context=self.item_context_filter,
+        )
+        context_clipboard_actions = self._clipboard_folder_actions(
+            context=self.item_context_filter,
+        )
+        if self.item_context_filter is not None:
+            menu.add_command(
+                label=f"Context: {self.item_context_filter}",
+                state=tk.DISABLED,
+            )
+        if relevant:
+            for destination in relevant[:6]:
+                self._add_send_destination_command(menu, destination)
+        elif self.item_context_filter is not None:
+            if context_clipboard_actions:
+                menu.add_command(
+                    label="Clipboard-based Folder Actions must be run normally",
+                    state=tk.DISABLED,
+                )
+            else:
+                menu.add_command(
+                    label="No Folder Actions in this Context",
+                    state=tk.DISABLED,
+                )
+
+        if relevant or self.item_context_filter is not None:
+            menu.add_separator()
+
+        submenus: list[tk.Menu] = []
+        if self.recent_send_destinations:
+            recent_menu = tk.Menu(menu, tearoff=False)
+            for destination in self.recent_send_destinations:
+                self._add_send_destination_command(recent_menu, destination)
+            menu.add_cascade(label="Recent destinations", menu=recent_menu)
+            submenus.append(recent_menu)
+
+        all_folders = self._folder_send_destinations()
+        if all_folders:
+            all_folders_menu = tk.Menu(menu, tearoff=False)
+            self._populate_send_destination_tree(
+                all_folders_menu,
+                all_folders,
+                (),
+                submenus,
+            )
+            menu.add_cascade(
+                label="All Folder Actions",
+                menu=all_folders_menu,
+            )
+            submenus.append(all_folders_menu)
+
+        clipboard_actions = self._clipboard_folder_actions()
+        if clipboard_actions:
+            count = len(clipboard_actions)
+            menu.add_command(
+                label=(
+                    f"{count} clipboard-based Folder Action"
+                    f"{'s' if count != 1 else ''} unavailable here — run normally"
+                ),
+                state=tk.DISABLED,
+            )
+
+        menu.add_command(
+            label="Find destination…",
+            command=self._show_send_destination_picker,
+        )
+        menu.add_command(
+            label="Choose another folder…",
+            command=self._choose_send_destination_folder,
+        )
+        menu.add_separator()
+        menu.add_command(
+            label="Manage Folder Actions…",
+            command=lambda: self._find_automatic_quick_actions(
+                "Folders",
+                "open_folder",
+            ),
+        )
+        menu.add_separator()
+        menu.add_command(label="Open with:", state=tk.DISABLED)
+        if path_line_count == 1:
+            menu.add_command(
+                label="Open folder in VS Code",
+                command=self._open_workspace_folder_in_vscode,
+            )
+        else:
+            menu.add_command(
+                label="Open in VS Code requires one path",
+                state=tk.DISABLED,
+            )
+        self._active_send_to_submenus = tuple(submenus)
+
+    def _open_workspace_folder_in_vscode(self) -> None:
+        workspace_text = self.workspace_component.raw_text()
+        try:
+            folder = open_workspace_path_in_vscode(workspace_text)
+        except VsCodeIntegrationError as exc:
+            self.status_var.set("VS Code could not be opened.")
+            messagebox.showerror(
+                "Could not open folder in VS Code",
+                str(exc),
+                parent=self.root,
+            )
+            return
+        label = folder.name or str(folder)
+        self.status_var.set(f"Asked Windows to open {label} in VS Code.")
+
+    def _folder_send_destinations(
+        self,
+        *,
+        context: str | None = None,
+    ) -> list[_SendDestination]:
+        destinations: list[_SendDestination] = []
+        for action in self.actions:
+            if action.state != ACTIVE_STATE or action.type != "open_folder":
+                continue
+            if context is not None and not self._action_belongs_to_context(
+                action,
+                context,
+            ):
+                continue
+            if action_uses_clipboard_template(action):
+                continue
+            try:
+                expanded = expanded_action(action)
+                folder_path = resolve_local_folder_path(expanded.value)
+            except ActionError:
+                continue
+            destinations.append(
+                _SendDestination(
+                    key=f"action:{action.id}",
+                    label=action.title,
+                    folder_path=folder_path,
+                    menu_path=action.quick_action_path,
+                    search_text=" ".join(
+                        (
+                            action.title,
+                            *action.quick_action_path,
+                            *action.effective_tags,
+                            str(folder_path),
+                        )
+                    ),
+                )
+            )
+        return destinations
+
+    def _clipboard_folder_actions(
+        self,
+        *,
+        context: str | None = None,
+    ) -> list[Action]:
+        actions: list[Action] = []
+        for action in self.actions:
+            if action.state != ACTIVE_STATE or action.type != "open_folder":
+                continue
+            if context is not None and not self._action_belongs_to_context(
+                action,
+                context,
+            ):
+                continue
+            if action_uses_clipboard_template(action):
+                actions.append(action)
+        return actions
+
+    def _work_item_send_destination(
+        self,
+        item: DiscoveredWorkItem,
+    ) -> _SendDestination:
+        return _SendDestination(
+            key=f"work-item:{item.source_id}/{item.relative_folder}",
+            label=f"{item.display_name} (Work Item)",
+            folder_path=item.folder_path,
+            search_text=(
+                f"{item.display_name} {item.source_name} "
+                f"{' '.join(item.project_codes)} {item.folder_path}"
+            ),
+        )
+
+    def _add_send_destination_command(
+        self,
+        menu: tk.Menu,
+        destination: _SendDestination,
+        *,
+        label: str | None = None,
+    ) -> None:
+        menu.add_command(
+            label=label or destination.label,
+            command=lambda selected=destination: self._open_send_destination(
+                selected
+            ),
+        )
+
+    def _populate_send_destination_tree(
+        self,
+        menu: tk.Menu,
+        destinations: list[_SendDestination],
+        prefix: tuple[str, ...],
+        submenus: list[tk.Menu],
+    ) -> None:
+        direct = [
+            destination
+            for destination in destinations
+            if tuple(part.casefold() for part in destination.menu_path)
+            == tuple(part.casefold() for part in prefix)
+        ]
+        for destination in direct:
+            self._add_send_destination_command(menu, destination)
+
+        branch_labels: dict[str, str] = {}
+        for destination in destinations:
+            if (
+                len(destination.menu_path) > len(prefix)
+                and tuple(
+                    part.casefold()
+                    for part in destination.menu_path[: len(prefix)]
+                )
+                == tuple(part.casefold() for part in prefix)
+            ):
+                label = destination.menu_path[len(prefix)]
+                branch_labels.setdefault(label.casefold(), label)
+        if direct and branch_labels:
+            menu.add_separator()
+        for label in branch_labels.values():
+            branch_menu = tk.Menu(menu, tearoff=False)
+            self._populate_send_destination_tree(
+                branch_menu,
+                destinations,
+                (*prefix, label),
+                submenus,
+            )
+            menu.add_cascade(label=label, menu=branch_menu)
+            submenus.append(branch_menu)
+
+    def _all_send_destinations(self) -> list[_SendDestination]:
+        destinations = self._folder_send_destinations()
+        destinations.extend(
+            self._work_item_send_destination(item)
+            for item in self.work_item_index.items
+        )
+        return destinations
+
+    def _show_send_destination_picker(self) -> None:
+        existing = self.send_to_destination_picker
+        if existing is not None and not existing.closed:
+            existing.close()
+
+        destinations = self._all_send_destinations()
+        if not destinations:
+            if self._clipboard_folder_actions():
+                self.status_var.set(
+                    "Clipboard-based Folder Actions cannot receive Send-to files; "
+                    "run the Action normally or choose another folder."
+                )
+            else:
+                self.status_var.set(
+                    "No Folder Actions or Work Items are available as destinations."
+                )
+            return
+
+        labels: list[str] = []
+        by_label: dict[str, _SendDestination] = {}
+        for index, destination in enumerate(destinations, start=1):
+            detail = destination.search_text.strip() or str(
+                destination.folder_path
+            )
+            label = f"{destination.label} — {detail}"
+            while label.casefold() in by_label:
+                label = f"{destination.label} ({index}) — {detail}"
+            labels.append(label)
+            by_label[label.casefold()] = destination
+
+        def selected(values: tuple[str, ...]) -> None:
+            if not values:
+                return
+            destination = by_label.get(values[0].casefold())
+            if destination is not None:
+                self._open_send_destination(destination)
+
+        self.send_to_destination_picker = SearchableSelectionPopup(
+            self.send_to_button,
+            labels,
+            multiple=False,
+            on_select=selected,
+            title="Find copy destination",
+            search_label="Find folder or Work Item",
+            item_name="destination",
+        )
+
+    def _choose_send_destination_folder(self) -> None:
+        selected = filedialog.askdirectory(
+            parent=self.root,
+            title="Choose folder to receive files",
+            mustexist=True,
+        )
+        if not selected:
+            return
+        folder_path = Path(selected)
+        self._open_send_destination(
+            _SendDestination(
+                key=f"folder:{str(folder_path).casefold()}",
+                label=folder_path.name or str(folder_path),
+                folder_path=folder_path,
+                search_text=str(folder_path),
+            )
+        )
+
+    def _open_send_destination(self, destination: _SendDestination) -> None:
+        current = self.file_transfer_window
+        if current is not None:
+            try:
+                exists = bool(current.window.winfo_exists())
+            except (AttributeError, tk.TclError):
+                exists = False
+            if exists and current.busy:
+                current.show()
+                self.status_var.set(
+                    "A Send-to copy is already running; wait for it to finish."
+                )
+                return
+            if exists:
+                current.close()
+
+        workspace_text = self.workspace_component.raw_text()
+        if not any(line.strip() for line in workspace_text.splitlines()):
+            self.status_var.set(
+                "Paste or drop one or more file paths before choosing Send to."
+            )
+            return
+
+        workflow: FileTransferWindow
+        workflow = FileTransferWindow(
+            self.root,
+            workspace_text=workspace_text,
+            destination_folder=destination.folder_path,
+            destination_label=destination.label,
+            status_setter=self.status_var.set,
+            on_success=lambda path: self._remember_send_destination(
+                destination,
+                path,
+            ),
+            on_close=lambda: self._forget_file_transfer_window(workflow),
+        )
+        self.file_transfer_window = workflow
+        self.status_var.set(f"Preparing to copy files to {destination.label}…")
+        workflow.show()
+
+    def _remember_send_destination(
+        self,
+        destination: _SendDestination,
+        folder_path: Path,
+    ) -> None:
+        recent = _SendDestination(
+            key=f"recent:{str(folder_path).casefold()}",
+            label=destination.label,
+            folder_path=folder_path,
+            search_text=str(folder_path),
+        )
+        path_key = str(folder_path).casefold()
+        self.recent_send_destinations = [
+            item
+            for item in self.recent_send_destinations
+            if str(item.folder_path).casefold() != path_key
+        ]
+        self.recent_send_destinations.insert(0, recent)
+        del self.recent_send_destinations[10:]
+
+    def _forget_file_transfer_window(
+        self,
+        workflow: FileTransferWindow,
+    ) -> None:
+        if self.file_transfer_window is workflow:
+            self.file_transfer_window = None
 
     def _set_workspace_text(self, value: str) -> None:
         self.workspace_component.set_text(value)

@@ -13,15 +13,314 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.action_deletion import (
     ActionDeletionError,
+    ActionDeletionReport,
     archive_action_and_references,
+    archive_actions_and_references,
     delete_action_and_references,
+    delete_actions_and_references,
     inspect_action_references,
+    inspect_action_references_many,
     restore_action,
 )
 from context_palette.persistence import atomic_write_json as real_atomic_write_json
 
 
 class ActionDeletionTests(unittest.TestCase):
+    def test_plural_reviewed_impact_mismatch_is_a_known_no_write_outcome(self) -> None:
+        operations = (
+            ("archive", "Active", archive_actions_and_references),
+            ("delete", "Archived", delete_actions_and_references),
+        )
+        for label, state, operation in operations:
+            with self.subTest(operation=label), TemporaryDirectory() as directory:
+                root = Path(directory)
+                actions = root / "actions.json"
+                contexts = root / "contexts.json"
+                palette = root / "palette.json"
+                self._write(
+                    actions,
+                    {"actions": [{"id": "one", "state": state}]},
+                )
+                self._write(
+                    contexts,
+                    {"contexts": [{"name": "Work", "action_ids": ["one"]}]},
+                )
+                self._write(palette, {"pinned_action_ids": ["one"]})
+                actions.with_name(actions.name + ".bak").write_bytes(
+                    b"action backup\r\n"
+                )
+                participants = tuple(
+                    participant
+                    for path in (actions, contexts, palette)
+                    for participant in (path, path.with_name(path.name + ".bak"))
+                )
+                before = {
+                    path: path.read_bytes() if path.exists() else None
+                    for path in participants
+                }
+
+                with (
+                    patch(
+                        "context_palette.action_deletion.atomic_write_json"
+                    ) as writer,
+                    self.assertRaisesRegex(
+                        ActionDeletionError,
+                        "does not match the reviewed lifecycle impact",
+                    ),
+                ):
+                    operation(
+                        actions,
+                        ("one",),
+                        context_paths=(contexts,),
+                        command_surface_paths=(),
+                        palette_path=palette,
+                        expected_report=ActionDeletionReport(999, 999, 999),
+                    )
+
+                writer.assert_not_called()
+                self.assertEqual(
+                    {
+                        path: path.read_bytes() if path.exists() else None
+                        for path in participants
+                    },
+                    before,
+                )
+
+    def test_plural_archive_counts_combined_cleanup_and_writes_each_file_once(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            actions = root / "actions.json"
+            contexts = root / "contexts.json"
+            commands = root / "commands.json"
+            palette = root / "palette.json"
+            self._write(
+                actions,
+                {
+                    "actions": [
+                        {"id": "one", "state": "Active"},
+                        {"id": "two", "state": "Active"},
+                    ]
+                },
+            )
+            self._write(
+                contexts,
+                {"contexts": [{"name": "Work", "action_ids": ["one", "two"]}]},
+            )
+            self._write(
+                commands,
+                {
+                    "groups": [
+                        {
+                            "id": "root",
+                            "items": [
+                                {
+                                    "id": "combined",
+                                    "targets": [
+                                        {"type": "action", "action_id": "one"},
+                                        {"type": "action", "action_id": "two"},
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
+            self._write(palette, {"pinned_action_ids": ["one", "two"]})
+
+            impact = inspect_action_references_many(
+                ("one", "two"),
+                context_paths=(contexts,),
+                command_surface_paths=(commands,),
+                palette_path=palette,
+            )
+            writes: list[Path] = []
+
+            def record_write(path: Path, data: object) -> None:
+                writes.append(path)
+                real_atomic_write_json(path, data)
+
+            with patch(
+                "context_palette.action_deletion.atomic_write_json",
+                side_effect=record_write,
+            ):
+                report = archive_actions_and_references(
+                    actions,
+                    ("one", "two"),
+                    context_paths=(contexts,),
+                    command_surface_paths=(commands,),
+                    palette_path=palette,
+                )
+
+            self.assertEqual(impact.references_removed, 6)
+            self.assertEqual(impact.buttons_removed, 1)
+            self.assertEqual(impact.files_changed, 3)
+            self.assertEqual(report.references_removed, 6)
+            self.assertEqual(report.buttons_removed, 1)
+            self.assertEqual(report.files_changed, 4)
+            self.assertEqual(
+                writes,
+                [contexts, commands, palette, actions],
+            )
+            self.assertEqual(
+                [item["state"] for item in self._read(actions)["actions"]],
+                ["Archived", "Archived"],
+            )
+            self.assertEqual(self._read(commands)["groups"][0]["items"], [])
+
+    def test_plural_cleanup_does_not_count_a_promoted_selected_primary_twice(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            actions = root / "actions.json"
+            commands = root / "commands.json"
+            palette = root / "palette.json"
+            self._write(
+                actions,
+                {
+                    "actions": [
+                        {"id": "one", "state": "Active"},
+                        {"id": "two", "state": "Active"},
+                    ]
+                },
+            )
+            self._write(
+                commands,
+                {
+                    "groups": [
+                        {
+                            "id": "root",
+                            "primary_action_id": "one",
+                            "action_ids": ["one", "two"],
+                            "items": [],
+                        }
+                    ]
+                },
+            )
+            self._write(palette, {"pinned_action_ids": []})
+
+            impact = inspect_action_references_many(
+                ("one", "two"),
+                context_paths=(),
+                command_surface_paths=(commands,),
+                palette_path=palette,
+            )
+            report = archive_actions_and_references(
+                actions,
+                ("one", "two"),
+                context_paths=(),
+                command_surface_paths=(commands,),
+                palette_path=palette,
+            )
+
+            self.assertEqual(impact.references_removed, 3)
+            self.assertEqual(report.references_removed, 3)
+            group = self._read(commands)["groups"][0]
+            self.assertEqual(group["primary_action_id"], "")
+            self.assertEqual(group["action_ids"], [])
+
+    def test_selected_dependent_sequence_can_be_archived_and_deleted_with_target(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            actions = root / "actions.json"
+            palette = root / "palette.json"
+            self._write(
+                actions,
+                {
+                    "actions": [
+                        {"id": "target", "state": "Active"},
+                        {
+                            "id": "sequence",
+                            "title": "Dependent sequence",
+                            "type": "sequence",
+                            "state": "Active",
+                            "steps": [
+                                {"kind": "action", "action_id": "target"}
+                            ],
+                        },
+                    ]
+                },
+            )
+            self._write(palette, {"pinned_action_ids": []})
+
+            archive_actions_and_references(
+                actions,
+                ("target", "sequence"),
+                context_paths=(),
+                command_surface_paths=(),
+                palette_path=palette,
+                sequence_paths=(actions,),
+            )
+            self.assertEqual(
+                [item["state"] for item in self._read(actions)["actions"]],
+                ["Archived", "Archived"],
+            )
+
+            delete_actions_and_references(
+                actions,
+                ("target", "sequence"),
+                context_paths=(),
+                command_surface_paths=(),
+                palette_path=palette,
+                sequence_paths=(actions,),
+            )
+            self.assertEqual(self._read(actions)["actions"], [])
+
+    def test_plural_failure_restores_exact_primary_and_backup_bytes(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            actions = root / "actions.json"
+            contexts = root / "contexts.json"
+            palette = root / "palette.json"
+            self._write(
+                actions,
+                {"actions": [{"id": "one", "state": "Active"}]},
+            )
+            self._write(
+                contexts,
+                {"contexts": [{"name": "Work", "action_ids": ["one"]}]},
+            )
+            self._write(palette, {"pinned_action_ids": []})
+            context_backup = contexts.with_name(contexts.name + ".bak")
+            context_backup.write_bytes(b"previous context backup\r\n")
+            participating = (
+                actions,
+                actions.with_name(actions.name + ".bak"),
+                contexts,
+                context_backup,
+            )
+            before = {
+                path: path.read_bytes() if path.exists() else None
+                for path in participating
+            }
+
+            def fail_action_write(path: Path, data: object) -> None:
+                if path == actions:
+                    raise OSError("locked")
+                real_atomic_write_json(path, data)
+
+            with (
+                patch(
+                    "context_palette.action_deletion.atomic_write_json",
+                    side_effect=fail_action_write,
+                ),
+                self.assertRaisesRegex(
+                    ActionDeletionError,
+                    "all attempted configuration changes were restored",
+                ),
+            ):
+                archive_actions_and_references(
+                    actions,
+                    ("one",),
+                    context_paths=(contexts,),
+                    command_surface_paths=(),
+                    palette_path=palette,
+                )
+
+            after = {
+                path: path.read_bytes() if path.exists() else None
+                for path in participating
+            }
+            self.assertEqual(after, before)
+
     def test_referenced_action_cannot_be_archived_or_deleted_behind_sequence(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)

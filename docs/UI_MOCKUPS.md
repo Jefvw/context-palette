@@ -58,9 +58,15 @@ Quick-actions heading. Its order is:
 6. A bounded, scrollable Quick-action region with no heading.
 7. Configure, Help, and More controls that never scroll off screen.
 
-Input / Output keeps the two session-history arrows plus its five
-content-dependent icon controls above the editor and a permanently readable
-Input -> Effect strip below it.
+Input / Output keeps the two session-history arrows, a literal **Send to…**
+destination menu, its five content-dependent icon controls above the editor,
+and a permanently readable Input -> Effect strip below it. The label is
+deliberate: copying files or handing a folder to another application is an
+effect and must not depend on an unexplained icon. Copy destinations appear
+first. A separator and disabled **Open with:** heading place **Open folder in
+VS Code** in a visibly different group, so it cannot be mistaken for a folder
+that will receive copies. The opener requires one path, opens a folder itself
+or a file's containing folder, and never changes Input / Output.
 
 The Context filter is the single Context model in the launcher:
 
@@ -114,7 +120,10 @@ The representative page uses:
 The representative page uses:
 
 - one `New Action...` primary action;
-- an `Other ways to create` menu for the type catalogue and Harvest;
+- a `More Action tasks` menu for bulk create/update/removal, the type catalogue, and
+  Harvest, including distinct `Export personal Actions for update...` and
+  `Review updated Actions workbook...` routes plus `Remove multiple personal
+  Actions...` for the centered two-stage lifecycle review;
 - one Action table with readable type and ownership;
 - Edit, Archive/Restore, and visibly destructive permanent deletion in the
   selected-item strip.

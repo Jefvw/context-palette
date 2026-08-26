@@ -53,6 +53,62 @@ class LauncherSmokeTests(unittest.TestCase):
         # across these intentionally large Windows smoke scenarios.
         gc.collect()
 
+    def test_workspace_send_to_control_fits_at_100_125_and_150_percent(self):
+        # Tk scaling is pixels per typographic point: 96 DPI starts at 4/3.
+        for percentage, scaling in ((100, 4 / 3), (125, 5 / 3), (150, 2.0)):
+            with self.subTest(percentage=percentage):
+                root = tk.Tk()
+                root.withdraw()
+                root.tk.call("tk", "scaling", scaling)
+                host = ttk.Frame(root)
+                host.pack(fill=tk.BOTH, expand=True)
+                tooltips: dict[tk.Widget, str] = {}
+                populated: list[tk.Menu] = []
+
+                def populate(menu: tk.Menu) -> None:
+                    populated.append(menu)
+                    menu.add_command(label="Choose another folder…")
+
+                panel = WorkspacePanel(
+                    host,
+                    clipboard_getter=lambda: "",
+                    clipboard_setter=lambda _value: None,
+                    status_setter=lambda _value: None,
+                    tooltip_adder=lambda widget, text: tooltips.__setitem__(
+                        widget,
+                        text,
+                    ),
+                    populate_send_to_menu=populate,
+                )
+                try:
+                    root.update_idletasks()
+                    header = panel.frame.winfo_children()[0]
+                    self.assertLessEqual(
+                        header.winfo_reqwidth(),
+                        MINIMUM_WORKSPACE_WIDTH,
+                        f"Input / Output header exceeds its minimum width at {percentage}%",
+                    )
+                    self.assertEqual(panel.send_to_button.cget("text"), "Send to…")
+                    self.assertTrue(bool(panel.send_to_button.cget("takefocus")))
+                    self.assertIn("Sources stay unchanged", tooltips[panel.send_to_button])
+                    self.assertIn("VS Code", tooltips[panel.send_to_button])
+
+                    context_labels = [
+                        panel.context_menu.entrycget(index, "label")
+                        for index in range(panel.context_menu.index(tk.END) + 1)
+                        if panel.context_menu.type(index) == "cascade"
+                    ]
+                    self.assertIn("Send to…", context_labels)
+                    panel._refresh_send_to_menu(panel.send_to_menu)
+                    panel._refresh_send_to_menu(panel.send_to_context_menu)
+                    self.assertEqual(
+                        panel.send_to_menu.entrycget(0, "label"),
+                        "Choose another folder…",
+                    )
+                    self.assertEqual(populated, [panel.send_to_menu, panel.send_to_context_menu])
+                finally:
+                    root.destroy()
+
     def test_workspace_create_action_uses_selection_then_full_text_without_clipboard(self):
         root = tk.Tk()
         root.withdraw()
@@ -154,6 +210,42 @@ class LauncherSmokeTests(unittest.TestCase):
             self.assertEqual(panel.raw_text(), "third edited")
         finally:
             root.destroy()
+
+    def test_workspace_send_to_label_stays_visible_at_supported_scaling(self):
+        for multiplier in (1.0, 1.25, 1.5):
+            with self.subTest(multiplier=multiplier):
+                root = tk.Tk()
+                root.withdraw()
+                original_scaling = float(root.tk.call("tk", "scaling"))
+                root.tk.call("tk", "scaling", original_scaling * multiplier)
+                root.geometry(f"{MINIMUM_WORKSPACE_WIDTH}x300+-32000+-32000")
+                host = ttk.Frame(root)
+                host.pack(fill=tk.BOTH, expand=True)
+                panel = WorkspacePanel(
+                    host,
+                    clipboard_getter=lambda: "",
+                    clipboard_setter=lambda _value: None,
+                    status_setter=lambda _value: None,
+                    tooltip_adder=lambda _widget, _text: None,
+                    populate_send_to_menu=lambda _menu: None,
+                )
+                try:
+                    root.deiconify()
+                    root.update()
+                    header = panel.frame.winfo_children()[0]
+                    self.assertEqual(panel.send_to_button.cget("text"), "Send to…")
+                    self.assertTrue(panel.send_to_button.winfo_ismapped())
+                    self.assertGreaterEqual(
+                        panel.send_to_button.winfo_width() + 1,
+                        panel.send_to_button.winfo_reqwidth(),
+                    )
+                    self.assertLessEqual(
+                        panel.send_to_button.winfo_rootx()
+                        + panel.send_to_button.winfo_width(),
+                        header.winfo_rootx() + header.winfo_width(),
+                    )
+                finally:
+                    root.destroy()
 
     def test_workspace_semantic_history_is_bounded_and_keeps_native_undo(self):
         root = tk.Tk()
@@ -2389,14 +2481,21 @@ class LauncherSmokeTests(unittest.TestCase):
                                 index,
                                 "label",
                             )
-                            for index in (0, 1, 3, 4)
+                            for index in (0, 1, 2, 4, 5, 6, 8)
                         ],
                         [
                             "Create Actions from Excel…",
                             "Get blank Actions workbook…",
                             "Harvest website links…",
+                            "Export personal Actions for update…",
+                            "Review updated Actions workbook…",
+                            "Remove multiple personal Actions…",
                             "Browse Action types…",
                         ],
+                    )
+                    self.assertEqual(
+                        app.configuration_window.other_action_creation_button.cget("text"),
+                        "More Action tasks",
                     )
                     reused_configuration_window.geometry("900x520")
                     app.configuration_window.notebook.select(3)

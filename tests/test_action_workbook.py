@@ -50,6 +50,24 @@ def _actions_xml(rows: list[list[tuple[str, str, bool]]]) -> bytes:
 
 
 class ActionWorkbookTemplateTests(unittest.TestCase):
+    def test_template_uses_default_namespaces_for_strict_xlsx_readers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "actions.xlsx"
+            write_action_import_template(path)
+
+            with zipfile.ZipFile(path) as archive:
+                for part in (
+                    "[Content_Types].xml",
+                    "_rels/.rels",
+                    "xl/workbook.xml",
+                    "xl/_rels/workbook.xml.rels",
+                    "xl/styles.xml",
+                    "xl/worksheets/sheet1.xml",
+                ):
+                    payload = archive.read(part).decode("utf-8")
+                    self.assertIn(' xmlns="', payload, part)
+                    self.assertNotIn("<ns0:", payload, part)
+
     def test_template_is_deterministic_valid_and_lists_only_bulk_supported_types(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             first = Path(temporary) / "first.xlsx"
@@ -275,6 +293,31 @@ class ActionWorkbookReadTests(unittest.TestCase):
                 archive.writestr("../outside.xml", "unsafe")
             with self.assertRaisesRegex(ActionWorkbookError, "unsafe"):
                 read_action_import_workbook(unsafe)
+
+    def test_rejects_macro_parts_and_external_relationships(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            macro = self._template(temporary)
+            _replace_zip_part(macro, "xl/vbaProject.bin", b"not executed")
+            with self.assertRaisesRegex(ActionWorkbookError, "Macro-bearing"):
+                read_action_import_workbook(macro)
+
+            linked = self._template(temporary)
+            relationship_ns = (
+                "http://schemas.openxmlformats.org/package/2006/relationships"
+            )
+            external_relationship = (
+                f'<?xml version="1.0"?><Relationships xmlns="{relationship_ns}">'
+                '<Relationship Id="rId99" Type="example" '
+                'Target="https://example.invalid/source.xlsx" '
+                'TargetMode="External"/></Relationships>'
+            ).encode("utf-8")
+            _replace_zip_part(
+                linked,
+                "xl/worksheets/_rels/sheet2.xml.rels",
+                external_relationship,
+            )
+            with self.assertRaisesRegex(ActionWorkbookError, "External workbook links"):
+                read_action_import_workbook(linked)
 
 
 if __name__ == "__main__":

@@ -50,6 +50,17 @@ _MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 _REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 _PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 _CONTENT_TYPES_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
+_EXTENDED_PROPERTIES_NS = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
+)
+_DEFAULT_XML_NAMESPACES = frozenset(
+    {
+        _MAIN_NS,
+        _PACKAGE_REL_NS,
+        _CONTENT_TYPES_NS,
+        _EXTENDED_PROPERTIES_NS,
+    }
+)
 _XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
 _OLE_SIGNATURE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 _CELL_REFERENCE = re.compile(r"^([A-Z]{1,3})([1-9][0-9]*)$", re.IGNORECASE)
@@ -240,19 +251,24 @@ def _validate_archive(archive: zipfile.ZipFile) -> None:
     names: set[str] = set()
     for entry in entries:
         normalized = entry.filename.replace("\\", "/")
+        normalized_key = normalized.casefold()
         parts = PurePosixPath(normalized).parts
         if (
             not normalized
             or normalized.startswith("/")
             or ".." in parts
-            or normalized.casefold() in names
+            or normalized_key in names
         ):
             raise ActionWorkbookError("The workbook contains an unsafe or duplicate package path.")
-        names.add(normalized.casefold())
+        names.add(normalized_key)
+        if normalized_key.endswith("vbaproject.bin"):
+            raise ActionWorkbookError("Macro-bearing Excel workbooks are not supported.")
+        if normalized_key.startswith("xl/externallinks/"):
+            raise ActionWorkbookError("External workbook links are not supported.")
         if entry.flag_bits & 0x1:
             raise ActionWorkbookError("Encrypted Excel workbooks are not supported.")
         expanded += entry.file_size
-        if entry.filename.casefold().endswith(".xml") and entry.file_size > MAX_XML_PART_BYTES:
+        if normalized_key.endswith((".xml", ".rels")) and entry.file_size > MAX_XML_PART_BYTES:
             raise ActionWorkbookError("A workbook XML part exceeds the safe import limit.")
         if entry.file_size and (
             entry.compress_size == 0
@@ -261,6 +277,25 @@ def _validate_archive(archive: zipfile.ZipFile) -> None:
             raise ActionWorkbookError("The workbook has an unsafe compression ratio.")
     if expanded > MAX_EXPANDED_BYTES:
         raise ActionWorkbookError("The expanded workbook exceeds the safe import limit.")
+    for entry in entries:
+        if not entry.filename.casefold().endswith(".rels"):
+            continue
+        payload = archive.read(entry)
+        upper = payload.upper()
+        if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
+            raise ActionWorkbookError("Workbook XML declarations are not supported.")
+        try:
+            relationships = ET.fromstring(payload)
+        except ET.ParseError as exc:
+            raise ActionWorkbookError(
+                f"Workbook XML is corrupt: {entry.filename}"
+            ) from exc
+        if any(
+            _local_name(relationship.tag) == "Relationship"
+            and relationship.attrib.get("TargetMode", "").casefold() == "external"
+            for relationship in relationships
+        ):
+            raise ActionWorkbookError("External workbook links are not supported.")
 
 
 def _xml_part(archive: zipfile.ZipFile, name: str, *, required: bool = True) -> ET.Element | None:
@@ -494,6 +529,12 @@ def _write_part(archive: zipfile.ZipFile, name: str, payload: bytes) -> None:
 
 
 def _xml_bytes(root: ET.Element) -> bytes:
+    namespace = root.tag[1:].split("}", 1)[0] if root.tag.startswith("{") else ""
+    if namespace in _DEFAULT_XML_NAMESPACES:
+        # Strict OPC/Open XML consumers do not all accept ElementTree's
+        # generated ``ns0:`` prefix on package roots. Emit the conventional
+        # default namespace used by Excel and the Open XML SDK.
+        ET.register_namespace("", namespace)
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 

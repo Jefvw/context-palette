@@ -43,6 +43,13 @@ from .action_suggestions import ActionCreationSuggestion
 from .action_type_picker import ActionTypePickerDialog, ActionTypePickerOption
 from .action_bound_quick_actions import action_bound_quick_groups
 from .action_bulk_window import ActionBulkWindow
+from .action_bulk_lifecycle_window import ActionBulkLifecycleWindow
+from .action_bulk_update import eligible_personal_actions_for_update
+from .action_bulk_update_window import ActionBulkUpdateWindow
+from .action_update_workbook import (
+    ActionUpdateWorkbookError,
+    write_action_update_workbook,
+)
 from .action_workbook import ActionWorkbookError, write_action_import_template
 from .action_picker import ActionPickerField, ActionPickerOption
 from .backup_restore_ui import BackupRestorePanel
@@ -1213,7 +1220,7 @@ class ConfigurationWindow:
         header_commands.pack(side=tk.RIGHT, padx=(10, 0))
         self.other_action_creation_button = ttk.Menubutton(
             header_commands,
-            text="Other ways to create",
+            text="More Action tasks",
         )
         self.other_action_creation_menu = tk.Menu(
             self.other_action_creation_button,
@@ -1227,11 +1234,24 @@ class ConfigurationWindow:
             label="Get blank Actions workbook…",
             command=self._save_bulk_action_template,
         )
-        self.other_action_creation_menu.add_separator()
         self.other_action_creation_menu.add_command(
             label="Harvest website links…",
             command=self._show_harvest,
         )
+        self.other_action_creation_menu.add_separator()
+        self.other_action_creation_menu.add_command(
+            label="Export personal Actions for update…",
+            command=self._save_bulk_action_update_workbook,
+        )
+        self.other_action_creation_menu.add_command(
+            label="Review updated Actions workbook…",
+            command=self._show_bulk_action_update,
+        )
+        self.other_action_creation_menu.add_command(
+            label="Remove multiple personal Actions…",
+            command=self._show_bulk_action_lifecycle,
+        )
+        self.other_action_creation_menu.add_separator()
         self.other_action_creation_menu.add_command(
             label="Browse Action types…",
             command=lambda: self._show_config_named_tab("types"),
@@ -1441,8 +1461,88 @@ class ConfigurationWindow:
         self.feedback_var.set(f"Blank Actions workbook saved: {saved}")
         self.feedback_label.configure(style="Success.TLabel")
 
+    def _personal_actions_for_bulk_update(self) -> tuple[Action, ...]:
+        return eligible_personal_actions_for_update(
+            self.stored_actions,
+            self.local_action_ids,
+        )
+
+    def _save_bulk_action_update_workbook(self) -> None:
+        actions = self._personal_actions_for_bulk_update()
+        if not actions:
+            messagebox.showinfo(
+                "No personal Actions to export",
+                "There are no supported personal Active Actions to update in bulk.",
+                parent=self.window,
+            )
+            return
+        selected = filedialog.asksaveasfilename(
+            parent=self.window,
+            title="Export personal Active Actions",
+            defaultextension=".xlsx",
+            initialfile="Context Palette Action Updates.xlsx",
+            filetypes=(("Excel workbooks", "*.xlsx"),),
+        )
+        if not selected:
+            return
+        try:
+            saved = write_action_update_workbook(Path(selected), actions)
+        except (ActionUpdateWorkbookError, OSError) as exc:
+            messagebox.showerror(
+                "Action update workbook was not exported",
+                str(exc),
+                parent=self.window,
+            )
+            return
+        self.feedback_var.set(
+            f"Exported {len(actions)} personal Active Action(s): {saved}"
+        )
+        self.feedback_label.configure(style="Success.TLabel")
+
+    def _show_bulk_action_update(self) -> None:
+        selected = filedialog.askopenfilename(
+            parent=self.window,
+            title="Choose updated Actions workbook",
+            filetypes=(("Excel workbooks", "*.xlsx"),),
+        )
+        if not selected:
+            return
+        ActionBulkUpdateWindow(
+            self.window,
+            actions=self.stored_actions,
+            local_action_ids=self.local_action_ids,
+            local_context_names=[context.name for context in self.local_contexts],
+            local_actions_path=self.local_actions_path,
+            shared_actions_path=self.shared_actions_path,
+            shared_contexts_path=self.contexts_path,
+            local_contexts_path=self.local_contexts_path,
+            on_change=self._bulk_actions_updated,
+            initial_workbook_path=Path(selected),
+        )
+
+    def _show_bulk_action_lifecycle(self) -> None:
+        ActionBulkLifecycleWindow(
+            self.window,
+            actions=self.stored_actions,
+            local_action_ids=self.local_action_ids,
+            local_actions_path=self.local_actions_path,
+            shared_actions_path=self.shared_actions_path,
+            shared_contexts_path=self.contexts_path,
+            local_contexts_path=self.local_contexts_path,
+            shared_command_surface_path=self.command_surface_path,
+            local_command_surface_path=self.local_command_surface_path,
+            palette_path=self.palette_path,
+            on_change=self._bulk_actions_removed,
+        )
+
     def _bulk_actions_changed(self) -> None:
         self._created_actions_changed("bulk-created")
+
+    def _bulk_actions_updated(self) -> None:
+        self._created_actions_changed("bulk-updated")
+
+    def _bulk_actions_removed(self) -> None:
+        self._created_actions_changed("bulk-removed")
 
     def _harvest_changed(self) -> None:
         self._created_actions_changed("harvested")

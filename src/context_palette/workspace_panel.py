@@ -158,6 +158,7 @@ class WorkspacePanel:
         extract_text: Callable[[str], None] | None = None,
         capture: Callable[[], None] | None = None,
         show_inbox: Callable[[], None] | None = None,
+        populate_send_to_menu: Callable[[tk.Menu], None] | None = None,
         text_change_callback: Callable[[], None] | None = None,
     ) -> None:
         self.clipboard_getter = clipboard_getter
@@ -165,6 +166,7 @@ class WorkspacePanel:
         self.status_setter = status_setter
         self.create_action = create_action
         self.extract_text = extract_text
+        self.populate_send_to_menu = populate_send_to_menu
         self.text_change_callback = text_change_callback
         self._content_history: list[str] = [""]
         self._content_history_index = 0
@@ -243,6 +245,18 @@ class WorkspacePanel:
             style="Icon.TButton",
         )
         self.capture_button.pack(side=tk.RIGHT, padx=(0, 4))
+        self.send_to_button = ttk.Menubutton(
+            header,
+            text="Send to…",
+            takefocus=True,
+        )
+        self.send_to_menu = tk.Menu(
+            self.send_to_button,
+            tearoff=False,
+            postcommand=lambda: self._refresh_send_to_menu(self.send_to_menu),
+        )
+        self.send_to_button.configure(menu=self.send_to_menu)
+        self.send_to_button.pack(side=tk.RIGHT, padx=(0, 8))
 
         self.file_preview: TextFileTransformPreview | None = None
         self.file_preview_frame = ttk.Frame(self.frame)
@@ -329,6 +343,14 @@ class WorkspacePanel:
         tooltip_adder(
             self.inbox_button,
             "Inbox — Review captures and convert them into permanent Actions.",
+        )
+        tooltip_adder(
+            self.send_to_button,
+            (
+                "Send to — Copy the file paths in Input / Output to a saved "
+                "folder, Work Item, or one-off destination, or open one path's "
+                "folder in VS Code. Sources stay unchanged."
+            ),
         )
 
     def _on_text_modified(self, _event: tk.Event) -> None:
@@ -589,6 +611,18 @@ class WorkspacePanel:
             command=self.replace_with_clipboard,
         )
         self.context_menu.add_command(label="Clear", command=lambda: self.set_text(""))
+        self.context_menu.add_separator()
+        self.send_to_context_menu = tk.Menu(
+            self.context_menu,
+            tearoff=False,
+            postcommand=lambda: self._refresh_send_to_menu(
+                self.send_to_context_menu
+            ),
+        )
+        self.context_menu.add_cascade(
+            label="Send to…",
+            menu=self.send_to_context_menu,
+        )
 
         self.transform_menu = tk.Menu(self.context_menu, tearoff=False)
         for group in WORKSPACE_TRANSFORM_GROUPS:
@@ -600,6 +634,13 @@ class WorkspacePanel:
                 )
             self.transform_menu.add_cascade(label=group.label, menu=group_menu)
         self.context_menu.add_cascade(label="Transform", menu=self.transform_menu)
+
+    def _refresh_send_to_menu(self, menu: tk.Menu) -> None:
+        menu.delete(0, tk.END)
+        if self.populate_send_to_menu is None:
+            menu.add_command(label="Send to is unavailable", state=tk.DISABLED)
+            return
+        self.populate_send_to_menu(menu)
 
     def _transform_command(
         self,

@@ -119,6 +119,8 @@ class UiMockupTkTests(unittest.TestCase):
                     self.assertGreaterEqual(view.text.winfo_width(), 300)
                     self.assertGreaterEqual(view.text.winfo_height(), 180)
                     self.assertEqual(view.primary_button.cget("text"), "Stop remaining")
+                    self.assertEqual(view.send_to_button.cget("text"), "Send to…")
+                    self.assertTrue(view.send_to_button.winfo_manager())
                     self.assertTrue(view.configure_button.winfo_manager())
                     self.assertTrue(view.quick_canvas.winfo_manager())
                 finally:
@@ -271,6 +273,27 @@ class UiMockupTkTests(unittest.TestCase):
             self.assertEqual(
                 str(configure.action_delete_button.cget("state")),
                 str(tk.NORMAL),
+            )
+        finally:
+            root.destroy()
+
+    def test_main_mockup_send_to_menu_separates_copy_and_vscode_effects(self) -> None:
+        root, main = self.build(MOCKUP_MAIN, scenario="no-selection")
+        try:
+            self.assertIsInstance(main, MainPaletteMockup)
+            labels = [
+                main.send_to_menu.entrycget(index, "label")
+                for index in range(main.send_to_menu.index(tk.END) + 1)
+                if main.send_to_menu.type(index) != "separator"
+            ]
+            self.assertEqual(
+                labels,
+                [
+                    "Finance reports",
+                    "Choose another folder…",
+                    "Open with:",
+                    "Open folder in VS Code",
+                ],
             )
         finally:
             root.destroy()

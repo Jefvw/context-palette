@@ -50,6 +50,12 @@ ACTION_BOUND_QUICK_TYPES = frozenset(
     action_type for _group_id, _label, action_type in ACTION_BOUND_QUICK_MENU_SPECS
 )
 MAX_QUICK_ACTION_PATH_LEVELS = 3
+CLIPBOARD_TEMPLATE_TOKENS = (
+    "%CLIPBOARD%",
+    "%CLIPBOARD_URL%",
+    "%pptxt%",
+    "%cpy_txt_urlencode%",
+)
 
 
 class ActionError(Exception):
@@ -109,6 +115,19 @@ class Action:
     def compact_display_text(self) -> str:
         title = self.compact_title
         return f"{ACTION_TYPES[self.type].icon} - {title}"
+
+
+def action_uses_clipboard_template(action: Action) -> bool:
+    """Return whether expanding an Action requires a clipboard-text snapshot."""
+
+    template_values = [action.value, *action.arguments]
+    if action.working_directory:
+        template_values.append(action.working_directory)
+    return any(
+        token in value
+        for value in template_values
+        for token in CLIPBOARD_TEMPLATE_TOKENS
+    )
 
 
 @dataclass(frozen=True)
@@ -366,16 +385,36 @@ def append_actions(path: Path, actions: Iterable[Action]) -> None:
 
 
 def update_action(path: Path, updated_action: Action) -> None:
-    data = _load_action_data(path)
-    changed = False
-    for index, raw_action in enumerate(data["actions"]):
-        if isinstance(raw_action, dict) and raw_action.get("id") == updated_action.id:
-            data["actions"][index] = _action_to_dict(updated_action)
-            changed = True
-            break
+    update_actions(path, (updated_action,))
 
-    if not changed:
-        raise ActionError(f"Action was not found: {updated_action.id}")
+
+def update_actions(path: Path, updated_actions: Iterable[Action]) -> None:
+    """Replace one or more stored Actions in one atomic JSON write."""
+
+    replacements = tuple(updated_actions)
+    if not replacements:
+        return
+    replacements_by_id: dict[str, Action] = {}
+    for action in replacements:
+        if action.id in replacements_by_id:
+            raise ActionError(f"Action was supplied more than once: {action.id}")
+        replacements_by_id[action.id] = action
+
+    data = _load_action_data(path)
+    found: set[str] = set()
+    for index, raw_action in enumerate(data["actions"]):
+        if not isinstance(raw_action, dict):
+            continue
+        action_id = raw_action.get("id")
+        if not isinstance(action_id, str) or action_id not in replacements_by_id:
+            continue
+        data["actions"][index] = _action_to_dict(replacements_by_id[action_id])
+        found.add(action_id)
+
+    missing = sorted(replacements_by_id.keys() - found)
+    if missing:
+        label = "Action was" if len(missing) == 1 else "Actions were"
+        raise ActionError(f"{label} not found: {', '.join(missing)}")
 
     atomic_write_json(path, data)
 
@@ -1664,13 +1703,7 @@ def expanded_action(
 ) -> Action:
     """Return an action with QuickTextPaste-style template variables resolved."""
     clipboard = ""
-    template_values = [action.value, *action.arguments]
-    if action.working_directory:
-        template_values.append(action.working_directory)
-    clipboard_tokens = ("%CLIPBOARD%", "%CLIPBOARD_URL%", "%pptxt%", "%cpy_txt_urlencode%")
-    needs_clipboard = any(
-        token in value for value in template_values for token in clipboard_tokens
-    )
+    needs_clipboard = action_uses_clipboard_template(action)
     if needs_clipboard and clipboard_getter is not None:
         try:
             clipboard = clipboard_getter()
@@ -1778,7 +1811,7 @@ def open_action_target(action: Action) -> None:
         return
 
     if action.type == "open_folder":
-        target = _resolve_local_path(action.value, Path.is_dir)
+        target = resolve_local_folder_path(action.value)
         if not target.is_dir():
             raise ActionError(f"Folder does not exist: {target}")
         os.startfile(target)  # type: ignore[attr-defined]
@@ -1988,6 +2021,12 @@ def _resolve_working_directory(value: str | None) -> str | None:
     if not path.is_dir():
         raise ActionError(f"Working directory does not exist: {path}")
     return str(path)
+
+
+def resolve_local_folder_path(value: str) -> Path:
+    """Resolve a configured folder value using the normal Action path rules."""
+
+    return _resolve_local_path(value, Path.is_dir)
 
 
 def _local_path_candidates(value: str) -> tuple[Path, ...]:
