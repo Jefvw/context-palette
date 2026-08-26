@@ -382,6 +382,64 @@ class ActionBulkUpdateWindowTests(unittest.TestCase):
         self.assertTrue(self.window.tree.bind("<space>"))
         self.assertTrue(self.window.tree.cget("xscrollcommand"))
 
+    def test_fixed_footer_remains_visible_at_150_percent_minimum_size(self) -> None:
+        original_scaling = float(self.root.tk.call("tk", "scaling"))
+        scaled_window = None
+        try:
+            self.root.tk.call("tk", "scaling", 2.0)
+            with patch(
+                "context_palette.action_bulk_update_window.configure_standard_window"
+            ):
+                scaled_window = ActionBulkUpdateWindow(
+                    self.root,
+                    actions=self.actions,
+                    local_action_ids=(
+                        "personal-ready",
+                        "personal-unchanged",
+                        "personal-error",
+                        "personal-archived",
+                    ),
+                    local_context_names=("Finance", "Quarter close"),
+                    local_actions_path=Path("local_actions.json"),
+                    shared_actions_path=Path("actions.json"),
+                    shared_contexts_path=Path("contexts.json"),
+                    local_contexts_path=Path("local_contexts.json"),
+                    on_change=Mock(),
+                )
+            scaled_window.window.geometry("700x480")
+            with patch(
+                "context_palette.action_bulk_update_window.read_action_update_workbook",
+                return_value=self.workbook,
+            ), patch(
+                "context_palette.action_bulk_update_window.plan_bulk_action_update",
+                return_value=self.plan,
+            ):
+                scaled_window._load_workbook(self.source)
+            self.root.update()
+
+            close_button = next(
+                widget
+                for widget in descendants(scaled_window.window)
+                if isinstance(widget, ttk.Button) and widget.cget("text") == "Close"
+            )
+            window_top = scaled_window.window.winfo_rooty()
+            window_bottom = window_top + scaled_window.window.winfo_height()
+            for widget in (
+                scaled_window.status_label,
+                scaled_window.update_button,
+                close_button,
+            ):
+                self.assertTrue(widget.winfo_ismapped())
+                self.assertGreaterEqual(widget.winfo_rooty(), window_top)
+                self.assertLessEqual(
+                    widget.winfo_rooty() + widget.winfo_height(),
+                    window_bottom,
+                )
+        finally:
+            if scaled_window is not None and scaled_window.window.winfo_exists():
+                scaled_window.close()
+            self.root.tk.call("tk", "scaling", original_scaling)
+
 
 if __name__ == "__main__":
     unittest.main()

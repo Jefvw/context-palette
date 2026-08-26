@@ -97,8 +97,10 @@ class ActionBulkUpdateWindow:
 
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(outer, text="Bulk update Actions", style="Title.TLabel").pack(
-            anchor=tk.W
+        outer.columnconfigure(0, weight=1)
+        outer.rowconfigure(4, weight=1)
+        ttk.Label(outer, text="Bulk update Actions", style="Title.TLabel").grid(
+            row=0, column=0, sticky=tk.W
         )
         self.intro_label = ttk.Label(
             outer,
@@ -111,10 +113,10 @@ class ActionBulkUpdateWindow:
             wraplength=740,
             justify=tk.LEFT,
         )
-        self.intro_label.pack(anchor=tk.W, fill=tk.X, pady=(2, 8))
+        self.intro_label.grid(row=1, column=0, sticky=tk.EW, pady=(2, 8))
 
         toolbar = ttk.Frame(outer)
-        toolbar.pack(fill=tk.X)
+        toolbar.grid(row=2, column=0, sticky=tk.EW)
         self.export_button = ttk.Button(
             toolbar,
             text="Export fresh workbook…",
@@ -142,10 +144,10 @@ class ActionBulkUpdateWindow:
             style="Muted.TLabel",
             wraplength=740,
             justify=tk.LEFT,
-        ).pack(fill=tk.X, pady=(5, 7))
+        ).grid(row=3, column=0, sticky=tk.EW, pady=(5, 7))
 
         review = ttk.Panedwindow(outer, orient=tk.VERTICAL)
-        review.pack(fill=tk.BOTH, expand=True)
+        review.grid(row=4, column=0, sticky=tk.NSEW)
 
         table_frame = ttk.Frame(review)
         review.add(table_frame, weight=3)
@@ -207,7 +209,7 @@ class ActionBulkUpdateWindow:
         )
 
         footer = ttk.Frame(outer)
-        footer.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
+        footer.grid(row=6, column=0, sticky=tk.EW, pady=(8, 0))
         self.update_button = ttk.Button(
             footer,
             text="Update 0 Actions",
@@ -220,13 +222,14 @@ class ActionBulkUpdateWindow:
         self.status_var = tk.StringVar(
             value="Export a fresh workbook before editing personal Actions."
         )
-        ttk.Label(
+        self.status_label = ttk.Label(
             outer,
             textvariable=self.status_var,
             style="Status.TLabel",
             wraplength=740,
             justify=tk.LEFT,
-        ).pack(side=tk.BOTTOM, fill=tk.X, pady=(7, 0))
+        )
+        self.status_label.grid(row=5, column=0, sticky=tk.EW, pady=(7, 0))
 
         self.window.transient(parent)
         self.window.lift()
