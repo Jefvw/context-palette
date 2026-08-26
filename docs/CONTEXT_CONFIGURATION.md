@@ -13,6 +13,13 @@ Open the main **Filter** menu and choose **Manage contexts…** to go directly t
 Item that belongs to it, and select up to five preferred items for slots 6–0.
 The form uses names instead of technical IDs.
 
+The fixed first row, **General — All items**, is different. Its membership is
+computed from every Active Action and available Work Item, so it has no member
+editor and cannot be renamed or deleted. Choose **Edit shortcuts…** to set only
+its preferred slots 6–0. Those preferences stay in `data/palette.json` on this
+computer. Clearing all five positions removes the override and restores
+automatic General ordering.
+
 Normal user contexts belong in **My configuration** and stay on this PC. They
 may contain Built-in Actions, My configuration Actions, and personal Work Items
 without editing the Actions or external folders themselves. **Built-in** is developer-owned starter configuration
@@ -30,8 +37,9 @@ its Actions, Work Item folders, or workbooks.
 - `data/local_contexts.json`: personal or work-specific contexts, ignored by Git.
 - `data/actions.json`: Built-in starter actions.
 - `data/local_actions.json`: personal or machine-specific actions, ignored by Git.
-- `data/palette.json`: explicit per-Context slot overrides plus legacy focus and
-  pin data retained only for compatible round-trip.
+- `data/palette.json`: explicit per-Context slot overrides, including optional
+  General preferences, plus legacy focus and pin data retained only for
+  compatible round-trip.
 
 Do not put internal URLs, customer names, work paths, or personal identifiers
 in Built-in files.
@@ -80,7 +88,9 @@ it adds no persisted field and requires no data migration. Any legacy
 `focus_context` value remains compatibility data rather than current UI state.
 
 Do not create a General Context definition; it is implied for every Action and
-discovered Work Item.
+discovered Work Item, and the guided editor reserves that name. A legacy or
+manually authored General definition cannot narrow the virtual root or seed its
+slots.
 Existing personal files using singular `context`, `technology`, and `task`
 remain readable.
 

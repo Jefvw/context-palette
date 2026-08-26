@@ -1,5 +1,23 @@
 # Decisions
 
+## 2026-08-26 - Expose virtual General only as a local shortcut editor
+
+**Decision:** Show **General — All items** as the fixed first row in Configure
+→ Contexts, but do not create a `ContextDefinition` for it. Keep its name,
+automatic membership, and lifecycle fixed. Its only command is **Edit
+shortcuts…**, which saves up to five preferred Action or Work Item references
+for slots 6–0 in machine-local palette state. Saving no choices removes the
+General override and restores automatic ordering. Reject General as a name for
+ordinary Context creation or rename, and ignore legacy stored General
+definitions when resolving membership or default slots.
+
+**Reason:** **All contexts** already uses General's slot bank, but Configure
+previously offered no way to edit that bank. Treating General as a normal
+Context would wrongly suggest that its all-items membership can be narrowed,
+renamed, deleted, or shared through `contexts.json`. A synthetic fixed row
+closes the configuration gap while preserving one virtual-root definition and
+the existing portable/personal data boundary.
+
 ## 2026-08-26 - Keep Send-to Folder destinations independent of clipboard state
 
 **Decision:** Reuse only Folder Actions whose destination can be resolved

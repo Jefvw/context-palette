@@ -91,6 +91,8 @@ def resolve_focus_state(
             else:
                 configured_item_slots.pop(definition.name, None)
     for definition in definitions:
+        if definition.name.casefold() == "general":
+            continue
         default_action_ids = tuple(
             dict.fromkeys(
                 (
@@ -138,11 +140,15 @@ def actions_for_context(
 ) -> list[Action]:
     """Return visible actions belonging to an explicit Focus in canonical order."""
     context_key = focus_context.casefold()
-    matching_definitions = [
-        definition
-        for definition in definitions
-        if definition.name.casefold() == context_key
-    ]
+    matching_definitions = (
+        []
+        if context_key == "general"
+        else [
+            definition
+            for definition in definitions
+            if definition.name.casefold() == context_key
+        ]
+    )
     configured_action_ids = {
         action_id
         for definition in matching_definitions
@@ -181,6 +187,8 @@ def palette_items_for_context(
         for action in actions_for_context(actions, focus_context, definitions)
     ]
     context_key = focus_context.casefold()
+    if context_key == "general":
+        return tuple(dict.fromkeys(references))
     for definition in definitions:
         if definition.name.casefold() != context_key:
             continue

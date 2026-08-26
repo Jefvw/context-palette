@@ -167,6 +167,37 @@ class FocusModelTests(unittest.TestCase):
         )
         self.assertEqual([action.id for action in other], ["two"])
 
+    def test_stored_general_definition_cannot_narrow_virtual_general(self):
+        actions = [
+            Action("one", "First", "General", "copy_text", "1"),
+            Action("two", "Second", "Other", "copy_text", "2"),
+        ]
+        stored_general = ContextDefinition(
+            "General",
+            preferred_action_ids=("one",),
+            action_ids=("one",),
+            work_item_refs=(WorkItemReference("work", "ISS-hidden"),),
+        )
+
+        focused = actions_for_context(actions, "General", [stored_general])
+        items = palette_items_for_context(actions, "General", [stored_general])
+        resolved = resolve_focus_state(
+            actions,
+            [stored_general],
+            PaletteState(focus_context="General"),
+        )
+
+        self.assertEqual([action.id for action in focused], ["one", "two"])
+        self.assertEqual(
+            items,
+            (
+                PaletteItemReference(action_id="one"),
+                PaletteItemReference(action_id="two"),
+            ),
+        )
+        self.assertNotIn("General", resolved.palette_state.context_slots)
+        self.assertNotIn("General", resolved.palette_state.context_item_slots)
+
     def test_context_definition_can_assign_built_in_action_without_editing_it(self):
         actions = [
             Action("built-in", "Built in", "General", "copy_text", "1"),

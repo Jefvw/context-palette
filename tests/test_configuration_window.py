@@ -19,6 +19,9 @@ from context_palette.configuration_window import (
     CONFIGURATION_TAB_INDEXES,
     ConfigurationWindow,
     ContextDialog,
+    GeneralShortcutsDialog,
+    GENERAL_CONTEXT_IID,
+    GENERAL_CONTEXT_SOURCE,
     GroupDialog,
     LOCAL_DESTINATION,
     PROJECT_DESTINATION,
@@ -46,6 +49,7 @@ from context_palette.command_surface import (
     GROUP_PRESENTATION_NESTED_MENU,
 )
 from context_palette.contexts import ContextDefinition
+from context_palette.palette_items import PaletteItemReference
 from context_palette.palette_state import PaletteState, load_palette_state
 from context_palette.work_items import DiscoveredWorkItem, WorkItemReference
 
@@ -620,11 +624,249 @@ class ConfigurationDialogTests(unittest.TestCase):
             configuration.context_detail_summary_var.value,
         )
         configuration.context_edit_button.configure.assert_called_once_with(
-            state="normal"
+            text="Edit…",
+            state="normal",
         )
         configuration.context_delete_button.configure.assert_called_once_with(
             state="normal"
         )
+
+    def test_context_tree_renders_fixed_general_row_first(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.contexts = [
+            ContextDefinition("Developing", action_ids=("open-code",))
+        ]
+        configuration.actions = [
+            Action(
+                "open-code",
+                "Open code editor",
+                "General",
+                "launch_app",
+                "code.exe",
+            )
+        ]
+        configuration.palette_state = PaletteState()
+        configuration.local_context_names = {"developing"}
+        configuration.context_tree = FakeActionTree()
+        configuration.context_filter_var = FakeVariable()
+        configuration.context_filter_count_var = FakeVariable()
+        configuration._available_work_items = Mock(return_value=())
+        configuration._update_context_controls = Mock()
+
+        configuration._render_contexts()
+
+        self.assertEqual(
+            configuration.context_tree.inserted,
+            [GENERAL_CONTEXT_IID, "context-0"],
+        )
+        general_options = configuration.context_tree.rows[GENERAL_CONTEXT_IID][1]
+        self.assertEqual(general_options["text"], "General")
+        self.assertEqual(
+            general_options["values"][0],
+            GENERAL_CONTEXT_SOURCE,
+        )
+        self.assertEqual(configuration.context_filter_count_var.value, "2 contexts")
+
+    def test_general_selection_only_enables_shortcut_editing(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.contexts = []
+        configuration.actions = [
+            Action("one", "One", "General", "copy_text", "Text")
+        ]
+        configuration.palette_state = PaletteState(
+            context_item_slots={
+                "General": (PaletteItemReference(action_id="one"),)
+            }
+        )
+        configuration.context_tree = FakeSelectedActionTree(GENERAL_CONTEXT_IID)
+        configuration._available_work_items = Mock(return_value=())
+        configuration.context_detail_title_var = FakeVariable()
+        configuration.context_detail_summary_var = FakeVariable()
+        configuration.context_edit_button = Mock()
+        configuration.context_delete_button = Mock()
+
+        configuration._update_context_controls()
+
+        self.assertEqual(
+            configuration.context_detail_title_var.value,
+            "General — All items",
+        )
+        self.assertIn(
+            "Automatic membership",
+            configuration.context_detail_summary_var.value,
+        )
+        configuration.context_edit_button.configure.assert_called_once_with(
+            text="Edit shortcuts…",
+            state="normal",
+        )
+        configuration.context_delete_button.configure.assert_called_once_with(
+            state="disabled"
+        )
+        configuration.context_delete_button.pack_forget.assert_called_once_with()
+
+    def test_general_shortcuts_save_action_only_preferences_to_palette(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            context_path = root / "contexts.json"
+            context_path.write_text("context sentinel", encoding="utf-8")
+            configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+            configuration.palette_path = root / "palette.json"
+            configuration.contexts_path = context_path
+            configuration.palette_state = PaletteState(
+                ("pin",),
+                "Customer",
+                {
+                    "gEnErAl": ("old-action",),
+                    "Customer": ("customer-action",),
+                },
+                7,
+                {
+                    "GENERAL": (PaletteItemReference(action_id="old-action"),),
+                    "Customer": (
+                        PaletteItemReference(action_id="customer-action"),
+                    ),
+                },
+            )
+            configuration.window = FakeWindow()
+            configuration.on_change = Mock()
+            configuration._reload = Mock()
+            configuration.feedback_var = FakeVariable()
+            configuration.feedback_label = Mock()
+            preferred = (PaletteItemReference(action_id="new-action"),)
+
+            self.assertTrue(configuration._save_general_shortcuts(preferred))
+
+            saved = load_palette_state(configuration.palette_path)
+            self.assertEqual(saved.pinned_action_ids, ("pin",))
+            self.assertEqual(saved.focus_context, "Customer")
+            self.assertEqual(saved.context_membership_version, 7)
+            self.assertEqual(saved.context_slots["Customer"], ("customer-action",))
+            self.assertEqual(saved.context_slots["General"], ("new-action",))
+            self.assertFalse(
+                any(
+                    name.casefold() == "general"
+                    for name in saved.context_item_slots
+                )
+            )
+            self.assertEqual(
+                [name for name in saved.context_slots if name.casefold() == "general"],
+                ["General"],
+            )
+            self.assertEqual(context_path.read_text(encoding="utf-8"), "context sentinel")
+            configuration.on_change.assert_called_once_with()
+            configuration._reload.assert_called_once_with()
+
+    def test_general_shortcuts_save_mixed_palette_item_preferences(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+            configuration.palette_path = Path(directory) / "palette.json"
+            configuration.palette_state = PaletteState(
+                context_slots={"Other": ("keep",)},
+                context_item_slots={
+                    "Other": (PaletteItemReference(action_id="keep"),)
+                },
+            )
+            configuration.window = FakeWindow()
+            configuration.on_change = Mock()
+            configuration._reload = Mock()
+            configuration.feedback_var = FakeVariable()
+            configuration.feedback_label = Mock()
+            preferred = (
+                PaletteItemReference(action_id="open-docs"),
+                PaletteItemReference(
+                    work_item_ref=WorkItemReference("product-work", "ISS-ABC-example")
+                ),
+            )
+
+            self.assertTrue(configuration._save_general_shortcuts(preferred))
+
+            saved = load_palette_state(configuration.palette_path)
+            self.assertFalse(
+                any(name.casefold() == "general" for name in saved.context_slots)
+            )
+            self.assertEqual(saved.context_item_slots["General"], preferred)
+            self.assertEqual(saved.context_slots["Other"], ("keep",))
+            self.assertEqual(
+                saved.context_item_slots["Other"],
+                (PaletteItemReference(action_id="keep"),),
+            )
+
+    def test_editing_general_opens_shortcuts_only_dialog(self) -> None:
+        work_item = DiscoveredWorkItem(
+            "product-work",
+            "Product work",
+            "ISS-ABC-example",
+            ROOT / "ISS-ABC-example",
+            "ISS-ABC-example",
+            "ISS",
+            "Issue",
+            "ABC",
+            "example",
+            (),
+            None,
+        )
+        action = Action("one", "One", "General", "copy_text", "Text")
+        preferred = (PaletteItemReference(action_id="one"),)
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.contexts = []
+        configuration.actions = [action]
+        configuration.palette_state = PaletteState(
+            context_slots={"General": ("one",)}
+        )
+        configuration.context_tree = FakeSelectedActionTree(GENERAL_CONTEXT_IID)
+        configuration.window = FakeWindow()
+        configuration._available_work_items = Mock(return_value=(work_item,))
+
+        with patch(
+            "context_palette.configuration_window.GeneralShortcutsDialog"
+        ) as dialog:
+            configuration._edit_context()
+
+        dialog.assert_called_once_with(
+            configuration.window,
+            [action],
+            (work_item,),
+            preferred,
+            configuration._save_general_shortcuts,
+        )
+
+    def test_clearing_general_shortcuts_returns_to_automatic_ordering(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+            configuration.palette_path = Path(directory) / "palette.json"
+            configuration.palette_state = PaletteState(
+                context_slots={
+                    "general": ("old",),
+                    "Other": ("keep",),
+                },
+                context_item_slots={
+                    "GENERAL": (PaletteItemReference(action_id="old"),),
+                    "Other": (PaletteItemReference(action_id="keep"),),
+                },
+            )
+            configuration.window = FakeWindow()
+            configuration.on_change = Mock()
+            configuration._reload = Mock()
+            configuration.feedback_var = FakeVariable()
+            configuration.feedback_label = Mock()
+
+            self.assertTrue(configuration._save_general_shortcuts(()))
+
+            saved = load_palette_state(configuration.palette_path)
+            self.assertFalse(
+                any(name.casefold() == "general" for name in saved.context_slots)
+            )
+            self.assertFalse(
+                any(
+                    name.casefold() == "general"
+                    for name in saved.context_item_slots
+                )
+            )
+            self.assertEqual(saved.context_slots["Other"], ("keep",))
+            self.assertEqual(
+                saved.context_item_slots["Other"],
+                (PaletteItemReference(action_id="keep"),),
+            )
 
     def test_empty_context_selection_disables_selection_commands(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
@@ -643,7 +885,8 @@ class ConfigurationDialogTests(unittest.TestCase):
             "Select a Context",
         )
         configuration.context_edit_button.configure.assert_called_once_with(
-            state="disabled"
+            text="Edit…",
+            state="disabled",
         )
         configuration.context_delete_button.configure.assert_called_once_with(
             state="disabled"
@@ -3067,7 +3310,7 @@ class ConfigurationDialogTests(unittest.TestCase):
 
     def test_context_dialog_stays_open_when_save_callback_fails(self) -> None:
         dialog = ContextDialog.__new__(ContextDialog)
-        dialog.name = FakeVariable("General")
+        dialog.name = FakeVariable("Research")
         dialog.description = FakeVariable()
         dialog.technology = FakeVariable()
         dialog.task = FakeVariable()
@@ -3080,6 +3323,139 @@ class ConfigurationDialogTests(unittest.TestCase):
         dialog._save()
 
         self.assertEqual(dialog.window.destroy_calls, 0)
+
+    def test_context_dialog_rejects_reserved_general_name(self) -> None:
+        dialog = ContextDialog.__new__(ContextDialog)
+        dialog.name = FakeVariable("  gEnErAl  ")
+        dialog.window = FakeWindow()
+        dialog.on_save = Mock()
+
+        with patch(
+            "context_palette.configuration_window.messagebox.showerror"
+        ) as error:
+            dialog._save()
+
+        dialog.on_save.assert_not_called()
+        self.assertEqual(dialog.window.destroy_calls, 0)
+        self.assertEqual(error.call_args.args[0], "General is built in")
+        self.assertIn("Edit shortcuts", error.call_args.args[1])
+
+    def test_general_shortcuts_dialog_edits_actions_and_work_items_only(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        captured: list[tuple[PaletteItemReference, ...]] = []
+        action = Action("open-docs", "Open docs", "General", "copy_text", "x")
+        work_item = DiscoveredWorkItem(
+            "product-work",
+            "Product work",
+            "ISS-ABC-example",
+            ROOT / "ISS-ABC-example",
+            "ISS-ABC-example",
+            "ISS",
+            "Issue",
+            "ABC",
+            "example",
+            (),
+            None,
+        )
+        action_reference = PaletteItemReference(action_id="open-docs")
+        work_item_reference = PaletteItemReference(
+            work_item_ref=WorkItemReference("product-work", "ISS-ABC-example")
+        )
+        try:
+            dialog = GeneralShortcutsDialog(
+                root,
+                [action],
+                (work_item,),
+                (action_reference,),
+                lambda preferred: captured.append(preferred) or True,
+            )
+            root.update_idletasks()
+
+            self.assertEqual(dialog.window.title(), "Edit General shortcuts")
+            self.assertEqual(len(dialog.slot_choices), 5)
+            self.assertFalse(hasattr(dialog, "name"))
+            self.assertFalse(hasattr(dialog, "member_targets"))
+            available_references = set(dialog.item_choices.values())
+            self.assertIn(action_reference, available_references)
+            self.assertIn(work_item_reference, available_references)
+            self.assertEqual(dialog.slots[1].get(), "Automatic — empty")
+
+            dialog.slots[0].set(dialog.labels_by_reference[work_item_reference])
+            dialog.slots[1].set(dialog.labels_by_reference[action_reference])
+            dialog._save()
+
+            self.assertEqual(
+                captured,
+                [(work_item_reference, action_reference)],
+            )
+            self.assertFalse(dialog.window.winfo_exists())
+        finally:
+            for child in root.winfo_children():
+                child.destroy()
+            root.destroy()
+
+    def test_general_shortcuts_dialog_shows_effective_automatic_slots(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        captured: list[tuple[PaletteItemReference, ...]] = []
+        actions = [
+            Action("first", "Current date and time", "General", "copy_text", "1"),
+            Action("second", "URL-encoded clipboard text", "General", "copy_text", "2"),
+        ]
+        try:
+            dialog = GeneralShortcutsDialog(
+                root,
+                actions,
+                (),
+                (),
+                lambda preferred: captured.append(preferred) or True,
+            )
+            root.update_idletasks()
+
+            self.assertEqual(
+                [variable.get() for variable in dialog.slots[:3]],
+                [
+                    "Automatic — Current date and time",
+                    "Automatic — URL-encoded clipboard text",
+                    "Automatic — empty",
+                ],
+            )
+            dialog._save()
+
+            self.assertEqual(captured, [()])
+            self.assertFalse(dialog.window.winfo_exists())
+        finally:
+            for child in root.winfo_children():
+                child.destroy()
+            root.destroy()
+
+    def test_general_shortcuts_dialog_rejects_a_gap_before_a_preference(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        action = Action("one", "One", "General", "copy_text", "1")
+        saved = Mock(return_value=True)
+        try:
+            dialog = GeneralShortcutsDialog(root, [action], (), (), saved)
+            dialog.slots[1].set(dialog.labels_by_reference[
+                PaletteItemReference(action_id="one")
+            ])
+
+            with patch(
+                "context_palette.configuration_window.messagebox.showerror"
+            ) as error:
+                dialog._save()
+
+            saved.assert_not_called()
+            self.assertEqual(
+                error.call_args.args[0],
+                "Choose General shortcuts in order",
+            )
+            self.assertTrue(dialog.window.winfo_exists())
+        finally:
+            for child in root.winfo_children():
+                child.destroy()
+            root.destroy()
 
     def test_new_context_passes_explicit_local_destination(self) -> None:
         dialog = ContextDialog.__new__(ContextDialog)

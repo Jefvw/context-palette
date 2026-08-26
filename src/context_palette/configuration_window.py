@@ -99,9 +99,11 @@ from .palette_state import (
     MAX_CONTEXT_SLOT_ACTIONS,
     PaletteState,
     load_palette_state,
+    palette_item_slots,
     save_palette_state,
     slot_display_number,
 )
+from .palette_items import PaletteItemReference
 from .context_membership_field import (
     ContextMembershipField,
     TagSelectionField,
@@ -141,6 +143,9 @@ ACTION_TYPE_EXAMPLES = {
 
 LOCAL_DESTINATION = "My configuration"
 PROJECT_DESTINATION = "Built-in"
+GENERAL_CONTEXT_NAME = "General"
+GENERAL_CONTEXT_IID = "context-general"
+GENERAL_CONTEXT_SOURCE = "Automatic"
 STANDARD_QUICK_GROUP_ID = "standard"
 EMPTY_PIN_LABEL = "Not assigned"
 DEFAULT_TEXT_ACTION_FILENAME = "local_text_action_source.txt"
@@ -2249,12 +2254,102 @@ class ConfigurationWindow:
         self._render_buttons()
         self._refresh_diagnostics()
 
+    def _general_preferred_items(self) -> tuple[PaletteItemReference, ...]:
+        item_slots = self.palette_state.context_item_slots or {}
+        for name, references in item_slots.items():
+            if name.casefold() == GENERAL_CONTEXT_NAME.casefold():
+                return tuple(references)
+        legacy_slots = self.palette_state.context_slots or {}
+        for name, action_ids in legacy_slots.items():
+            if name.casefold() == GENERAL_CONTEXT_NAME.casefold():
+                return tuple(
+                    PaletteItemReference(action_id=action_id)
+                    for action_id in action_ids
+                )
+        return ()
+
+    def _general_context_definition(self) -> ContextDefinition:
+        work_items = tuple(self._available_work_items())
+        preferred_items = self._general_preferred_items()
+        return ContextDefinition(
+            GENERAL_CONTEXT_NAME,
+            description=(
+                "Automatic membership: all Active Actions and available Work Items. "
+                "Only shortcuts 6–0 are editable."
+            ),
+            preferred_action_ids=tuple(
+                reference.action_id
+                for reference in preferred_items
+                if reference.action_id
+            ),
+            action_ids=tuple(action.id for action in self.actions),
+            work_item_refs=tuple(
+                WorkItemReference(item.source_id, item.relative_folder)
+                for item in work_items
+            ),
+            preferred_item_refs=(
+                preferred_items
+                if any(
+                    reference.work_item_ref is not None
+                    for reference in preferred_items
+                )
+                else ()
+            ),
+        )
+
+    def _general_shortcut_labels(
+        self,
+        work_items: tuple[DiscoveredWorkItem, ...],
+    ) -> tuple[str, ...]:
+        actions_by_id = {action.id: action for action in self.actions}
+        return tuple(
+            (
+                actions_by_id[reference.action_id].title
+                if reference.action_id in actions_by_id
+                else f"Missing action: {reference.action_id}"
+            )
+            if reference.action_id
+            else work_item_reference_label(reference.work_item_ref, work_items)
+            for reference in self._general_preferred_items()
+        )
+
     def _render_contexts(self) -> None:
         self.context_tree.delete(*self.context_tree.get_children())
         query = self.context_filter_var.get()
         matches = 0
         work_items = self._available_work_items()
+        general = self._general_context_definition()
+        if context_matches_filter(
+            general,
+            query,
+            actions=self.actions,
+            work_items=work_items,
+            personal=True,
+        ):
+            matches += 1
+            self.context_tree.insert(
+                "",
+                tk.END,
+                iid=GENERAL_CONTEXT_IID,
+                text=GENERAL_CONTEXT_NAME,
+                values=(
+                    GENERAL_CONTEXT_SOURCE,
+                    (
+                        f"{len(self.actions) + len(work_items)} member(s) · "
+                        "Context shortcuts: "
+                        + (
+                            ", ".join(self._general_shortcut_labels(work_items))
+                            or "automatic"
+                        )
+                    ),
+                ),
+                tags=("general",),
+            )
+        persisted_count = 0
         for index, context in enumerate(self.contexts):
+            if context.name.casefold() == GENERAL_CONTEXT_NAME.casefold():
+                continue
+            persisted_count += 1
             local = context.name.casefold() in self.local_context_names
             if not context_matches_filter(
                 context,
@@ -2275,10 +2370,11 @@ class ConfigurationWindow:
             )
         self.context_tree.tag_configure("shared", foreground="#666666")
         select_first_tree_item(self.context_tree)
+        total = 1 + persisted_count
         self.context_filter_count_var.set(
-            f"{matches} of {len(self.contexts)}"
+            f"{matches} of {total}"
             if query.strip()
-            else f"{len(self.contexts)} contexts"
+            else f"{total} contexts"
         )
         self._update_context_controls()
 
@@ -2759,6 +2855,8 @@ class ConfigurationWindow:
         selection = self.context_tree.selection()
         if not selection:
             return None
+        if selection[0] == GENERAL_CONTEXT_IID:
+            return self._general_context_definition(), GENERAL_CONTEXT_SOURCE
         context = self.contexts[int(selection[0].split("-")[1])]
         values = self.context_tree.item(selection[0], "values")
         source = values[0] if values else PROJECT_DESTINATION
@@ -2773,10 +2871,33 @@ class ConfigurationWindow:
             self.context_detail_summary_var.set(
                 "Choose a Context to review its members and context shortcuts."
             )
-            self.context_edit_button.configure(state=tk.DISABLED)
+            self.context_edit_button.configure(text="Edit…", state=tk.DISABLED)
             self.context_delete_button.configure(state=tk.DISABLED)
             return
         context, source = selected
+        if source == GENERAL_CONTEXT_SOURCE:
+            preferred_count = len(self._general_preferred_items())
+            available_count = len(self.actions) + len(self._available_work_items())
+            ordering = (
+                "saved in local settings"
+                if preferred_count
+                else "automatic ordering"
+            )
+            self.context_detail_title_var.set("General — All items")
+            self.context_detail_summary_var.set(
+                compact_selection_summary(
+                    f"Automatic membership · {available_count} "
+                    f"available item(s) · {preferred_count} preferred shortcut(s) · "
+                    f"{ordering}"
+                )
+            )
+            self.context_edit_button.configure(
+                text="Edit shortcuts…",
+                state=tk.NORMAL,
+            )
+            self.context_delete_button.configure(state=tk.DISABLED)
+            self.context_delete_button.pack_forget()
+            return
         member_count = context_membership_count(context, self.actions)
         preferred_count = len(context.preferred_items)
         description = " ".join(context.description.split()) or "No description"
@@ -2789,8 +2910,9 @@ class ConfigurationWindow:
                 f"{preferred_count} context shortcut(s) · {description}"
             )
         )
-        self.context_edit_button.configure(state=tk.NORMAL)
+        self.context_edit_button.configure(text="Edit…", state=tk.NORMAL)
         self.context_delete_button.configure(state=tk.NORMAL)
+        self.context_delete_button.pack(side=tk.LEFT, padx=(6, 0))
 
     def _edit_action(self) -> None:
         action = self._selected_stored_action()
@@ -3217,6 +3339,15 @@ class ConfigurationWindow:
         if selected is None:
             return
         context, source = selected
+        if source == GENERAL_CONTEXT_SOURCE:
+            GeneralShortcutsDialog(
+                self.window,
+                self.actions,
+                self._available_work_items(),
+                self._general_preferred_items(),
+                self._save_general_shortcuts,
+            )
+            return
         local = source == LOCAL_DESTINATION
         if not local and not messagebox.askokcancel(
                 "Edit built-in context?",
@@ -3241,6 +3372,60 @@ class ConfigurationWindow:
             work_items=(self._available_work_items() if local else ()),
             shared=not local,
         )
+
+    def _save_general_shortcuts(
+        self,
+        preferred_items: tuple[PaletteItemReference, ...],
+    ) -> bool:
+        context_slots = {
+            name: values
+            for name, values in self.palette_state.context_slots.items()
+            if name.casefold() != GENERAL_CONTEXT_NAME.casefold()
+        }
+        context_item_slots = {
+            name: values
+            for name, values in self.palette_state.context_item_slots.items()
+            if name.casefold() != GENERAL_CONTEXT_NAME.casefold()
+        }
+        if preferred_items:
+            if any(
+                reference.work_item_ref is not None
+                for reference in preferred_items
+            ):
+                context_item_slots[GENERAL_CONTEXT_NAME] = preferred_items
+            else:
+                context_slots[GENERAL_CONTEXT_NAME] = tuple(
+                    reference.action_id
+                    for reference in preferred_items
+                    if reference.action_id
+                )
+        updated = PaletteState(
+            self.palette_state.pinned_action_ids,
+            self.palette_state.focus_context,
+            context_slots,
+            self.palette_state.context_membership_version,
+            context_item_slots,
+        )
+        try:
+            save_palette_state(self.palette_path, updated)
+        except (ActionError, OSError) as exc:
+            messagebox.showerror(
+                "General shortcuts were not saved",
+                "Context Palette could not save General's shortcuts.\n\n"
+                f"{exc}\n\nThe previous shortcuts remain active.",
+                parent=self.window,
+            )
+            return False
+        self.palette_state = updated
+        self.on_change()
+        self._reload()
+        self.feedback_var.set(
+            "Saved General shortcuts 6–0 in local settings."
+            if preferred_items
+            else "Restored automatic General shortcut ordering."
+        )
+        self.feedback_label.configure(style="Success.TLabel")
+        return True
 
     def _save_context(
         self,
@@ -3336,6 +3521,14 @@ class ConfigurationWindow:
         if selected is None:
             return
         context, source = selected
+        if source == GENERAL_CONTEXT_SOURCE:
+            messagebox.showinfo(
+                "General cannot be deleted",
+                "General is the automatic All items context. Its membership, name, "
+                "and lifecycle are fixed; use Edit shortcuts to change slots 6–0.",
+                parent=self.window,
+            )
+            return
         local = source == LOCAL_DESTINATION
         destination = self.local_contexts_path if local else self.contexts_path
         membership_count = context_membership_count(context, self.actions)
@@ -4929,6 +5122,265 @@ class ActionDialog:
             self.window.destroy()
 
 
+class GeneralShortcutsDialog:
+    """Edit only the machine-local 6–0 preferences for virtual General."""
+
+    def __init__(
+        self,
+        parent: tk.Toplevel,
+        actions: list[Action],
+        work_items: tuple[DiscoveredWorkItem, ...],
+        preferred_items: tuple[PaletteItemReference, ...],
+        on_save: Callable[[tuple[PaletteItemReference, ...]], bool],
+    ) -> None:
+        self.on_save = on_save
+        self.actions = actions
+        self.window = tk.Toplevel(parent)
+        self.window.bind("<Escape>", lambda _event: self.window.destroy())
+        self.window.title("Edit General shortcuts")
+        configure_standard_window(self.window, parent)
+
+        outer = ttk.Frame(self.window, padding=12)
+        outer.pack(fill=tk.BOTH, expand=True)
+        self.controls_frame = _dialog_buttons(
+            outer,
+            self._save,
+            self.window.destroy,
+        )
+        self.form_view = _ScrollableDialogBody(self.window, outer)
+        form = self.form_view.content
+
+        ttk.Label(
+            form,
+            text="General — All items",
+            style="Heading.TLabel",
+        ).pack(anchor=tk.W)
+        ttk.Label(
+            form,
+            text=(
+                "General automatically contains every Active Action and available "
+                "Work Item. Its name and membership are fixed. Choose only which "
+                "items should appear first in shortcuts 6–0 on this computer."
+            ),
+            style="Muted.TLabel",
+            wraplength=610,
+        ).pack(anchor=tk.W, pady=(3, 10))
+
+        action_choices = _action_choices(actions)
+        work_item_choices = _work_item_choices(work_items)
+        self.item_choices: dict[str, PaletteItemReference] = {}
+        self.labels_by_reference: dict[PaletteItemReference, str] = {}
+        self.display_names_by_reference: dict[PaletteItemReference, str] = {}
+        options: list[ActionPickerOption] = []
+
+        for option in _action_picker_options(actions, choices=action_choices):
+            reference = PaletteItemReference(action_id=option.action_id)
+            self.item_choices[option.label] = reference
+            self.labels_by_reference[reference] = option.label
+            self.display_names_by_reference[reference] = next(
+                action.title for action in actions if action.id == option.action_id
+            )
+            options.append(option)
+        for option in _work_item_picker_options(work_items, work_item_choices):
+            reference = work_item_choices[option.label]
+            item_reference = PaletteItemReference(work_item_ref=reference)
+            self.item_choices[option.label] = item_reference
+            self.labels_by_reference[item_reference] = option.label
+            item = next(
+                candidate
+                for candidate in work_items
+                if WorkItemReference(
+                    candidate.source_id,
+                    candidate.relative_folder,
+                )
+                == reference
+            )
+            self.display_names_by_reference[item_reference] = (
+                f"{item.display_name} · {item.source_name}"
+            )
+            options.append(option)
+
+        for reference in preferred_items:
+            if reference in self.labels_by_reference:
+                continue
+            label = (
+                f"Unavailable action: {reference.action_id}"
+                if reference.action_id
+                else work_item_reference_label(
+                    reference.work_item_ref,
+                    work_items,
+                )
+            )
+            if label in self.item_choices:
+                label = f"{label} · {reference.stable_key}"
+            self.item_choices[label] = reference
+            self.labels_by_reference[reference] = label
+            self.display_names_by_reference[reference] = label
+            options.append(
+                ActionPickerOption(reference.stable_key, label, label)
+            )
+        self.options = tuple(options)
+
+        ttk.Label(
+            form,
+            text="Shortcuts 6–0",
+            style="Heading.TLabel",
+        ).pack(anchor=tk.W, pady=(3, 0))
+        ttk.Label(
+            form,
+            text=(
+                "Automatic rows show the shortcuts currently used. Choose items "
+                "from slot 6 downward only when you want to fix their order."
+            ),
+            style="Muted.TLabel",
+            wraplength=610,
+        ).pack(anchor=tk.W, pady=(2, 5))
+
+        self.slots: list[tk.StringVar] = []
+        self.slot_choices: list[ActionPickerField] = []
+        effective_slots = self._effective_slots(preferred_items)
+        self._updating_slots = True
+        for index, slot in enumerate(CONTEXT_SLOT_NUMBERS):
+            automatic_label = self._automatic_label(
+                effective_slots.get(slot)
+            )
+            label = automatic_label
+            if index < len(preferred_items):
+                label = self.labels_by_reference[preferred_items[index]]
+            variable = tk.StringVar(value=label)
+            self.slots.append(variable)
+            slot_label = slot_display_number(slot)
+            row = ttk.Frame(form)
+            row.pack(fill=tk.X, pady=3)
+            ttk.Label(row, text=f"Slot {slot_label}", width=8).pack(side=tk.LEFT)
+            chooser = ActionPickerField(
+                row,
+                variable=variable,
+                options=self.options,
+                empty_label=automatic_label,
+                title=f"Choose General item for slot {slot_label}",
+                item_name="Palette item",
+                item_plural="Palette items",
+            )
+            chooser.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            self.slot_choices.append(chooser)
+        self._updating_slots = False
+        self.slot_traces = [
+            variable.trace_add(
+                "write",
+                lambda *_args: self._refresh_automatic_slots(),
+            )
+            for variable in self.slots
+        ]
+
+        self.window.transient(parent)
+        self.window.grab_set()
+        if self.slot_choices:
+            _focus_entry(self.window, self.slot_choices[0].entry)
+
+    def _effective_slots(
+        self,
+        preferred_items: tuple[PaletteItemReference, ...],
+    ) -> dict[int, PaletteItemReference]:
+        if any(
+            reference.work_item_ref is not None
+            for reference in preferred_items
+        ):
+            state = PaletteState(
+                focus_context=GENERAL_CONTEXT_NAME,
+                context_item_slots={GENERAL_CONTEXT_NAME: preferred_items},
+            )
+        else:
+            state = PaletteState(
+                focus_context=GENERAL_CONTEXT_NAME,
+                context_slots={
+                    GENERAL_CONTEXT_NAME: tuple(
+                        reference.action_id
+                        for reference in preferred_items
+                        if reference.action_id
+                    )
+                },
+            )
+        return palette_item_slots(self.actions, state)
+
+    def _automatic_label(
+        self,
+        reference: PaletteItemReference | None,
+    ) -> str:
+        if reference is None:
+            return "Automatic — empty"
+        name = self.display_names_by_reference.get(
+            reference,
+            self.labels_by_reference.get(reference, reference.stable_key),
+        )
+        return f"Automatic — {name}"
+
+    def _selected_prefix(self) -> tuple[PaletteItemReference, ...]:
+        selected: list[PaletteItemReference] = []
+        for variable in self.slots:
+            reference = self.item_choices.get(variable.get())
+            if reference is None:
+                break
+            selected.append(reference)
+        return tuple(selected)
+
+    def _refresh_automatic_slots(self) -> None:
+        if self._updating_slots:
+            return
+        effective_slots = self._effective_slots(self._selected_prefix())
+        self._updating_slots = True
+        try:
+            for slot, variable, chooser in zip(
+                CONTEXT_SLOT_NUMBERS,
+                self.slots,
+                self.slot_choices,
+            ):
+                if variable.get() in self.item_choices:
+                    continue
+                automatic_label = self._automatic_label(
+                    effective_slots.get(slot)
+                )
+                chooser.set_options(
+                    self.options,
+                    empty_label=automatic_label,
+                )
+                variable.set(automatic_label)
+        finally:
+            self._updating_slots = False
+
+    def _save(self) -> None:
+        selected = tuple(
+            self.item_choices.get(variable.get())
+            for variable in self.slots
+        )
+        first_automatic = next(
+            (index for index, reference in enumerate(selected) if reference is None),
+            len(selected),
+        )
+        if any(reference is not None for reference in selected[first_automatic:]):
+            messagebox.showerror(
+                "Choose General shortcuts in order",
+                "Set preferred shortcuts from slot 6 downward, or clear later "
+                "preferred slots before returning an earlier slot to Automatic.",
+                parent=self.window,
+            )
+            return
+        preferred_items = tuple(
+            reference
+            for reference in selected[:first_automatic]
+            if reference is not None
+        )
+        if len(set(preferred_items)) != len(preferred_items):
+            messagebox.showerror(
+                "Choose each item once",
+                "A General shortcut item can be preferred only once.",
+                parent=self.window,
+            )
+            return
+        if self.on_save(preferred_items):
+            self.window.destroy()
+
+
 class ContextDialog:
     def __init__(
         self, parent: tk.Toplevel, context: ContextDefinition | None,
@@ -5215,6 +5667,14 @@ class ContextDialog:
         name = self.name.get().strip()
         if not name:
             messagebox.showerror("Context Palette", "Context name cannot be empty.", parent=self.window)
+            return
+        if name.casefold() == GENERAL_CONTEXT_NAME.casefold():
+            messagebox.showerror(
+                "General is built in",
+                "General is the automatic All items context. Select General in "
+                "Configure > Contexts and use Edit shortcuts to change slots 6–0.",
+                parent=self.window,
+            )
             return
         member_targets = tuple(
             dict.fromkeys(

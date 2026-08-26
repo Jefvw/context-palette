@@ -4,6 +4,14 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Made virtual **General** visible as the fixed first row in Configure →
+  Contexts. Its automatic all-Action/all-Work-Item membership, name, and
+  lifecycle remain locked, while **Edit shortcuts…** now provides the missing
+  local editor for preferred slots 6–0. Clearing every choice restores
+  automatic General ordering; no General record is written to a Context file.
+- Fixed the bulk-update review layout so its status line and effect-labelled
+  **Update N Actions** and **Close** controls remain visible in the fixed footer
+  at the supported minimum window size and 150% display scaling.
 - Added a constrained **Send to… → Open with → Open folder in VS Code** route.
   It accepts one existing absolute folder or file path from Input / Output,
   opens a folder itself or a file's containing folder through Windows'

@@ -632,7 +632,11 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     self.assertEqual(
                         len(trees_by_heading["Context"].get_children()),
-                        1,
+                        2,
+                    )
+                    self.assertEqual(
+                        trees_by_heading["Context"].get_children()[0],
+                        "context-general",
                     )
                     self.assertEqual(
                         len(
@@ -2522,6 +2526,29 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertGreater(
                         app.configuration_window.context_tree.winfo_height(),
                         70,
+                    )
+                    self.assertEqual(
+                        app.configuration_window.context_tree.selection(),
+                        ("context-general",),
+                    )
+                    self.assertEqual(
+                        app.configuration_window.context_edit_button.cget("text"),
+                        "Edit shortcuts…",
+                    )
+                    self.assertFalse(
+                        app.configuration_window.context_delete_button.winfo_ismapped()
+                    )
+                    app.configuration_window.context_tree.selection_set("context-0")
+                    app.configuration_window.context_tree.event_generate(
+                        "<<TreeviewSelect>>"
+                    )
+                    root.update()
+                    self.assertEqual(
+                        app.configuration_window.context_edit_button.cget("text"),
+                        "Edit…",
+                    )
+                    self.assertTrue(
+                        app.configuration_window.context_delete_button.winfo_ismapped()
                     )
                     app.configuration_window.context_detail_summary_var.set(
                         "Maximum bounded Context selection detail " * 4

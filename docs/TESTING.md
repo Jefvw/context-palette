@@ -498,6 +498,15 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    metadata only; verify relevance order and no shortcut promotion. Confirm
    Shift+1–5 never executes and legacy focus/pin IDs survive a palette-state
    save without restoring a Context filter.
+   Open Configure → Contexts and verify **General — All items** is the fixed
+   first row. Confirm its card offers **Edit shortcuts…** but no rename,
+    membership, or delete command. Assign an Action and a Work Item to slots 6
+    and 7, save, clear to **All contexts**, and verify that General bank appears.
+    Reopen the editor and verify unassigned rows show their effective
+    **Automatic — _item_** values. Return every row to **Automatic**, save, and
+    verify automatic General ordering returns. Confirm no General record was
+    added to either Context file and the preferences were stored only in local
+    palette state.
 8. At the standard `780x600` size and supported minimum, verify Quick actions
    use two readable columns without clipping beneath discovery. Narrow the
    command console until one column is genuinely necessary, then verify stable

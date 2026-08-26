@@ -258,6 +258,10 @@ General (all actions)
 └── Tags (independent discovery filters)
 ```
 
+Configure → Contexts shows virtual **General — All items** as a fixed row.
+Its membership cannot be changed, but **Edit shortcuts…** sets its local
+preferred Action/Work Item slots 6–0; clearing them restores automatic ordering.
+
 Creation and editing are permanent after confirmation. Context Palette keeps
 atomic backups, but the user owns the consequences of shared or machine-specific
 configuration changes.

@@ -799,8 +799,16 @@ column appears only when Active and Archived records are mixed.
 The Contexts and Quick actions pages use the same visual hierarchy without
 introducing shared domain state: a page title and purpose, one primary creation
 command, Find, a dominant scrollable table, and a selection-aware card. The
-Contexts card preserves the existing Context-ID lookup and deletion boundary.
-Its editor presents membership before optional context shortcuts 6–0. The Quick
+Contexts table prepends a synthetic **General — All items** row. It is not a
+`ContextDefinition`: its membership is computed from every Active Action and
+available Work Item, while its optional 6–0 preferences are read from and
+written only to local `PaletteState`. Its selection card hides Delete and opens
+a shortcuts-only editor; clearing all choices removes both legacy and typed
+General overrides so normal automatic ordering resumes. Persisted definitions
+named General are ignored by focus resolution, and the ordinary Context editor
+reserves that name. Specific Context cards preserve the existing Context-ID
+lookup and deletion boundary, and their editor presents membership before
+optional context shortcuts 6–0. The Quick
 actions card derives enabled commands from the selected record's ownership and
 depth: configured records may be edited, moved, or deleted; automatic groups
 route to filtered Actions and automatic leaves route to their owning Action.

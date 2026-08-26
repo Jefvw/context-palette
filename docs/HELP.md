@@ -283,10 +283,16 @@ does not.
 
 Open the unified Filter menu and choose **Manage contexts…** for a direct route,
 or choose **Configure** (or press `Ctrl+,`) and select **Contexts**. There you
-can create or edit a Context, choose its Actions and Work Items, and select up
-to five preferred items for slots 6–0. **My configuration** definitions stay on
-this PC. **Built-in** definitions show a developer warning before editing. The
-only shipped specific Context is **Developing Context Palette** in
+see **General — All items** first. General's membership, name, and lifecycle are
+automatic and cannot be edited or deleted; choose **Edit shortcuts…** to select
+up to five preferred Actions or Work Items for its slots 6–0 on this computer.
+Rows labelled **Automatic — _item_** show the shortcuts currently in use without
+being saved as overrides. Choose fixed items from slot 6 downward; return every
+row to **Automatic** to restore fully automatic General ordering.
+For a specific Context, create or edit its membership and preferred slots as
+before. **My configuration** definitions stay on this PC. **Built-in**
+definitions show a developer warning before editing. The only shipped specific
+Context is **Developing Context Palette** in
 `data/contexts.json`; personal or work-specific definitions live in ignored
 `data/local_contexts.json`. The complete format is documented in
 `docs/CONTEXT_CONFIGURATION.md`.
