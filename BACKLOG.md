@@ -53,6 +53,17 @@ This file contains actionable future work. Completed user-visible work belongs i
   Complete the remaining setup/missing-engine, all-visible, AutoSave rejection,
   added-filter, hidden-sheet, stale, partial/unknown, no-retry, Return-to-Excel,
   no-save/no-close, and 100%/125%/150% display-scaling matrix.
+- Complete disposable real-Excel UAT for **UAT: Convert scientific-notation
+  columns** against Python Excel `08af313` before removing its execution gate.
+  With `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1` set before startup, cover
+  scientific text, numeric scalars, leading-zero and ordinary text, formulas
+  outside the selected scope, a formula-in-scope blocked plan, blank and
+  duplicate headers, duplicate workbook names across Excel processes,
+  pagination/truncation, precision acknowledgement, default and overridden
+  sibling recovery paths, stale/recovery conflicts, verified recovery content,
+  partial/unknown no-retry guidance, dirty-unsaved/open Excel lifecycle, no
+  extra Excel process, Return to Excel, and 100%/125%/150% scaling. Keep the
+  Action UAT-labelled and Execute fail-closed until that matrix passes.
 - Manually validate the first Python Excel CSV automation vertical slice on a
   second standard-user PC. Cover missing/invalid local engine setup,
   Input/Output and Drop-into exact `.xlsx` intake, the 100-workbook limit,

@@ -1792,6 +1792,56 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertIs(app.excel_automation_window, workflow)
         self.assertIn("live Excel format", message)
 
+    def test_live_text_conversion_uses_open_workbooks_and_startup_uat_gate(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.status_var = FakeVariable()
+        app.excel_automation_settings_path = Path("C:/settings.json")
+        app.excel_automation_window = None
+        app.live_text_conversion_execution_enabled = True
+        app._workspace_text = Mock(return_value="not workbook input")
+        app._excel_automation_closed = Mock()
+        app._open_excel_recovery_file = Mock()
+        app._open_excel_output_folder = Mock()
+        workflow = Mock(busy=False)
+
+        with (
+            patch(
+                "context_palette.launcher.ExcelLiveTextConversionWindow",
+                return_value=workflow,
+            ) as window,
+            patch("context_palette.launcher.window_process_id", return_value=55),
+            patch(
+                "context_palette.launcher.window_title",
+                return_value="Budget.xlsx - Excel",
+            ),
+        ):
+            message = app._run_excel_automation(
+                Action(
+                    "excel-live-text",
+                    "UAT: Convert scientific-notation columns",
+                    "General",
+                    "excel_automation",
+                    "excel.convert_live_column_representation",
+                ),
+                source_window_handle=123,
+            )
+
+        app._workspace_text.assert_not_called()
+        self.assertEqual(window.call_args.kwargs["source_window_handle"], 123)
+        self.assertEqual(window.call_args.kwargs["source_process_id"], 55)
+        self.assertEqual(
+            window.call_args.kwargs["source_window_title"],
+            "Budget.xlsx - Excel",
+        )
+        self.assertTrue(window.call_args.kwargs["execution_enabled"])
+        self.assertIs(
+            window.call_args.kwargs["file_opener"],
+            app._open_excel_recovery_file,
+        )
+        self.assertIs(app.excel_automation_window, workflow)
+        self.assertIn("text-conversion", message)
+
     def test_excel_runner_receives_and_consumes_the_captured_window(self):
         app = LauncherApp.__new__(LauncherApp)
         app.source_foreground_handle = 123

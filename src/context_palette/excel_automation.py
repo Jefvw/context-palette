@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import math
 import os
 from pathlib import Path
 import queue
@@ -30,6 +31,10 @@ PLAN_OPERATION = "plan_automation"
 EXECUTE_OPERATION = "execute_automation"
 LIVE_INVENTORY_OPERATION = "inventory_live_excel"
 LIVE_FORMAT_PROFILE_OPERATION = "apply_live_format_profile"
+DESCRIBE_CAPABILITIES_OPERATION = "describe_capabilities"
+LIVE_PREFLIGHT_OPERATION = "preflight_live_columns"
+LIVE_CONVERSION_PLAN_OPERATION = "plan_live_column_conversion"
+LIVE_CONVERSION_EXECUTE_OPERATION = "convert_live_column_representation"
 OPERATION_VERSION = "1.0"
 MAX_WORKBOOKS = 100
 MAX_REQUEST_BYTES = 1024 * 1024
@@ -37,8 +42,26 @@ DEFAULT_MAX_STDOUT_BYTES = 4 * 1024 * 1024
 DEFAULT_MAX_STDERR_BYTES = 256 * 1024
 PYTHON_EXCEL_SIBLING_DIRECTORY = "python-excel"
 PYTHON_EXCEL_LAUNCHER_NAME = "python-excel.bat"
+LIVE_TEXT_CONVERSION_AUTOMATION_ID = "excel.convert_live_column_representation"
+LIVE_TEXT_CONVERSION_UAT_ENV = "CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION"
+LIVE_HEADER_ROW = 1
+LIVE_MAXIMUM_COLUMNS = 100
+LIVE_MAXIMUM_DATA_ROWS = 10_000
+LIVE_MAXIMUM_SAMPLES_PER_COLUMN = 10
+LIVE_TEXT_LIMIT = 200
+LIVE_MAXIMUM_EXCEL_COLUMN = 16_384
 
-AutomationPhase = Literal["describe", "plan", "execute", "inventory", "apply"]
+AutomationPhase = Literal[
+    "describe",
+    "plan",
+    "execute",
+    "inventory",
+    "apply",
+    "capabilities",
+    "preflight",
+    "conversion_plan",
+    "conversion_execute",
+]
 CallClassification = Literal[
     "start_failed",
     "outer_error",
@@ -58,6 +81,17 @@ CallClassification = Literal[
     "apply_failed",
     "apply_partial_failure",
     "apply_unknown",
+    "capabilities_succeeded",
+    "capabilities_failed",
+    "preflight_succeeded",
+    "preflight_failed",
+    "conversion_plan_blocked",
+    "conversion_plan_ready",
+    "conversion_plan_failed",
+    "conversion_execute_succeeded",
+    "conversion_execute_failed",
+    "conversion_execute_partial_failure",
+    "conversion_execute_unknown",
 ]
 
 
@@ -325,6 +359,93 @@ class LiveExcelInventoryLimits:
         )
 
 
+def live_text_conversion_uat_enabled(
+    environment: Mapping[str, str] | None = None,
+) -> bool:
+    """Return true only for the exact opt-in value accepted by the UAT gate."""
+
+    selected = os.environ if environment is None else environment
+    return selected.get(LIVE_TEXT_CONVERSION_UAT_ENV) == "1"
+
+
+@dataclass(frozen=True, slots=True)
+class LiveColumnPreflightInvocation:
+    """One bounded, read-only physical-column inspection."""
+
+    workbook_token: str
+    worksheet: str
+    columns: tuple[int, ...] | None = None
+    column_offset: int = 0
+
+    def __post_init__(self) -> None:
+        _validate_live_target(self.workbook_token, self.worksheet)
+        if (
+            isinstance(self.column_offset, bool)
+            or not isinstance(self.column_offset, int)
+            or not 0 <= self.column_offset < LIVE_MAXIMUM_EXCEL_COLUMN
+        ):
+            raise ExcelAutomationInputError(
+                "The live column offset must be an integer from 0 through 16383."
+            )
+        if self.columns is not None:
+            _validate_live_columns(self.columns)
+            if self.column_offset != 0:
+                raise ExcelAutomationInputError(
+                    "An explicit live column selection must use offset zero."
+                )
+
+
+@dataclass(frozen=True, slots=True)
+class LiveColumnConversionPlanInvocation:
+    """Exact attended text-conversion choices before engine review."""
+
+    workbook_token: str
+    worksheet: str
+    columns: tuple[int, ...]
+    recovery_path: str | None = None
+    target: Literal["text"] = "text"
+
+    def __post_init__(self) -> None:
+        _validate_live_target(self.workbook_token, self.worksheet)
+        _validate_live_columns(self.columns)
+        if self.target != "text":
+            raise ExcelAutomationInputError(
+                "Live column conversion version 1.0 supports text only."
+            )
+        if self.recovery_path is not None:
+            _validate_live_recovery_path(self.recovery_path)
+
+
+@dataclass(frozen=True, slots=True)
+class LiveColumnConversionInvocation:
+    """One reviewed, UAT-gated live text mutation request."""
+
+    workbook_token: str
+    worksheet: str
+    columns: tuple[int, ...]
+    expected_plan_fingerprint: str
+    recovery_path: str
+    acknowledge_irreversible_precision_risk: bool = False
+    target: Literal["text"] = "text"
+
+    def __post_init__(self) -> None:
+        _validate_live_target(self.workbook_token, self.worksheet)
+        _validate_live_columns(self.columns)
+        if self.target != "text":
+            raise ExcelAutomationInputError(
+                "Live column conversion version 1.0 supports text only."
+            )
+        if not _is_prefixed_sha256(self.expected_plan_fingerprint):
+            raise ExcelAutomationInputError(
+                "The reviewed live plan fingerprint is not a valid SHA-256 value."
+            )
+        _validate_live_recovery_path(self.recovery_path)
+        if not isinstance(self.acknowledge_irreversible_precision_risk, bool):
+            raise ExcelAutomationInputError(
+                "The irreversible precision-risk acknowledgement must be boolean."
+            )
+
+
 @dataclass(frozen=True, slots=True)
 class LiveFormatProfileInvocation:
     """One attended direct-format target; its token is intentionally opaque."""
@@ -377,6 +498,87 @@ def build_inventory_live_excel_request(
                 selected.maximum_workbooks_per_application
             ),
             "maximum_sheets_per_workbook": selected.maximum_sheets_per_workbook,
+        },
+    )
+
+
+def build_describe_capabilities_request(request_id: str) -> dict[str, object]:
+    """Build the side-effect-free operation catalogue handshake."""
+
+    return _request(request_id, DESCRIBE_CAPABILITIES_OPERATION, {})
+
+
+def build_preflight_live_columns_request(
+    request_id: str,
+    invocation: LiveColumnPreflightInvocation,
+) -> dict[str, object]:
+    """Build the fixed-bound read-only preflight request."""
+
+    return _request(
+        request_id,
+        LIVE_PREFLIGHT_OPERATION,
+        {
+            "workbook_token": invocation.workbook_token,
+            "worksheet": invocation.worksheet,
+            "columns": (
+                None if invocation.columns is None else list(invocation.columns)
+            ),
+            "header_row": LIVE_HEADER_ROW,
+            "column_offset": invocation.column_offset,
+            "maximum_columns": LIVE_MAXIMUM_COLUMNS,
+            "maximum_data_rows": LIVE_MAXIMUM_DATA_ROWS,
+            "maximum_samples_per_column": LIVE_MAXIMUM_SAMPLES_PER_COLUMN,
+            "text_limit": LIVE_TEXT_LIMIT,
+        },
+    )
+
+
+def build_plan_live_column_conversion_request(
+    request_id: str,
+    invocation: LiveColumnConversionPlanInvocation,
+) -> dict[str, object]:
+    """Build the zero-write live text-conversion plan request."""
+
+    return _request(
+        request_id,
+        LIVE_CONVERSION_PLAN_OPERATION,
+        {
+            "workbook_token": invocation.workbook_token,
+            "worksheet": invocation.worksheet,
+            "columns": list(invocation.columns),
+            "target": invocation.target,
+            "header_row": LIVE_HEADER_ROW,
+            "recovery_path": invocation.recovery_path,
+            "maximum_data_rows": LIVE_MAXIMUM_DATA_ROWS,
+            "maximum_samples_per_column": LIVE_MAXIMUM_SAMPLES_PER_COLUMN,
+            "text_limit": LIVE_TEXT_LIMIT,
+        },
+    )
+
+
+def build_convert_live_column_representation_request(
+    request_id: str,
+    invocation: LiveColumnConversionInvocation,
+) -> dict[str, object]:
+    """Build one reviewed conversion request without altering its fingerprint."""
+
+    return _request(
+        request_id,
+        LIVE_CONVERSION_EXECUTE_OPERATION,
+        {
+            "workbook_token": invocation.workbook_token,
+            "worksheet": invocation.worksheet,
+            "columns": list(invocation.columns),
+            "target": invocation.target,
+            "expected_plan_fingerprint": invocation.expected_plan_fingerprint,
+            "recovery_path": invocation.recovery_path,
+            "acknowledge_irreversible_precision_risk": (
+                invocation.acknowledge_irreversible_precision_risk
+            ),
+            "header_row": LIVE_HEADER_ROW,
+            "maximum_data_rows": LIVE_MAXIMUM_DATA_ROWS,
+            "maximum_samples_per_column": LIVE_MAXIMUM_SAMPLES_PER_COLUMN,
+            "text_limit": LIVE_TEXT_LIMIT,
         },
     )
 
@@ -661,6 +863,304 @@ class LiveExcelInventoryResult:
 
 
 @dataclass(frozen=True, slots=True)
+class ExcelCapabilityAvailability:
+    available: bool
+    reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ExcelCapabilitySupports:
+    worksheet_selection: bool
+    column_selection: bool
+    in_place: bool
+    planning: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ExcelCapability:
+    operation: str
+    operation_version: str
+    title: str
+    description: str
+    backend: Literal["openpyxl", "xlwings"]
+    input_context: Literal["closed_workbook_files", "live_excel"]
+    input_extensions: tuple[str, ...]
+    minimum_inputs: int
+    maximum_inputs: int
+    effect_class: Literal[
+        "read_only", "creates_output", "may_replace_input", "live_mutation"
+    ]
+    output_class: Literal["none", "xlsx", "csv"]
+    supports: ExcelCapabilitySupports
+    plan_operation: str | None
+    plan_operation_version: str | None
+    requires_excel: bool
+    availability: ExcelCapabilityAvailability
+
+
+@dataclass(frozen=True, slots=True)
+class DescribeCapabilitiesResult:
+    capabilities: tuple[ExcelCapability, ...]
+
+    def find(
+        self,
+        operation: str,
+        operation_version: str = OPERATION_VERSION,
+    ) -> ExcelCapability | None:
+        return next(
+            (
+                item
+                for item in self.capabilities
+                if item.operation == operation
+                and item.operation_version == operation_version
+            ),
+            None,
+        )
+
+    @property
+    def live_text_conversion(self) -> ExcelCapability | None:
+        return self.find(LIVE_CONVERSION_EXECUTE_OPERATION)
+
+
+LiveScalar = str | int | float | bool | None
+
+
+@dataclass(frozen=True, slots=True)
+class LiveUsedRange:
+    first_row: int
+    last_row: int
+    first_column: int
+    last_column: int
+
+
+@dataclass(frozen=True, slots=True)
+class LiveDataRows:
+    first: int | None
+    last: int | None
+    total: int
+    examined: int
+    truncated: bool
+
+
+@dataclass(frozen=True, slots=True)
+class LiveValueClassifications:
+    blank: int
+    text: int
+    numeric: int
+    boolean: int
+    date_time: int
+    error: int
+    unsupported: int
+    formula: int
+
+
+@dataclass(frozen=True, slots=True)
+class LiveFormulaSample:
+    row: int
+    formula: str
+
+
+@dataclass(frozen=True, slots=True)
+class LivePrecisionRisk:
+    row: int
+    code: str
+    value_preview: LiveScalar
+
+
+@dataclass(frozen=True, slots=True)
+class LiveColumnFormulas:
+    count: int
+    samples: tuple[LiveFormulaSample, ...]
+    samples_truncated: bool
+
+
+@dataclass(frozen=True, slots=True)
+class LiveColumnPrecisionRisks:
+    cells: int
+    samples: tuple[LivePrecisionRisk, ...]
+    samples_truncated: bool
+
+
+@dataclass(frozen=True, slots=True)
+class LiveColumnPreflightColumn:
+    column_index: int
+    column_letter: str
+    header_value: LiveScalar
+    first_used_row: int | None
+    last_used_row: int | None
+    cells_examined: int
+    classifications: LiveValueClassifications
+    formulas: LiveColumnFormulas
+    precision_risks: LiveColumnPrecisionRisks
+
+
+@dataclass(frozen=True, slots=True)
+class LivePreflightWorkbook:
+    token: str
+    process_id: int
+    name: str
+    full_path: str | None
+    saved: bool
+    read_only: bool
+    autosave_enabled: bool | None
+
+
+@dataclass(frozen=True, slots=True)
+class LiveColumnPreflightResult:
+    workbook: LivePreflightWorkbook
+    worksheet: str
+    header_row: int
+    used_range: LiveUsedRange
+    data_rows: LiveDataRows
+    columns_total: int
+    columns_truncated: bool
+    next_column_offset: int | None
+    columns: tuple[LiveColumnPreflightColumn, ...]
+    warnings: tuple[LiveExcelWarning, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LiveConversionCounts:
+    cells_examined: int
+    blank: int
+    already_compliant: int
+    eligible: int
+    blocked_formula: int
+    blocked_unsupported: int
+    precision_risk_cells: int
+
+
+@dataclass(frozen=True, slots=True)
+class LiveConversionSample:
+    row: int
+    input_preview: LiveScalar
+    output_text: str
+
+
+@dataclass(frozen=True, slots=True)
+class LiveConversionPlanColumn:
+    column_index: int
+    column_letter: str
+    header_value: LiveScalar
+    counts: LiveConversionCounts
+    conversion_samples: tuple[LiveConversionSample, ...]
+    conversion_samples_truncated: bool
+    precision_risks: tuple[LivePrecisionRisk, ...]
+    precision_risks_truncated: bool
+
+
+@dataclass(frozen=True, slots=True)
+class LiveConversionEffect:
+    target_type: Literal["text", "number"]
+    cells_examined: int
+    eligible: int
+    already_compliant: int
+    blank: int
+    blocked: int
+    formulas: int
+    unsupported: int
+    precision_risk_cells: int
+
+
+@dataclass(frozen=True, slots=True)
+class LiveConversionRecoveryPlan:
+    required: bool
+    strategy: str
+    path: str | None
+    will_overwrite: bool
+
+
+@dataclass(frozen=True, slots=True)
+class LiveConversionBlocker:
+    code: str
+    message: str
+    details: Mapping[str, object]
+
+
+@dataclass(frozen=True, slots=True)
+class LiveConversionPlanTarget:
+    process_id: int
+    workbook_token: str
+    workbook_name: str
+    full_path: str | None
+    saved: bool
+    read_only: bool
+    autosave_enabled: bool | None
+    workbook_protected: bool | None
+    worksheet: str
+    worksheet_protected: bool | None
+    physical_columns: tuple[int, ...]
+    header_row: int
+    used_range: LiveUsedRange
+    data_first_row: int | None
+    data_last_row: int | None
+    data_rows_total: int
+    data_rows_examined: int
+    data_rows_truncated: bool
+
+
+@dataclass(frozen=True, slots=True)
+class LiveColumnConversionPlanResult:
+    can_execute: bool
+    writes_performed: int
+    scope_fingerprint: str
+    plan_fingerprint: str
+    target: LiveConversionPlanTarget
+    effect: LiveConversionEffect
+    recovery: LiveConversionRecoveryPlan
+    columns: tuple[LiveConversionPlanColumn, ...]
+    blockers: tuple[LiveConversionBlocker, ...]
+    warnings: tuple[LiveExcelWarning, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LiveConversionExecutionTarget:
+    process_id: int
+    workbook_token: str
+    workbook_name: str
+    full_path: str
+    worksheet: str
+    physical_columns: tuple[int, ...]
+    data_first_row: int | None
+    data_last_row: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class LiveConversionExecutionRecovery:
+    path: str
+    verified: bool
+
+
+@dataclass(frozen=True, slots=True)
+class LiveConversionFailure:
+    code: str
+    message: str
+    stage: Literal["revalidate", "recovery", "write"]
+    column_index: int | None
+    exception_type: str | None
+    com_hresult: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class LiveColumnConversionResult:
+    state: Literal["succeeded", "failed", "partial_failure"]
+    target: LiveConversionExecutionTarget
+    reviewed_plan_fingerprint: str
+    changed_cells: int
+    already_compliant_cells: int
+    blank_cells: int
+    columns_completed: tuple[int, ...]
+    recovery: LiveConversionExecutionRecovery
+    mutation_started: bool
+    workbook_dirty: bool
+    workbook_saved: bool
+    workbook_closed: bool
+    application_closed: bool
+    failure: LiveConversionFailure | None
+    warnings: tuple[LiveExcelWarning, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class LiveFormatFailure:
     worksheet: str
     code: str
@@ -688,9 +1188,13 @@ class LiveFormatProfileResult:
 
 AutomationResult = (
     DescribeAutomationsResult
+    | DescribeCapabilitiesResult
     | PlanAutomationResult
     | ExecuteAutomationResult
     | LiveExcelInventoryResult
+    | LiveColumnPreflightResult
+    | LiveColumnConversionPlanResult
+    | LiveColumnConversionResult
     | LiveFormatProfileResult
 )
 
@@ -708,7 +1212,11 @@ class AutomationCallResult:
 
     @property
     def unknown_outcome(self) -> bool:
-        return self.classification in {"execute_unknown", "apply_unknown"}
+        return self.classification in {
+            "execute_unknown",
+            "apply_unknown",
+            "conversion_execute_unknown",
+        }
 
 
 class _ProtocolError(ValueError):
@@ -738,7 +1246,14 @@ def parse_automation_response(
             raise _ProtocolError("The response operation version did not match.")
         _nonnegative_int(document.get("duration_ms"), "duration_ms")
         paths = _object(document.get("paths"), "paths")
-        if phase in {"inventory", "apply"} and (
+        if phase in {
+            "inventory",
+            "apply",
+            "capabilities",
+            "preflight",
+            "conversion_plan",
+            "conversion_execute",
+        } and (
             set(paths) != {"input", "output", "backup"}
             or any(value is not None for value in paths.values())
         ):
@@ -812,6 +1327,8 @@ def _parse_success_result(
     if phase == "describe":
         result = _parse_describe_result(document)
         return result, "describe_succeeded"
+    if phase == "capabilities":
+        return _parse_capabilities_result(document), "capabilities_succeeded"
     if phase == "plan":
         result = _parse_plan_result(document)
         return result, {
@@ -824,6 +1341,25 @@ def _parse_success_result(
             _parse_live_inventory_result(document, envelope_warnings),
             "inventory_succeeded",
         )
+    if phase == "preflight":
+        return (
+            _parse_live_preflight_result(document, envelope_warnings),
+            "preflight_succeeded",
+        )
+    if phase == "conversion_plan":
+        result = _parse_live_conversion_plan_result(document, envelope_warnings)
+        return result, (
+            "conversion_plan_ready"
+            if result.can_execute
+            else "conversion_plan_blocked"
+        )
+    if phase == "conversion_execute":
+        result = _parse_live_conversion_result(document, envelope_warnings)
+        return result, {
+            "succeeded": "conversion_execute_succeeded",
+            "failed": "conversion_execute_failed",
+            "partial_failure": "conversion_execute_partial_failure",
+        }[result.state]
     if phase == "apply":
         result = _parse_live_format_profile_result(document, envelope_warnings)
         return result, {
@@ -870,6 +1406,103 @@ def _parse_describe_result(document: dict[str, object]) -> DescribeAutomationsRe
     return DescribeAutomationsResult(contract, tuple(automations))
 
 
+def _parse_capabilities_result(
+    document: dict[str, object],
+) -> DescribeCapabilitiesResult:
+    capabilities = tuple(
+        _parse_capability(value, index)
+        for index, value in enumerate(
+            _array(document.get("capabilities"), "capabilities")
+        )
+    )
+    identities = {
+        (item.operation, item.operation_version) for item in capabilities
+    }
+    if len(identities) != len(capabilities):
+        raise _ProtocolError("The capability catalogue contains duplicate identities.")
+    return DescribeCapabilitiesResult(capabilities)
+
+
+def _parse_capability(value: object, index: int) -> ExcelCapability:
+    label = f"capabilities[{index}]"
+    item = _object(value, label)
+    backend = _text(item.get("backend"), f"{label}.backend")
+    if backend not in {"openpyxl", "xlwings"}:
+        raise _ProtocolError("The capability backend is unsupported.")
+    input_context = _text(item.get("input_context"), f"{label}.input_context")
+    if input_context not in {"closed_workbook_files", "live_excel"}:
+        raise _ProtocolError("The capability input context is unsupported.")
+    input_count = _object(item.get("input_count"), f"{label}.input_count")
+    minimum = _nonnegative_int(input_count.get("minimum"), "input_count.minimum")
+    maximum = _nonnegative_int(input_count.get("maximum"), "input_count.maximum")
+    if minimum > maximum:
+        raise _ProtocolError("The capability input count is contradictory.")
+    effect_class = _text(item.get("effect_class"), f"{label}.effect_class")
+    if effect_class not in {
+        "read_only",
+        "creates_output",
+        "may_replace_input",
+        "live_mutation",
+    }:
+        raise _ProtocolError("The capability effect class is unsupported.")
+    output_class = _text(item.get("output_class"), f"{label}.output_class")
+    if output_class not in {"none", "xlsx", "csv"}:
+        raise _ProtocolError("The capability output class is unsupported.")
+    support_document = _object(item.get("supports"), f"{label}.supports")
+    supports = ExcelCapabilitySupports(
+        _boolean(
+            support_document.get("worksheet_selection"),
+            "supports.worksheet_selection",
+        ),
+        _boolean(
+            support_document.get("column_selection"),
+            "supports.column_selection",
+        ),
+        _boolean(support_document.get("in_place"), "supports.in_place"),
+        _boolean(support_document.get("planning"), "supports.planning"),
+    )
+    plan_operation = _optional_text(
+        item.get("plan_operation"), f"{label}.plan_operation"
+    )
+    plan_version = _optional_text(
+        item.get("plan_operation_version"), f"{label}.plan_operation_version"
+    )
+    if (
+        (plan_operation is None) != (plan_version is None)
+        or supports.planning != (plan_operation is not None)
+    ):
+        raise _ProtocolError("The capability planning metadata is contradictory.")
+    availability_document = _object(
+        item.get("availability"), f"{label}.availability"
+    )
+    available = _boolean(
+        availability_document.get("available"), "availability.available"
+    )
+    reason = _optional_text(
+        availability_document.get("reason"), "availability.reason"
+    )
+    if available and reason is not None:
+        raise _ProtocolError("An available capability reported an unavailable reason.")
+    return ExcelCapability(
+        _text(item.get("operation"), f"{label}.operation"),
+        _text(item.get("operation_version"), f"{label}.operation_version"),
+        _text(item.get("title"), f"{label}.title"),
+        _text(item.get("description"), f"{label}.description"),
+        backend,  # type: ignore[arg-type]
+        input_context,  # type: ignore[arg-type]
+        _text_tuple(item.get("input_extensions"), f"{label}.input_extensions"),
+        minimum,
+        maximum,
+        effect_class,  # type: ignore[arg-type]
+        output_class,  # type: ignore[arg-type]
+        supports,
+        plan_operation,
+        plan_version,
+        _boolean(item.get("requires_excel"), f"{label}.requires_excel"),
+        ExcelCapabilityAvailability(available, reason),
+    )
+
+
 def _parse_live_inventory_result(
     document: dict[str, object],
     warnings: list[object],
@@ -896,6 +1529,564 @@ def _parse_live_inventory_result(
         truncated,
         applications,
         _parse_live_warnings(warnings),
+    )
+
+
+def _parse_live_preflight_result(
+    document: dict[str, object],
+    warnings: list[object],
+) -> LiveColumnPreflightResult:
+    workbook_document = _object(document.get("workbook"), "result.workbook")
+    workbook = LivePreflightWorkbook(
+        _text(workbook_document.get("token"), "workbook.token"),
+        _positive_int(workbook_document.get("process_id"), "workbook.process_id"),
+        _text(workbook_document.get("name"), "workbook.name"),
+        _optional_text(workbook_document.get("full_path"), "workbook.full_path"),
+        _boolean(workbook_document.get("saved"), "workbook.saved"),
+        _boolean(workbook_document.get("read_only"), "workbook.read_only"),
+        _optional_boolean(
+            workbook_document.get("autosave_enabled"), "workbook.autosave_enabled"
+        ),
+    )
+    columns = tuple(
+        _parse_live_preflight_column(value, index)
+        for index, value in enumerate(_array(document.get("columns"), "columns"))
+    )
+    returned = _nonnegative_int(document.get("columns_returned"), "columns_returned")
+    total = _nonnegative_int(document.get("columns_total"), "columns_total")
+    truncated = _boolean(document.get("columns_truncated"), "columns_truncated")
+    next_offset = _optional_nonnegative_int(
+        document.get("next_column_offset"), "next_column_offset"
+    )
+    if (
+        returned != len(columns)
+        or total < returned
+        or truncated != (next_offset is not None)
+        or (truncated and total == returned)
+        or len({item.column_index for item in columns}) != len(columns)
+    ):
+        raise _ProtocolError("The live preflight column counts are inconsistent.")
+    return LiveColumnPreflightResult(
+        workbook,
+        _text(document.get("worksheet"), "worksheet"),
+        _positive_int(document.get("header_row"), "header_row"),
+        _parse_used_range(document.get("used_range")),
+        _parse_data_rows(document.get("data_rows")),
+        total,
+        truncated,
+        next_offset,
+        columns,
+        _parse_live_warnings(warnings),
+    )
+
+
+def _parse_live_preflight_column(
+    value: object,
+    index: int,
+) -> LiveColumnPreflightColumn:
+    label = f"columns[{index}]"
+    item = _object(value, label)
+    column_index = _positive_int(item.get("column_index"), f"{label}.column_index")
+    column_letter = _text(item.get("column_letter"), f"{label}.column_letter")
+    if column_index > LIVE_MAXIMUM_EXCEL_COLUMN or column_letter != _column_letter(
+        column_index
+    ):
+        raise _ProtocolError("The live preflight physical column is inconsistent.")
+    used_rows = _object(item.get("used_rows"), f"{label}.used_rows")
+    first_used = _optional_positive_int(used_rows.get("first"), "used_rows.first")
+    last_used = _optional_positive_int(used_rows.get("last"), "used_rows.last")
+    if (first_used is None) != (last_used is None) or (
+        first_used is not None and last_used is not None and first_used > last_used
+    ):
+        raise _ProtocolError("The live preflight used-row bounds are inconsistent.")
+    classifications_document = _object(
+        item.get("classifications"), f"{label}.classifications"
+    )
+    classifications = LiveValueClassifications(
+        *(
+            _nonnegative_int(classifications_document.get(field), field)
+            for field in (
+                "blank",
+                "text",
+                "numeric",
+                "boolean",
+                "date_time",
+                "error",
+                "unsupported",
+                "formula",
+            )
+        )
+    )
+    cells_examined = _nonnegative_int(
+        item.get("cells_examined"), f"{label}.cells_examined"
+    )
+    if cells_examined != sum(
+        (
+            classifications.blank,
+            classifications.text,
+            classifications.numeric,
+            classifications.boolean,
+            classifications.date_time,
+            classifications.error,
+            classifications.unsupported,
+        )
+    ):
+        raise _ProtocolError("The live preflight classifications do not reconcile.")
+    formulas_document = _object(item.get("formulas"), f"{label}.formulas")
+    formula_samples = tuple(
+        LiveFormulaSample(
+            _positive_int(_object(raw, "formula sample").get("row"), "formula.row"),
+            _text(
+                _object(raw, "formula sample").get("formula"), "formula.formula"
+            ),
+        )
+        for raw in _array(formulas_document.get("samples"), "formulas.samples")
+    )
+    formula_count = _nonnegative_int(formulas_document.get("count"), "formulas.count")
+    formula_truncated = _boolean(
+        formulas_document.get("samples_truncated"), "formulas.samples_truncated"
+    )
+    if (
+        formula_count != classifications.formula
+        or formula_count < len(formula_samples)
+        or formula_truncated != (formula_count > len(formula_samples))
+    ):
+        raise _ProtocolError("The live preflight formula samples are inconsistent.")
+    risk_document = _object(item.get("precision_risks"), f"{label}.precision_risks")
+    risks = tuple(
+        _parse_precision_risk(raw, risk_index)
+        for risk_index, raw in enumerate(
+            _array(risk_document.get("samples"), "precision_risks.samples")
+        )
+    )
+    risk_cells = _nonnegative_int(risk_document.get("cells"), "precision_risks.cells")
+    risks_truncated = _boolean(
+        risk_document.get("samples_truncated"),
+        "precision_risks.samples_truncated",
+    )
+    if len({risk.row for risk in risks}) > risk_cells:
+        raise _ProtocolError("The live preflight precision risks are inconsistent.")
+    return LiveColumnPreflightColumn(
+        column_index,
+        column_letter,
+        _scalar(item.get("header_value"), f"{label}.header_value"),
+        first_used,
+        last_used,
+        cells_examined,
+        classifications,
+        LiveColumnFormulas(formula_count, formula_samples, formula_truncated),
+        LiveColumnPrecisionRisks(risk_cells, risks, risks_truncated),
+    )
+
+
+def _parse_live_conversion_plan_result(
+    document: dict[str, object],
+    warnings: list[object],
+) -> LiveColumnConversionPlanResult:
+    can_execute = _boolean(document.get("can_execute"), "can_execute")
+    writes = _nonnegative_int(document.get("writes_performed"), "writes_performed")
+    if writes != 0:
+        raise _ProtocolError("The live conversion plan unexpectedly reported a write.")
+    scope_fingerprint = _text(document.get("scope_fingerprint"), "scope_fingerprint")
+    plan_fingerprint = _text(document.get("plan_fingerprint"), "plan_fingerprint")
+    if not _is_prefixed_sha256(scope_fingerprint) or not _is_prefixed_sha256(
+        plan_fingerprint
+    ):
+        raise _ProtocolError("The live conversion plan fingerprint is invalid.")
+    target = _parse_live_conversion_plan_target(document.get("target"))
+    effect = _parse_live_conversion_effect(document.get("effect"))
+    recovery = _parse_live_conversion_recovery_plan(document.get("recovery"))
+    columns = tuple(
+        _parse_live_conversion_plan_column(value, index)
+        for index, value in enumerate(_array(document.get("columns"), "columns"))
+    )
+    blockers = tuple(
+        _parse_live_conversion_blocker(value, index)
+        for index, value in enumerate(_array(document.get("blockers"), "blockers"))
+    )
+    if can_execute == bool(blockers):
+        raise _ProtocolError("The live conversion plan readiness is contradictory.")
+    if tuple(item.column_index for item in columns) != target.physical_columns:
+        raise _ProtocolError("The live conversion plan columns contradict its target.")
+    if target.data_rows_truncated != (
+        target.data_rows_examined < target.data_rows_total
+    ):
+        raise _ProtocolError("The live conversion plan row coverage is contradictory.")
+    totals = LiveConversionEffect(
+        effect.target_type,
+        sum(item.counts.cells_examined for item in columns),
+        sum(item.counts.eligible for item in columns),
+        sum(item.counts.already_compliant for item in columns),
+        sum(item.counts.blank for item in columns),
+        sum(
+            item.counts.blocked_formula + item.counts.blocked_unsupported
+            for item in columns
+        ),
+        sum(item.counts.blocked_formula for item in columns),
+        sum(item.counts.blocked_unsupported for item in columns),
+        sum(item.counts.precision_risk_cells for item in columns),
+    )
+    if totals != effect:
+        raise _ProtocolError("The live conversion plan effect counts do not reconcile.")
+    if (
+        not recovery.required
+        or recovery.will_overwrite
+        or recovery.strategy != "excel_save_copy_as"
+        or (can_execute and recovery.path is None)
+        or (can_execute and effect.target_type != "text")
+        or (can_execute and effect.eligible == 0)
+        or (can_execute and target.data_rows_truncated)
+    ):
+        raise _ProtocolError("The live conversion plan safety contract is contradictory.")
+    return LiveColumnConversionPlanResult(
+        can_execute,
+        writes,
+        scope_fingerprint,
+        plan_fingerprint,
+        target,
+        effect,
+        recovery,
+        columns,
+        blockers,
+        _parse_live_warnings(warnings),
+    )
+
+
+def _parse_live_conversion_plan_target(
+    value: object,
+) -> LiveConversionPlanTarget:
+    target = _object(value, "result.target")
+    columns = _positive_int_tuple(
+        target.get("physical_columns"), "target.physical_columns"
+    )
+    if len(columns) > LIVE_MAXIMUM_COLUMNS or any(
+        column > LIVE_MAXIMUM_EXCEL_COLUMN for column in columns
+    ):
+        raise _ProtocolError("The live conversion target has unsupported columns.")
+    total = _nonnegative_int(target.get("data_rows_total"), "target.data_rows_total")
+    examined = _nonnegative_int(
+        target.get("data_rows_examined"), "target.data_rows_examined"
+    )
+    first = _optional_positive_int(
+        target.get("data_first_row"), "target.data_first_row"
+    )
+    last = _optional_positive_int(target.get("data_last_row"), "target.data_last_row")
+    if (
+        examined > total
+        or (first is None) != (last is None)
+        or (first is None) != (total == 0)
+        or (first is not None and last is not None and last - first + 1 != total)
+    ):
+        raise _ProtocolError("The live conversion target row bounds are inconsistent.")
+    header_row = _positive_int(target.get("header_row"), "target.header_row")
+    if header_row != LIVE_HEADER_ROW:
+        raise _ProtocolError("The live conversion target header row did not match.")
+    return LiveConversionPlanTarget(
+        _positive_int(target.get("process_id"), "target.process_id"),
+        _text(target.get("workbook_token"), "target.workbook_token"),
+        _text(target.get("workbook_name"), "target.workbook_name"),
+        _optional_text(target.get("full_path"), "target.full_path"),
+        _boolean(target.get("saved"), "target.saved"),
+        _boolean(target.get("read_only"), "target.read_only"),
+        _optional_boolean(target.get("autosave_enabled"), "target.autosave_enabled"),
+        _optional_boolean(
+            target.get("workbook_protected"), "target.workbook_protected"
+        ),
+        _text(target.get("worksheet"), "target.worksheet"),
+        _optional_boolean(
+            target.get("worksheet_protected"), "target.worksheet_protected"
+        ),
+        columns,
+        header_row,
+        _parse_used_range(target.get("used_range")),
+        first,
+        last,
+        total,
+        examined,
+        _boolean(target.get("data_rows_truncated"), "target.data_rows_truncated"),
+    )
+
+
+def _parse_live_conversion_effect(value: object) -> LiveConversionEffect:
+    item = _object(value, "result.effect")
+    target_type = _text(item.get("target_type"), "effect.target_type")
+    if target_type not in {"text", "number"}:
+        raise _ProtocolError("The live conversion effect target is unsupported.")
+    counts = tuple(
+        _nonnegative_int(item.get(field), f"effect.{field}")
+        for field in (
+            "cells_examined",
+            "eligible",
+            "already_compliant",
+            "blank",
+            "blocked",
+            "formulas",
+            "unsupported",
+            "precision_risk_cells",
+        )
+    )
+    result = LiveConversionEffect(target_type, *counts)  # type: ignore[arg-type]
+    if (
+        result.blocked != result.formulas + result.unsupported
+        or result.cells_examined
+        != result.eligible
+        + result.already_compliant
+        + result.blank
+        + result.blocked
+        or result.precision_risk_cells > result.cells_examined
+    ):
+        raise _ProtocolError("The live conversion effect is contradictory.")
+    return result
+
+
+def _parse_live_conversion_recovery_plan(
+    value: object,
+) -> LiveConversionRecoveryPlan:
+    item = _object(value, "result.recovery")
+    return LiveConversionRecoveryPlan(
+        _boolean(item.get("required"), "recovery.required"),
+        _text(item.get("strategy"), "recovery.strategy"),
+        _optional_text(item.get("path"), "recovery.path"),
+        _boolean(item.get("will_overwrite"), "recovery.will_overwrite"),
+    )
+
+
+def _parse_live_conversion_plan_column(
+    value: object,
+    index: int,
+) -> LiveConversionPlanColumn:
+    label = f"columns[{index}]"
+    item = _object(value, label)
+    column_index = _positive_int(item.get("column_index"), f"{label}.column_index")
+    column_letter = _text(item.get("column_letter"), f"{label}.column_letter")
+    if column_index > LIVE_MAXIMUM_EXCEL_COLUMN or column_letter != _column_letter(
+        column_index
+    ):
+        raise _ProtocolError("The live conversion physical column is inconsistent.")
+    count_document = _object(item.get("counts"), f"{label}.counts")
+    counts = LiveConversionCounts(
+        *(
+            _nonnegative_int(count_document.get(field), f"counts.{field}")
+            for field in (
+                "cells_examined",
+                "blank",
+                "already_compliant",
+                "eligible",
+                "blocked_formula",
+                "blocked_unsupported",
+                "precision_risk_cells",
+            )
+        )
+    )
+    if (
+        counts.cells_examined
+        != counts.blank
+        + counts.already_compliant
+        + counts.eligible
+        + counts.blocked_formula
+        + counts.blocked_unsupported
+        or counts.precision_risk_cells > counts.cells_examined
+    ):
+        raise _ProtocolError("The live conversion column counts do not reconcile.")
+    samples = tuple(
+        _parse_live_conversion_sample(raw, sample_index)
+        for sample_index, raw in enumerate(
+            _array(item.get("conversion_samples"), "conversion_samples")
+        )
+    )
+    samples_truncated = _boolean(
+        item.get("conversion_samples_truncated"),
+        "conversion_samples_truncated",
+    )
+    if (
+        len(samples) > counts.eligible
+        or samples_truncated != (counts.eligible > len(samples))
+    ):
+        raise _ProtocolError("The live conversion samples are inconsistent.")
+    risks = tuple(
+        _parse_precision_risk(raw, risk_index)
+        for risk_index, raw in enumerate(
+            _array(item.get("precision_risks"), "precision_risks")
+        )
+    )
+    risks_truncated = _boolean(
+        item.get("precision_risks_truncated"), "precision_risks_truncated"
+    )
+    if len({risk.row for risk in risks}) > counts.precision_risk_cells:
+        raise _ProtocolError("The live conversion precision risks are inconsistent.")
+    return LiveConversionPlanColumn(
+        column_index,
+        column_letter,
+        _scalar(item.get("header_value"), f"{label}.header_value"),
+        counts,
+        samples,
+        samples_truncated,
+        risks,
+        risks_truncated,
+    )
+
+
+def _parse_live_conversion_sample(
+    value: object,
+    index: int,
+) -> LiveConversionSample:
+    item = _object(value, f"conversion_samples[{index}]")
+    return LiveConversionSample(
+        _positive_int(item.get("row"), "conversion_sample.row"),
+        _scalar(item.get("input_preview"), "conversion_sample.input_preview"),
+        _text(item.get("output_text"), "conversion_sample.output_text"),
+    )
+
+
+def _parse_live_conversion_blocker(
+    value: object,
+    index: int,
+) -> LiveConversionBlocker:
+    item = _object(value, f"blockers[{index}]")
+    details = _object(item.get("details"), "blocker.details")
+    return LiveConversionBlocker(
+        _text(item.get("code"), "blocker.code"),
+        _text(item.get("message"), "blocker.message"),
+        MappingProxyType(dict(details)),
+    )
+
+
+def _parse_live_conversion_result(
+    document: dict[str, object],
+    warnings: list[object],
+) -> LiveColumnConversionResult:
+    state = _text(document.get("state"), "result.state")
+    if state not in {"succeeded", "failed", "partial_failure"}:
+        raise _ProtocolError("The live conversion result state is unsupported.")
+    target = _parse_live_conversion_execution_target(document.get("target"))
+    fingerprint = _text(
+        document.get("reviewed_plan_fingerprint"), "reviewed_plan_fingerprint"
+    )
+    if not _is_prefixed_sha256(fingerprint):
+        raise _ProtocolError("The reviewed live plan fingerprint is invalid.")
+    changed = _nonnegative_int(document.get("changed_cells"), "changed_cells")
+    compliant = _nonnegative_int(
+        document.get("already_compliant_cells"), "already_compliant_cells"
+    )
+    blank = _nonnegative_int(document.get("blank_cells"), "blank_cells")
+    completed = _positive_int_tuple_or_empty(
+        document.get("columns_completed"), "columns_completed"
+    )
+    if not set(completed).issubset(target.physical_columns):
+        raise _ProtocolError("The completed live columns contradict the target.")
+    recovery_document = _object(document.get("recovery"), "result.recovery")
+    recovery = LiveConversionExecutionRecovery(
+        _text(recovery_document.get("path"), "recovery.path"),
+        _boolean(recovery_document.get("verified"), "recovery.verified"),
+    )
+    mutation_started = _boolean(
+        document.get("mutation_started"), "mutation_started"
+    )
+    dirty = _boolean(document.get("workbook_dirty"), "workbook_dirty")
+    lifecycle = (
+        _boolean(document.get("workbook_saved"), "workbook_saved"),
+        _boolean(document.get("workbook_closed"), "workbook_closed"),
+        _boolean(document.get("application_closed"), "application_closed"),
+    )
+    if any(lifecycle):
+        raise _ProtocolError("The live conversion lifecycle is contradictory.")
+    failure = (
+        None
+        if document.get("failure") is None
+        else _parse_live_conversion_failure(document.get("failure"))
+    )
+    if (
+        (state == "succeeded" and (failure is not None or not mutation_started))
+        or (
+            state == "failed"
+            and (failure is None or mutation_started)
+        )
+        or (
+            state == "partial_failure"
+            and (failure is None or not mutation_started)
+        )
+        or (mutation_started and not recovery.verified)
+        or (mutation_started and not dirty)
+        or (state == "succeeded" and completed != target.physical_columns)
+    ):
+        raise _ProtocolError("The live conversion state contradicts its effects.")
+    if failure is not None:
+        if failure.column_index is not None and failure.column_index not in (
+            target.physical_columns
+        ):
+            raise _ProtocolError("The live conversion failure column is not targeted.")
+        if (
+            failure.stage == "recovery"
+            and (recovery.verified or mutation_started or completed)
+        ) or (
+            failure.stage == "revalidate"
+            and (not recovery.verified or mutation_started or completed)
+        ) or (failure.stage == "write" and not recovery.verified):
+            raise _ProtocolError("The live conversion failure stage is contradictory.")
+    if target.data_first_row is not None and target.data_last_row is not None:
+        completed_cells = (
+            target.data_last_row - target.data_first_row + 1
+        ) * len(completed)
+        if changed + compliant + blank != completed_cells:
+            raise _ProtocolError("The completed live conversion counts do not reconcile.")
+    elif changed or compliant or blank or completed:
+        raise _ProtocolError("An empty live conversion scope reported effects.")
+    return LiveColumnConversionResult(
+        state,  # type: ignore[arg-type]
+        target,
+        fingerprint,
+        changed,
+        compliant,
+        blank,
+        completed,
+        recovery,
+        mutation_started,
+        dirty,
+        *lifecycle,
+        failure,
+        _parse_live_warnings(warnings),
+    )
+
+
+def _parse_live_conversion_execution_target(
+    value: object,
+) -> LiveConversionExecutionTarget:
+    item = _object(value, "result.target")
+    columns = _positive_int_tuple(item.get("physical_columns"), "target.physical_columns")
+    if len(columns) > LIVE_MAXIMUM_COLUMNS or any(
+        column > LIVE_MAXIMUM_EXCEL_COLUMN for column in columns
+    ):
+        raise _ProtocolError("The live conversion target has unsupported columns.")
+    first = _optional_positive_int(item.get("data_first_row"), "target.data_first_row")
+    last = _optional_positive_int(item.get("data_last_row"), "target.data_last_row")
+    if (first is None) != (last is None) or (
+        first is not None and last is not None and first > last
+    ):
+        raise _ProtocolError("The live conversion result row bounds are inconsistent.")
+    return LiveConversionExecutionTarget(
+        _positive_int(item.get("process_id"), "target.process_id"),
+        _text(item.get("workbook_token"), "target.workbook_token"),
+        _text(item.get("workbook_name"), "target.workbook_name"),
+        _text(item.get("full_path"), "target.full_path"),
+        _text(item.get("worksheet"), "target.worksheet"),
+        columns,
+        first,
+        last,
+    )
+
+
+def _parse_live_conversion_failure(value: object) -> LiveConversionFailure:
+    item = _object(value, "result.failure")
+    stage = _text(item.get("stage"), "failure.stage")
+    if stage not in {"revalidate", "recovery", "write"}:
+        raise _ProtocolError("The live conversion failure stage is unsupported.")
+    return LiveConversionFailure(
+        _text(item.get("code"), "failure.code"),
+        _text(item.get("message"), "failure.message"),
+        stage,  # type: ignore[arg-type]
+        _optional_positive_int(item.get("column_index"), "failure.column_index"),
+        _optional_text(item.get("exception_type"), "failure.exception_type"),
+        _optional_int(item.get("com_hresult"), "failure.com_hresult"),
     )
 
 
@@ -1466,6 +2657,10 @@ def _operation_for_phase(phase: AutomationPhase) -> str:
         "execute": EXECUTE_OPERATION,
         "inventory": LIVE_INVENTORY_OPERATION,
         "apply": LIVE_FORMAT_PROFILE_OPERATION,
+        "capabilities": DESCRIBE_CAPABILITIES_OPERATION,
+        "preflight": LIVE_PREFLIGHT_OPERATION,
+        "conversion_plan": LIVE_CONVERSION_PLAN_OPERATION,
+        "conversion_execute": LIVE_CONVERSION_EXECUTE_OPERATION,
     }[phase]
 
 
@@ -1535,6 +2730,20 @@ def _optional_nonnegative_int(value: object, label: str) -> int | None:
     return _nonnegative_int(value, label)
 
 
+def _optional_positive_int(value: object, label: str) -> int | None:
+    if value is None:
+        return None
+    return _positive_int(value, label)
+
+
+def _optional_int(value: object, label: str) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise _ProtocolError(f"{label} must be an integer or null.")
+    return value
+
+
 def _positive_int_tuple(value: object, label: str) -> tuple[int, ...]:
     result = _positive_int_tuple_or_empty(value, label)
     if not result:
@@ -1556,6 +2765,122 @@ def _is_sha256(value: object) -> bool:
         and len(value) == 64
         and all(character in "0123456789abcdef" for character in value)
     )
+
+
+def _is_prefixed_sha256(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and value.startswith("sha256:")
+        and _is_sha256(value.removeprefix("sha256:"))
+    )
+
+
+def _scalar(value: object, label: str) -> LiveScalar:
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, float) and math.isfinite(value):
+        return value
+    raise _ProtocolError(f"{label} must be a finite JSON scalar or null.")
+
+
+def _parse_used_range(value: object) -> LiveUsedRange:
+    item = _object(value, "used_range")
+    result = LiveUsedRange(
+        _positive_int(item.get("first_row"), "used_range.first_row"),
+        _positive_int(item.get("last_row"), "used_range.last_row"),
+        _positive_int(item.get("first_column"), "used_range.first_column"),
+        _positive_int(item.get("last_column"), "used_range.last_column"),
+    )
+    if (
+        result.first_row > result.last_row
+        or result.first_column > result.last_column
+        or result.last_column > LIVE_MAXIMUM_EXCEL_COLUMN
+    ):
+        raise _ProtocolError("The live used range is inconsistent.")
+    return result
+
+
+def _parse_data_rows(value: object) -> LiveDataRows:
+    item = _object(value, "data_rows")
+    first = _optional_positive_int(item.get("first"), "data_rows.first")
+    last = _optional_positive_int(item.get("last"), "data_rows.last")
+    total = _nonnegative_int(item.get("total"), "data_rows.total")
+    examined = _nonnegative_int(item.get("examined"), "data_rows.examined")
+    truncated = _boolean(item.get("truncated"), "data_rows.truncated")
+    if (
+        examined > total
+        or truncated != (examined < total)
+        or (first is None) != (last is None)
+        or (first is None) != (total == 0)
+        or (first is not None and last is not None and last - first + 1 != total)
+    ):
+        raise _ProtocolError("The live data-row bounds are inconsistent.")
+    return LiveDataRows(first, last, total, examined, truncated)
+
+
+def _parse_precision_risk(value: object, index: int) -> LivePrecisionRisk:
+    item = _object(value, f"precision_risks[{index}]")
+    return LivePrecisionRisk(
+        _positive_int(item.get("row"), "precision_risk.row"),
+        _text(item.get("code"), "precision_risk.code"),
+        _scalar(item.get("value_preview"), "precision_risk.value_preview"),
+    )
+
+
+def _column_letter(column: int) -> str:
+    letters = ""
+    current = column
+    while current:
+        current, remainder = divmod(current - 1, 26)
+        letters = chr(65 + remainder) + letters
+    return letters
+
+
+def _validate_live_target(workbook_token: object, worksheet: object) -> None:
+    if (
+        not isinstance(workbook_token, str)
+        or not workbook_token.strip()
+        or len(workbook_token) > 8192
+    ):
+        raise ExcelAutomationInputError(
+            "The live workbook token must contain 1 through 8192 characters."
+        )
+    if (
+        not isinstance(worksheet, str)
+        or not worksheet
+        or len(worksheet) > 31
+    ):
+        raise ExcelAutomationInputError(
+            "The live worksheet name must contain 1 through 31 characters."
+        )
+
+
+def _validate_live_columns(columns: object) -> None:
+    if (
+        not isinstance(columns, tuple)
+        or not columns
+        or len(columns) > LIVE_MAXIMUM_COLUMNS
+        or any(
+            isinstance(column, bool)
+            or not isinstance(column, int)
+            or not 1 <= column <= LIVE_MAXIMUM_EXCEL_COLUMN
+            for column in columns
+        )
+        or len(set(columns)) != len(columns)
+    ):
+        raise ExcelAutomationInputError(
+            "Choose 1 through 100 unique physical Excel columns."
+        )
+
+
+def _validate_live_recovery_path(value: object) -> None:
+    if not isinstance(value, str) or not value.strip() or "\x00" in value:
+        raise ExcelAutomationInputError("The live recovery path must be text.")
+    path = Path(value)
+    if not path.is_absolute() or path.suffix.casefold() != ".xlsx":
+        raise ExcelAutomationInputError(
+            "The live recovery path must be an absolute .xlsx path."
+        )
 
 
 @dataclass(slots=True)
@@ -1810,6 +3135,10 @@ def _failure_classification(phase: AutomationPhase) -> CallClassification:
         "execute": "execute_unknown",
         "inventory": "inventory_failed",
         "apply": "apply_unknown",
+        "capabilities": "capabilities_failed",
+        "preflight": "preflight_failed",
+        "conversion_plan": "conversion_plan_failed",
+        "conversion_execute": "conversion_execute_unknown",
     }[phase]
 
 

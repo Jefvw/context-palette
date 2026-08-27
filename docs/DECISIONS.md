@@ -1,5 +1,35 @@
 # Decisions
 
+## 2026-08-26 - Gate reviewed live column-to-text conversion behind UAT
+
+**Decision:** Add **UAT: Convert scientific-notation columns** as a normal
+searchable `excel_automation` Action backed by Python Excel `08af313` and its
+version-1.0 capability, inventory, preflight, plan, and execute operations.
+Context Palette owns attended target selection and presentation; Python Excel
+owns physical-column analysis, blockers, fingerprints, the default or reviewed
+sibling recovery path, recovery creation/verification, and mutation. Keep
+inventory, paged preflight, and planning available, but enable Execute only when
+the exact environment value `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1` was
+present at Context Palette startup. Removing or changing the variable requires
+a restart.
+
+**Reason:** The workflow is valuable and has engine-level automated coverage,
+but disposable real-Excel mutation UAT is not complete. A process-start gate
+lets the exact plan and presentation be tested without making an unverified
+live mutation generally available. The engine-selected recovery path prevents
+the host from duplicating workbook/path policy.
+
+**Safety boundary:** A selected-scope formula or unsupported value blocks the
+plan. Precision-risk cells require explicit acknowledgement that Excel may
+already have discarded digits and that conversion cannot restore them. The
+engine creates and verifies the reviewed recovery workbook before mutation;
+Context Palette never saves or closes Excel. Success, no-live-mutation failure,
+partial mutation, and process/protocol loss remain distinct. A verified
+recovery may exist even after a clean live-workbook failure. Partial and unknown
+outcomes are never retried automatically. Tokens, samples, paths, and the
+actual machine-local launcher location remain outside tracked configuration and
+logs. The supporting partial-effect result contract is Python Excel `54f1ab8`.
+
 ## 2026-08-26 - Expose virtual General only as a local shortcut editor
 
 **Decision:** Show **General — All items** as the fixed first row in Configure

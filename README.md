@@ -66,6 +66,12 @@ actions remain editable there but stay outside normal retrieval. See
   session, lets you choose one worksheet or all visible worksheets, and uses
   one **Apply** click as confirmation. It does not use Input / Output and never
   saves or closes Excel; AutoSave must be off.
+- Provides a Development/UAT Action for reviewed conversion of selected
+  physical columns in an already-open workbook to text. Python Excel owns the
+  paged preflight, exact plan fingerprint, verified recovery workbook, and
+  mutation. Context Palette keeps execution disabled unless
+  `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1` was present when it started;
+  inventory, preflight, and planning remain available for safe review.
 - Turns one clear website or absolute file, folder, or application path in
   Input / Output into a prefilled, review-before-save Action without probing a
   mapped drive or changing the general Action type chooser.

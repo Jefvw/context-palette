@@ -1248,8 +1248,10 @@ Provides the optional machine-local boundary to the separately installed
 Python Excel engine. It accepts only exact existing absolute `.xlsx` paths
 from Input / Output or the general drop intake (up to 100 closed workbooks),
 then performs the engine's `describe`, `plan`, and reviewed `execute` protocol
-off the Tk thread. The same bounded client also supports the separate direct
-live-Excel `inventory_live_excel` and `apply_live_format_profile` protocol.
+off the Tk thread. The same bounded client also supports direct live-Excel
+inventory/formatting plus the `describe_capabilities`, `preflight_live_columns`,
+`plan_live_column_conversion`, and `convert_live_column_representation`
+version-1.0 operations; live token and sample data remain session-only.
 Standard input carries structured requests; stdout and stderr are drained
 concurrently with bounded capture, so a verbose child cannot block the Palette
 process.
@@ -1287,6 +1289,30 @@ subprocess owns a batch. The configured engine path is stored only in ignored
 `data/local_excel_automation_settings.json`.
 Absence, misconfiguration, or a failed engine leaves every non-Excel feature
 available.
+
+### `excel_live_text_conversion_window.py`
+
+Owns the centered attended Development/UAT workflow for Python Excel commit
+`08af313` and retains the partial-effect result boundary introduced by
+`54f1ab8`. It reuses the one bounded process client/coordinator and machine-local
+launcher setting. Its sequence is exact capability discovery, already-open
+workbook inventory, one visible worksheet, bounded paged physical-column
+preflight, zero-write plan, reviewed fingerprint, and conversion. Columns are
+identified by ordered physical index so blank or duplicate headers remain
+distinct. All bounds, workbook tokens, column order, recovery path, and plan
+fingerprint are correlated at the result boundary.
+
+The engine, not Context Palette, chooses the default sibling recovery path and
+creates/verifies the recovery workbook. An override triggers a fresh plan.
+Formula or unsupported values in scope remain engine-authored blockers; a
+precision-risk plan requires an explicit acknowledgement that lost digits
+cannot be reconstructed. Execution is fail-closed unless the exact environment
+value `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1` was present at process
+startup. Inventory, preflight, and planning remain read-only when the gate is
+off. Success, known no-live-mutation failure, partial mutation, and unknown
+process/protocol outcomes are distinct; no outcome is retried automatically.
+Context Palette never saves or closes Excel and never persists tokens, samples,
+workbook paths, or the actual machine-local launcher path in tracked data.
 
 ### `excel_live_format_window.py`
 
@@ -1630,6 +1656,7 @@ Input / Output workspace <---- Paste / manual edit
         +-- URL builder -> prompt or consume workspace -> copy + open URL
         +-- Excel CSV automation -> describe -> plan -> attended review -> execute
         +-- Live Excel format -> inventory -> one attended Apply
+        +-- UAT live text conversion -> capability -> inventory -> preflight -> plan -> execute
         `-- saved-text action -> clipboard -> fresh captured destination, or manual-paste fallback
 
 Windows Credential Manager -- exact target --> protected clipboard --> captured destination

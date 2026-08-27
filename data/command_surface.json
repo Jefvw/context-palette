@@ -8,7 +8,8 @@
       "action_ids": [
         "general-open-python-docs",
         "excel-export-workbooks-to-csv",
-        "excel-apply-format-template"
+        "excel-apply-format-template",
+        "excel-convert-scientific-notation"
       ],
       "items": [
         {

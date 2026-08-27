@@ -115,6 +115,23 @@ class ActionPreviewTests(unittest.TestCase):
         self.assertIn("Overwrite is off by default", preview.limitations)
         self.assertNotIn("AutoSave", preview.limitations)
 
+    def test_live_text_conversion_preview_names_recovery_and_uat_boundary(self):
+        preview = build_action_preview(
+            self._action(
+                "excel_automation",
+                "excel.convert_live_column_representation",
+            )
+        )
+
+        self.assertIn("already-open .xlsx workbook", preview.input_text)
+        self.assertIn("physical columns", preview.input_text)
+        self.assertIn("verify a reviewed recovery copy", preview.effect_text)
+        self.assertIn("text", preview.effect_text)
+        self.assertIn("Development/UAT", preview.limitations)
+        self.assertIn("startup feature flag", preview.limitations)
+        self.assertIn("lost digits", preview.limitations)
+        self.assertIn("never saves or closes", preview.limitations)
+
     def test_runtime_state_changes_input_and_failure_explanation(self):
         transform = self._action("transform_text", "uppercase")
         empty = build_action_preview(transform, workspace_has_text=False)

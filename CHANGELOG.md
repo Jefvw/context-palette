@@ -4,6 +4,15 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Added **UAT: Convert scientific-notation columns** against Python Excel
+  `08af313`. The attended workflow inventories already-open workbooks, pages a
+  bounded physical-column preflight, reviews the exact conversion plan and
+  engine-selected sibling recovery workbook, requires explicit acknowledgement
+  for possible prior Excel precision loss, and reports success, clean failure,
+  partial mutation, and unknown process outcomes without automatic retry.
+  Inventory, preflight, and planning remain available, but Execute is disabled
+  unless `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1` was present when Context
+  Palette started. Real disposable mutation UAT remains pending.
 - Made virtual **General** visible as the fixed first row in Configure →
   Contexts. Its automatic all-Action/all-Work-Item membership, name, and
   lifecycle remain locked, while **Edit shortcuts…** now provides the missing

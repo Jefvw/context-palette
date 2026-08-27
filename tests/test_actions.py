@@ -213,6 +213,19 @@ class ActionTests(unittest.TestCase):
 
         self.assertEqual(action.value, "excel.apply_live_format_profile")
 
+    def test_excel_live_text_conversion_is_an_allow_listed_automation(self):
+        action = configured_action(
+            title="UAT: Convert scientific-notation columns",
+            context="General",
+            action_type="excel_automation",
+            value="excel.convert_live_column_representation",
+        )
+
+        self.assertEqual(
+            action.value,
+            "excel.convert_live_column_representation",
+        )
+
     def test_built_in_live_excel_format_action_has_no_process_configuration(self):
         actions = load_actions(ROOT / "data" / "actions.json")
         action = next(
@@ -220,6 +233,21 @@ class ActionTests(unittest.TestCase):
         )
 
         self.assertEqual(action.value, "excel.apply_live_format_profile")
+        self.assertEqual(action.arguments, ())
+        self.assertIsNone(action.working_directory)
+
+    def test_built_in_live_text_conversion_has_no_process_configuration(self):
+        actions = load_actions(ROOT / "data" / "actions.json")
+        action = next(
+            item
+            for item in actions
+            if item.id == "excel-convert-scientific-notation"
+        )
+
+        self.assertEqual(
+            action.value,
+            "excel.convert_live_column_representation",
+        )
         self.assertEqual(action.arguments, ())
         self.assertIsNone(action.working_directory)
 

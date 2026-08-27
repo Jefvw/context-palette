@@ -274,6 +274,7 @@ class CommandSurfaceTests(unittest.TestCase):
                 "general-open-python-docs",
                 "excel-export-workbooks-to-csv",
                 "excel-apply-format-template",
+                "excel-convert-scientific-notation",
             ),
         )
         product_systems = groups[0].items[0]

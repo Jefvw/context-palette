@@ -19,6 +19,7 @@ from .actions import (
     ensure_default_text_action_file,
     EXCEL_AUTOMATION_ID,
     LIVE_FORMAT_PROFILE_AUTOMATION_ID,
+    LIVE_TEXT_CONVERSION_AUTOMATION_ID,
     load_combined_actions,
     load_combined_stored_actions,
     validate_context_memberships,
@@ -130,7 +131,7 @@ ACTION_TYPE_EXAMPLES = {
     "open_file": r"Example: Open %PROJECT_ROOT%\README.md in its associated application.",
     "open_folder": r"Example: Open %PROJECT_ROOT%\docs in File Explorer.",
     "launch_app": r"Example: Start C:\Tools\Example\Example.exe with reviewed arguments.",
-    "excel_automation": "Example: Choose CSV export from Input / Output, or apply Standard data directly to one worksheet or all visible sheets in an already-open Excel workbook.",
+    "excel_automation": "Example: Export Input / Output workbooks, format an open workbook, or review selected live columns for UAT-gated conversion to text.",
     "sequence": "Example: Start an import Action, wait briefly, then open its results folder.",
     "paste_credential": "Example: Paste the Windows or generic credential target oracle-pc17.",
     "build_url_open": "Example: Ask for ABC 123, then copy and open its generated website address.",
@@ -4557,6 +4558,9 @@ class ActionDialog:
             self.excel_automation_choices = {
                 "Export Excel workbooks to CSV": EXCEL_AUTOMATION_ID,
                 "Apply Excel format template": LIVE_FORMAT_PROFILE_AUTOMATION_ID,
+                "UAT: Convert scientific-notation columns": (
+                    LIVE_TEXT_CONVERSION_AUTOMATION_ID
+                ),
             }
             selected_label = next(
                 (
@@ -4575,7 +4579,9 @@ class ActionDialog:
                 help_text=(
                     "CSV export reads exact .xlsx paths from Input / Output. "
                     "Apply Excel format template inventories open Excel, then "
-                    "formats one chosen worksheet or all visible worksheets directly."
+                    "formats one chosen worksheet or all visible worksheets directly. "
+                    "The UAT conversion reviews exact physical columns and an "
+                    "engine-created recovery copy before changing eligible cells to text."
                 ),
             )
         else:

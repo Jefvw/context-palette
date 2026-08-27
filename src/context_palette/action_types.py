@@ -152,9 +152,9 @@ ACTION_TYPES = {
             "Run an Excel automation",
             "Excel automation",
             "Run one reviewed Python Excel automation through its versioned host protocol.",
-            "CSV export reads exact .xlsx paths from Input / Output; live formatting inventories already-open Excel workbooks.",
-            "CSV export plans reviewed outputs. Live formatting lets you choose one worksheet or all visible worksheets, then applies Standard data directly.",
-            "The Action is portable; each computer needs a machine-local Python Excel setup. CSV source workbooks stay unchanged and checked replacements have no recovery backup or batch rollback. Live formatting changes the open workbook directly, may clear Excel Undo, has no recovery, and never saves or closes Excel; AutoSave must be off.",
+            "CSV export reads exact .xlsx paths from Input / Output; live workflows inventory already-open Excel workbooks.",
+            "CSV export plans reviewed outputs. Live workflows can apply Standard data formatting or review selected physical columns and convert eligible values to text.",
+            "The Action is portable; each computer needs a machine-local Python Excel setup. Live workflows change an open workbook, may clear Excel Undo, and never save or close Excel. Scientific-notation conversion is UAT-gated and requires an engine-created reviewed recovery copy.",
         ),
         _definition(
             "sequence",

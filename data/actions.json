@@ -238,6 +238,20 @@
       "description": "Choose an already-open Excel workbook and one worksheet or all visible worksheets, then apply Standard data directly. Excel is not saved or closed."
     },
     {
+      "id": "excel-convert-scientific-notation",
+      "title": "UAT: Convert scientific-notation columns",
+      "type": "excel_automation",
+      "value": "excel.convert_live_column_representation",
+      "state": "Active",
+      "tags": [
+        "excel",
+        "scientific notation",
+        "open workbook",
+        "uat"
+      ],
+      "description": "Review exact physical columns in an already-open .xlsx workbook, create a verified recovery copy, and convert eligible scientific-notation text and current numeric values to text. Execute remains UAT-gated; Excel is never saved or closed."
+    },
+    {
       "id": "developing-uat-sequence",
       "title": "UAT: Run a harmless sequence",
       "description": "Test sequence preview, confirmation, progress, and Stop remaining by dispatching the Context Palette project folder twice with a five-second wait. Windows may reuse one Explorer window.",

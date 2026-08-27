@@ -977,6 +977,33 @@ The bottom communication line always stays one row high. Hover over it for the c
   changes before Apply, Refresh and select it again. For partial or unknown
   results, inspect the workbook before retrying. **Return to Excel** only tries
   to return focus to the window captured when you opened the Action.
+- To review a column-to-text conversion, run **UAT: Convert
+  scientific-notation columns**. It does not read Input / Output. Choose one
+  already-open workbook, one visible worksheet, then exact physical columns;
+  blank and duplicate headers remain separate because columns are identified
+  by index and letter. Context Palette pages the bounded read-only preflight,
+  shows eligible, already-text, blank, formula, unsupported, and precision-risk
+  counts plus bounded samples, then asks Python Excel for an exact zero-write
+  plan. A selected-scope formula blocks execution.
+- Python Excel chooses the default sibling recovery path. Choosing another
+  future sibling `.xlsx` path creates a fresh plan; Context Palette never
+  creates or overwrites the recovery workbook. If Excel may already have lost
+  digits beyond its numeric precision, explicitly acknowledge that conversion
+  can preserve only the value Excel currently exposes. The engine creates and
+  verifies the reviewed recovery copy before mutation. It converts selected
+  eligible values to text, never saves or closes Excel, and reports the exact
+  completed columns and counts.
+- This Action is a Development/UAT feature. Set
+  `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1` before starting Context Palette
+  and restart it to enable **Execute**; any other or missing value leaves
+  discovery, inventory, preflight, and planning available but mutation
+  disabled. From PowerShell, use
+  `$env:CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION='1'; .\run-context-palette.bat`
+  for that one app process. Close it and start normally to return to read-only
+  review. A clean failure means no live-workbook mutation began, although a
+  verified recovery copy may exist. A partial failure or lost/unparseable
+  engine result may mean partial or unknown effects: inspect Excel and the
+  reviewed recovery location, and never retry automatically.
 - A transform changes the selection, or the complete field when nothing is selected.
 - Every transform result is copied to the clipboard automatically and can be reverted with one Undo.
 - Transform groups provide case and naming styles, whitespace cleanup, literal

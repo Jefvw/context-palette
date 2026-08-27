@@ -18,6 +18,7 @@ from .actions import (
     ActionError,
     EXCEL_AUTOMATION_ID,
     LIVE_FORMAT_PROFILE_AUTOMATION_ID,
+    LIVE_TEXT_CONVERSION_AUTOMATION_ID,
     action_uses_clipboard_template,
     action_search_rank,
     expanded_action,
@@ -102,10 +103,12 @@ from .drop_adapter import DropResult
 from .drop_target_window import DropTargetWindow
 from .excel_automation import (
     ExcelAutomationInputError,
+    live_text_conversion_uat_enabled,
     workbook_paths_from_workspace,
 )
 from .excel_automation_window import ExcelAutomationWindow
 from .excel_live_format_window import ExcelLiveFormatWindow
+from .excel_live_text_conversion_window import ExcelLiveTextConversionWindow
 from .file_transfer_window import FileTransferWindow
 from .inbox import InboxError, append_inbox_item, create_clipboard_item, load_inbox_items
 from .inbox_window import ActionCreator, InboxWindow, suggest_url_template
@@ -346,6 +349,9 @@ class LauncherApp:
         self.excel_automation_settings_path = (
             self.data_paths.excel_automation_settings_file
         )
+        self.live_text_conversion_execution_enabled = (
+            live_text_conversion_uat_enabled()
+        )
         self.work_item_sources: tuple[WorkItemSource, ...] = ()
         self.work_item_metadata: dict[str, WorkItemMetadata] = {}
         self.work_item_index = WorkItemIndex()
@@ -412,7 +418,10 @@ class LauncherApp:
         self.configuration_window: ConfigurationWindow | None = None
         self.drop_target_window: DropTargetWindow | None = None
         self.excel_automation_window: (
-            ExcelAutomationWindow | ExcelLiveFormatWindow | None
+            ExcelAutomationWindow
+            | ExcelLiveFormatWindow
+            | ExcelLiveTextConversionWindow
+            | None
         ) = None
         self.file_transfer_window: object | None = None
         self.send_to_destination_picker: SearchableSelectionPopup | None = None
@@ -3269,6 +3278,28 @@ class LauncherApp:
             self.excel_automation_window = workflow
             return "Opened the attended live Excel format workflow."
 
+        if action.value == LIVE_TEXT_CONVERSION_AUTOMATION_ID:
+            source_process_id = window_process_id(source_window_handle or 0)
+            source_title = window_title(source_window_handle or 0)
+            workflow = ExcelLiveTextConversionWindow(
+                self.root,
+                settings_path=self.excel_automation_settings_path,
+                status_setter=self.status_var.set,
+                source_window_handle=source_window_handle,
+                source_process_id=source_process_id,
+                source_window_title=source_title,
+                execution_enabled=getattr(
+                    self,
+                    "live_text_conversion_execution_enabled",
+                    False,
+                ),
+                file_opener=self._open_excel_recovery_file,
+                folder_opener=self._open_excel_output_folder,
+                on_close=self._excel_automation_closed,
+            )
+            self.excel_automation_window = workflow
+            return "Opened the reviewed live Excel text-conversion workflow."
+
         if action.value != EXCEL_AUTOMATION_ID:
             raise ActionError("The selected Excel automation is unsupported.")
 
@@ -3303,6 +3334,19 @@ class LauncherApp:
                 title="Excel output folder",
                 context="General",
                 type="open_folder",
+                value=str(path),
+            )
+        )
+
+    def _open_excel_recovery_file(self, path: Path) -> None:
+        if not path.is_file():
+            raise OSError(f"Recovery workbook is unavailable: {path}")
+        open_action_target(
+            Action(
+                id="excel-recovery-workbook",
+                title="Excel recovery workbook",
+                context="General",
+                type="open_file",
                 value=str(path),
             )
         )

@@ -705,6 +705,32 @@ Perform only when relevant:
   2026-08-25. Repeat the complete matrix at 100%, 125%, and 150% display
   scaling.
 
+- Against Python Excel commit `08af313`, run **UAT: Convert
+  scientific-notation columns** first without the UAT environment variable.
+  Confirm capability discovery, live inventory, paged preflight, physical
+  column selection, and planning work, while Execute remains disabled with a
+  persistent Development/UAT explanation. Then stop the app, set
+  `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1`, and restart. Use only a
+  disposable open `.xlsx`: include scientific text, ordinary text,
+  leading-zero identifiers, current numeric scalars, blank and duplicate
+  headers, and formulas outside the selected columns. Verify selected eligible
+  cells become text; ordinary/leading-zero text content is unchanged; only
+  selected physical columns and used data rows change; the header and formulas
+  outside scope are untouched; Excel remains open, dirty, and unsaved; and no
+  extra Excel process remains. In a separate fixture, put a formula inside the
+  selected scope and verify the plan blocks with no Execute.
+- Review default and overridden sibling recovery paths; every override must
+  produce a new plan. Confirm the engine-created recovery workbook opens and
+  contains the pre-change state. Exercise precision-risk acknowledgement,
+  stale workbook/sheet/plan, an existing recovery path, a clean failure with a
+  verified recovery, partial failure, and process/protocol loss. Confirm no
+  automatic retry, exact completed-column/count reporting, and guidance to
+  inspect Excel and recovery before another run. Repeat with Unicode names,
+  duplicate workbook names in separate Excel processes, blank/duplicate
+  headers, enough columns to exercise paging/truncation, Return to Excel, and
+  100%/125%/150% scaling. Never record the configured launcher path, workbook
+  token, path, header, or sample content in tracked files or ordinary logs.
+
 - With the optional OCR component prepared, copy a Snipping Tool bitmap and
   choose **Extract text**. Verify the UI stays responsive, useful text appears
   in Input / Output, the original image remains on the clipboard, and Undo

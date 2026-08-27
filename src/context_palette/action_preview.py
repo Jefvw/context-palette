@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .actions import Action
+from .actions import (
+    Action,
+    LIVE_FORMAT_PROFILE_AUTOMATION_ID,
+    LIVE_TEXT_CONVERSION_AUTOMATION_ID,
+)
 from .action_types import ACTION_TYPES
 from .action_sequences import (
     ActionSequenceError,
@@ -129,7 +133,7 @@ def build_action_preview(
             limitations,
         )
     if action.type == "excel_automation":
-        if action.value == "excel.apply_live_format_profile":
+        if action.value == LIVE_FORMAT_PROFILE_AUTOMATION_ID:
             return ActionPreview(
                 "open Excel workbooks, then one worksheet or all visible worksheets you choose",
                 "apply Standard data formatting directly; Excel is not saved or closed",
@@ -138,6 +142,22 @@ def build_action_preview(
                     "Changes the open workbook directly, may clear Excel Undo, "
                     "has no recovery or rollback. AutoSave must be off. Context "
                     "Palette never saves or closes Excel."
+                ),
+            )
+        if action.value == LIVE_TEXT_CONVERSION_AUTOMATION_ID:
+            return ActionPreview(
+                "an already-open .xlsx workbook, exact worksheet, and physical columns you review",
+                (
+                    "plan selected scientific-notation and numeric cells, create "
+                    "and verify a reviewed recovery copy, then convert eligible "
+                    "cells to text"
+                ),
+                details,
+                (
+                    "Development/UAT workflow. Execute is disabled unless its "
+                    "startup feature flag is enabled. Excel may already have lost "
+                    "digits beyond its numeric precision; the engine never saves "
+                    "or closes Excel."
                 ),
             )
         csv_limitations = (
@@ -300,11 +320,12 @@ def _configured_details(action: Action) -> tuple[tuple[str, str], ...]:
     elif action.type == "launch_app":
         label = "Configured application"
     elif action.type == "excel_automation":
-        label = (
-            "Apply Excel format template"
-            if action.value == "excel.apply_live_format_profile"
-            else "Export Excel files to CSV"
-        )
+        label = {
+            LIVE_FORMAT_PROFILE_AUTOMATION_ID: "Apply Excel format template",
+            LIVE_TEXT_CONVERSION_AUTOMATION_ID: (
+                "UAT: Convert scientific-notation columns"
+            ),
+        }.get(action.value, "Export Excel files to CSV")
         return (("Automation", label),)
     elif action.type == "paste_credential":
         return (("Credential target", action.value),)

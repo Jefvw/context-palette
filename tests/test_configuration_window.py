@@ -2872,15 +2872,23 @@ class ConfigurationDialogTests(unittest.TestCase):
         dialog.excel_automation_choices = {
             "Export Excel workbooks to CSV": "excel.export_workbooks_to_csv",
             "Apply Excel format template": "excel.apply_live_format_profile",
+            "UAT: Convert scientific-notation columns": (
+                "excel.convert_live_column_representation"
+            ),
         }
-        dialog.excel_automation_var = FakeVariable("Apply Excel format template")
+        dialog.excel_automation_var = FakeVariable(
+            "UAT: Convert scientific-notation columns"
+        )
         dialog.window = FakeWindow()
         saved: list[Action] = []
         dialog.on_save = lambda action: saved.append(action) or True
 
         dialog._save()
 
-        self.assertEqual(saved[0].value, "excel.apply_live_format_profile")
+        self.assertEqual(
+            saved[0].value,
+            "excel.convert_live_column_representation",
+        )
         self.assertEqual(saved[0].arguments, ())
         self.assertIsNone(saved[0].working_directory)
 
