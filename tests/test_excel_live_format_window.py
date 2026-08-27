@@ -19,6 +19,7 @@ from context_palette.excel_automation import (
     LiveFormatProfileResult,
 )
 from context_palette.excel_live_format_window import ExcelLiveFormatWindow
+from context_palette.excel_live_target_selector import LiveExcelTargetSelector
 
 
 class FakeCoordinator:
@@ -204,6 +205,10 @@ class ExcelLiveFormatWindowTests(unittest.TestCase):
         self.assertEqual(window._selected_workbook, selected)
         self.assertEqual(window.worksheet_var.get(), "Data")
         self.assertEqual(str(window.workbook_picker.cget("state")), "readonly")
+        self.assertIsInstance(window.target_selector, LiveExcelTargetSelector)
+        self.assertIs(window.workbook_picker.master, window.target_selector)
+        self.assertIs(window.worksheet_picker.master, window.target_selector)
+        self.assertIs(window.refresh_button.master, window.target_selector)
 
     def test_apply_uses_one_worksheet_request_without_a_planner(self) -> None:
         window = self._window()

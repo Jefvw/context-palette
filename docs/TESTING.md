@@ -694,7 +694,9 @@ Perform only when relevant:
 - With a separately bootstrapped Python Excel engine at commit `e405e14`, use
   a disposable already-open workbook to run **Apply Excel format template**.
   Confirm missing/invalid launcher setup disables only Excel Actions; inventory
-  finds the active workbook; one-worksheet and all-visible choices act only on
+  finds the active workbook; the workbook/worksheet labels, captured-F9
+  preselection, active-sheet fallback, inline Refresh, and Return eligibility
+  match the conversion Action; one-worksheet and all-visible choices act only on
   the displayed target; AutoSave is rejected; and Standard data applies Aptos
   11 to the used range, row-1 header treatment, freeze top row, and a filter
   only when absent. Verify hidden sheets are skipped, stale inventory requires
@@ -707,7 +709,10 @@ Perform only when relevant:
 
 - Against Python Excel commit `08af313`, run **UAT: Convert
   scientific-notation columns** first without the UAT environment variable.
-  Confirm capability discovery, live inventory, paged preflight, physical
+  Confirm capability discovery and that its initial workbook/worksheet chooser
+  matches the format-template Action, including duplicate-name labels,
+  captured-F9 preference, active visible worksheet, inline Refresh, and
+  Return-to-Excel eligibility. Then confirm paged preflight, physical
   column selection, and planning work, while Execute remains disabled with a
   persistent Development/UAT explanation. Then stop the app, set
   `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1`, and restart. Use only a

@@ -4,6 +4,11 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Unified the already-open Excel workbook and worksheet chooser used by the
+  live format-template and scientific-notation conversion Actions. Both now
+  share the same disambiguated labels, captured-F9 workbook preference,
+  active-visible-sheet fallback, inline Refresh control, and Return-to-Excel
+  eligibility; each workflow retains only its own scope and safety rules.
 - Added **UAT: Convert scientific-notation columns** against Python Excel
   `08af313`. The attended workflow inventories already-open workbooks, pages a
   bounded physical-column preflight, reviews the exact conversion plan and

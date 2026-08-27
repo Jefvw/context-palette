@@ -35,6 +35,13 @@ from .excel_automation import (
     load_excel_automation_settings,
     save_excel_automation_settings,
 )
+from .excel_live_target_selector import (
+    CapturedExcelSource,
+    LiveExcelTargetSelector,
+    can_return_to_captured_excel,
+    inventory_process_ids,
+    visible_inventory_workbooks,
+)
 from .hotkeys import focus_window
 from .window_geometry import configure_standard_window
 
@@ -78,6 +85,7 @@ class ExcelLiveTextConversionWindow:
         client: PythonExcelProcessClient | None = None,
         file_opener: Callable[[Path], None] | None = None,
         folder_opener: Callable[[Path], None] | None = None,
+        return_to_source: Callable[[int], bool] = focus_window,
         on_close: Callable[[], None] | None = None,
     ) -> None:
         if coordinator is not None and client is not None:
@@ -87,10 +95,16 @@ class ExcelLiveTextConversionWindow:
         self.source_window_handle = source_window_handle
         self.source_process_id = source_process_id
         self.source_window_title = source_window_title.strip()
+        self._captured_source = CapturedExcelSource(
+            source_window_handle,
+            source_process_id,
+            self.source_window_title,
+        )
         self.execution_enabled = bool(execution_enabled)
         self.coordinator = coordinator or ExcelAutomationCoordinator(client)
         self.file_opener = file_opener or (lambda _path: None)
         self.folder_opener = folder_opener or (lambda _path: None)
+        self.return_to_source = return_to_source
         self.on_close = on_close or (lambda: None)
 
         self._launcher_path: Path | None = None
@@ -101,6 +115,7 @@ class ExcelLiveTextConversionWindow:
         self._workbooks_by_label: dict[str, LiveExcelWorkbook] = {}
         self._selected_workbook: LiveExcelWorkbook | None = None
         self._selected_worksheet: str | None = None
+        self.target_selector: LiveExcelTargetSelector | None = None
         self._preflight_columns: list[object] = []
         self._preflight_column_indexes: set[int] = set()
         self._selected_preflight_column_indexes: set[int] = set()
@@ -357,15 +372,8 @@ class ExcelLiveTextConversionWindow:
         ):
             self._show_unavailable(call, "Open Excel workbooks are unavailable.")
             return
-        self._inventory_process_ids = frozenset(
-            application.process_id for application in result.applications
-        )
-        workbooks = tuple(
-            workbook
-            for application in result.applications
-            if application.visible
-            for workbook in application.workbooks
-        )
+        self._inventory_process_ids = inventory_process_ids(result)
+        workbooks = visible_inventory_workbooks(result)
         if not workbooks:
             self.view_state = "no_workbooks"
             self._clear_content()
@@ -391,47 +399,23 @@ class ExcelLiveTextConversionWindow:
     ) -> None:
         self.view_state = "select_target"
         self._clear_content()
-        self._workbooks_by_label = _workbook_labels(workbooks)
-        initial = _preferred_workbook(
-            workbooks,
-            source_process_id=self.source_process_id,
-            source_window_title=self.source_window_title,
+        selector = LiveExcelTargetSelector(
+            self.content,
+            workbooks=workbooks,
+            source=self._captured_source,
+            refresh_command=self._start_inventory,
+            selection_changed=self._target_selection_changed,
         )
-        label = next(
-            item_label
-            for item_label, workbook in self._workbooks_by_label.items()
-            if workbook == initial
-        )
-        self.workbook_var.set(label)
-        self._selected_workbook = initial
+        selector.pack(fill=tk.X)
+        self.target_selector = selector
+        self._workbooks_by_label = selector.workbooks_by_label
+        self.workbook_var = selector.workbook_var
+        self.worksheet_var = selector.worksheet_var
+        self.workbook_picker = selector.workbook_picker
+        self.worksheet_picker = selector.worksheet_picker
+        self.refresh_button = selector.refresh_button
+        self._sync_target_selection()
 
-        form = ttk.Frame(self.content)
-        form.pack(fill=tk.X)
-        ttk.Label(form, text="Workbook", style="Heading.TLabel").grid(
-            row=0, column=0, sticky=tk.W, padx=(0, 8), pady=(0, 6)
-        )
-        self.workbook_picker = ttk.Combobox(
-            form,
-            textvariable=self.workbook_var,
-            values=tuple(self._workbooks_by_label),
-            state="readonly",
-            width=68,
-        )
-        self.workbook_picker.grid(row=0, column=1, sticky=tk.EW, pady=(0, 6))
-        self.workbook_picker.bind("<<ComboboxSelected>>", self._workbook_changed)
-        ttk.Label(form, text="Worksheet", style="Heading.TLabel").grid(
-            row=1, column=0, sticky=tk.W, padx=(0, 8)
-        )
-        self.worksheet_picker = ttk.Combobox(
-            form,
-            textvariable=self.worksheet_var,
-            state="readonly",
-            width=50,
-        )
-        self.worksheet_picker.grid(row=1, column=1, sticky=tk.EW)
-        self.worksheet_picker.bind("<<ComboboxSelected>>", self._worksheet_changed)
-        form.columnconfigure(1, weight=1)
-        self._populate_worksheets(initial)
         ttk.Label(
             self.content,
             text=(
@@ -449,33 +433,27 @@ class ExcelLiveTextConversionWindow:
             style="Accent.TButton",
         )
         self.primary_button.pack(anchor=tk.W, pady=(12, 0))
-        self._refresh_inventory_button()
         self._render_warnings(inventory.warnings)
         self._update_inspect_state()
 
-    def _workbook_changed(self, _event: tk.Event | None = None) -> None:
-        workbook = self._workbooks_by_label.get(self.workbook_var.get())
-        if workbook is None:
+    def _sync_target_selection(self) -> None:
+        selector = self.target_selector
+        if selector is None:
             return
-        self._selected_workbook = workbook
-        self._populate_worksheets(workbook)
+        self._selected_workbook = selector.selected_workbook
+        self._selected_worksheet = selector.selected_worksheet
+
+    def _target_selection_changed(self) -> None:
+        self._sync_target_selection()
         self._update_inspect_state()
 
-    def _populate_worksheets(self, workbook: LiveExcelWorkbook) -> None:
-        visible = tuple(sheet.name for sheet in workbook.sheets if sheet.state == "visible")
-        selected = (
-            workbook.active_sheet
-            if workbook.active_sheet in visible
-            else (visible[0] if visible else "")
-        )
-        self.worksheet_var.set(selected)
-        self._selected_worksheet = selected or None
-        if self.worksheet_picker is not None:
-            self.worksheet_picker.configure(values=visible)
+    def _workbook_changed(self, _event: tk.Event | None = None) -> None:
+        if self.target_selector is not None:
+            self.target_selector.select_workbook_from_variable(_event)
 
     def _worksheet_changed(self, _event: tk.Event | None = None) -> None:
-        self._selected_worksheet = self.worksheet_var.get() or None
-        self._update_inspect_state()
+        if self.target_selector is not None:
+            self.target_selector.select_worksheet_from_variable(_event)
 
     def _update_inspect_state(self) -> None:
         if self.primary_button is None:
@@ -1123,9 +1101,8 @@ class ExcelLiveTextConversionWindow:
         self.refresh_button.pack(anchor=tk.W, pady=(8, 0))
 
     def _return_button(self) -> None:
-        if (
-            self.source_window_handle is None
-            or self.source_process_id not in self._inventory_process_ids
+        if not can_return_to_captured_excel(
+            self._captured_source, self._inventory_process_ids
         ):
             return
         ttk.Button(
@@ -1136,7 +1113,7 @@ class ExcelLiveTextConversionWindow:
 
     def _return_to_excel(self) -> None:
         handle = self.source_window_handle
-        if handle is None or not focus_window(handle):
+        if handle is None or not self.return_to_source(handle):
             self._set_status(
                 "The captured Excel window is no longer available; select it manually.",
                 error=True,
@@ -1233,6 +1210,7 @@ class ExcelLiveTextConversionWindow:
         self._stop_progress()
         for child in self.content.winfo_children():
             child.destroy()
+        self.target_selector = None
         self.primary_button = None
         self.refresh_button = None
         self.result_text = None
@@ -1269,53 +1247,6 @@ class ExcelLiveTextConversionWindow:
 
     def _canvas_configured(self, event: tk.Event) -> None:
         self.canvas.itemconfigure(self._content_window_id, width=event.width)
-
-
-def _workbook_labels(
-    workbooks: tuple[LiveExcelWorkbook, ...],
-) -> dict[str, LiveExcelWorkbook]:
-    labels: dict[str, LiveExcelWorkbook] = {}
-    for workbook in workbooks:
-        location = workbook.full_path or "Unsaved workbook"
-        base = f"{workbook.name} — {location} — Excel {workbook.process_id}"
-        label = base
-        suffix = 2
-        while label in labels:
-            label = f"{base} ({suffix})"
-            suffix += 1
-        labels[label] = workbook
-    return labels
-
-
-def _preferred_workbook(
-    workbooks: tuple[LiveExcelWorkbook, ...],
-    *,
-    source_process_id: int | None,
-    source_window_title: str,
-) -> LiveExcelWorkbook:
-    title = source_window_title.casefold()
-    same_process = tuple(
-        item
-        for item in workbooks
-        if source_process_id is not None and item.process_id == source_process_id
-    )
-    title_matches = tuple(
-        item
-        for item in same_process
-        if _title_starts_with_workbook_name(title, item.name.casefold())
-    )
-    if len(title_matches) == 1:
-        return title_matches[0]
-    if len(same_process) == 1:
-        return same_process[0]
-    return workbooks[0]
-
-
-def _title_starts_with_workbook_name(title: str, workbook_name: str) -> bool:
-    if not title.startswith(workbook_name):
-        return False
-    remainder = title[len(workbook_name) :]
-    return not remainder or remainder[0].isspace() or remainder[0] in "-—"
 
 
 def _column_label(column: object) -> str:

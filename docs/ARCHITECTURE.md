@@ -1290,13 +1290,26 @@ subprocess owns a batch. The configured engine path is stored only in ignored
 Absence, misconfiguration, or a failed engine leaves every non-Excel feature
 available.
 
+### `excel_live_target_selector.py`
+
+Owns the one reusable already-open Excel target selector used by both live
+workflows. It creates disambiguated workbook labels, prefers the workbook from
+the captured F9 Excel process and title when that choice is unambiguous, falls
+back to Excel's active visible worksheet, and renders the common workbook,
+worksheet, and inline **Refresh** controls. It also owns the common rule that a
+**Return to Excel** command is offered only when the captured handle's process
+appeared in the latest inventory. The component does not decide mutation
+policy: direct formatting adds its all-visible scope and blocks AutoSave at
+selection time, while conversion may perform read-only inspection and lets its
+authoritative plan block unsafe mutation.
+
 ### `excel_live_text_conversion_window.py`
 
 Owns the centered attended Development/UAT workflow for Python Excel commit
 `08af313` and retains the partial-effect result boundary introduced by
-`54f1ab8`. It reuses the one bounded process client/coordinator and machine-local
-launcher setting. Its sequence is exact capability discovery, already-open
-workbook inventory, one visible worksheet, bounded paged physical-column
+`54f1ab8`. It reuses the one bounded process client/coordinator, machine-local
+launcher setting, and shared live-Excel target selector. Its sequence is exact
+capability discovery, already-open workbook inventory, one visible worksheet, bounded paged physical-column
 preflight, zero-write plan, reviewed fingerprint, and conversion. Columns are
 identified by ordered physical index so blank or duplicate headers remain
 distinct. All bounds, workbook tokens, column order, recovery path, and plan
@@ -1319,8 +1332,8 @@ workbook paths, or the actual machine-local launcher path in tracked data.
 Owns the centered attended **Apply Excel format template** workflow against
 the Python Excel engine at commit `e405e14`. It reuses the same optional,
 machine-local launcher resolution as CSV export, inventories only already-open
-Excel workbooks, and offers a selected visible worksheet or all visible
-worksheets. It has one fixed **Standard data** profile: Aptos 11 in the used
+Excel workbooks, and uses the shared target selector before offering a selected
+visible worksheet or all visible worksheets. It has one fixed **Standard data** profile: Aptos 11 in the used
 range, a row-1 header, freeze top row, and an AutoFilter only when none already
 exists. Its **Apply** button is the one confirmation.
 

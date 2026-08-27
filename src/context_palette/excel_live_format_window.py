@@ -24,6 +24,13 @@ from .excel_automation import (
     load_excel_automation_settings,
     save_excel_automation_settings,
 )
+from .excel_live_target_selector import (
+    CapturedExcelSource,
+    LiveExcelTargetSelector,
+    can_return_to_captured_excel,
+    inventory_process_ids,
+    visible_inventory_workbooks,
+)
 from .hotkeys import focus_window
 from .window_geometry import configure_standard_window
 
@@ -66,6 +73,11 @@ class ExcelLiveFormatWindow:
         self.source_window_handle = source_window_handle
         self.source_process_id = source_process_id
         self.source_window_title = source_window_title.strip()
+        self._captured_source = CapturedExcelSource(
+            source_window_handle,
+            source_process_id,
+            self.source_window_title,
+        )
         self.coordinator = coordinator or ExcelAutomationCoordinator(client)
         self.return_to_source = return_to_source
         self.on_close = on_close or (lambda: None)
@@ -79,6 +91,7 @@ class ExcelLiveFormatWindow:
         self._selected_workbook: LiveExcelWorkbook | None = None
         self._selected_worksheet: str | None = None
         self._selected_scope = "worksheet"
+        self.target_selector: LiveExcelTargetSelector | None = None
         self.view_state = "starting"
 
         self.window = tk.Toplevel(parent)
@@ -254,15 +267,8 @@ class ExcelLiveFormatWindow:
         ):
             self._show_inventory_failure(call)
             return
-        self._inventory_process_ids = frozenset(
-            application.process_id for application in call.result.applications
-        )
-        workbooks = tuple(
-            workbook
-            for application in call.result.applications
-            for workbook in application.workbooks
-            if application.visible
-        )
+        self._inventory_process_ids = inventory_process_ids(call.result)
+        workbooks = visible_inventory_workbooks(call.result)
         if not workbooks:
             self._show_no_workbooks(call.result)
             return
@@ -297,68 +303,24 @@ class ExcelLiveFormatWindow:
     ) -> None:
         self.view_state = "select"
         self._clear_content()
-        self._workbooks_by_label = _workbook_labels(workbooks)
-        initial = _preferred_workbook(
-            workbooks,
-            source_process_id=self.source_process_id,
-            source_window_title=self.source_window_title,
+        selector = LiveExcelTargetSelector(
+            self.content,
+            workbooks=workbooks,
+            source=self._captured_source,
+            refresh_command=self._start_inventory,
+            selection_changed=self._target_selection_changed,
+            allow_all_visible_worksheets=True,
         )
-        initial_label = next(
-            label for label, workbook in self._workbooks_by_label.items() if workbook == initial
-        )
-        self.workbook_var.set(initial_label)
-        self._selected_workbook = initial
-
-        form = ttk.Frame(self.content)
-        form.pack(fill=tk.X)
-        ttk.Label(form, text="Workbook", style="Heading.TLabel").grid(
-            row=0, column=0, sticky=tk.W, padx=(0, 8), pady=(0, 5)
-        )
-        self.workbook_picker = ttk.Combobox(
-            form,
-            textvariable=self.workbook_var,
-            values=tuple(self._workbooks_by_label),
-            state="readonly",
-            width=70,
-        )
-        self.workbook_picker.grid(row=0, column=1, sticky=tk.EW, pady=(0, 5))
-        self.workbook_picker.bind("<<ComboboxSelected>>", self._workbook_changed)
-        self.refresh_button = ttk.Button(
-            form, text="Refresh", command=self._start_inventory, style="Compact.TButton"
-        )
-        self.refresh_button.grid(row=0, column=2, sticky=tk.E, padx=(8, 0), pady=(0, 5))
-        ttk.Label(form, text="Apply to", style="Heading.TLabel").grid(
-            row=1, column=0, sticky=tk.NW, padx=(0, 8), pady=(4, 0)
-        )
-        scope = ttk.Frame(form)
-        scope.grid(row=1, column=1, columnspan=2, sticky=tk.W, pady=(4, 0))
-        ttk.Radiobutton(
-            scope,
-            text="One worksheet",
-            variable=self.scope_var,
-            value="worksheet",
-            command=self._scope_changed,
-        ).pack(side=tk.LEFT)
-        ttk.Radiobutton(
-            scope,
-            text="All visible worksheets",
-            variable=self.scope_var,
-            value="workbook",
-            command=self._scope_changed,
-        ).pack(side=tk.LEFT, padx=(12, 0))
-        ttk.Label(form, text="Worksheet", style="Heading.TLabel").grid(
-            row=2, column=0, sticky=tk.W, padx=(0, 8), pady=(6, 0)
-        )
-        self.worksheet_picker = ttk.Combobox(
-            form,
-            textvariable=self.worksheet_var,
-            state="readonly",
-            width=48,
-        )
-        self.worksheet_picker.grid(row=2, column=1, columnspan=2, sticky=tk.EW, pady=(6, 0))
-        self.worksheet_picker.bind("<<ComboboxSelected>>", self._worksheet_changed)
-        form.columnconfigure(1, weight=1)
-        self._populate_worksheets(initial)
+        selector.pack(fill=tk.X)
+        self.target_selector = selector
+        self._workbooks_by_label = selector.workbooks_by_label
+        self.workbook_var = selector.workbook_var
+        self.scope_var = selector.scope_var
+        self.worksheet_var = selector.worksheet_var
+        self.workbook_picker = selector.workbook_picker
+        self.worksheet_picker = selector.worksheet_picker
+        self.refresh_button = selector.refresh_button
+        self._sync_target_selection()
 
         ttk.Separator(self.content).pack(fill=tk.X, pady=12)
         ttk.Label(self.content, text="What Apply does", style="Heading.TLabel").pack(
@@ -396,34 +358,29 @@ class ExcelLiveFormatWindow:
         self._render_warnings(inventory.warnings)
         self._update_apply_state()
 
-    def _workbook_changed(self, _event: tk.Event | None = None) -> None:
-        workbook = self._workbooks_by_label.get(self.workbook_var.get())
-        if workbook is None:
+    def _sync_target_selection(self) -> None:
+        selector = self.target_selector
+        if selector is None:
             return
-        self._selected_workbook = workbook
-        self._populate_worksheets(workbook)
+        self._selected_workbook = selector.selected_workbook
+        self._selected_worksheet = selector.selected_worksheet
+        self._selected_scope = selector.selected_scope
+
+    def _target_selection_changed(self) -> None:
+        self._sync_target_selection()
         self._update_apply_state()
 
-    def _populate_worksheets(self, workbook: LiveExcelWorkbook) -> None:
-        visible = tuple(sheet.name for sheet in workbook.sheets if sheet.state == "visible")
-        selected = workbook.active_sheet if workbook.active_sheet in visible else (visible[0] if visible else "")
-        self.worksheet_var.set(selected)
-        self._selected_worksheet = selected or None
-        if self.worksheet_picker is not None:
-            self.worksheet_picker.configure(values=visible)
-        self._scope_changed()
+    def _workbook_changed(self, _event: tk.Event | None = None) -> None:
+        if self.target_selector is not None:
+            self.target_selector.select_workbook_from_variable(_event)
 
     def _worksheet_changed(self, _event: tk.Event | None = None) -> None:
-        self._selected_worksheet = self.worksheet_var.get() or None
-        self._update_apply_state()
+        if self.target_selector is not None:
+            self.target_selector.select_worksheet_from_variable(_event)
 
     def _scope_changed(self) -> None:
-        self._selected_scope = self.scope_var.get()
-        if self.worksheet_picker is not None:
-            self.worksheet_picker.configure(
-                state=("readonly" if self._selected_scope == "worksheet" else tk.DISABLED)
-            )
-        self._update_apply_state()
+        if self.target_selector is not None:
+            self.target_selector.select_scope_from_variable()
 
     def _update_apply_state(self) -> None:
         button = self.primary_button
@@ -679,9 +636,8 @@ class ExcelLiveFormatWindow:
         self._set_status("Context Palette remains available; only the live Excel template is unavailable.", error=True)
 
     def _return_button(self) -> None:
-        if (
-            self.source_window_handle is None
-            or self.source_process_id not in self._inventory_process_ids
+        if not can_return_to_captured_excel(
+            self._captured_source, self._inventory_process_ids
         ):
             return
         button = ttk.Button(self.content, text="Return to Excel", command=self._return_to_excel)
@@ -792,6 +748,7 @@ class ExcelLiveFormatWindow:
         self._stop_progress()
         for child in self.content.winfo_children():
             child.destroy()
+        self.target_selector = None
         self.primary_button = None
         self.refresh_button = None
 
@@ -807,49 +764,6 @@ class ExcelLiveFormatWindow:
         self.status_var.set(message)
         self.status_label.configure(style="Error.TLabel" if error else "Status.TLabel")
         self.status_setter(message)
-
-
-def _workbook_labels(workbooks: tuple[LiveExcelWorkbook, ...]) -> dict[str, LiveExcelWorkbook]:
-    labels: dict[str, LiveExcelWorkbook] = {}
-    for workbook in workbooks:
-        location = workbook.full_path or "Unsaved workbook"
-        base = f"{workbook.name} — {location} — Excel {workbook.process_id}"
-        label = base
-        suffix = 2
-        while label in labels:
-            label = f"{base} ({suffix})"
-            suffix += 1
-        labels[label] = workbook
-    return labels
-
-
-def _preferred_workbook(
-    workbooks: tuple[LiveExcelWorkbook, ...],
-    *,
-    source_process_id: int | None,
-    source_window_title: str,
-) -> LiveExcelWorkbook:
-    title = source_window_title.casefold()
-    same_process = tuple(
-        item for item in workbooks if source_process_id is not None and item.process_id == source_process_id
-    )
-    title_matches = tuple(
-        item
-        for item in same_process
-        if _title_starts_with_workbook_name(title, item.name.casefold())
-    )
-    if len(title_matches) == 1:
-        return title_matches[0]
-    if len(same_process) == 1:
-        return same_process[0]
-    return workbooks[0]
-
-
-def _title_starts_with_workbook_name(title: str, workbook_name: str) -> bool:
-    if not title.startswith(workbook_name):
-        return False
-    remainder = title[len(workbook_name) :]
-    return not remainder or remainder[0].isspace() or remainder[0] in "-—"
 
 
 def _request_id() -> str:

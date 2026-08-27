@@ -50,11 +50,13 @@ This file contains actionable future work. Completed user-visible work belongs i
 - Manually validate the live **Apply Excel format template** Action with a
   disposable workbook against Python Excel commit `e405e14`. The one-sheet
   happy path and preservation of an existing filter passed on 2026-08-25.
-  Complete the remaining setup/missing-engine, all-visible, AutoSave rejection,
+  Confirm its shared workbook/worksheet chooser matches the conversion Action,
+  then complete the remaining setup/missing-engine, all-visible, AutoSave rejection,
   added-filter, hidden-sheet, stale, partial/unknown, no-retry, Return-to-Excel,
   no-save/no-close, and 100%/125%/150% display-scaling matrix.
 - Complete disposable real-Excel UAT for **UAT: Convert scientific-notation
   columns** against Python Excel `08af313` before removing its execution gate.
+  Confirm the same shared workbook/worksheet chooser behavior first.
   With `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1` set before startup, cover
   scientific text, numeric scalars, leading-zero and ordinary text, formulas
   outside the selected scope, a formula-in-scope blocked plan, blank and

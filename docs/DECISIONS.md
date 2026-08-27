@@ -1,5 +1,27 @@
 # Decisions
 
+## 2026-08-27 - Reuse one live-Excel workbook and worksheet chooser
+
+**Decision:** Render the already-open workbook and visible-worksheet selection
+for **Apply Excel format template** and **UAT: Convert scientific-notation
+columns** through one small shared component. The component owns workbook
+label disambiguation, captured-F9 workbook preference, active-visible-sheet
+fallback, the inline Refresh control, and Return-to-Excel eligibility.
+Formatting alone adds **All visible worksheets**; conversion continues from one
+worksheet into physical-column inspection.
+
+**Reason:** Both Actions select the same live Excel objects. Separate widgets
+had already drifted in layout and duplicated subtle title-matching rules, which
+made the safer conversion appear more complicated before its genuinely
+different column review began.
+
+**Consequences:** Target selection now looks and behaves consistently without
+creating a generic workflow framework. AutoSave remains workflow policy:
+formatting blocks its immediate Apply button, while conversion may complete
+read-only inspection and relies on the fingerprinted engine plan to block an
+unsafe mutation. Recovery, precision acknowledgement, all-visible formatting,
+and result handling remain owned by their respective windows.
+
 ## 2026-08-26 - Gate reviewed live column-to-text conversion behind UAT
 
 **Decision:** Add **UAT: Convert scientific-notation columns** as a normal

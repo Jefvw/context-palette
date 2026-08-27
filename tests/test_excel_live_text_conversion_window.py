@@ -45,6 +45,7 @@ from context_palette.excel_automation import (
 from context_palette.excel_live_text_conversion_window import (
     ExcelLiveTextConversionWindow,
 )
+from context_palette.excel_live_target_selector import LiveExcelTargetSelector
 
 
 FINGERPRINT = "sha256:" + "a" * 64
@@ -435,6 +436,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         self.status = Mock()
         self.file_opener = Mock()
         self.folder_opener = Mock()
+        self.return_to_source = Mock(return_value=True)
 
     def _window(self, **kwargs) -> ExcelLiveTextConversionWindow:
         window = ExcelLiveTextConversionWindow(
@@ -444,6 +446,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
             coordinator=self.coordinator,  # type: ignore[arg-type]
             file_opener=self.file_opener,
             folder_opener=self.folder_opener,
+            return_to_source=self.return_to_source,
             **kwargs,
         )
         self.addCleanup(self._close, window)
@@ -543,6 +546,10 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         self.assertEqual(len(labels), 2)
         self.assertNotEqual(labels[0], labels[1])
         self.assertEqual(window.worksheet_var.get(), "Données")
+        self.assertIsInstance(window.target_selector, LiveExcelTargetSelector)
+        self.assertIs(window.workbook_picker.master, window.target_selector)
+        self.assertIs(window.worksheet_picker.master, window.target_selector)
+        self.assertIs(window.refresh_button.master, window.target_selector)
 
     def test_blank_duplicate_headers_and_load_more_preserve_physical_selection(self) -> None:
         window = self._window()
@@ -652,12 +659,8 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         self._button(window.content, "Review recovery workbook").invoke()
         self.file_opener.assert_called_once_with(Path(RECOVERY))
 
-        with patch(
-            "context_palette.excel_live_text_conversion_window.focus_window",
-            return_value=True,
-        ) as focus:
-            self._button(window.content, "Return to Excel").invoke()
-        focus.assert_called_once_with(4321)
+        self._button(window.content, "Return to Excel").invoke()
+        self.return_to_source.assert_called_once_with(4321)
 
     def test_clean_failure_and_partial_failure_have_distinct_recovery_guidance(self) -> None:
         for state, expected in (

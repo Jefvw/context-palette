@@ -967,8 +967,10 @@ The bottom communication line always stays one row high. Hover over it for the c
   cancellation, live Excel support, or Action-sequence support.
 - To format an already-open workbook, run **Apply Excel format template** from
   the Standard menu or its normal Action location. This does not read Input /
-  Output. The screen lists workbooks currently open in Excel; select one
-  visible worksheet or **All visible worksheets** and choose **Apply**. The
+  Output. The shared live-Excel chooser lists workbooks currently open in
+  Excel, prefers the workbook and active visible worksheet captured through F9
+  when possible, and provides **Refresh** beside the workbook. Select one visible
+  worksheet or **All visible worksheets** and choose **Apply**. The
   fixed Standard data template applies Aptos 11 to the used range, treats row
   1 as a header, freezes its top row, and adds a filter only where none exists.
   Turn AutoSave off first. Apply is the confirmation, and Context Palette never
@@ -978,8 +980,10 @@ The bottom communication line always stays one row high. Hover over it for the c
   results, inspect the workbook before retrying. **Return to Excel** only tries
   to return focus to the window captured when you opened the Action.
 - To review a column-to-text conversion, run **UAT: Convert
-  scientific-notation columns**. It does not read Input / Output. Choose one
-  already-open workbook, one visible worksheet, then exact physical columns;
+  scientific-notation columns**. It does not read Input / Output. It begins
+  with the same live-Excel workbook, worksheet, captured-F9 preference, and
+  Refresh controls as the format-template Action. Choose one visible worksheet,
+  then exact physical columns;
   blank and duplicate headers remain separate because columns are identified
   by index and letter. Context Palette pages the bounded read-only preflight,
   shows eligible, already-text, blank, formula, unsupported, and precision-risk
