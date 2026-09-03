@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from copy import deepcopy
+from hashlib import sha256
 import json
 from pathlib import Path
 from typing import Iterable
@@ -11,7 +12,7 @@ from .persistence import atomic_replace_bytes, atomic_write_json
 
 
 class ActionDeletionError(Exception):
-    """Raised when an action lifecycle mutation cannot complete safely."""
+    """Raised when an Action deletion cannot complete safely."""
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,121 @@ class ActionDeletionReport:
     references_removed: int = 0
     buttons_removed: int = 0
     files_changed: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class ActionDeletionTarget:
+    """User-visible Action identity captured from the reviewed file."""
+
+    id: str
+    title: str
+    state: str
+    type: str
+    quick_action_path: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ActionDeletionPlan:
+    """Exact single-Action state approved by the destructive review."""
+
+    action_path: Path
+    action_id: str
+    target: ActionDeletionTarget
+    impact: ActionDeletionReport
+    configuration_fingerprint: str
+    context_paths: tuple[Path, ...]
+    command_surface_paths: tuple[Path, ...]
+    palette_path: Path
+    sequence_paths: tuple[Path, ...] = ()
+
+    @property
+    def participant_paths(self) -> tuple[Path, ...]:
+        return _deletion_participant_paths(
+            self.action_path,
+            context_paths=self.context_paths,
+            command_surface_paths=self.command_surface_paths,
+            palette_path=self.palette_path,
+            sequence_paths=self.sequence_paths,
+        )
+
+
+def plan_action_deletion(
+    action_path: Path,
+    action_id: str,
+    *,
+    context_paths: tuple[Path, ...],
+    command_surface_paths: tuple[Path, ...],
+    palette_path: Path,
+    sequence_paths: tuple[Path, ...] = (),
+) -> ActionDeletionPlan:
+    """Prepare one exact, read-only permanent-deletion review."""
+
+    requested_ids = _validated_action_ids((action_id,))
+    participants = _deletion_participant_paths(
+        action_path,
+        context_paths=context_paths,
+        command_surface_paths=command_surface_paths,
+        palette_path=palette_path,
+        sequence_paths=sequence_paths,
+    )
+    with configuration_mutation_gate():
+        fingerprint_before = action_deletion_configuration_fingerprint(participants)
+        action_data = _read_object(action_path)
+        records = _find_action_records(action_data, action_path, requested_ids)
+        canonical_id = records[0]["id"]
+        if not isinstance(canonical_id, str):
+            raise ActionDeletionError("The reviewed Action has an invalid ID.")
+        target = _deletion_target(records[0], canonical_id)
+        _assert_no_sequence_dependencies_many(
+            (canonical_id,),
+            sequence_paths,
+            include_archived=True,
+        )
+        references = inspect_action_references(
+            canonical_id,
+            context_paths=context_paths,
+            command_surface_paths=command_surface_paths,
+            palette_path=palette_path,
+        )
+        fingerprint_after = action_deletion_configuration_fingerprint(participants)
+        if fingerprint_before != fingerprint_after:
+            raise ActionDeletionError(
+                "Saved Actions or assignments changed while the deletion review "
+                "was being prepared. Review the Action again."
+            )
+
+    return ActionDeletionPlan(
+        action_path=Path(action_path),
+        action_id=canonical_id,
+        target=target,
+        impact=ActionDeletionReport(
+            references.references_removed,
+            references.buttons_removed,
+            references.files_changed + 1,
+        ),
+        configuration_fingerprint=fingerprint_after,
+        context_paths=tuple(context_paths),
+        command_surface_paths=tuple(command_surface_paths),
+        palette_path=Path(palette_path),
+        sequence_paths=tuple(sequence_paths),
+    )
+
+
+def commit_action_deletion(plan: ActionDeletionPlan) -> ActionDeletionReport:
+    """Commit one unchanged, reviewed single-Action deletion plan."""
+
+    if not isinstance(plan, ActionDeletionPlan):
+        raise ActionDeletionError("A reviewed Action deletion plan is required.")
+    return delete_action_and_references(
+        plan.action_path,
+        plan.action_id,
+        context_paths=plan.context_paths,
+        command_surface_paths=plan.command_surface_paths,
+        palette_path=plan.palette_path,
+        sequence_paths=plan.sequence_paths,
+        expected_report=plan.impact,
+        expected_configuration_fingerprint=plan.configuration_fingerprint,
+    )
 
 
 def inspect_action_references(
@@ -95,6 +211,8 @@ def delete_action_and_references(
     command_surface_paths: tuple[Path, ...],
     palette_path: Path,
     sequence_paths: tuple[Path, ...] = (),
+    expected_report: ActionDeletionReport | None = None,
+    expected_configuration_fingerprint: str | None = None,
 ) -> ActionDeletionReport:
     return delete_actions_and_references(
         action_path,
@@ -103,6 +221,8 @@ def delete_action_and_references(
         command_surface_paths=command_surface_paths,
         palette_path=palette_path,
         sequence_paths=sequence_paths,
+        expected_report=expected_report,
+        expected_configuration_fingerprint=expected_configuration_fingerprint,
     )
 
 
@@ -115,11 +235,35 @@ def delete_actions_and_references(
     palette_path: Path,
     sequence_paths: tuple[Path, ...] = (),
     expected_report: ActionDeletionReport | None = None,
+    expected_configuration_fingerprint: str | None = None,
 ) -> ActionDeletionReport:
-    """Permanently delete one reviewed Archived batch in one transaction."""
+    """Permanently delete one reviewed Action batch in one transaction.
+
+    Active Actions and legacy ``Archived`` records are both accepted.  The
+    latter remain readable only for backward-compatible cleanup; deletion does
+    not restore or otherwise migrate them first.
+    """
 
     selected_ids = _validated_action_ids(action_ids)
+    participant_paths = _deletion_participant_paths(
+        action_path,
+        context_paths=context_paths,
+        command_surface_paths=command_surface_paths,
+        palette_path=palette_path,
+        sequence_paths=sequence_paths,
+    )
     with configuration_mutation_gate():
+        fingerprint_before = action_deletion_configuration_fingerprint(
+            participant_paths
+        )
+        if (
+            expected_configuration_fingerprint is not None
+            and fingerprint_before != expected_configuration_fingerprint
+        ):
+            raise ActionDeletionError(
+                "Saved Actions or assignments changed after review. Review the "
+                "Action selection again; no configuration changes were made."
+            )
         _assert_no_sequence_dependencies_many(
             selected_ids,
             sequence_paths,
@@ -132,94 +276,9 @@ def delete_actions_and_references(
             command_surface_paths=command_surface_paths,
             palette_path=palette_path,
             expected_report=expected_report,
+            participant_paths=participant_paths,
+            fingerprint_before=fingerprint_before,
         )
-
-
-def archive_action_and_references(
-    action_path: Path,
-    action_id: str,
-    *,
-    context_paths: tuple[Path, ...],
-    command_surface_paths: tuple[Path, ...],
-    palette_path: Path,
-    sequence_paths: tuple[Path, ...] = (),
-) -> ActionDeletionReport:
-    """Archive an action after detaching every active-only saved reference."""
-
-    return archive_actions_and_references(
-        action_path,
-        (action_id,),
-        context_paths=context_paths,
-        command_surface_paths=command_surface_paths,
-        palette_path=palette_path,
-        sequence_paths=sequence_paths,
-    )
-
-
-def archive_actions_and_references(
-    action_path: Path,
-    action_ids: Iterable[str],
-    *,
-    context_paths: tuple[Path, ...],
-    command_surface_paths: tuple[Path, ...],
-    palette_path: Path,
-    sequence_paths: tuple[Path, ...] = (),
-    expected_report: ActionDeletionReport | None = None,
-) -> ActionDeletionReport:
-    """Archive one reviewed Active batch and detach its saved placements."""
-
-    selected_ids = _validated_action_ids(action_ids)
-    with configuration_mutation_gate():
-        _assert_no_sequence_dependencies_many(
-            selected_ids,
-            sequence_paths,
-            include_archived=False,
-        )
-        action_data = _read_object(action_path)
-        actions = _find_action_records(action_data, action_path, selected_ids)
-        already_archived = [
-            action_id
-            for action_id, action in zip(selected_ids, actions, strict=True)
-            if action.get("state", "Active") == "Archived"
-        ]
-        if already_archived:
-            raise ActionDeletionError(
-                "Actions are already archived: " + ", ".join(already_archived)
-            )
-
-        pending_writes, references_removed, buttons_removed = (
-            _prepare_reference_removals_many(
-                selected_ids,
-                context_paths=context_paths,
-                command_surface_paths=command_surface_paths,
-                palette_path=palette_path,
-            )
-        )
-        report = ActionDeletionReport(
-            references_removed,
-            buttons_removed,
-            len(pending_writes) + 1,
-        )
-        _assert_expected_report(expected_report, report)
-        for action in actions:
-            action["state"] = "Archived"
-        _write_json_transaction(
-            (*pending_writes, (action_path, action_data)),
-            operation="The Action archive",
-        )
-        return report
-
-
-def restore_action(action_path: Path, action_id: str) -> None:
-    """Restore an Archived action without recreating its former assignments."""
-
-    with configuration_mutation_gate():
-        action_data = _read_object(action_path)
-        action = _find_action_record(action_data, action_path, action_id)
-        if action.get("state", "Active") != "Archived":
-            raise ActionDeletionError(f"Action is not archived: {action_id}")
-        action["state"] = "Active"
-        atomic_write_json(action_path, action_data)
 
 
 def _delete_actions_and_references(
@@ -230,23 +289,20 @@ def _delete_actions_and_references(
     command_surface_paths: tuple[Path, ...],
     palette_path: Path,
     expected_report: ActionDeletionReport | None,
+    participant_paths: tuple[Path, ...],
+    fingerprint_before: str,
 ) -> ActionDeletionReport:
     action_data = _read_object(action_path)
     actions = action_data.get("actions")
     if not isinstance(actions, list):
         raise ActionDeletionError(f"{action_path.name} must contain an 'actions' list.")
-    selected_actions = _find_action_records(action_data, action_path, action_ids)
-    active_ids = [
-        action_id
-        for action_id, action in zip(action_ids, selected_actions, strict=True)
-        if action.get("state", "Active") != "Archived"
-    ]
-    if active_ids:
-        raise ActionDeletionError(
-            "Actions must be Archived before permanent deletion: "
-            + ", ".join(active_ids)
-        )
-    selected_keys = {action_id.casefold() for action_id in action_ids}
+    selected_records = _find_action_records(action_data, action_path, action_ids)
+    canonical_action_ids = tuple(
+        action["id"]
+        for action in selected_records
+        if isinstance(action.get("id"), str)
+    )
+    selected_keys = {action_id.casefold() for action_id in canonical_action_ids}
     retained_actions = [
         item
         for item in actions
@@ -258,7 +314,7 @@ def _delete_actions_and_references(
     ]
 
     pending_writes, references_removed, buttons_removed = _prepare_reference_removals_many(
-        action_ids,
+        canonical_action_ids,
         context_paths=context_paths,
         command_surface_paths=command_surface_paths,
         palette_path=palette_path,
@@ -269,6 +325,15 @@ def _delete_actions_and_references(
         len(pending_writes) + 1,
     )
     _assert_expected_report(expected_report, report)
+    if (
+        action_deletion_configuration_fingerprint(participant_paths)
+        != fingerprint_before
+    ):
+        raise ActionDeletionError(
+            "Saved Actions or assignments changed while the deletion was being "
+            "prepared. Review the Action selection again; no configuration "
+            "changes were made."
+        )
 
     action_data["actions"] = retained_actions
     _write_json_transaction(
@@ -278,6 +343,55 @@ def _delete_actions_and_references(
     return report
 
 
+def action_deletion_configuration_fingerprint(paths: Iterable[Path]) -> str:
+    """Return a stable content fingerprint for deletion participants."""
+
+    digest = sha256()
+    candidates_by_label = {
+        str(Path(path).absolute()).casefold(): Path(path)
+        for path in paths
+    }
+    for normalized_label in sorted(candidates_by_label):
+        candidate = candidates_by_label[normalized_label]
+        label = normalized_label.encode("utf-8")
+        digest.update(len(label).to_bytes(8, "big"))
+        digest.update(label)
+        try:
+            payload = candidate.read_bytes()
+        except FileNotFoundError:
+            digest.update(b"\x00")
+        except OSError as exc:
+            raise ActionDeletionError(
+                f"Configuration file could not be fingerprinted: {candidate.name}"
+            ) from exc
+        else:
+            digest.update(b"\x01")
+            digest.update(len(payload).to_bytes(8, "big"))
+            digest.update(payload)
+    return digest.hexdigest()
+
+
+def _deletion_participant_paths(
+    action_path: Path,
+    *,
+    context_paths: tuple[Path, ...],
+    command_surface_paths: tuple[Path, ...],
+    palette_path: Path,
+    sequence_paths: tuple[Path, ...],
+) -> tuple[Path, ...]:
+    return tuple(
+        dict.fromkeys(
+            (
+                Path(action_path),
+                *(Path(path) for path in sequence_paths),
+                *(Path(path) for path in context_paths),
+                *(Path(path) for path in command_surface_paths),
+                Path(palette_path),
+            )
+        )
+    )
+
+
 def _assert_expected_report(
     expected: ActionDeletionReport | None,
     actual: ActionDeletionReport,
@@ -285,17 +399,9 @@ def _assert_expected_report(
     if expected is not None and actual != expected:
         raise ActionDeletionError(
             "The current saved-placement effect does not match the reviewed "
-            "lifecycle impact. Review the Actions again; no configuration "
+            "deletion impact. Review the Actions again; no configuration "
             "changes were made."
         )
-
-
-def _find_action_record(
-    action_data: dict[str, object],
-    action_path: Path,
-    action_id: str,
-) -> dict[str, object]:
-    return _find_action_records(action_data, action_path, (action_id,))[0]
 
 
 def _find_action_records(
@@ -306,11 +412,21 @@ def _find_action_records(
     actions = action_data.get("actions")
     if not isinstance(actions, list):
         raise ActionDeletionError(f"{action_path.name} must contain an 'actions' list.")
-    records_by_key = {
-        action["id"].casefold(): action
-        for action in actions
-        if isinstance(action, dict) and isinstance(action.get("id"), str)
-    }
+    records_by_key: dict[str, dict[str, object]] = {}
+    duplicate_ids: list[str] = []
+    for action in actions:
+        if not isinstance(action, dict) or not isinstance(action.get("id"), str):
+            continue
+        key = action["id"].casefold()
+        if key in records_by_key:
+            duplicate_ids.append(action["id"])
+        else:
+            records_by_key[key] = action
+    if duplicate_ids:
+        raise ActionDeletionError(
+            f"{action_path.name} contains duplicate Action IDs: "
+            + ", ".join(duplicate_ids)
+        )
     found: list[dict[str, object]] = []
     missing: list[str] = []
     for action_id in action_ids:
@@ -323,6 +439,27 @@ def _find_action_records(
         label = "Action was" if len(missing) == 1 else "Actions were"
         raise ActionDeletionError(f"{label} not found: {', '.join(missing)}")
     return tuple(found)
+
+
+def _deletion_target(
+    record: dict[str, object],
+    canonical_id: str,
+) -> ActionDeletionTarget:
+    title = record.get("title")
+    state = record.get("state", "Active")
+    action_type = record.get("type")
+    raw_path = record.get("quick_action_path")
+    return ActionDeletionTarget(
+        id=canonical_id,
+        title=title if isinstance(title, str) and title else canonical_id,
+        state=state if isinstance(state, str) else "Active",
+        type=action_type if isinstance(action_type, str) else "",
+        quick_action_path=(
+            tuple(value for value in raw_path if isinstance(value, str))
+            if isinstance(raw_path, list)
+            else ()
+        ),
+    )
 
 
 def _validated_action_ids(
@@ -393,36 +530,8 @@ def _assert_no_sequence_dependencies_many(
         raise ActionDeletionError(
             "The Actions are used by these sequences: "
             + ", ".join(dependents)
-            + ". Select those sequences too, or edit/archive/delete them first."
+            + ". Select those sequences too, or edit or delete them first."
         )
-
-
-def _assert_no_sequence_dependencies(
-    action_id: str,
-    paths: tuple[Path, ...],
-    *,
-    include_archived: bool,
-) -> None:
-    _assert_no_sequence_dependencies_many(
-        (action_id,),
-        paths,
-        include_archived=include_archived,
-    )
-
-
-def _prepare_reference_removals(
-    action_id: str,
-    *,
-    context_paths: tuple[Path, ...],
-    command_surface_paths: tuple[Path, ...],
-    palette_path: Path,
-) -> tuple[list[tuple[Path, dict[str, object]]], int, int]:
-    return _prepare_reference_removals_many(
-        (action_id,),
-        context_paths=context_paths,
-        command_surface_paths=command_surface_paths,
-        palette_path=palette_path,
-    )
 
 
 def _prepare_reference_removals_many(
@@ -555,7 +664,7 @@ def _read_optional_object(path: Path) -> dict[str, object] | None:
         return None
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ActionDeletionError(f"{path.name} could not be read as valid JSON.") from exc
     if not isinstance(value, dict):
         raise ActionDeletionError(f"{path.name} must contain a JSON object.")

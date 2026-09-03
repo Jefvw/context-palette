@@ -4,6 +4,33 @@ This file contains actionable future work. Completed user-visible work belongs i
 
 ## Now
 
+- Manually validate combined **Menu locations** while creating and editing a
+  Folder, Password, and AI-prompt Action, then validate **Other menus…** from a
+  selected saved Active Action. Confirm the automatic
+  Passwords/Folders/Prompts location is always present and independent; add the
+  same Action to zero, one, and multiple eligible configured roots/branches;
+  switch between My configuration and Built-in before saving; remove selected
+  references; and verify personal Actions cannot use Built-in locations. Review exact
+  additions, removals, and newly empty items before applying, then exercise
+  stale-plan, complete-rollback, and incomplete-rollback outcomes. Repeat
+  keyboard-only and at 100%, 125%, and 150% scaling.
+- Manually validate structured automatic Quick-menu organization for
+  Passwords, Folders, and Prompts. From a new and existing Action, choose the
+  menu root, an existing branch, and a newly created three-level branch without
+  typing `>`. In Configure → Quick actions, use the explicit New/Rename/Move/
+  Remove submenu tasks for all three automatic roots. Cover no-selection,
+  maximum depth, selected Built-in/personal and Active Actions, nested-child
+  promotion, and case-variant merge. Trigger stale-plan
+  and injected rollback failures, and confirm empty branches disappear while
+  Actions and external targets remain unchanged. Repeat with keyboard-only use
+  and at 100%, 125%, and 150% scaling.
+- From an automatic submenu, remove one Action leaf with **Remove from
+  submenu…**, then remove several direct members with **Remove selected from
+  this submenu**. Confirm every selected Action moves exactly one level, the
+  target and record remain, the last-member branch disappears, and two
+  same-titled Actions are distinguished by stable ID. At the automatic root,
+  confirm no Remove command appears and direct Action deletion is explained as
+  the only way to remove that required automatic leaf.
 - Manually validate **Send to… → Open with → Open folder in VS Code** with one
   existing absolute folder, one file whose parent should open, outer quotes,
   spaces, Unicode, and an unavailable network path. Cover empty, multiple,
@@ -34,16 +61,15 @@ This file contains actionable future work. Completed user-visible work belongs i
   rows, immutable identity columns, removed rows, lossless JSON arguments,
   personal Contexts, stale workbook and configuration changes, selected-row
   commit, exact-byte rollback after an injected Context-write failure, and no
-  Action execution or second confirmation. Confirm Built-in, Archived,
+  Action execution or second confirmation. Confirm Built-in, legacy inactive,
   sequence, Excel-automation, and text-file-transform Actions are excluded.
   Repeat at 100%, 125%, and 150% scaling and without Excel installed.
-- Validate **More Action tasks → Remove multiple personal Actions…** with
-  personal Active, already-Archived, sequence, Context, slot, and configured
-  Quick-menu fixtures. Confirm the same centered window prepares the selected
-  Active batch, carries that selection into the permanent-delete review, and
-  deletes only after the second effect-labelled button. Cover selected and
-  unselected dependent sequences, shared Quick items, stale configuration,
-  injected write/rollback failure, closing after preparation, keyboard-only
+- Validate **More Action tasks → Delete multiple personal Actions…** with
+  personal Active, legacy inactive, sequence, Context, slot, and configured
+  Quick-menu fixtures. Confirm the centered window deletes only after one
+  **Delete N Actions permanently** effect-labelled button. Cover selected and
+  unselected dependent sequences, hidden selected rows, shared Quick items,
+  stale configuration, injected write/rollback failure, keyboard-only
   selection, and 100%, 125%, and 150% scaling. Confirm every external target
   remains untouched.
 
@@ -86,7 +112,8 @@ This file contains actionable future work. Completed user-visible work belongs i
   palette auto-hide/non-topmost behavior, last-ten Previous/Next/Send-again
   history, compact selection summaries, bounded on-demand prepared-content
   details and warnings, collapse on Hide/new drop, target Hide/Show, and
-  fallback when TkDND cannot load. Also exercise
+  stale-requirements refusal plus setup/restart recovery, and isolated fallback
+  when native TkDND cannot load. Also exercise
   the Input / Output Back/Forward history and its branch behavior.
 - Manually verify native Quick-action menu right-click delivery on Windows at
   100%, 125%, and 150%: launcher left-click/Enter/Space browses without
@@ -107,8 +134,8 @@ This file contains actionable future work. Completed user-visible work belongs i
   type, Work Item project, and Find narrow results without selecting another
   slot bank; verify query relevance and dormant-filter chips; and confirm that
   Shift+1–5 never executes while context slots 6–0 still do.
-- Manually validate complete deletion and disconnection wording: archive then
-  permanently delete a disposable Action, delete a disposable Context and
+- Manually validate complete deletion and disconnection wording: permanently
+  delete a disposable Action, delete a disposable Context and
   configured Quick menu, and disconnect/reconnect a disposable Work Item
   source while confirming that external folders/files and saved organization
   remain untouched.

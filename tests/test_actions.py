@@ -58,6 +58,42 @@ from context_palette.action_sequences import (
 
 
 class ActionTests(unittest.TestCase):
+    def test_action_load_read_failures_are_reported_as_action_errors(self):
+        path = Path("actions.json")
+        failures = (
+            (PermissionError("access denied"), "could not be read"),
+            (OSError("device unavailable"), "could not be read"),
+            (
+                UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid byte"),
+                "not valid UTF-8",
+            ),
+        )
+
+        for failure, message in failures:
+            with self.subTest(failure=type(failure).__name__):
+                with patch.object(Path, "read_text", side_effect=failure):
+                    with self.assertRaisesRegex(ActionError, message):
+                        load_stored_actions(path)
+
+    def test_action_mutation_read_failures_are_reported_without_writing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "actions.json"
+            path.write_text('{"actions": []}', encoding="utf-8")
+            before = path.read_bytes()
+
+            with patch.object(
+                Path,
+                "read_text",
+                side_effect=PermissionError("access denied"),
+            ):
+                with self.assertRaisesRegex(ActionError, "could not be read"):
+                    append_action(
+                        path,
+                        Action("new", "New", "General", "copy_text", "text"),
+                    )
+
+            self.assertEqual(path.read_bytes(), before)
+
     def test_update_actions_replaces_a_batch_in_one_saved_collection(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "actions.json"
@@ -606,6 +642,25 @@ class ActionTests(unittest.TestCase):
 
         self.assertEqual([action.id for action in actions], ["shared"])
         self.assertEqual(local_ids, set())
+
+    def test_combined_actions_do_not_treat_optional_read_error_as_missing(self):
+        shared = self._write_actions(
+            [
+                {
+                    "id": "shared",
+                    "title": "Shared",
+                    "context": "General",
+                    "type": "copy_text",
+                    "value": "x",
+                }
+            ]
+        )
+        unreadable = shared.parent / "local-actions.json"
+        unreadable.mkdir()
+
+        with patch.object(Path, "exists", return_value=False):
+            with self.assertRaisesRegex(ActionError, "could not be read"):
+                load_combined_actions(shared, unreadable)
 
     def test_combined_stored_actions_keeps_archived_records(self):
         shared = self._write_actions(

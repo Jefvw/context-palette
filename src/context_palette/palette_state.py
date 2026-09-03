@@ -30,10 +30,14 @@ class PaletteState:
 
 
 def load_palette_state(path: Path) -> PaletteState:
-    if not path.exists():
-        return PaletteState()
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return PaletteState()
+    except UnicodeError as exc:
+        raise ActionError(
+            f"Palette configuration is not valid UTF-8: {path}"
+        ) from exc
     except OSError as exc:
         raise ActionError(f"Palette configuration could not be read: {path}") from exc
     except json.JSONDecodeError as exc:

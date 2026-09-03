@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
+import gc
 import json
 import os
 from pathlib import Path
@@ -2008,6 +2009,12 @@ class ExcelAutomationProcessClientTests(unittest.TestCase):
 
 
 class ExcelAutomationCoordinatorTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # Collect widgets left by earlier Tk tests on the main thread before
+        # this class starts workers. Tk variables cannot be finalized safely
+        # by a worker after their owning interpreter has been destroyed.
+        gc.collect()
+
     def test_apply_completion_is_single_call_without_an_automatic_retry(self) -> None:
         expected = AutomationCallResult("apply", "apply_unknown", True, 70)
 

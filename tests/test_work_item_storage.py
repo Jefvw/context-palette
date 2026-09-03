@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +27,26 @@ from context_palette.work_items import WorkItemSource
 
 
 class WorkItemStorageTests(unittest.TestCase):
+    def test_work_item_read_failures_are_reported_as_storage_errors(self) -> None:
+        path = Path("local_work_item_sources.json")
+        failures = (
+            PermissionError("access denied"),
+            OSError("device unavailable"),
+            UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid byte"),
+        )
+
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__):
+                with (
+                    patch.object(Path, "exists", return_value=True),
+                    patch.object(Path, "read_text", side_effect=failure),
+                ):
+                    with self.assertRaisesRegex(
+                        WorkItemStorageError,
+                        "Work-item sources could not be read",
+                    ):
+                        load_work_item_sources(path)
+
     def test_missing_local_files_load_as_empty(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -36,6 +57,25 @@ class WorkItemStorageTests(unittest.TestCase):
                 load_work_item_creation_settings(root / "settings.json"),
                 WorkItemCreationSettings(),
             )
+
+    def test_optional_work_item_read_errors_are_not_treated_as_missing(self) -> None:
+        loaders = (
+            (load_work_item_sources, "Work-item sources"),
+            (load_work_item_metadata, "Work-item metadata"),
+            (load_work_item_creation_settings, "Work-item creation settings"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for index, (loader, label) in enumerate(loaders):
+                path = root / f"unreadable-{index}.json"
+                path.mkdir()
+                with self.subTest(loader=loader.__name__):
+                    with patch.object(Path, "exists", return_value=False):
+                        with self.assertRaisesRegex(
+                            WorkItemStorageError,
+                            f"{label} could not be read",
+                        ):
+                            loader(path)
 
     def test_creation_settings_round_trip_machine_local_template(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

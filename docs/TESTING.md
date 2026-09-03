@@ -118,6 +118,85 @@ only one job.
    data outside A–J, and more than 1,000 populated rows stop without writes.
    Repeat at 100%, 125%, and 150% scaling and on a PC without Excel installed.
 
+## Automatic Quick-menu organization manual check
+
+Status: **Manual UAT pending.**
+
+1. Create or edit one Password, Folder, and AI-prompt Action. Confirm the form
+   names the correct fixed menu, shows **Menu root** explicitly, and uses a
+   read-only breadcrumb plus **Choose…**, not a free-text `>` field.
+2. In the chooser, search existing branches, select the root and a nested
+   branch, create a new submenu under each, and verify a fourth level is
+   unavailable. Cancel once and confirm the saved placement is unchanged.
+3. In Configure → Quick actions, select an automatic root and choose **Manage
+   menu…**. Confirm **Submenu tasks** offers only **New submenu…** at the root.
+   Select one or more Active Actions, create a submenu, and verify every exact
+   before → after path plus ownership/file counts before **Create submenu
+   with N Actions**. Confirm no-selection explains why an Active Action is
+   required, and level three disables creation.
+4. Select a populated automatic branch and choose **Manage this submenu…**.
+   Confirm **Submenu tasks** offers New child, Rename, Move, and Remove. Rename
+   it, move it beneath a new parent while preserving its name, and merge it into
+   a case-variant existing branch. Remove it and verify direct Actions move to
+   the parent, child submenus move up intact, and the final button says **Remove
+   submenu; keep N Actions**.
+5. Select one automatic Action leaf in that branch and choose **Remove from
+   submenu…**. Confirm its exact stable ID is preselected, the review promotes
+   it one level, and the record and external target remain unchanged. Repeat
+   with several direct members through **Remove selected from this submenu**;
+   include two equal titles and confirm the correct IDs move. Confirm the last
+   member removes the empty branch. At the automatic root, confirm no Remove
+   command appears and the UI names permanent Action deletion as the only way
+   to remove the required automatic leaf.
+6. Change an Action file after review and confirm commit stops as stale. Inject
+   a second-file write failure and verify exact primary/backup rollback; inject
+   rollback failure and verify the organizer locks further mutation and directs
+   backup/Diagnostics inspection. Confirm no Action executes and no external
+   file, folder, credential, prompt target, or configured Quick-action reference
+   changes.
+7. Repeat the editor, chooser, and manager using keyboard only and at 100%,
+   125%, and 150% scaling. Confirm search, tree, reviewed detail, fixed status,
+   Submenu tasks menu, effect-labelled button, and Close remain reachable.
+
+## Configured Quick-action placements manual check
+
+Status: **Manual UAT pending.**
+
+1. Create a Folder, Password, or AI-prompt Action and open **Menu locations**.
+   Confirm the same screen shows one automatic tree and an optional configured
+   checklist. Select a configured location, save once, and confirm both the
+   Action and reference exist. Repeat while editing, then select the saved
+   Action in Configure → Actions and open **Other menus…**. Confirm its
+   **Automatic placement (read-only)** value names the exact
+   Folders/Passwords/Prompts location and `quick_action_path`. Open another
+   Action type with no automatic
+   menu and confirm it says none without disabling configured placement
+   management.
+2. Search the configured root/branch table and select zero, one, then multiple
+   locations. Confirm the current references are represented exactly and the
+   review lists every addition, removal, and newly empty item before the
+   effect-labelled Apply command. Applying must not show another Yes/No dialog,
+   execute the Action, change its automatic placement, or reorder unrelated
+   targets.
+3. Switch Storage before creation and confirm newly invalid staged locations
+   are cleared with a visible explanation. With a personal Action, confirm
+   Built-in locations are visibly blocked and
+   cannot be selected. With a Built-in Action, add eligible Built-in and My
+   configuration references, reload, and confirm every placement remains.
+   Revert disposable tracked changes afterward.
+4. Remove all configured references and confirm the automatic menu remains
+   unchanged. Then add the same Action to several configured roots/branches and
+   confirm every launcher reference resolves the same Action ID; no duplicate
+   Action or new placement schema should appear in either command-surface file.
+5. Change a participating Action or command-surface file after review and
+   confirm Apply stops as stale. Inject a later-file write failure and verify
+   exact primary and `.bak` rollback. Inject rollback failure and confirm
+   further writes are disabled with backup/Diagnostics guidance and no success
+   claim.
+6. Repeat with keyboard-only selection, Find focused during `Ctrl+A`, and at
+   100%, 125%, and 150% scaling. The searchable table, exact review, fixed
+   status, effect-labelled Apply button, and Close must remain reachable.
+
 ## Bulk Action update workbook manual check
 
 Status: **Manual UAT pending.**
@@ -125,7 +204,7 @@ Status: **Manual UAT pending.**
 1. Open Configure → Actions → **More Action tasks → Export personal
    Actions for update…** and save the deterministic version-1 `.xlsx`. Confirm
    it contains only eligible personal Active ordinary Actions. Built-in,
-   Archived, sequence, Excel-automation, and text-file-transform Actions must
+   Legacy inactive, sequence, Excel-automation, and text-file-transform Actions must
    not appear.
 2. In Excel, edit Name, Value, personal Contexts, tags, description, Quick menu,
    lossless Arguments JSON (including an empty and whitespace-only argument),
@@ -136,7 +215,7 @@ Status: **Manual UAT pending.**
 3. Choose **More Action tasks → Review updated Actions workbook…**. Confirm
    only real valid changes are Ready and selected by default, the unchanged row
    is not selectable, every exact Before/After value is readable, and the
-   removed row causes no deletion or lifecycle change. Clear and restore one
+   removed row causes no deletion or Action-state change. Clear and restore one
    Ready selection with mouse and keyboard.
 4. On separate fresh exports, change Action ID, State, Action type, Original
    fingerprint, a header, a formula cell, and workbook/package structure.
@@ -147,7 +226,7 @@ Status: **Manual UAT pending.**
    Context configuration after review. Confirm **Update N Actions** stops and a
    fresh review/export is required. Restore a Ready review and update selected
    rows; confirm the labelled button is the only confirmation, all changes land
-   together, no Action runs, and Archive/Restore/Delete remain unchanged.
+   together, no Action runs, and deletion remains outside workbook semantics.
 6. In the automated failure fixture, make Context persistence fail after the
    Action write and compare the local Action file byte-for-byte with its prior
    contents. No partial Action update may remain. Then inject a rollback write
@@ -156,7 +235,7 @@ Status: **Manual UAT pending.**
    offers a generic retry. Repeat the attended UI at 100%, 125%, and 150%
    scaling and on a PC without Excel installed.
 
-## Bulk Action removal manual check
+## Bulk Action deletion manual check
 
 Status: **Manual UAT pending.**
 
@@ -164,28 +243,25 @@ Status: **Manual UAT pending.**
    personal Context, Context slots, and configured Quick menus. Add one
    sequence that refers to another disposable Action. Keep the external test
    files, folders, URLs, or applications easy to inspect afterward.
-2. Open Configure → Actions → **More Action tasks → Remove multiple
+2. Open Configure → Actions → **More Action tasks → Delete multiple
    personal Actions…**. Confirm Built-in Actions are absent. Use Find,
    **Select all shown**, **Clear selection**, mouse selection, and `Space`.
    Verify the footer buttons, status, and selected-Action details remain visible
-   at 100%, 125%, and 150% scaling. Use **Show prepared Actions** to reach an
-   Action prepared in an earlier session and **Show Active Actions** to return.
+   at 100%, 125%, and 150% scaling. Change Find after selecting rows and confirm
+   the status and final button count selected rows hidden by the filter.
 3. Select an Action that an unselected sequence uses. Confirm it is blocked and
    names the dependent sequence. Select that personal sequence too and confirm
    the batch becomes Ready. Review the combined saved-reference, empty
    Quick-action-item, and changed-file counts. No Action may execute.
-4. Choose **Prepare N Actions for deletion**. Confirm this effect-labelled
-   button is the only confirmation, the same window advances to permanent
-   deletion, and the same reviewed Actions remain selected. Close at this point
-   once and confirm those Actions remain recoverable Archived records. Also
-   confirm a double-click on Prepare cannot activate the separately positioned
-   permanent-delete control.
-5. Repeat preparation, review the second-stage impact, and choose **Delete N
-   Actions permanently**. Confirm there is no extra Yes/No dialog; the exact
+4. Choose **Delete N Actions permanently**. Confirm this effect-labelled button
+   is the only confirmation and there is no extra Yes/No dialog; the exact
    selected records and saved placements disappear; unrelated Actions and
    empty root Quick menus remain; and every external target is unchanged.
+5. Repeat with one legacy inactive personal record. Confirm it is explicitly
+   labelled, cannot be edited or restored, and can be included in the same
+   deletion review without becoming Active.
 6. In separate automated fixtures, change a participating Action, Context,
-   palette, or Quick-menu file after review and confirm the stage stops as
+   palette, or Quick-menu file after review and confirm deletion stops as
    stale. Make a later configuration write fail and compare every participating
    primary file and `.bak` sidecar byte-for-byte with its prior state. No
    partial stage may remain.
@@ -337,8 +413,8 @@ read-only scrollable summary plus keyboard-reachable Refresh and Copy controls.
 `tests.test_diagnostics` protects the allow-listed parser and privacy boundary;
 `tests.test_configuration_window` verifies exact safe-summary copying and
 honest failure feedback when the Windows clipboard is unavailable.
-`tests.test_action_deletion` verifies that Active Actions cannot be permanently
-deleted and that archive or Archived deletion restores exact bytes across all
+`tests.test_action_deletion` verifies direct Active and legacy-inactive deletion,
+exact saved-reference cleanup, and restoration of exact bytes across all
 attempted files when any write fails, including explicit incomplete rollback.
 `tests.test_work_item_organization` verifies inspection, idempotent Forget,
 complete personal-reference cleanup, exact-byte rollback, and the hard boundary
@@ -471,18 +547,16 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    opens directly in the reused Configure workspace. Repeat with a disposable Built-in action,
    verify the Git/private-data warning appears, cancel once, then accept and
    verify the Built-in file receives the reviewed edit. Revert that disposable
-   edit afterward. In Configure -> Actions, archive a disposable personal
-   Action assigned to a Context, context slot, and configured Quick action.
-   Verify the confirmation reports the impact, the Action disappears from
-   every runtime placement, Configure switches to **Show: Archived**, the same
-   Action remains selected, and **Delete permanently…** becomes visible. Verify
-   that permanent delete is not shown for an Active Action. Restore it and
-   verify it returns to normal search without recreating former assignments.
-   Archive and permanently delete it. Repeat archive cancellation with a
-   disposable Built-in Action and verify the Git/multi-computer warning.
+   edit afterward. In Configure -> Actions, delete a disposable personal Action
+   assigned to a Context, context slot, and configured Quick action. Cancel the
+   first review and confirm nothing changes. Repeat and verify the review names
+   the exact stable ID and placement impact, the Action disappears from every
+   runtime placement, and its external target remains unchanged. Repeat review
+   cancellation with a disposable Built-in Action and verify the
+   Git/multi-computer warning.
    In Configure, confirm **Set up** and **Support** are visually separate and no
    horizontal tab strip appears. On Actions, verify no pin configuration or Pin
-   toolbar command remains and lifecycle commands stay readable. On Work
+   toolbar command remains and the delete command stays readable. On Work
    Items, verify **Manage sources…** contains Add, Edit, Remove, and Creation
    template while Refresh remains visible; with no sources, Add and template
    stay available while Edit, Remove, and Refresh are disabled.
@@ -600,7 +674,7 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
     a branch and verify the normal form still includes storage, name,
     description, Contexts, tags, target, and the prefilled menu location. Clear
     the location and verify the Action appears at the menu root with no
-    **Unsorted** submenu. Archive/delete the disposable Action afterward.
+    **Unsorted** submenu. Delete the disposable Action afterward.
     Select a specific Context filter with fewer than five genuine members and
     confirm slots 6–0 remain empty after its final member instead of showing
     unrelated global Actions. Clear to **All contexts** and confirm General's
@@ -662,7 +736,18 @@ Perform only when relevant:
   Previous, Next, Send again, Show/Hide details, Hide, and title-bar controls
   remain inside the current monitor work area. Move the target near every edge
   and onto a secondary monitor before repeating. Finally simulate an
-  unavailable TkDND component and confirm only the drop target is unavailable.
+  unavailable TkDND component and confirm only the drop target is unavailable,
+  launcher status points to **More → Show drop target**, the dialog prescribes
+  stop/setup/restart, and no withdrawn partial Toplevel remains after native
+  registration or either event-binding failure.
+
+- On a second standard-user PC, pull a revision whose `requirements.txt` does
+  not match the local setup marker. Confirm `run-context-palette.bat` refuses
+  launch before `pythonw` starts and prints the stop/setup/retry sequence. Run
+  setup and confirm normal launch plus the Drop target. Then simulate a native
+  TkDND initialization failure with a current marker and confirm the main app
+  still opens, every non-drop feature works, and restarting is required after
+  repair. No step should require administrator rights.
 
 - On a standard-user Windows PC, first start Context Palette with Python Excel
   absent and then with an invalid configured path. Confirm only the Excel CSV

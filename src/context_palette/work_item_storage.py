@@ -23,9 +23,9 @@ class WorkItemCreationSettings:
 
 
 def load_work_item_creation_settings(path: Path) -> WorkItemCreationSettings:
-    if not path.exists():
-        return WorkItemCreationSettings()
     payload = _read_object(path, "Work-item creation settings")
+    if payload is None:
+        return WorkItemCreationSettings()
     if set(payload) != {"template_path"} or not isinstance(payload["template_path"], str):
         raise WorkItemStorageError("Work-item creation settings must contain template_path text only.")
     raw_path = payload["template_path"].strip()
@@ -55,9 +55,9 @@ def work_item_metadata_key(source_id: str, relative_folder: str) -> str:
 
 
 def load_work_item_sources(path: Path) -> tuple[WorkItemSource, ...]:
-    if not path.exists():
-        return ()
     payload = _read_object(path, "Work-item sources")
+    if payload is None:
+        return ()
     raw_sources = payload.get("sources", [])
     if not isinstance(raw_sources, list):
         raise WorkItemStorageError("Work-item sources must contain a sources list.")
@@ -112,9 +112,9 @@ def save_work_item_sources(path: Path, sources: tuple[WorkItemSource, ...]) -> N
 
 
 def load_work_item_metadata(path: Path) -> dict[str, WorkItemMetadata]:
-    if not path.exists():
-        return {}
     payload = _read_object(path, "Work-item metadata")
+    if payload is None:
+        return {}
     raw_items = payload.get("work_items", {})
     if not isinstance(raw_items, dict):
         raise WorkItemStorageError("Work-item metadata must contain a work_items object.")
@@ -157,10 +157,12 @@ def save_work_item_metadata(
     )
 
 
-def _read_object(path: Path, label: str) -> dict[str, object]:
+def _read_object(path: Path, label: str) -> dict[str, object] | None:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except FileNotFoundError:
+        return None
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise WorkItemStorageError(f"{label} could not be read.") from exc
     if not isinstance(payload, dict):
         raise WorkItemStorageError(f"{label} must be a JSON object.")

@@ -13,20 +13,18 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from context_palette.action_bulk_lifecycle import (
-    ARCHIVE_OPERATION,
-    DELETE_OPERATION,
     BulkActionLifecycleError,
     BulkActionLifecyclePaths,
-    commit_bulk_action_lifecycle,
-    eligible_personal_actions_for_lifecycle,
-    plan_bulk_action_lifecycle,
+    commit_bulk_action_deletion,
+    eligible_personal_actions_for_deletion,
+    plan_bulk_action_deletion,
 )
 from context_palette.action_deletion import ActionDeletionReport
 from context_palette.actions import Action, load_stored_actions
 
 
 class BulkActionLifecycleTests(unittest.TestCase):
-    def test_eligibility_is_personal_and_operation_state_specific(self) -> None:
+    def test_eligibility_includes_active_and_legacy_inactive_personal_actions(self) -> None:
         active = Action("active", "Active", "General", "copy_text", "one")
         archived = Action(
             "archived",
@@ -39,31 +37,25 @@ class BulkActionLifecycleTests(unittest.TestCase):
         built_in = Action("built", "Built in", "General", "copy_text", "three")
 
         self.assertEqual(
-            eligible_personal_actions_for_lifecycle(
+            eligible_personal_actions_for_deletion(
                 (active, archived, built_in),
                 ("active", "archived"),
-                operation=ARCHIVE_OPERATION,
             ),
-            (active,),
-        )
-        self.assertEqual(
-            eligible_personal_actions_for_lifecycle(
-                (active, archived, built_in),
-                ("active", "archived"),
-                operation=DELETE_OPERATION,
-            ),
-            (archived,),
+            (active, archived),
         )
 
-    def test_plan_and_commit_preserve_two_stage_lifecycle(self) -> None:
+    def test_plan_and_commit_delete_mixed_states_in_one_transaction(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
             paths = self._paths(root)
             self._write_fixture(
                 paths,
-                local_actions=(self._action("one"),),
+                local_actions=(
+                    self._action("active"),
+                    self._action("legacy", state="Archived"),
+                ),
                 local_contexts=(
-                    {"name": "Work", "action_ids": ["one"]},
+                    {"name": "Work", "action_ids": ["active", "legacy"]},
                 ),
                 local_groups=(
                     {
@@ -72,51 +64,30 @@ class BulkActionLifecycleTests(unittest.TestCase):
                             {
                                 "id": "only",
                                 "targets": [
-                                    {"type": "action", "action_id": "one"}
+                                    {"type": "action", "action_id": "active"},
+                                    {"type": "action", "action_id": "legacy"},
                                 ],
                             }
                         ],
                     },
                 ),
-                palette={"pinned_action_ids": ["one"]},
+                palette={"pinned_action_ids": ["active", "legacy"]},
             )
 
-            archive_plan = plan_bulk_action_lifecycle(
-                ARCHIVE_OPERATION,
-                ("one",),
+            plan = plan_bulk_action_deletion(
+                ("active", "legacy"),
                 paths=paths,
             )
 
-            self.assertTrue(archive_plan.can_commit)
-            self.assertEqual(archive_plan.candidates[0].status, "Ready")
-            self.assertEqual(archive_plan.impact.references_removed, 3)
-            self.assertEqual(archive_plan.impact.buttons_removed, 1)
-            self.assertEqual(archive_plan.impact.files_changed, 4)
+            self.assertTrue(plan.can_commit)
             self.assertEqual(
-                commit_bulk_action_lifecycle(archive_plan),
-                archive_plan.impact,
+                tuple(candidate.status for candidate in plan.candidates),
+                ("Ready", "Ready"),
             )
-            self.assertEqual(
-                load_stored_actions(
-                    paths.local_actions_path,
-                    inspect_external_paths=False,
-                )[0].state,
-                "Archived",
-            )
-
-            delete_plan = plan_bulk_action_lifecycle(
-                DELETE_OPERATION,
-                ("one",),
-                paths=paths,
-            )
-
-            self.assertTrue(delete_plan.can_commit)
-            self.assertEqual(delete_plan.impact.references_removed, 0)
-            self.assertEqual(delete_plan.impact.files_changed, 1)
-            self.assertEqual(
-                commit_bulk_action_lifecycle(delete_plan),
-                delete_plan.impact,
-            )
+            self.assertEqual(plan.impact.references_removed, 6)
+            self.assertEqual(plan.impact.buttons_removed, 1)
+            self.assertEqual(plan.impact.files_changed, 4)
+            self.assertEqual(commit_bulk_action_deletion(plan), plan.impact)
             self.assertEqual(
                 load_stored_actions(
                     paths.local_actions_path,
@@ -124,8 +95,53 @@ class BulkActionLifecycleTests(unittest.TestCase):
                 ),
                 [],
             )
+            self.assertEqual(
+                json.loads(paths.local_contexts_path.read_text(encoding="utf-8"))[
+                    "contexts"
+                ][0]["action_ids"],
+                [],
+            )
 
-    def test_selected_dependent_sequence_is_allowed_in_both_stages(self) -> None:
+    def test_unselected_active_and_legacy_sequences_both_block_deletion(self) -> None:
+        with TemporaryDirectory() as directory:
+            paths = self._paths(Path(directory))
+            self._write_fixture(
+                paths,
+                local_actions=(
+                    self._action(
+                        "target",
+                        action_type="open_url",
+                        value="https://target.example",
+                    ),
+                    self._action(
+                        "other",
+                        action_type="open_url",
+                        value="https://other.example",
+                    ),
+                    self._sequence("active-sequence", "target", "other"),
+                    self._sequence(
+                        "legacy-sequence",
+                        "target",
+                        "other",
+                        state="Archived",
+                    ),
+                ),
+            )
+
+            plan = plan_bulk_action_deletion(("target",), paths=paths)
+
+            self.assertFalse(plan.can_commit)
+            self.assertEqual(
+                plan.candidates[0].blocking_sequence_ids,
+                ("active-sequence", "legacy-sequence"),
+            )
+            with self.assertRaisesRegex(
+                BulkActionLifecycleError,
+                "sequence dependencies",
+            ):
+                commit_bulk_action_deletion(plan)
+
+    def test_selected_dependent_sequences_can_be_deleted_with_target(self) -> None:
         with TemporaryDirectory() as directory:
             paths = self._paths(Path(directory))
             self._write_fixture(
@@ -145,43 +161,13 @@ class BulkActionLifecycleTests(unittest.TestCase):
                 ),
             )
 
-            blocked_archive = plan_bulk_action_lifecycle(
-                ARCHIVE_OPERATION,
-                ("target",),
-                paths=paths,
-            )
-            self.assertFalse(blocked_archive.can_commit)
-            self.assertEqual(
-                blocked_archive.candidates[0].blocking_sequence_ids,
-                ("sequence",),
-            )
-            with self.assertRaisesRegex(
-                BulkActionLifecycleError,
-                "sequence dependencies",
-            ):
-                commit_bulk_action_lifecycle(blocked_archive)
-
-            archive_plan = plan_bulk_action_lifecycle(
-                ARCHIVE_OPERATION,
+            plan = plan_bulk_action_deletion(
                 ("target", "sequence"),
                 paths=paths,
             )
-            self.assertTrue(archive_plan.can_commit)
-            commit_bulk_action_lifecycle(archive_plan)
 
-            blocked_delete = plan_bulk_action_lifecycle(
-                DELETE_OPERATION,
-                ("target",),
-                paths=paths,
-            )
-            self.assertFalse(blocked_delete.can_commit)
-            delete_plan = plan_bulk_action_lifecycle(
-                DELETE_OPERATION,
-                ("target", "sequence"),
-                paths=paths,
-            )
-            self.assertTrue(delete_plan.can_commit)
-            commit_bulk_action_lifecycle(delete_plan)
+            self.assertTrue(plan.can_commit)
+            commit_bulk_action_deletion(plan)
             self.assertEqual(
                 [
                     action.id
@@ -204,17 +190,13 @@ class BulkActionLifecycleTests(unittest.TestCase):
             "palette_path",
         )
         for participant_name in participant_names:
-            with self.subTest(participant=participant_name), TemporaryDirectory() as directory:
+            with (
+                self.subTest(participant=participant_name),
+                TemporaryDirectory() as directory,
+            ):
                 paths = self._paths(Path(directory))
-                self._write_fixture(
-                    paths,
-                    local_actions=(self._action("one"),),
-                )
-                plan = plan_bulk_action_lifecycle(
-                    ARCHIVE_OPERATION,
-                    ("one",),
-                    paths=paths,
-                )
+                self._write_fixture(paths, local_actions=(self._action("one"),))
+                plan = plan_bulk_action_deletion(("one",), paths=paths)
                 participant = getattr(paths, participant_name)
                 data = json.loads(participant.read_text(encoding="utf-8"))
                 data["external_change"] = participant_name
@@ -224,14 +206,17 @@ class BulkActionLifecycleTests(unittest.TestCase):
                     BulkActionLifecycleError,
                     "changed after review",
                 ):
-                    commit_bulk_action_lifecycle(plan)
+                    commit_bulk_action_deletion(plan)
 
                 self.assertEqual(
-                    load_stored_actions(
-                        paths.local_actions_path,
-                        inspect_external_paths=False,
-                    )[0].state,
-                    "Active",
+                    [
+                        action.id
+                        for action in load_stored_actions(
+                            paths.local_actions_path,
+                            inspect_external_paths=False,
+                        )
+                    ],
+                    ["one"],
                 )
 
     def test_injected_aggregate_mismatch_is_rejected_before_any_write(self) -> None:
@@ -245,11 +230,7 @@ class BulkActionLifecycleTests(unittest.TestCase):
                 ),
                 palette={"pinned_action_ids": ["one"]},
             )
-            plan = plan_bulk_action_lifecycle(
-                ARCHIVE_OPERATION,
-                ("one",),
-                paths=paths,
-            )
+            plan = plan_bulk_action_deletion(("one",), paths=paths)
             injected = replace(
                 plan,
                 impact=ActionDeletionReport(999, 999, 999),
@@ -266,15 +247,15 @@ class BulkActionLifecycleTests(unittest.TestCase):
 
             with (
                 patch(
-                    "context_palette.action_bulk_lifecycle.plan_bulk_action_lifecycle",
+                    "context_palette.action_bulk_lifecycle.plan_bulk_action_deletion",
                     return_value=injected,
                 ),
                 self.assertRaisesRegex(
                     BulkActionLifecycleError,
-                    "does not match the reviewed lifecycle impact",
+                    "does not match the reviewed deletion impact",
                 ),
             ):
-                commit_bulk_action_lifecycle(plan)
+                commit_bulk_action_deletion(plan)
 
             self.assertEqual(
                 {
@@ -294,11 +275,7 @@ class BulkActionLifecycleTests(unittest.TestCase):
                     {"name": "Work", "action_ids": ["one"]},
                 ),
             )
-            plan = plan_bulk_action_lifecycle(
-                ARCHIVE_OPERATION,
-                ("one",),
-                paths=paths,
-            )
+            plan = plan_bulk_action_deletion(("one",), paths=paths)
             tampered = replace(
                 plan,
                 impact=ActionDeletionReport(999, 999, 999),
@@ -315,9 +292,9 @@ class BulkActionLifecycleTests(unittest.TestCase):
 
             with self.assertRaisesRegex(
                 BulkActionLifecycleError,
-                "does not match the reviewed lifecycle impact",
+                "does not match the reviewed deletion impact",
             ):
-                commit_bulk_action_lifecycle(tampered)
+                commit_bulk_action_deletion(tampered)
 
             self.assertEqual(
                 {
@@ -327,7 +304,7 @@ class BulkActionLifecycleTests(unittest.TestCase):
                 before,
             )
 
-    def test_invalid_mixed_and_wrong_owner_plans_write_nothing(self) -> None:
+    def test_invalid_identity_or_owner_requests_write_nothing(self) -> None:
         with TemporaryDirectory() as directory:
             paths = self._paths(Path(directory))
             self._write_fixture(
@@ -335,29 +312,28 @@ class BulkActionLifecycleTests(unittest.TestCase):
                 shared_actions=(self._action("built"),),
                 local_actions=(
                     self._action("active"),
-                    self._action("archived", state="Archived"),
+                    self._action("legacy", state="Archived"),
                 ),
             )
             participants = paths.participant_paths
             before = {path: path.read_bytes() for path in participants}
             invalid_requests = (
-                (ARCHIVE_OPERATION, ()),
-                (ARCHIVE_OPERATION, ("active", "ACTIVE")),
-                (ARCHIVE_OPERATION, ("missing",)),
-                (ARCHIVE_OPERATION, ("built",)),
-                (ARCHIVE_OPERATION, ("active", "archived")),
-                (DELETE_OPERATION, ("archived", "active")),
+                (),
+                ("active", "ACTIVE"),
+                ("missing",),
+                ("built",),
             )
 
-            for operation, action_ids in invalid_requests:
-                with self.subTest(operation=operation, action_ids=action_ids):
+            for action_ids in invalid_requests:
+                with self.subTest(action_ids=action_ids):
                     with self.assertRaises(BulkActionLifecycleError):
-                        plan_bulk_action_lifecycle(
-                            operation,
-                            action_ids,
-                            paths=paths,
-                        )
+                        plan_bulk_action_deletion(action_ids, paths=paths)
 
+            valid_mixed = plan_bulk_action_deletion(
+                ("active", "legacy"),
+                paths=paths,
+            )
+            self.assertTrue(valid_mixed.can_commit)
             self.assertEqual(
                 {path: path.read_bytes() for path in participants},
                 before,

@@ -81,9 +81,9 @@ class ActionSequenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ActionSequenceError, "Total wait"):
             resolve_sequence_steps(long_waits, self.actions)
 
-    def test_rejects_missing_archived_unsupported_nested_and_self_references(self) -> None:
+    def test_rejects_missing_legacy_inactive_unsupported_nested_and_self_references(self) -> None:
         cases = (
-            ((FakeAction("old", "Old", "open_url", "https://old", "Archived"),), "Archived"),
+            ((FakeAction("old", "Old", "open_url", "https://old", "Archived"),), "legacy inactive"),
             ((FakeAction("copy", "Copy", "copy_text", "text"),), "unsupported"),
             ((FakeAction("nested", "Nested", "sequence", ""),), "another sequence"),
         )

@@ -42,6 +42,10 @@ Each development computer creates its own ignored `.venv` by running
 Python 3.12 or newer 3.x only when pip and Tkinter are available; it preserves
 an incompatible local environment as `.venv-unusable*` before rebuilding.
 Personal Context Palette data is stored outside `.venv`.
+After pulling a revision with changed requirements, stop the resident app and
+run setup again. The normal launcher checks the tracked requirements signature
+and refuses to start with a stale environment instead of silently omitting a
+feature.
 
 Image-to-text extraction uses an optional local OCR component. From the Context
 Palette folder, run `setup-ocr-context-palette.bat`, then restart the app. It
@@ -88,8 +92,7 @@ effect-labelled **Create N Actions** operation. Created records are personal
 Active Actions and nothing is run during import.
 
 This workbook remains create-only. Updating uses the separate identity-bound
-workbook below. Archive, Restore, and Delete permanently remain separate;
-permanent deletion continues to require an Archived Action.
+workbook below. Deletion remains a separate reviewed in-app operation.
 
 ## Update personal Actions from Excel
 
@@ -100,7 +103,7 @@ tasks → Review updated Actions workbook…** and select that file. This is a
 separate contract from the blank creation workbook.
 
 The workbook contains only eligible **My configuration**, Active Actions. It
-does not export Built-in or Archived Actions, sequences, fixed Excel-automation
+does not export Built-in or legacy inactive Actions, sequences, fixed Excel-automation
 Actions, or text-file transformations. **Action ID**, **State**, **Action type**,
 and **Original fingerprint** are verified identity fields; do not edit them. You may edit
 **Name**, **Value**, personal **Contexts**, **Tags**, **Description**, **Quick
@@ -132,23 +135,20 @@ backups and Diagnostics, then verify the saved configuration first. After
 success, export a fresh workbook before making another batch. Removing a
 workbook row still never deletes an Action.
 
-## Remove multiple personal Actions
+## Delete multiple personal Actions
 
-Press `Ctrl+,`, open **Actions**, then choose **More Action tasks → Remove
+Press `Ctrl+,`, open **Actions**, then choose **More Action tasks → Delete
 multiple personal Actions…**. This is an in-app review; no spreadsheet is
 required. Only **My configuration** Actions are offered. Use Find, select the
-exact rows you intend to remove, and inspect the combined number of Context,
+exact rows you intend to delete, and inspect the combined number of Context,
 slot, and configured Quick-menu references plus any dependent sequences.
+Active and legacy inactive records can be selected together.
 
-For Active selections, **Prepare N Actions for deletion** removes the Actions
-from runtime and clears their saved placements while retaining recoverable
-Archived records. The same window then shows those exact Actions in the
-permanent-delete stage—there is no need to open Show: Archived or select them
-again. **Delete N Actions permanently** is the second and final confirmation;
-there is no extra Yes/No dialog. Close after preparation if you want to keep
-the recoverable records. Use **Show prepared Actions** to review personal
-Actions that were already prepared earlier, and **Show Active Actions** to
-return to preparation.
+Find narrows the shown rows without clearing selection. **Select all shown**
+adds only visible rows; **Clear selection** clears the complete selection. The
+status reports selected rows hidden by the current filter, and the final
+**Delete N Actions permanently** label counts them. That effect-labelled button
+is the only confirmation; there is no preparation stage or extra Yes/No dialog.
 
 A referenced Action is blocked unless its dependent sequence is also selected
 in the same stage or edited first. Every file is rechecked immediately before
@@ -156,7 +156,7 @@ the batch write. If a write fails, Context Palette restores the exact previous
 configuration and backup-sidecar bytes when possible. The workflow never runs
 an Action and never deletes or changes its target file, folder, website,
 workbook, application, credential, or Inbox item. Built-in Actions retain their
-ordinary guided lifecycle controls because their changes travel through Git.
+ordinary direct-delete review because their changes travel through Git.
 
 ## Harvest website links from documents
 
@@ -600,6 +600,23 @@ launcher; no launcher silently runs a default Action.
   Quick actions, and submenus without editing JSON. Add Actions and Work Items from their
   searchable lists, then reorder them together; stable IDs are generated from the visible names
   when left blank.
+- A configured menu root or branch may explicitly reference an Active Action,
+  independently of the automatic menus below. The same Action can therefore
+  appear in no configured menu, one configured menu, or several configured
+  menus without changing its type or automatic location.
+- When creating or editing a Folder, Password, or AI-prompt Action, choose
+  **Menu locations → Choose…**. The first section selects its required
+  automatic Folders, Passwords, or Prompts location; the second section selects
+  zero or more additional configured menu roots or branches. Both are staged
+  until **Create action** or **Save action**, which saves the Action and those
+  references together. For a saved Active Action, select it under **Actions**
+  and choose **Other menus…** as a faster configured-placement-only route. Search the configured
+  roots and branches, select the wanted references, and review the exact
+  additions, removals, and newly empty items before applying. Built-in
+  locations can reference only Built-in Actions; My configuration locations
+  may reference either. A stale review or uncertain rollback stops further
+  changes and requires a fresh review. Applying placements never executes or
+  deletes the Action.
 - **Standard** is the single fixed Built-in group. Its one **Standard** launcher
   distributes Active Built-in Actions across root commands and nested subject
   levels. It is always first and cannot be moved or deleted; its contents can
@@ -608,10 +625,12 @@ launcher; no launcher silently runs a default Action.
   menus. They automatically include every Active `paste_credential`,
   `open_folder`, or `ai_prompt` action respectively, including actions created
   after the launcher opens and reloads.
-- Edit one of those actions and set **Quick menu** to as many as three levels
-  separated by `>`, such as `Work > Reports > Monthly`. Leave it empty to put
-  the Action directly at that menu's root, with no extra submenu. Archiving or
-  deleting the action removes it
+- In the Action form, **Menu locations** shows the exact automatic breadcrumb
+  and a summary of additional configured locations. Choose **Choose…** to
+  select **Menu root** or an existing branch from the real menu tree, search
+  locations, or create a new submenu below the selected location. Nesting is
+  limited to three levels; no `>` path needs to be remembered or typed.
+  Deleting the Action removes it
   from its generated menu without maintaining a second assignment.
 - Launcher order is **Standard**, personal configured menus, shared configured
   menus, then the automatic **Passwords**, **Folders**, and **Prompts** menus.
@@ -638,12 +657,13 @@ under **Set up** and backup or troubleshooting destinations under **Support**:
 - **Actions:** choose **New Action…** for the normal creation flow. **More Action
   tasks** contains bulk Excel creation/template and update commands,
   website-link Harvest, and the educational Action-type catalogue. Find,
-  lifecycle, and selection commands surround one
+  direct deletion, and selection commands surround one
   Actions table; Contexts and tags for the selection appear below it. Use
-  **Archive…** to remove an Active Action from runtime. Configure then switches
-  to **Show: Archived**, keeps that Action selected, and reveals **Delete
-  permanently…**. The permanent-delete control is hidden for Active Actions so
-  it cannot look available before the required archive step.
+  **Delete Action…** to review and permanently remove the selected record plus
+  its saved Context, shortcut, and configured-menu references. The confirmation
+  names the exact stable ID and states that the external target remains
+  unchanged. Old `Archived` records appear as **Legacy inactive** and offer
+  deletion only; there is no Archive or Restore command.
   New actions default to **My configuration**; choose **Built-in** only when
   deliberately changing shipped starter data.
 - **+ Action / New Action:** use the visible launcher button, Configure's
@@ -664,7 +684,7 @@ under **Set up** and backup or troubleshooting destinations under **Support**:
   6–0. The editor lists members first, followed by those slots. My
   configuration Contexts can contain built-in Actions, personal Actions, and
   Work Items; Built-in Contexts remain Action-only.
-- **Quick actions:** choose **New menu…** to create a configured shortcut menu.
+- **Quick actions:** choose **New saved menu…** to create a configured shortcut menu.
   Select a custom menu and use **New Quick action**; select a custom item and
   use **New submenu** where the bounded hierarchy permits it. Edit, Move, and
   Delete apply only to configured structure. Each menu has one launcher;
@@ -672,11 +692,27 @@ under **Set up** and backup or troubleshooting destinations under **Support**:
   The automatic **Passwords**, **Folders**, and **Prompts** menus also appear in
   the same tree, marked as generated from Actions. Select an automatic menu or
   branch to add a correctly typed Action with the ordinary full form, including
-  Contexts, tags, target, and a prefilled **Quick menu** location. Select an
-  automatic Action leaf to **Edit Action**, or choose **Find all/matching
-  Actions** from a menu or branch. Their
-  structure cannot be moved or deleted here; organize it through each Action's
-  **Quick menu** path. Actions at a menu root appear before child submenus. The
+  Contexts, tags, target, and a preselected menu location. Choose **Manage
+  menu…** or **Manage this submenu…** to search matching stored Actions and use
+  the explicit **Submenu tasks** menu. **New submenu** requires at least one
+  selected Active Action because an empty automatic submenu is not stored.
+  **Rename** changes only the selected submenu name, **Move** chooses a new
+  parent while retaining its name, and **Remove submenu** promotes its direct
+  Actions and child submenus to the parent. Every operation shows the exact
+  before → after paths and Built-in/personal impact before one effect-labelled
+  Apply button. Legacy inactive records are deletion-only and are not placement
+  candidates. Select an
+  automatic Action leaf inside a submenu and choose **Remove from submenu…**
+  to promote that exact Action one level, or select several direct members in
+  the manager and choose **Remove selected from this submenu**. The review
+  shows stable Action IDs so duplicate titles are not ambiguous. The Action
+  remains Active and its external target is unchanged. At the automatic root,
+  no Remove command appears: move the Action into a submenu, or delete the
+  owning Action to remove that required automatic leaf.
+  Automatic branches are not separate records: moving the last Action out
+  makes an empty branch disappear. Removing a submenu never deletes an Action,
+  folder, password, prompt, Work Item, or other external target. Actions at a
+  menu root appear before child submenus. The
   selection card shows the complete path and only the commands valid for that
   selection.
   The single fixed Built-in **Standard** group offers only Built-in actions,
@@ -812,24 +848,28 @@ summaries, Quick-action summaries, and diagnostics. Actions
 created from Inbox, Harvest, or Cheat Sheets also refresh an already-open
 Configure workspace.
 
-Use **Show** to switch the Actions table between **Active**, **Archived**, and
-**All** stored actions. **Archive…** is the normal way to remove an
-Active Action from use without destroying its record. The confirmation reports
-how many saved Context slots, Context memberships, and configured Quick
-actions will be removed; empty Quick-action buttons are cleaned automatically.
-After archiving, Configure switches to **Show: Archived**, keeps the same Action
-selected, and reveals **Delete permanently…**. The Archived Action remains
-searchable and editable in Configure. Restore it before assigning a Context
-because Archived Actions cannot own active saved placements.
+For a Folder, Password, or AI-prompt Action, the normal create/edit form's
+**Menu locations** chooser manages its automatic location and optional
+configured references together. For any saved Active Action,
+**Other menus…** remains a configured-reference-only shortcut. Uncheck one or
+all saved locations there to remove only those optional references; the Action
+and its required automatic location remain. No conversion or
+migration occurs between the two stored menu models.
 
-Select an Archived Action and choose **Restore…** to make the same
-record Active again. Restore does not recreate its former saved placements, so
-reassign any wanted Context membership, context slots, or configured Quick
-actions. Generated Passwords, Folders, or Prompts placement can return
-automatically when the Action type and retained **Quick menu** path apply.
-**Delete permanently…** is available for Archived Actions and cannot be
-undone inside Context Palette. Built-in lifecycle changes add a warning because
-they alter starter configuration tracked by Git.
+The Actions table shows ordinary Active records and any old records marked
+**Legacy inactive**. Select an Action and choose **Delete Action…** to review
+permanent deletion. The review reports saved Context memberships, slots,
+configured Quick-action references, newly empty Quick-action items, and the
+automatic menu location that will disappear. It identifies duplicate titles by
+stable ID and explicitly states that the external file, folder, website,
+application, credential target, or other resource will not be deleted or
+changed. A Built-in Action adds a Git and multi-computer warning.
+
+Deletion rechecks that exact impact before writing. A stale review makes no
+change and asks for a fresh review. A write failure restores every attempted
+configuration and `.bak` file when possible; an incomplete rollback is
+reported explicitly. Legacy inactive records cannot run, be edited, or be
+restored; deletion is their only available mutation.
 
 The Actions, Contexts, and Quick actions tables select their first useful row
 automatically. Use the arrow keys to move, then press Enter to edit the selected
@@ -860,7 +900,7 @@ These commands deliberately affect different kinds of data:
 
 | Entity | Command and result | What remains untouched |
 | --- | --- | --- |
-| Action | **Archive…** removes an Active Action from runtime and saved placements; an Archived Action can then use **Delete permanently…**. Archive and delete roll back all attempted configuration writes if one fails. | The Action's external file, folder, website, application, or other target. |
+| Action | **Delete Action…** reviews and permanently removes the Action plus its saved Context, slot, and configured-menu references. Active and legacy inactive records use the same transactional deletion boundary. | The Action's external file, folder, website, application, or other target. |
 | Context | Open **Configure**, choose **Contexts**, then use **Delete permanently…**. This removes that Context, its memberships, and its context-slot configuration. | Member Actions and Work Item folders/files. |
 | Quick menu | A configured custom menu or item can use **Delete**. **Standard** is fixed and cannot be moved or deleted; automatic Passwords/Folders/Prompts structure is changed through its owning Actions. | Assigned Actions, Work Items, and external targets. |
 | Work Item organization | Open **Configure**, choose **Work Items**, then choose **Organize** and **Forget Palette organization…**. This transactionally removes personal tags, Context membership and preferred placement, context slots, and personal Quick-menu references for that Work Item. | The source, folder, workbook, files, and workbook Inbox. |
@@ -1105,9 +1145,9 @@ application** with an exact `powershell.exe` or `pwsh.exe` and separate reviewed
 arguments such as `-NoProfile`, `-File`, and the script path, then add that
 Action to the sequence. A sequence never stores inline shell commands.
 
-An Action used by an Active sequence cannot be archived. An Action used by any
-Active or Archived sequence cannot be permanently deleted until those sequences
-are edited, archived, or deleted as appropriate. Built-in sequences may use
+An Action used by any unselected Active or legacy inactive sequence cannot be
+permanently deleted until those sequences are edited or deleted, or selected in
+the same personal bulk-delete review. Built-in sequences may use
 Built-in Actions only; My configuration sequences may use either source.
 
 For **Paste saved text**, Run directly pastes into the application from which
@@ -1200,11 +1240,11 @@ The fixed **Prompts** launcher opens a nested menu containing all Active AI
 prompt actions. Choosing a prompt loads it into Input / Output for review and
 copies it to the clipboard.
 
-Stored prompts reuse the normal action lifecycle. In Configure, choose
+Stored prompts reuse normal Action editing and deletion. In Configure, choose
 **Action types**, select **AI prompt**, and create a personal action.
 Enter the visible prompt name and prompt text; no technical tag is required.
-Active AI prompt actions appear automatically, while Archived
-prompts do not. Personal prompt text stays in ignored `data/local_actions.json`
+Active AI prompt actions appear automatically, while legacy inactive prompts
+do not. Personal prompt text stays in ignored `data/local_actions.json`
 and is never written to diagnostics by the AI menu.
 
 ### Edit
@@ -1251,8 +1291,12 @@ Dropping does not open or execute anything, save configuration, create an
 Action or Inbox item, write a log containing the dropped value, or modify the
 clipboard. An unreadable `.url` or unresolved `.lnk` remains as its original
 path with a warning. Showing details does not inspect a path, access a web link,
-re-resolve a shortcut, or copy anything. If TkDND cannot load, the target is unavailable but the
-resident launcher and every non-drop feature continue to work.
+re-resolve a shortcut, or copy anything. If TkDND cannot load or initialize,
+the target is unavailable but the resident launcher and every non-drop feature
+continue to work. The launcher status points to **More → Show drop target**;
+that command explains the required stop, setup, and restart sequence. A failed
+Drop-target initialization is retained for the current process, so installing
+the dependency without restarting is not sufficient.
 
 ### Hide
 
@@ -1417,9 +1461,9 @@ types** to return to every Action; ordinary Find text narrows either list.
 
 Every Active credential action also appears automatically under the fixed
 **Passwords** Quick-action menu. Choosing one starts the existing protected
-destination confirmation. Set its optional **Quick menu** path when creating or
-editing it to organize credentials into as many as three nested levels; leave
-the path empty to show it directly at the Passwords menu root.
+destination confirmation. When creating or editing it, use **Passwords menu →
+Choose…** to select the menu root, an existing branch, or a new nested location
+from the real menu tree.
 
 Press `Ctrl+,`, then choose **Action types → Paste a Windows
 credential** to create a permanent personal action. The action stores only an exact target
@@ -1466,7 +1510,7 @@ unresolved. Copy harmless text and reopen Context Palette to let the sequence
 guard recognize that the protected item has been replaced.
 
 Credential paste is unavailable after an ordinary launcher/external show
-request because that route has no fresh destination window. Archived
+request because that route has no fresh destination window. Legacy inactive
 credential actions are hidden, and credential actions are not AI-proposable.
 Windows Credential Manager
 protects storage at rest, but this feature cannot protect against malicious
@@ -1483,17 +1527,16 @@ Configure.
 
 The `Company Reference Prefixes` sheet documents known Archive and ServiceNow prefixes. Archive references can already be opened with `Open selected archive item`. ServiceNow is reference-only until its complete URL template is configured.
 
-## Action lifecycle
+## Action records and deletion
 
 - Inbox: captured but not yet structured.
 - Active: permanent, editable, and visible in normal action discovery.
-- Archived: retained and editable by opening **Configure**, choosing
-  **Actions**, and setting **Show** to **Archived**, but hidden from the
-  launcher and active assignment pickers.
+- Legacy inactive: an old `Archived` record retained for compatibility, hidden
+  from the launcher and assignment pickers, and available only for deletion.
 
-Archiving removes saved placements so the configuration never points at an
-inactive Action. Restoring returns the same Action to Active but intentionally
-does not recreate those assignments.
+New and edited Actions remain Active. Deletion is a direct reviewed permanent
+operation that transactionally removes the selected record and internal saved
+placements without changing the external target.
 
 ## Local data
 
@@ -1540,12 +1583,16 @@ passwords, whitespace in the hostname area, or ambiguous backslashes are rejecte
 Configuration reloads show a brief busy cursor and status message. Because all
 configuration is local and normally loads in under a second, Context Palette
 does not show a spinner that would flicker during ordinary use. Errors identify
-the affected area and preserve the rest of the launcher where possible. If an
-edited action, context, Quick-action record, or palette-state file is invalid,
-its last successfully loaded configuration remains available while the file is
-corrected. Palette failures retain legacy focus/pin compatibility data and
-per-Context slot assignments. On first start, a missing or invalid palette uses
-safe empty slots instead of preventing the launcher from opening.
+the affected area. After startup, Actions, Contexts, Quick actions, palette
+slots, and Work Item configuration reload as one unit: if any part is invalid
+or changes while being read, the complete last successfully loaded interface
+remains available while the files are corrected. Context Palette never mixes a
+new Action list with older menus, Contexts, or slots. On first start, where no
+earlier interface exists to preserve, configuration areas remain fault-isolated
+and a missing or invalid palette uses safe empty slots instead of preventing the
+launcher from opening. Repeated show requests do not reopen the same error for
+an unchanged invalid file; after correcting a transient access problem, press
+**F5** to retry the reload explicitly.
 
 For an intermittent startup or configuration problem, inspect
 `data/context-palette.log`. The local log is ignored by Git, rotates
@@ -1555,6 +1602,23 @@ contents.
 ### New features are reported as unsupported
 
 A previous resident process is still running. Run `stop-context-palette.bat`, then start `run-context-palette.bat` again.
+
+### The Drop window is missing
+
+Choose **More → Show drop target**. If it reports that the target is
+unavailable, close Context Palette and run:
+
+```powershell
+.\stop-context-palette.bat
+.\setup-context-palette.bat
+.\run-context-palette.bat
+```
+
+No administrator rights are required. On another computer, its ignored
+`.venv` must be prepared locally after a pull; Git transfers the requirements
+file, not installed packages. If setup succeeds but the warning persists,
+review `data/context-palette.log` or open **Diagnostics** in Configure for the
+local initialization error. All non-drop features remain available.
 
 ### Ctrl+Alt+P does not reopen the palette
 

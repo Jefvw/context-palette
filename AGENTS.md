@@ -26,8 +26,10 @@ common modifications.
   drive paths, files, folders, and associated scripts to ShellExecute. Do not
   invent or parse a separate compound command language.
 - Keep actions constrained, previewable, and testable.
-- Preserve the permanent Active/Archived action lifecycle. Confirmed creation
-  and edits save immediately; do not reintroduce a Draft or Trusted gate.
+- Confirmed Action creation and edits save immediately. Deletion is a direct,
+  reviewed permanent operation; do not reintroduce an Archive/Restore, Draft,
+  or Trusted gate. Continue to read legacy `Archived` records as inactive,
+  deletion-only compatibility data without silently activating or deleting them.
 - All persisted actions, contexts, and Quick actions are user-editable. Explain
   the Git and multi-computer impact of shared changes, but do not make shared
   records read-only.

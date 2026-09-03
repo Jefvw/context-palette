@@ -7,8 +7,6 @@ import unittest
 from unittest.mock import Mock, patch
 
 from context_palette.action_bulk_lifecycle import (
-    ARCHIVE_OPERATION,
-    DELETE_OPERATION,
     BulkActionLifecycleCandidate,
     BulkActionLifecycleError,
     BulkActionLifecyclePlan,
@@ -52,16 +50,16 @@ class ActionBulkLifecycleWindowTests(unittest.TestCase):
 
         self.active_one = action("active-one", "Active one")
         self.active_two = action("active-two", "Active two")
-        self.archived = action(
-            "archived-one",
-            "Archived one",
+        self.legacy = action(
+            "legacy-one",
+            "Legacy one",
             state=ARCHIVED_STATE,
         )
         self.shared = action("shared", "Built-in")
         self.actions = (
             self.active_one,
             self.active_two,
-            self.archived,
+            self.legacy,
             self.shared,
         )
         self.on_change = Mock()
@@ -80,7 +78,7 @@ class ActionBulkLifecycleWindowTests(unittest.TestCase):
         local_ids: tuple[str, ...] = (
             "active-one",
             "active-two",
-            "archived-one",
+            "legacy-one",
         ),
     ) -> ActionBulkLifecycleWindow:
         return ActionBulkLifecycleWindow(
@@ -103,7 +101,6 @@ class ActionBulkLifecycleWindowTests(unittest.TestCase):
 
     def _plan(
         self,
-        operation: str,
         selected: tuple[Action, ...],
         *,
         blocked_ids: tuple[str, ...] = (),
@@ -122,7 +119,6 @@ class ActionBulkLifecycleWindowTests(unittest.TestCase):
             for item in selected
         )
         return BulkActionLifecyclePlan(
-            operation=operation,
             action_ids=tuple(item.id for item in selected),
             candidates=candidates,
             impact=ActionDeletionReport(3, 1, 4),
@@ -130,19 +126,22 @@ class ActionBulkLifecycleWindowTests(unittest.TestCase):
             paths=self.window.paths,
         )
 
-    def test_starts_with_active_personal_actions_and_keeps_commands_visible(self) -> None:
-        self.assertEqual(self.window.operation, ARCHIVE_OPERATION)
+    def test_starts_with_all_personal_states_and_one_delete_action(self) -> None:
         self.assertEqual(
             self.window.tree.get_children(),
-            ("action-active-one", "action-active-two"),
+            ("action-active-one", "action-active-two", "action-legacy-one"),
         )
         self.assertEqual(
-            self.window.stage_var.get(),
-            "Prepare Active Actions for deletion",
+            self.window.tree.set("action-active-one", "availability"),
+            "Active",
+        )
+        self.assertEqual(
+            self.window.tree.set("action-legacy-one", "availability"),
+            "Legacy inactive",
         )
         self.assertEqual(
             self.window.commit_button.cget("text"),
-            "Prepare 0 Actions for deletion",
+            "Delete 0 Actions permanently",
         )
         self.assertTrue(self.window.commit_button.instate(["disabled"]))
 
@@ -153,39 +152,20 @@ class ActionBulkLifecycleWindowTests(unittest.TestCase):
         }
         self.assertIn("Select all shown", labels)
         self.assertIn("Clear selection", labels)
-        self.assertIn("Show prepared Actions", labels)
         self.assertIn("Close", labels)
-        self.assertIn("External targets are never changed", self.window.intro_label.cget("text"))
+        self.assertNotIn("Prepare 0 Actions for deletion", labels)
+        self.assertFalse(any(label.startswith("Show prepared") for label in labels))
+        self.assertIn(
+            "External targets are never changed",
+            self.window.intro_label.cget("text"),
+        )
+        self.assertEqual(self.window.tree.heading("use")["text"], "Delete")
         self.assertTrue(self.window.window.bind("<Control-f>"))
         self.assertTrue(self.window.window.bind("<Control-a>"))
         self.assertTrue(self.window.window.bind("<F5>"))
         self.assertTrue(self.window.window.bind("<Escape>"))
         self.assertTrue(self.window.tree.bind("<space>"))
-        self.assertEqual(
-            self.window.tree.heading("dependencies")["text"],
-            "Dependencies",
-        )
-        self.assertEqual(self.window.tree.heading("use")["text"], "Remove")
         self.assertTrue(self.window.tree.cget("xscrollcommand"))
-
-    def test_can_switch_to_already_prepared_actions_without_leaving_window(self) -> None:
-        self.assertEqual(self.window.operation, ARCHIVE_OPERATION)
-        self.window.switch_stage()
-
-        self.assertEqual(self.window.operation, DELETE_OPERATION)
-        self.assertEqual(
-            self.window.tree.get_children(),
-            ("action-archived-one",),
-        )
-        self.assertEqual(self.window.selected_action_ids, set())
-        self.assertEqual(
-            self.window.stage_var.get(),
-            "Delete prepared Actions permanently",
-        )
-        self.assertEqual(
-            self.window.stage_switch_button.cget("text"),
-            "Show Active Actions",
-        )
 
     def test_footer_and_review_remain_visible_at_150_percent_scaling(self) -> None:
         self._close_window()
@@ -217,35 +197,31 @@ class ActionBulkLifecycleWindowTests(unittest.TestCase):
             self.root.tk.call("tk", "scaling", original_scaling)
 
     def test_selection_plans_exact_batch_and_space_toggles(self) -> None:
-        reviewed = self._plan(ARCHIVE_OPERATION, (self.active_one,))
+        reviewed = self._plan((self.active_one,))
         with patch(
-            "context_palette.action_bulk_lifecycle_window.plan_bulk_action_lifecycle",
+            "context_palette.action_bulk_lifecycle_window.plan_bulk_action_deletion",
             return_value=reviewed,
         ) as planner:
             self.window.tree.selection_set("action-active-one")
             self.window.tree.focus("action-active-one")
             self.assertEqual(self.window._toggle_from_key(), "break")
 
-        planner.assert_called_once_with(
-            ARCHIVE_OPERATION,
-            ("active-one",),
-            paths=self.window.paths,
-        )
+        planner.assert_called_once_with(("active-one",), paths=self.window.paths)
         self.assertEqual(self.window.selected_action_ids, {"active-one"})
         self.assertEqual(self.window.tree.set("action-active-one", "use"), "[x]")
         self.assertEqual(
             self.window.commit_button.cget("text"),
-            "Prepare 1 Action for deletion",
+            "Delete 1 Action permanently",
         )
         self.assertFalse(self.window.commit_button.instate(["disabled"]))
         detail = self.window.detail.get("1.0", "end-1c")
-        self.assertIn("Action records: archived and retained.", detail)
+        self.assertIn("Action records: deleted permanently.", detail)
         self.assertIn("Saved references removed: 3", detail)
         self.assertIn("Empty Quick-action items removed: 1", detail)
         self.assertIn("Configuration files changed: 4", detail)
         self.assertIn("External targets: not deleted or changed.", detail)
 
-    def test_ctrl_a_selects_actions_only_when_the_table_has_focus(self) -> None:
+    def test_ctrl_a_selects_shown_actions_only_when_table_has_focus(self) -> None:
         self.window.filter_var.set("Active")
         self.window.filter_entry.focus_force()
         self.window.filter_entry.icursor(2)
@@ -257,18 +233,10 @@ class ActionBulkLifecycleWindowTests(unittest.TestCase):
 
         self.assertEqual(self.window.selected_action_ids, set())
         self.assertTrue(self.window.filter_entry.selection_present())
-        self.assertEqual(int(self.window.filter_entry.index(tk.SEL_FIRST)), 0)
-        self.assertEqual(
-            int(self.window.filter_entry.index(tk.SEL_LAST)),
-            len(self.window.filter_var.get()),
-        )
 
-        reviewed = self._plan(
-            ARCHIVE_OPERATION,
-            (self.active_one, self.active_two),
-        )
+        reviewed = self._plan((self.active_one, self.active_two))
         with patch(
-            "context_palette.action_bulk_lifecycle_window.plan_bulk_action_lifecycle",
+            "context_palette.action_bulk_lifecycle_window.plan_bulk_action_deletion",
             return_value=reviewed,
         ):
             self.window.tree.focus_force()
@@ -281,14 +249,13 @@ class ActionBulkLifecycleWindowTests(unittest.TestCase):
             {"active-one", "active-two"},
         )
 
-    def test_blocked_selection_stays_visible_and_disables_prepare(self) -> None:
+    def test_blocked_selection_stays_visible_and_disables_delete(self) -> None:
         blocked = self._plan(
-            ARCHIVE_OPERATION,
             (self.active_one,),
             blocked_ids=("active-one",),
         )
         with patch(
-            "context_palette.action_bulk_lifecycle_window.plan_bulk_action_lifecycle",
+            "context_palette.action_bulk_lifecycle_window.plan_bulk_action_deletion",
             return_value=blocked,
         ):
             self.window._toggle_iids(("action-active-one",))
@@ -300,180 +267,78 @@ class ActionBulkLifecycleWindowTests(unittest.TestCase):
         self.assertIn("Monthly sequence", detail)
         self.assertIn("sequence-monthly", detail)
 
-    def test_prepare_switches_in_place_and_retains_the_selected_batch(self) -> None:
-        archive_plan = self._plan(ARCHIVE_OPERATION, (self.active_one,))
-        prepared = action("active-one", "Active one", state=ARCHIVED_STATE)
-        delete_plan = self._plan(DELETE_OPERATION, (prepared,))
-        report = archive_plan.impact
-
+    def test_delete_commits_without_another_dialog_and_clears_selection(self) -> None:
+        deletion_plan = self._plan((self.active_one, self.legacy))
         with (
             patch(
-                "context_palette.action_bulk_lifecycle_window.plan_bulk_action_lifecycle",
-                side_effect=(archive_plan, delete_plan),
-            ) as planner,
+                "context_palette.action_bulk_lifecycle_window.plan_bulk_action_deletion",
+                return_value=deletion_plan,
+            ),
             patch(
-                "context_palette.action_bulk_lifecycle_window.commit_bulk_action_lifecycle",
-                return_value=report,
+                "context_palette.action_bulk_lifecycle_window.commit_bulk_action_deletion",
+                return_value=deletion_plan.impact,
             ) as commit,
             patch(
                 "context_palette.action_bulk_lifecycle_window.load_combined_stored_actions",
-                return_value=(
-                    [prepared, self.archived, self.shared],
-                    {prepared.id, self.archived.id},
-                ),
+                return_value=([self.active_two, self.shared], {self.active_two.id}),
             ),
             patch(
                 "context_palette.action_bulk_lifecycle_window.messagebox.askyesno",
                 create=True,
             ) as confirmation,
         ):
-            self.window._toggle_iids(("action-active-one",))
+            self.window.selected_action_ids = {self.active_one.id, self.legacy.id}
+            self.window.plan = deletion_plan
+            self.window._render()
             self.window.commit_selected()
 
-        commit.assert_called_once_with(archive_plan)
+        commit.assert_called_once_with(deletion_plan)
         confirmation.assert_not_called()
         self.on_change.assert_called_once_with()
-        self.assertEqual(self.window.operation, DELETE_OPERATION)
-        self.assertEqual(self.window.selected_action_ids, {"active-one"})
-        self.assertEqual(
-            self.window.stage_var.get(),
-            "Delete prepared Actions permanently",
-        )
-        self.assertEqual(
-            self.window.commit_button.cget("text"),
-            "Delete 1 Action permanently",
-        )
-        self.assertFalse(self.window.commit_button.instate(["disabled"]))
-        self.assertIn("same Actions remain selected", self.window.status_var.get())
-        self.assertEqual(planner.call_count, 2)
-        self.assertEqual(planner.call_args_list[-1].args, (DELETE_OPERATION, ("active-one",)))
-        self.root.update()
-        self.assertFalse(self.window.prepare_button.winfo_ismapped())
-        self.assertTrue(self.window.delete_button.winfo_ismapped())
-        self.assertIs(self.window.commit_button, self.window.delete_button)
-
-    def test_prepare_reports_delete_review_failure_and_disables_delete(self) -> None:
-        archive_plan = self._plan(ARCHIVE_OPERATION, (self.active_one,))
-        prepared = action("active-one", "Active one", state=ARCHIVED_STATE)
-
-        with (
-            patch(
-                "context_palette.action_bulk_lifecycle_window.plan_bulk_action_lifecycle",
-                side_effect=(
-                    archive_plan,
-                    BulkActionLifecycleError("assignments could not be read"),
-                ),
-            ),
-            patch(
-                "context_palette.action_bulk_lifecycle_window.commit_bulk_action_lifecycle",
-                return_value=archive_plan.impact,
-            ),
-            patch(
-                "context_palette.action_bulk_lifecycle_window.load_combined_stored_actions",
-                return_value=(
-                    [prepared, self.archived, self.shared],
-                    {prepared.id, self.archived.id},
-                ),
-            ),
-            patch(
-                "context_palette.action_bulk_lifecycle_window.messagebox.showerror"
-            ) as error,
-        ):
-            self.window._toggle_iids(("action-active-one",))
-            self.window.commit_selected()
-
-        self.on_change.assert_called_once_with()
-        self.assertEqual(self.window.operation, DELETE_OPERATION)
-        self.assertEqual(self.window.selected_action_ids, {"active-one"})
-        self.assertIsNone(self.window.plan)
-        self.assertTrue(self.window.delete_button.instate(["disabled"]))
-        self.assertIn("remain prepared", self.window.status_var.get())
-        self.assertIn("Press F5", self.window.status_var.get())
-        self.assertNotIn("same Actions remain selected", self.window.status_var.get())
-        error.assert_called_once()
-        self.assertEqual(
-            error.call_args.args[0],
-            "Permanent deletion could not be reviewed",
-        )
-        self.assertIn("assignments could not be read", error.call_args.args[1])
-
-    def test_delete_commits_without_second_dialog_and_clears_selection(self) -> None:
-        self._close_window()
-        archived = action("archived-only", "Archived only", state=ARCHIVED_STATE)
-        with patch(
-            "context_palette.action_bulk_lifecycle_window.configure_standard_window"
-        ):
-            self.window = self._make_window(
-                (archived, self.shared),
-                local_ids=(archived.id,),
-            )
-        self.root.update()
-        delete_plan = self._plan(DELETE_OPERATION, (archived,))
-        with (
-            patch(
-                "context_palette.action_bulk_lifecycle_window.plan_bulk_action_lifecycle",
-                return_value=delete_plan,
-            ),
-            patch(
-                "context_palette.action_bulk_lifecycle_window.commit_bulk_action_lifecycle",
-                return_value=delete_plan.impact,
-            ) as commit,
-            patch(
-                "context_palette.action_bulk_lifecycle_window.load_combined_stored_actions",
-                return_value=([self.shared], set()),
-            ),
-            patch(
-                "context_palette.action_bulk_lifecycle_window.messagebox.askyesno",
-                create=True,
-            ) as confirmation,
-        ):
-            self.window._toggle_iids(("action-archived-only",))
-            self.window.commit_selected()
-
-        commit.assert_called_once_with(delete_plan)
-        confirmation.assert_not_called()
-        self.assertEqual(self.window.operation, DELETE_OPERATION)
         self.assertEqual(self.window.selected_action_ids, set())
-        self.assertEqual(self.window.tree.get_children(), ())
-        self.assertIn("Deleted 1 Action permanently", self.window.status_var.get())
+        self.assertEqual(self.window.tree.get_children(), ("action-active-two",))
+        self.assertIn("Deleted 2 Actions permanently", self.window.status_var.get())
         self.assertIn("External targets were unchanged", self.window.status_var.get())
 
     def test_filter_select_all_and_clear_keep_hidden_selection_explicit(self) -> None:
-        first_plan = self._plan(ARCHIVE_OPERATION, (self.active_one,))
-        both_plan = self._plan(
-            ARCHIVE_OPERATION,
-            (self.active_one, self.active_two),
-        )
+        first_plan = self._plan((self.active_one,))
+        all_plan = self._plan((self.active_one, self.active_two, self.legacy))
         with patch(
-            "context_palette.action_bulk_lifecycle_window.plan_bulk_action_lifecycle",
-            side_effect=(first_plan, both_plan),
+            "context_palette.action_bulk_lifecycle_window.plan_bulk_action_deletion",
+            side_effect=(first_plan, all_plan),
         ):
             self.window.filter_var.set("Active one")
             self.window.select_all_shown()
             self.window.filter_var.set("")
             self.window.select_all_shown()
 
-        self.assertEqual(self.window.selected_action_ids, {"active-one", "active-two"})
+        self.assertEqual(
+            self.window.selected_action_ids,
+            {"active-one", "active-two", "legacy-one"},
+        )
         self.window.filter_var.set("Active one")
-        self.assertIn("1 selected hidden", self.window.shown_var.get())
+        self.assertIn("2 selected hidden", self.window.shown_var.get())
         self.window.clear_selection()
         self.assertEqual(self.window.selected_action_ids, set())
         self.assertTrue(self.window.commit_button.instate(["disabled"]))
 
     def test_failed_commit_refreshes_review_without_claiming_no_effect(self) -> None:
-        plan = self._plan(ARCHIVE_OPERATION, (self.active_one,))
+        plan = self._plan((self.active_one,))
         with (
             patch(
-                "context_palette.action_bulk_lifecycle_window.plan_bulk_action_lifecycle",
+                "context_palette.action_bulk_lifecycle_window.plan_bulk_action_deletion",
                 return_value=plan,
             ),
             patch(
-                "context_palette.action_bulk_lifecycle_window.commit_bulk_action_lifecycle",
+                "context_palette.action_bulk_lifecycle_window.commit_bulk_action_deletion",
                 side_effect=BulkActionLifecycleError("saved Actions changed"),
             ),
             patch(
                 "context_palette.action_bulk_lifecycle_window.load_combined_stored_actions",
-                return_value=(list(self.actions), {"active-one", "active-two", "archived-one"}),
+                return_value=(
+                    list(self.actions),
+                    {"active-one", "active-two", "legacy-one"},
+                ),
             ),
             patch(
                 "context_palette.action_bulk_lifecycle_window.messagebox.showerror"
@@ -486,7 +351,7 @@ class ActionBulkLifecycleWindowTests(unittest.TestCase):
         error.assert_called_once()
         self.assertEqual(
             error.call_args.args[0],
-            "Action removal did not complete as reviewed",
+            "Action deletion did not complete as reviewed",
         )
 
 

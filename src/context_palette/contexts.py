@@ -84,11 +84,21 @@ def update_work_item_context_memberships(
     return updated
 
 
-def load_contexts(path: Path) -> list[ContextDefinition]:
+def load_contexts(
+    path: Path,
+    *,
+    missing_ok: bool = False,
+) -> list[ContextDefinition]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
+        if missing_ok:
+            return []
         raise ContextError(f"Context file was not found: {path}") from exc
+    except UnicodeError as exc:
+        raise ContextError(f"Context file is not valid UTF-8: {path}") from exc
+    except OSError as exc:
+        raise ContextError(f"Context file could not be read: {path}") from exc
     except json.JSONDecodeError as exc:
         raise ContextError(f"Context file is not valid JSON: {path}") from exc
     if not isinstance(raw, dict) or not isinstance(raw.get("contexts"), list):
@@ -104,8 +114,7 @@ def load_combined_contexts(shared_path: Path, local_path: Path) -> list[ContextD
         for context in contexts
     ):
         raise ContextError("Built-in contexts cannot reference personal Work Items.")
-    if local_path.exists():
-        contexts += load_contexts(local_path)
+    contexts += load_contexts(local_path, missing_ok=True)
     names: set[str] = set()
     for context in contexts:
         key = context.name.casefold()

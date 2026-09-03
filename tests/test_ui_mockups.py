@@ -262,17 +262,35 @@ class UiMockupTkTests(unittest.TestCase):
         try:
             self.assertIsInstance(configure, ConfigureMockup)
             self.assertFalse(hasattr(configure, "pins_panel"))
-            self.assertFalse(configure.action_delete_button.winfo_manager())
-        finally:
-            root.destroy()
-
-        root, configure = self.build(MOCKUP_ACTIONS, scenario="archived")
-        try:
-            self.assertIsInstance(configure, ConfigureMockup)
-            self.assertTrue(configure.action_delete_button.winfo_manager())
             self.assertEqual(
                 str(configure.action_delete_button.cget("state")),
                 str(tk.NORMAL),
+            )
+            self.assertEqual(
+                str(configure.action_edit_button.cget("state")),
+                str(tk.NORMAL),
+            )
+            self.assertFalse(hasattr(configure, "action_state_var"))
+            self.assertFalse(hasattr(configure, "action_lifecycle_button"))
+        finally:
+            root.destroy()
+
+        root, configure = self.build(MOCKUP_ACTIONS, scenario="legacy-inactive")
+        try:
+            self.assertIsInstance(configure, ConfigureMockup)
+            self.assertEqual(
+                str(configure.action_delete_button.cget("state")),
+                str(tk.NORMAL),
+            )
+            self.assertEqual(
+                str(configure.action_edit_button.cget("state")),
+                str(tk.DISABLED),
+            )
+            selection = configure.actions_tree.selection()
+            self.assertTrue(selection)
+            self.assertEqual(
+                configure.actions_tree.set(selection[0], "state"),
+                "Legacy inactive",
             )
         finally:
             root.destroy()

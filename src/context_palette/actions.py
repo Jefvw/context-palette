@@ -220,10 +220,29 @@ def load_stored_actions(
     *,
     inspect_external_paths: bool = True,
 ) -> list[Action]:
+    return _load_stored_actions(
+        path,
+        inspect_external_paths=inspect_external_paths,
+        missing_ok=False,
+    )
+
+
+def _load_stored_actions(
+    path: Path,
+    *,
+    inspect_external_paths: bool,
+    missing_ok: bool,
+) -> list[Action]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
+        if missing_ok:
+            return []
         raise ActionError(f"Action file was not found: {path}") from exc
+    except UnicodeError as exc:
+        raise ActionError(f"Action file is not valid UTF-8: {path}") from exc
+    except OSError as exc:
+        raise ActionError(f"Action file could not be read: {path}") from exc
     except json.JSONDecodeError as exc:
         raise ActionError(f"Action file is not valid JSON: {path}") from exc
 
@@ -264,14 +283,15 @@ def load_combined_actions(
         shared_path,
         inspect_external_paths=inspect_external_paths,
     )
-    local_actions = (
-        load_actions(
+    local_actions = [
+        action
+        for action in _load_stored_actions(
             local_path,
             inspect_external_paths=inspect_external_paths,
+            missing_ok=True,
         )
-        if local_path.exists()
-        else []
-    )
+        if action.state in VISIBLE_STATES
+    ]
     shared_ids = {action.id.casefold(): action.id for action in shared_actions}
     local_ids_by_key = {action.id.casefold(): action.id for action in local_actions}
     duplicate_ids = shared_ids.keys() & local_ids_by_key.keys()
@@ -298,13 +318,10 @@ def load_combined_stored_actions(
         shared_path,
         inspect_external_paths=inspect_external_paths,
     )
-    local_actions = (
-        load_stored_actions(
-            local_path,
-            inspect_external_paths=inspect_external_paths,
-        )
-        if local_path.exists()
-        else []
+    local_actions = _load_stored_actions(
+        local_path,
+        inspect_external_paths=inspect_external_paths,
+        missing_ok=True,
     )
     shared_ids = {action.id.casefold(): action.id for action in shared_actions}
     local_ids_by_key = {action.id.casefold(): action.id for action in local_actions}
@@ -1977,11 +1994,14 @@ def _ensure_unique_action_ids(actions: Iterable[Action], path: Path) -> None:
 
 
 def _load_action_data(path: Path) -> dict[str, list[object]]:
-    if not path.exists():
-        return {"actions": []}
-
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {"actions": []}
+    except UnicodeError as exc:
+        raise ActionError(f"Action file is not valid UTF-8: {path}") from exc
+    except OSError as exc:
+        raise ActionError(f"Action file could not be read: {path}") from exc
     except json.JSONDecodeError as exc:
         raise ActionError(f"Action file is not valid JSON: {path}") from exc
 

@@ -109,6 +109,7 @@ class PerformanceLifecycleTests(unittest.TestCase):
                 app.local_work_item_settings_path,
             ) = paths
             app.configuration_signature_cache = app._configuration_signature()
+            app.configuration_failed_signature_cache = None
             reloads: list[bool] = []
             app._reload = lambda: reloads.append(True)
 
@@ -136,35 +137,34 @@ class PerformanceLifecycleTests(unittest.TestCase):
         app.status_var = FakeVariable()
         app.actions = []
         events: list[object] = []
-        app._load_actions = lambda: events.append("actions")
-        app._load_command_surface = (
-            lambda *, render=True: events.append(("commands", render))
+        generation = object()
+        app._stage_runtime_configuration = lambda _timings: (
+            events.append("stage") or generation
         )
-        app._load_contexts = lambda: events.append("contexts")
-        app._load_work_item_configuration = lambda: events.append("work_items")
-        app._load_palette_state = (
-            lambda *, render=True: events.append(("palette", render))
+        app._publish_runtime_configuration = lambda value: events.append(
+            ("publish", value)
         )
         app._render_command_surface = lambda: events.append("surface")
         app._refresh_results = lambda: events.append("results")
         app._start_work_item_refresh = lambda: events.append("work_item_refresh")
         app._configuration_signature = lambda: ()
+        app.configuration_signature_cache = (("old", 1, 1),)
+        app.configuration_failed_signature_cache = (("failed", 1, 1),)
 
         app._reload()
 
         self.assertEqual(
             events,
             [
-                "actions",
-                ("commands", False),
-                "contexts",
-                "work_items",
-                ("palette", False),
+                "stage",
+                ("publish", generation),
                 "surface",
                 "results",
                 "work_item_refresh",
             ],
         )
+        self.assertEqual(app.configuration_signature_cache, ())
+        self.assertIsNone(app.configuration_failed_signature_cache)
 
     def test_diagnostic_log_is_rotating_and_bounded(self):
         with tempfile.TemporaryDirectory() as directory:

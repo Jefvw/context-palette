@@ -813,15 +813,16 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     for button in (
                         configuration.action_edit_button,
-                        configuration.action_lifecycle_button,
+                        configuration.action_placements_button,
                         configuration.delete_action_button,
                     ):
                         self.assertLessEqual(
                             button.winfo_rootx() + button.winfo_width(),
                             selection_right,
                         )
-                    self.assertFalse(
-                        configuration.delete_action_button.winfo_manager()
+                    self.assertEqual(
+                        str(configuration.delete_action_button.cget("state")),
+                        str(tk.NORMAL),
                     )
                     self.assertGreater(configuration.action_tree.winfo_height(), 70)
                     configuration._update_action_controls()
@@ -2493,7 +2494,7 @@ class LauncherSmokeTests(unittest.TestCase):
                             "Harvest website links…",
                             "Export personal Actions for update…",
                             "Review updated Actions workbook…",
-                            "Remove multiple personal Actions…",
+                            "Delete multiple personal Actions…",
                             "Browse Action types…",
                         ],
                     )
@@ -2576,7 +2577,7 @@ class LauncherSmokeTests(unittest.TestCase):
                         for child in self._descendants(quick_page)
                         if isinstance(child, ttk.Label)
                     }
-                    self.assertIn("Manage Quick actions", quick_labels)
+                    self.assertIn("Manage Quick-action menus", quick_labels)
                     self.assertEqual(
                         app.configuration_window.new_quick_menu_button.cget("style"),
                         "Accent.TButton",

@@ -13,11 +13,13 @@ from context_palette.drop_adapter import (
     DropWarning,
 )
 from context_palette.drop_target_window import (
+    DROP_COMPONENT_UNAVAILABLE,
     DROP_COPY_ACTION,
     DROP_DETAILS_CHARACTER_LIMIT,
     DROP_DETAILS_ITEM_LIMIT,
     DROP_HISTORY_LIMIT,
     DROP_REFUSE_ACTION,
+    DROP_WINDOW_UNAVAILABLE,
     DropTargetWindow,
     drop_result_details,
     drop_result_summary,
@@ -525,10 +527,94 @@ class DropTargetWindowTests(unittest.TestCase):
             self.assertEqual(received, [])
 
     def test_unavailable_optional_library_does_not_create_a_window(self) -> None:
-        with patch("context_palette.drop_target_window._load_tk_dnd", side_effect=ImportError("missing")):
+        with self.assertLogs("context_palette.drop_target", level="ERROR"), \
+             patch("context_palette.drop_target_window._load_tk_dnd", side_effect=ImportError("missing")) as load:
             target = DropTargetWindow(self.root, lambda _result: None)
             self.assertFalse(target.start())
+            self.assertFalse(target.start())
             self.assertIsNone(target.window)
+            self.assertEqual(target.unavailable_reason, DROP_COMPONENT_UNAVAILABLE)
+        load.assert_called_once_with()
+
+    def test_registration_failure_cleans_up_the_partial_target(self) -> None:
+        existing_children = tuple(self.root.winfo_children())
+        with self.assertLogs("context_palette.drop_target", level="ERROR"), \
+             patch("context_palette.drop_target_window._load_tk_dnd", return_value=_Dnd), \
+             patch.object(
+                 tk.Toplevel,
+                 "drop_target_register",
+                 create=True,
+                 side_effect=tk.TclError("registration failed"),
+             ), \
+             patch.object(tk.Toplevel, "dnd_bind", create=True):
+            target = DropTargetWindow(self.root, lambda _result: None)
+
+            self.assertFalse(target.start())
+
+        self.assertIsNone(target.window)
+        self.assertIsNone(target._status)
+        self.assertIsNone(target.details_button)
+        self.assertEqual(target.unavailable_reason, DROP_WINDOW_UNAVAILABLE)
+        self.assertEqual(tuple(self.root.winfo_children()), existing_children)
+        self.assertTrue(bool(self.root.winfo_exists()))
+
+    def test_native_require_failure_is_cached_without_creating_a_window(self) -> None:
+        unavailable_dnd = Mock()
+        unavailable_dnd.require.side_effect = tk.TclError("native load failed")
+        with self.assertLogs("context_palette.drop_target", level="ERROR"), \
+             patch(
+                 "context_palette.drop_target_window._load_tk_dnd",
+                 return_value=unavailable_dnd,
+             ) as load:
+            target = DropTargetWindow(self.root, lambda _result: None)
+
+            self.assertFalse(target.start())
+            self.assertFalse(target.start())
+
+        load.assert_called_once_with()
+        unavailable_dnd.require.assert_called_once_with(self.root)
+        self.assertIsNone(target.window)
+        self.assertEqual(target.unavailable_reason, DROP_COMPONENT_UNAVAILABLE)
+
+    def test_each_binding_failure_cleans_up_and_is_cached(self) -> None:
+        for failing_call in (1, 2):
+            with self.subTest(failing_call=failing_call):
+                existing_children = tuple(self.root.winfo_children())
+                bind_calls = 0
+
+                def bind(*_args: object, **_kwargs: object) -> str:
+                    nonlocal bind_calls
+                    bind_calls += 1
+                    if bind_calls == failing_call:
+                        raise tk.TclError("binding failed")
+                    return "binding"
+
+                with self.assertLogs(
+                    "context_palette.drop_target", level="ERROR"
+                ), patch(
+                    "context_palette.drop_target_window._load_tk_dnd",
+                    return_value=_Dnd,
+                ), patch.object(
+                    tk.Toplevel, "drop_target_register", create=True
+                ), patch.object(
+                    tk.Toplevel, "dnd_bind", create=True, side_effect=bind
+                ):
+                    target = DropTargetWindow(self.root, lambda _result: None)
+                    self.assertFalse(target.start())
+                    self.assertFalse(target.start())
+
+                self.assertEqual(bind_calls, failing_call)
+                self.assertIsNone(target.window)
+                self.assertIsNone(target._details_frame)
+                self.assertIsNone(target.send_again_button)
+                self.assertEqual(
+                    target.unavailable_reason,
+                    DROP_WINDOW_UNAVAILABLE,
+                )
+                self.assertEqual(
+                    tuple(self.root.winfo_children()),
+                    existing_children,
+                )
 
     @unittest.skipUnless(sys.platform == "win32", "Native TkDND check requires Windows.")
     def test_native_library_registers_toplevel_on_an_ordinary_tk_root(self) -> None:

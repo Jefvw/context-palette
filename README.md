@@ -7,8 +7,8 @@ and keeps configuration in inspectable local files.
 
 The application is under active development. Captured, harvested, configured,
 and AI-proposed actions become permanent Active actions as soon as the user
-confirms creation. Configure can archive and restore retained actions; Archived
-actions remain editable there but stay outside normal retrieval. See
+confirms creation. Configure can directly review and permanently delete an
+Action and its internal placements without changing its external target. See
 [MVP](docs/MVP.md) for the exact implementation boundary.
 
 ## What it does today
@@ -40,11 +40,10 @@ actions remain editable there but stay outside normal retrieval. See
 - Exports eligible personal Active Actions to a separate versioned Excel
   workbook for attended bulk updates. Stable IDs, type, state, and original
   fingerprints remain immutable; changed Ready rows update once after exact
-  workbook/configuration rechecks and no Action is run. Archive, restore, and
-  permanent deletion remain outside workbook semantics.
-- Removes multiple personal Actions through one attended window. Explicit
-  Active selections are prepared first, then the same reviewed selection can
-  be deleted permanently without navigating to an Archived view. Sequence and
+  workbook/configuration rechecks and no Action is run. Deletion remains
+  outside workbook semantics.
+- Deletes multiple personal Actions through one attended review and one
+  effect-labelled permanent-delete operation. Sequence and
   saved-placement effects are shown, stale state is rejected, failed writes
   restore exact configuration bytes, and external targets remain untouched.
 - Keeps a separate always-on-top drop target for files, folders, shortcuts,
@@ -116,6 +115,10 @@ in-app documentation viewer uses pinned Markdown and HTML-rendering libraries,
 and its Windows drop target uses the pinned `tkinterdnd2` adapter with bundled
 TkDND binaries. `setup-context-palette.bat` installs the declared dependencies
 into the local `.venv`; offline preparation includes the same pinned wheel.
+The normal launcher refuses to start against a missing or stale tracked
+requirements marker and directs the user through stop, setup, and restart.
+A native TkDND failure with an otherwise current environment remains isolated:
+the Drop target is unavailable while all non-drop features keep working.
 
 Image-to-text extraction is an optional local component because its OCR models
 and native runtime add about 270 MB. Prepare it inside the same user-writable
@@ -146,6 +149,8 @@ From the repository root:
 `develop-context-palette.bat` is the single development entry point. It creates
 or repairs this computer's `.venv`, installs declared dependencies, initializes
 missing personal data from safe examples, and runs the complete project check.
+After pulling changes on another computer, run it before the normal launcher;
+Git never transfers the machine-local packages inside `.venv`.
 
 To review proposed real-Tk layouts without reading configuration or running
 anything, open `run-ui-mockups.bat`. The inert gallery and its Windows scaling
@@ -247,12 +252,26 @@ automatic menus. Every Quick-action control is menu-only: left-click browses
 it, right-click manages it, and only choosing an Action inside the menu runs
 that Action.
 
+Folder, Password, and AI-prompt Action forms use one **Menu locations** chooser:
+the Action's automatic Folders/Passwords/Prompts location is selected alongside
+any optional Standard or other configured-menu locations. Saving commits those
+placements with the Action; saved Actions also retain the faster standalone
+**Other menus…** manager for optional configured references. Configure → Quick
+actions uses explicit New, Rename,
+Move, and Remove-submenu tasks for the derived automatic hierarchies. Removing
+one promotes its contents to the parent and never deletes an Action or external
+target. An Action leaf inside a submenu has **Remove from submenu…**, which
+moves that exact Action one level upward and keeps it Active. An Action already
+at the automatic root can leave that derived menu only when its owning Action
+is permanently deleted. Saved configured menus retain their separate
+record-based CRUD.
+
 Close, `Esc`, and **Hide** keep the process resident. **Quit** stops it.
 
 ## Core model
 
 ```text
-Capture or configure → Confirm → Active → Archived
+Capture or configure → Confirm → Active
 ```
 
 Every action belongs to the virtual **General** root. An action can additionally
@@ -299,8 +318,8 @@ select the capture, and choose **Delete capture…**. This deletes only the loca
 captured copy; an Action already created from it remains. A Work Item workbook's
 Excel **Inbox** sheet is separate and is still edited in Excel.
 
-Removal is deliberately entity-specific: Actions archive before permanent
-deletion; Contexts and configured Quick menus delete only their Palette
+Removal is deliberately entity-specific: reviewed Action deletion permanently
+removes the saved record and internal placements; Contexts and configured Quick menus delete only their Palette
 organization; Work Item **Forget Palette organization…** clears saved tags,
 Context/slot placement, and personal Quick-menu references without touching the
 folder, workbook, files, or Excel Inbox. Removing a Work Item source is only a
@@ -308,7 +327,7 @@ reversible local disconnection and retains that organization.
 
 Choose **Configure**, or press `Ctrl+,`, to open the complete guided
 configuration workspace. Its single left navigator separates **Set up** from
-**Support**. Actions exposes the Active/Archived lifecycle directly; Work Items
+**Support**. Actions exposes direct reviewed deletion; Work Items
 keeps Refresh visible and consolidates source setup under **Manage sources…**.
 Removing a Work Item source disconnects it on this PC without deleting folders
 or files and retains its saved Palette organization for later reconnection.

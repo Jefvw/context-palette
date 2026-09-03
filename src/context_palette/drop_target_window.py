@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import logging
 import ntpath
 import tkinter as tk
 from tkinter import ttk
@@ -26,6 +27,13 @@ DROP_REFUSE_ACTION = "refuse_drop"
 DROP_HISTORY_LIMIT = 10
 DROP_DETAILS_ITEM_LIMIT = 64
 DROP_DETAILS_CHARACTER_LIMIT = 32_768
+
+
+LOGGER = logging.getLogger("context_palette.drop_target")
+DROP_COMPONENT_UNAVAILABLE = (
+    "The Windows drag-and-drop component could not be loaded."
+)
+DROP_WINDOW_UNAVAILABLE = "The drop target window could not be initialized."
 
 
 def drop_result_summary(result: DropResult) -> str:
@@ -135,21 +143,34 @@ class DropTargetWindow:
         self._drop_history: list[DropResult] = []
         self._history_index = -1
         self._dnd_available: bool | None = None
+        self.unavailable_reason: str | None = None
         self._polling = False
 
     def start(self) -> bool:
         if not self._ensure_dnd():
             return False
         if self.window is None or not self.window.winfo_exists():
-            self._create_window()
+            try:
+                self._create_window()
+            except Exception:
+                LOGGER.exception("Drop target window initialization failed")
+                self._mark_unavailable(DROP_WINDOW_UNAVAILABLE)
+                self._destroy_partial_window()
+                return False
         return True
 
     def show(self) -> bool:
         if not self.start():
             return False
         assert self.window is not None
-        self.window.deiconify()
-        self.window.lift()
+        try:
+            self.window.deiconify()
+            self.window.lift()
+        except Exception:
+            LOGGER.exception("Drop target window could not be shown")
+            self._mark_unavailable(DROP_WINDOW_UNAVAILABLE)
+            self._destroy_partial_window()
+            return False
         return True
 
     def hide(self) -> None:
@@ -166,10 +187,37 @@ class DropTargetWindow:
         try:
             _load_tk_dnd().require(self.root)
         except Exception:
-            self._dnd_available = False
+            LOGGER.exception("Windows drag-and-drop component failed to load")
+            self._mark_unavailable(DROP_COMPONENT_UNAVAILABLE)
             return False
         self._dnd_available = True
+        self.unavailable_reason = None
         return True
+
+    def _mark_unavailable(self, reason: str) -> None:
+        self._dnd_available = False
+        self.unavailable_reason = reason
+
+    def _destroy_partial_window(self) -> None:
+        window = self.window
+        try:
+            if window is not None and window.winfo_exists():
+                window.destroy()
+        except Exception:
+            LOGGER.exception("Partial drop target cleanup failed")
+        finally:
+            self.window = None
+            self._status = None
+            self._history_var = None
+            self.previous_button = None
+            self.history_label = None
+            self.next_button = None
+            self.send_again_button = None
+            self.details_button = None
+            self.hide_button = None
+            self._details_frame = None
+            self._details_text = None
+            self._details_visible = False
 
     def _create_window(self) -> None:
         window = tk.Toplevel(self.root)

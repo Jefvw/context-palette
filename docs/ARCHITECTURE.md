@@ -20,7 +20,8 @@ Context Palette is optimized for:
 4. Inspectable local JSON and Markdown data.
 5. Explicit action types, including a user-owned Windows ShellExecute target,
    instead of an application-defined compound command language.
-6. Permanent confirmed action creation with Active and Archived states.
+6. Permanent confirmed Action creation with direct reviewed deletion; legacy
+   Archived records remain inactive, deletion-only compatibility data.
 7. Standard-library implementation where practical.
 
 It is intentionally a personal, single-user desktop application. There are no
@@ -32,6 +33,8 @@ requirements.
 
 ```text
 run-context-palette.bat
+        |
+        +-- verify the local environment and tracked requirements signature
         |
         v
 pythonw.exe -> context_palette.main
@@ -154,8 +157,8 @@ identity columns are Action ID, type, state, and the original canonical-record
 fingerprint. Name, Value, personal Contexts, tags, description, Quick menu,
 lossless JSON arguments, and working folder are editable. Only ordinary types
 supported by this contract are exported; sequence, `excel_automation`, and
-`transform_file_text` remain in their guided editors. Built-in and Archived
-Actions are never exported. The bounded ZIP/XML reader rejects formula cells,
+`transform_file_text` remain in their guided editors. Built-in and legacy
+inactive Actions are never exported. The bounded ZIP/XML reader rejects formula cells,
 macros, links, changed structure, unsafe packages, and changed identity.
 
 `action_bulk_update.py` maps each verified row back to its stable personal
@@ -171,24 +174,23 @@ bytes. Removed workbook rows have no meaning and never delete records.
 review, selected-Ready-row toggles, and one effect-labelled **Update N Actions**
 button. That button is the confirmation: there is no redundant Yes/No dialog
 and no Action executes. A successful update makes the review stale and requires
-a fresh export before another operation. Archive, Restore, and Delete
-permanently remain the ordinary separate lifecycle controls. Configure exposes
+a fresh export before another operation. Direct Action deletion remains
+outside workbook semantics. Configure exposes
 **Export personal Actions for update…** and **Review updated Actions
 workbook…** under **More Action tasks**.
 
 ### `action_bulk_lifecycle.py` and `action_bulk_lifecycle_window.py`
 
 `action_bulk_lifecycle.py` owns read-only, identity-based review plans and
-guarded batch commits for personal Action removal. An archive-stage plan accepts
-personal Active IDs; a delete-stage plan accepts personal Archived IDs. It
-loads Active and Archived Actions together, identifies unselected dependent
-sequences, inventories the selected set's combined Context, slot, legacy-pin,
-and configured Quick-menu effects, and fingerprints every participating Action,
+guarded batch commits for direct personal Action deletion. It accepts Active
+and legacy inactive personal IDs, identifies unselected dependent sequences,
+inventories the selected set's combined Context, slot, legacy-pin, and
+configured Quick-menu effects, and fingerprints every participating Action,
 Context, command-surface, and palette file. Commit holds the configuration
 mutation gate, recreates the plan, rejects stale state, and delegates to the
-set-aware lifecycle transaction in `action_deletion.py`. Selected dependent
-sequences may move with the Actions they reference; unselected dependencies
-remain blockers.
+set-aware deletion transaction in `action_deletion.py`. Selected dependent
+sequences may be deleted with the Actions they reference; unselected
+dependencies remain blockers.
 
 `action_deletion.py` processes a selected ID set against each reference file
 once, writes every changed primary file at most once, and snapshots both primary
@@ -196,21 +198,18 @@ and `.bak` bytes before effects. Failed writes restore those exact bytes or
 report incomplete rollback. The plural boundary also compares the freshly
 computed aggregate report with the reviewed report before its transaction
 writes anything, so an impact mismatch is a known no-write result rather than
-a post-commit error. Singular Archive/Delete commands remain wrappers over the
-same set-aware boundary.
+a post-commit error. Singular and plural deletion use the same set-aware
+boundary.
 
 `action_bulk_lifecycle_window.py` owns the centered attended selection, Find,
-impact review, and two effect-labelled stages. **Prepare N Actions for
-deletion** archives Active records and removes placements. The same window then
-carries the selected records into **Delete N Actions permanently** without a
-second picker, a generic confirmation dialog, or navigation to Configure's
-Archived filter. Separate footer widgets and a focus handoff prevent one
-double-click from invoking both effects. **Show prepared Actions** and **Show
-Active Actions** switch stages inside the same window. Closing after
-preparation intentionally retains recoverable Archived records. Built-in
-Actions, workbook row removal, Action execution, and external target mutation
-are outside this workflow. Configure exposes it as **More Action tasks → Remove
-multiple personal Actions…**.
+combined impact review, and one effect-labelled **Delete N Actions
+permanently** command. Find narrows shown candidates without clearing selected
+IDs; the status and command label count selected rows hidden by the filter.
+There is no redundant generic confirmation or preparation stage. Active and
+legacy inactive personal records can be removed. Built-in Actions, workbook row
+removal, Action execution, and external target mutation are outside this
+workflow. Configure exposes it as **More Action tasks → Delete multiple
+personal Actions…**.
 
 ### `harvest.py` and `harvest_window.py`
 
@@ -303,9 +302,83 @@ and menu-root placement cannot diverge. An empty path becomes a group-root
 Action; a non-empty path creates only the named branches. Configure adds
 presentation-only
 selection records: generated action leaves delegate to the normal action
-editor, while generated groups and levels offer a typed full Action form plus
-the matching Actions list.
+editor, while generated groups and levels offer a typed full Action form and
+the automatic-menu organizer.
 The generated hierarchy is never written as a second assignment store.
+
+### `quick_menu_path_dialog.py`
+
+Owns the structured, searchable automatic-menu location chooser shared by the
+Action editor and organizer. It derives the fixed Passwords, Folders, or
+Prompts root from the Action type, shows the real case-canonical branch tree and
+Action counts, represents the root explicitly, and permits a proposed submenu
+only within the existing three-level bound. It returns a normalized tuple and
+does not persist an empty branch independently.
+
+### `action_quick_menu_organization.py`
+
+Plans and commits automatic-menu placement changes without changing the
+command-surface schema. Assignment moves selected same-type Actions to one
+exact path. Branch move/rename rewrites a case-insensitive path prefix for all
+matching Active Actions in Built-in and personal storage. Legacy inactive
+records are deletion-only. Plans report exact Action, ownership, and file
+counts and are fingerprinted
+against both Action files. Commit rechecks the plan under the configuration
+mutation gate, writes each changed Action file once, and restores exact primary
+and backup bytes when a later write fails. Only `quick_action_path` changes;
+Actions, external targets, and configured Quick-action references are never
+deleted or executed.
+
+### `action_quick_menu_organization_window.py`
+
+Owns the attended Configure UI for reviewing and committing selected Action
+placement changes or explicit automatic-submenu Create/Rename/Move/Remove
+tasks. Create assigns selected Actions to a new child path; rename replaces the
+last source level; move chooses a parent and preserves the submenu name; remove
+uses the parent as the destination so direct Actions and nested suffixes are
+promoted without deletion. An Action-level removal uses the same assignment
+plan but accepts only direct members and promotes them exactly one level; the
+Quick-actions tree can preselect one exact stable Action ID. The fixed root
+exposes no Action-removal command because every matching Active Action must
+remain in its automatic menu. The window
+uses the shared path/name choosers, operation-specific review and effect labels,
+and delegates all persistence, stale-state detection, and rollback behavior to
+`action_quick_menu_organization.py`.
+
+### `action_configured_placement.py`
+
+Plans and commits configured Quick-menu references for one Active Action. A
+location has stable identity from its storage, group ID, and item-ID path;
+display labels are not identity. The plan compares every eligible configured
+root/branch with the Action's current references and reports exact additions,
+removals, newly empty items, Built-in/My configuration effects, and files to
+write. Built-in Actions may be referenced from either storage, while personal
+Actions are restricted to My configuration. Commit fingerprints both Action
+files and both command-surface files, rechecks under the configuration mutation
+gate, writes each changed surface once, and restores exact primary and `.bak`
+bytes after failure. Stale state and rollback completeness remain explicit.
+The same service inventories configured locations for a not-yet-saved Action
+and owns the composite create/edit transaction used by the Action form. That
+transaction saves the Action record, Context memberships, and configured
+references under one mutation gate and restores exact participating primary and
+`.bak` bytes if a later step fails.
+
+### `action_configured_placement_window.py`
+
+Owns the attended **Other menus…** UI from a selected
+Active Action. It shows automatic type/path placement as read-only independent
+information, provides a searchable configured root/branch checklist, and
+renders one exact add/remove review before the effect-labelled apply command.
+It never edits the Action's type or `quick_action_path` and delegates all
+persistence and recovery decisions to `action_configured_placement.py`.
+
+### `quick_menu_path_dialog.py`
+
+Owns the combined **Menu locations** chooser used during Folder, Password, and
+AI-prompt Action creation/editing. It stages one automatic path plus zero or
+more stable configured-location keys and performs no writes. Ownership-disabled
+locations remain visible; the final Action save delegates the staged selection
+to `action_configured_placement.py`.
 
 ### `palette_items.py`
 
@@ -405,7 +478,11 @@ remains mapped when the main root is withdrawn and stays available after a
 drop. Its callback returns only a completed structured result to `LauncherApp`;
 the component cannot modify Input / Output, clipboard, persistence, Actions,
 Inbox, or external applications. Dependency import/native-load failures are
-caught at this feature boundary so ordinary startup remains usable. The window
+logged and caught at this feature boundary so ordinary startup remains usable.
+Registration, binding, and show failures destroy only the partial Toplevel,
+clear its widget references, cache a safe unavailable reason until restart,
+and expose repair guidance through launcher status and **More → Show drop
+target**. The window
 retains only the last ten successful non-empty `DropResult` values in memory,
 identifies the selected result with type-level metadata, and can resend that
 immutable result through the same launcher callback without re-resolving or
@@ -444,6 +521,13 @@ the pinned optional engine. Online setup establishes the core environment before
 attempting OCR; offline setup additionally runs the complete core check after
 the optional attempt. An OCR installation or initialization failure leaves the
 core environment and non-OCR launcher behavior available.
+
+`run-context-palette.bat` hashes the tracked core requirements and compares the
+result with the marker written only after a successful setup installation. A
+missing or mismatched marker refuses normal launch with the exact stop, setup,
+and retry sequence; it does not install packages implicitly. A current marker
+does not make TkDND a whole-application runtime gate: native Drop-target failure
+continues through the isolated behavior above.
 
 ### `action_suggestions.py`
 
@@ -485,7 +569,7 @@ request to that same stable-ID route. Configure reloads and raises its existing
 workspace, clears conflicting Action filters, resolves the ID only against the
 current Active projection, and opens the existing `ActionDialog` path after the
 window becomes idle. Right-click remains selection-only navigation. A missing
-or concurrently Archived Action leaves Configure usable and opens no editor.
+or concurrently deleted Action leaves Configure usable and opens no editor.
 
 ### `context_membership_field.py`
 
@@ -590,8 +674,9 @@ backups and snapshots, and used only to finish an interrupted rollback.
 
 Owns complete, read-only loading and aggregate validation for catalogued
 structured application state. Frozen `ConfigurationSnapshot` values retain
-Built-in and personal collections separately, preserve stored Archived Actions,
-expose only Active Actions in the executable projection, and defensively copy
+Built-in and personal collections separately, preserve legacy inactive Actions
+for deletion compatibility, expose only Active Actions in the executable
+projection, and defensively copy
 loader-owned lists and mappings. `SnapshotValidationReport` and its frozen
 issues provide stable codes, catalog asset provenance, severity, category, and
 privacy-safe summaries.
@@ -791,10 +876,11 @@ The Actions page keeps its single primary **New Action** command in the page
 header and moves the bulk create/update Excel routes, website-link Harvest,
 and type catalogue behind **More Action tasks**. Global pin configuration is
 retired. Selection titles are display-bounded so arbitrary
-names cannot displace lifecycle commands at minimum width. Tags remain searchable
+names cannot displace Action commands at minimum width. Tags remain searchable
 and appear in the selected-Action strip instead of consuming a permanent table
-column. The lifecycle filter controls which records are listed; the State
-column appears only when Active and Archived records are mixed.
+column. Active and legacy inactive records share one table; the latter have an
+explicit non-color-only **Legacy inactive** status and deletion is their only
+mutation.
 
 The Contexts and Quick actions pages use the same visual hierarchy without
 introducing shared domain state: a page title and purpose, one primary creation
@@ -876,10 +962,13 @@ an off-screen field scrolls it into view; text, list, and combobox controls keep
 their own native wheel behavior.
 
 Automatic-menu Add commands reuse the ordinary `ActionDialog` and persistence
-path. They constrain only the Action type and prefill `quick_action_path`; the
+path. They constrain only the Action type and preselect `quick_action_path`; the
 normal storage, name, description, Contexts, tags, target, validation, and
-review fields remain present. Saving one Active Action then rebuilds both the
-launcher menu and Configure tree from the single Action source of truth.
+review fields remain present. The Action form renders that tuple through the
+shared read-only tree chooser rather than a free-text delimiter field. The
+Quick-actions organizer uses the same chooser for destination-first assignment
+and branch move/rename. Saving or organizing then rebuilds both the launcher
+menu and Configure tree from the single Action source of truth.
 
 ### `context_deletion.py`
 
@@ -893,24 +982,21 @@ as the context file's backup.
 
 ### `action_deletion.py`
 
-Owns dependency-aware Action lifecycle mutations. It validates and inventories
-Context, Quick-action, legacy-pin, and context-slot references before the UI asks
-for confirmation. Archive removes those active-only references before changing
-the retained record to Archived; restore changes that same record back to Active
-without recreating former assignments. Permanent deletion rejects any record
-that is not already Archived, then uses the same reference-cleanup boundary
-before removing it. Archive and permanent deletion snapshot the exact bytes of
-every participating file before the first write and run as best-effort
-multi-file transactions. A failed write restores every attempted file; an
+Owns dependency-aware Action deletion. It validates and inventories Context,
+Quick-action, legacy-pin, and context-slot references before the UI asks for
+confirmation. Direct deletion accepts an Active record or a legacy inactive
+`Archived` record, cleans those internal references, and removes the record in
+one best-effort multi-file transaction. It snapshots the exact bytes of every
+participating file before the first write. A failed write restores every attempted file; an
 incomplete rollback is explicit and directs recovery. Every individual write
 still uses atomic replacement and local backup behavior. A Quick-action item
 with no remaining target is removed; removing a legacy primary Action preserves
 the remaining menu order without creating a new launcher default.
 
 `actions.py` exposes separate combined projections for this boundary: stored
-loading includes Active and Archived records with cross-owner duplicate-ID
+loading includes Active and legacy inactive records with cross-owner duplicate-ID
 validation, while ordinary combined loading remains Active-only. Configure
-uses the stored projection only for its Actions table and lifecycle controls;
+uses the stored projection only for its Actions table and deletion controls;
 all runtime discovery and assignment pickers continue to consume Active
 Actions.
 
@@ -952,6 +1038,14 @@ an ordering compatibility field only; launcher controls never execute it
 implicitly.
 `CommandTarget` remains a compatibility export of `PaletteItemReference`.
 Command groups do not currently store Context visibility or membership.
+The combined Action-form chooser and saved-Action Placements manager work
+against these existing root/item Action reference fields. They do not introduce
+a placement table, change the schema, or migrate records. A single Active Action
+may be referenced by zero or many
+configured nodes, while its automatic Passwords/Folders/Prompts membership is
+derived independently from Action type and its nested location from
+`quick_action_path`. Existing Work Item targets, other Actions, child menus,
+and target order are preserved.
 At render time, `launcher.py` fixes Standard first, partitions configured groups
 by their recorded source path so personal groups precede shared groups while
 preserving order within each file, then appends the automatic Action-bound
@@ -1682,7 +1776,7 @@ live reference resolution, immutable run plan, and readable ordered preview.
 A sequence persists an explicit `steps` array containing only Action references
 and waits. It can reference Active `open_url`, `open_file`, `open_folder`,
 `launch_app`, and `open_windows_target` Actions. Nested sequences, clipboard
-inputs, credentials, transformations, and missing or Archived references fail
+inputs, credentials, transformations, and missing or legacy inactive references fail
 before any effect.
 
 The Action editor adds, removes, and reorders existing Actions and bounded
@@ -1692,7 +1786,7 @@ remains responsive. While a sequence is active, FocusOut auto-hide is suspended
 and the palette remains above launched windows so step progress and the attended
 **Stop remaining** control stay accessible. **Stop remaining** cancels only the pending callback;
 already opened targets or started processes are not rolled back or terminated.
-Archive/delete treats sequence references as blocking semantic dependencies,
+Deletion treats sequence references as blocking semantic dependencies,
 not removable placements. Built-in sequences may reference Built-in Actions
 only; personal sequences may reference either ownership.
 
@@ -1781,8 +1875,8 @@ Configured Quick actions use Action IDs or an ordered personal mix of Actions
 and stable Work Item references. The launcher renders fixed **Standard** first,
 then personal configured menus, shared configured menus, and finally automatic
 **Passwords**, **Folders**, and **Prompts**. The last three menus are pure projections over
-Active first-class actions and their optional `quick_action_path`; creating,
-archiving, or deleting an action therefore updates menu membership without a
+Active first-class actions and their optional `quick_action_path`; creating or
+deleting an action therefore updates menu membership without a
 second configuration record. AI prompt execution still shares review-first
 workspace/clipboard behavior with templates while retaining a separate type
 identity for future prompt-specific evolution. Cheat sheets remain a
@@ -1885,22 +1979,30 @@ Tcl timer behind.
 
 Configuration reloads are skipped when active file existence, modification time, and size are unchanged. Typed search changes are coalesced over 40 ms before recalculating slots and rows.
 
-Configuration reload is transactional in memory: combined shared/local actions,
-contexts, and quick-action groups replace their active lists only after complete
-validation succeeds. A failed external edit reports the affected file and
-retains the last successfully loaded interface configuration.
+After the fault-isolated first-start bootstrap establishes a usable baseline,
+configuration reload is transactional in memory. Combined shared/local Actions,
+Contexts, Quick-action groups, palette state, and local Work Item configuration
+are loaded into one immutable candidate generation. The launcher publishes all
+of its cached projections only after every stage validates and the participating
+file signature remains unchanged. A late failure therefore reports its owning
+area and retains the complete last successfully loaded interface generation;
+it cannot combine newly loaded Actions with older menus, Contexts, or slots.
 Presentation reload deliberately retains configured external Action references
 without probing their current targets. This matches snapshot/restore
 portability policy; creation, editing, and execution retain their stricter
 target validation.
-Invalid or temporarily unreadable palette state follows the same last-known-good
-rule: legacy focus/pin compatibility data and per-Context slots remain in memory
-while the local file is corrected or becomes accessible again.
+Invalid or temporarily unreadable palette state follows the same complete-
+generation rule: legacy focus/pin compatibility data and per-Context slots
+remain in memory together with the Actions, Contexts, menus, and Work Item
+configuration with which they were accepted.
 The domain default always contains an empty context-slot mapping, so a missing
 or initially invalid palette file cannot fail first-start normalization.
 Coordinated startup and reload defer command-surface rendering until both
 command groups and palette state are loaded, then build the Quick-action
-widgets once. Standalone loader calls keep immediate rendering by default.
+widgets once. Startup keeps its fault-isolated loaders because no earlier
+generation exists to preserve; subsequent reloads use the strict staged
+generation boundary. Standalone bootstrap loader calls keep immediate
+rendering by default.
 
 
 ## Diagnostics

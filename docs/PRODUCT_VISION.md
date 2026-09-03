@@ -21,10 +21,13 @@ The intended experience has two equally important modes:
   constrained action, and edit it directly whenever the workflow changes.
 
 ```text
-Capture or configure → Confirm → Active → Archived
+Capture or configure → Confirm → Active
 ```
 
-Archived material leaves normal retrieval without being silently destroyed.
+Actions remain editable until the user explicitly reviews permanent deletion.
+Deletion removes only Context Palette's Action record and saved placements;
+referenced files, folders, applications, websites, credentials, and other
+external targets remain untouched.
 
 ## Context model
 

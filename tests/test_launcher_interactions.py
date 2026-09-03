@@ -50,7 +50,12 @@ from context_palette.work_item_file_copy import (
     WorkItemFileCopyResult,
 )
 from context_palette.work_item_inbox import WorkItemInboxError, WorkItemInboxResult
-from context_palette.work_items import DiscoveredWorkItem, WorkItemReference
+from context_palette.work_item_refresh import SourceRefreshResult, WorkItemIndex
+from context_palette.work_items import (
+    DiscoveredWorkItem,
+    WorkItemReference,
+    WorkItemSource,
+)
 from context_palette.vscode_integration import VsCodeIntegrationError
 
 
@@ -408,27 +413,198 @@ class LauncherInteractionTests(unittest.TestCase):
         app.root = Mock()
         app.status_var = FakeVariable()
         app.actions = []
-        app._load_actions = Mock()
-        app._load_command_surface = Mock()
-        app._load_contexts = Mock()
-        app._load_work_item_configuration = Mock()
-        app._load_palette_state = Mock()
+        generation = object()
+        app._stage_runtime_configuration = Mock(return_value=generation)
+        app._publish_runtime_configuration = Mock()
         app._render_command_surface = Mock()
         app._refresh_results = Mock()
         app._start_work_item_refresh = Mock()
         app._configuration_signature = Mock(return_value=(("test", 1, 1),))
+        app.configuration_signature_cache = (("old", 1, 1),)
+        app.configuration_failed_signature_cache = (("failed", 1, 1),)
 
-        app._reload()
+        result = app._reload()
 
-        app._load_actions.assert_called_once_with()
-        app._load_command_surface.assert_called_once_with(render=False)
-        app._load_contexts.assert_called_once_with()
-        app._load_work_item_configuration.assert_called_once_with()
-        app._load_palette_state.assert_called_once_with(render=False)
+        self.assertTrue(result)
+        app._stage_runtime_configuration.assert_called_once()
+        app._publish_runtime_configuration.assert_called_once_with(generation)
         app._render_command_surface.assert_called_once_with()
         app._refresh_results.assert_called_once_with()
         app._start_work_item_refresh.assert_called_once_with()
         self.assertEqual(app.configuration_signature_cache, (("test", 1, 1),))
+        self.assertIsNone(app.configuration_failed_signature_cache)
+
+    def test_failed_late_stage_reload_preserves_complete_runtime_generation(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.status_var = FakeVariable()
+        app.actions_path = Path("actions.json")
+        app.local_actions_path = Path("local_actions.json")
+        app.command_surface_path = Path("command_surface.json")
+        app.local_command_surface_path = Path("local_command_surface.json")
+        app.contexts_path = Path("contexts.json")
+        app.local_contexts_path = Path("missing_local_contexts.json")
+        app.palette_path = Path("palette.json")
+        app.local_work_item_sources_path = Path("local_work_item_sources.json")
+        app.local_work_item_metadata_path = Path("local_work_item_metadata.json")
+        app.local_work_item_settings_path = Path("local_work_item_settings.json")
+
+        old_actions = [Mock(name="old_action")]
+        old_local_ids = {"old-action"}
+        old_groups = [Mock(name="old_group")]
+        old_contexts = [Mock(name="old_context")]
+        old_local_names = {"old": "Old"}
+        old_palette = PaletteState(focus_context="Old")
+        old_available_names = ["General", "Old"]
+        old_sources = (Mock(name="old_source"),)
+        old_metadata = {"old/item": Mock(name="old_metadata")}
+        old_index = Mock(name="old_index")
+        app.actions = old_actions
+        app.local_action_ids = old_local_ids
+        app.command_groups = old_groups
+        app.context_definitions = old_contexts
+        app.local_context_names = old_local_names
+        app.palette_state = old_palette
+        app.available_context_names = old_available_names
+        app.work_item_sources = old_sources
+        app.work_item_metadata = old_metadata
+        app.work_item_index = old_index
+        app._render_command_surface = Mock()
+        app._refresh_results = Mock()
+        app._start_work_item_refresh = Mock()
+        old_signature = (("accepted", 1, 1),)
+        attempted_signature = (("attempted", 2, 2),)
+        app.configuration_signature_cache = old_signature
+        app.configuration_failed_signature_cache = None
+        app._configuration_signature = Mock(return_value=attempted_signature)
+
+        with (
+            patch(
+                "context_palette.launcher.load_combined_actions",
+                return_value=([Mock(name="new_action")], {"new-action"}),
+            ),
+            patch(
+                "context_palette.launcher.load_combined_command_groups",
+                return_value=[Mock(name="new_group")],
+            ),
+            patch(
+                "context_palette.launcher.load_combined_contexts",
+                return_value=[Mock(name="new_context")],
+            ),
+            patch(
+                "context_palette.launcher.actions_with_canonical_contexts",
+                return_value=[Mock(name="canonical_new_action")],
+            ),
+            patch(
+                "context_palette.launcher.load_work_item_sources",
+                return_value=(Mock(name="new_source"),),
+            ),
+            patch(
+                "context_palette.launcher.load_work_item_metadata",
+                return_value={"new/item": Mock(name="new_metadata")},
+            ),
+            patch("context_palette.launcher.load_work_item_creation_settings"),
+            patch(
+                "context_palette.launcher.load_palette_state",
+                side_effect=ActionError("palette is invalid"),
+            ),
+            patch("context_palette.launcher.messagebox.showerror") as showerror,
+        ):
+            result = app._reload()
+
+        self.assertFalse(result)
+        self.assertIs(app.actions, old_actions)
+        self.assertIs(app.local_action_ids, old_local_ids)
+        self.assertIs(app.command_groups, old_groups)
+        self.assertIs(app.context_definitions, old_contexts)
+        self.assertIs(app.local_context_names, old_local_names)
+        self.assertIs(app.palette_state, old_palette)
+        self.assertIs(app.available_context_names, old_available_names)
+        self.assertIs(app.work_item_sources, old_sources)
+        self.assertIs(app.work_item_metadata, old_metadata)
+        self.assertIs(app.work_item_index, old_index)
+        app._render_command_surface.assert_not_called()
+        app._refresh_results.assert_not_called()
+        app._start_work_item_refresh.assert_not_called()
+        self.assertEqual(app.configuration_signature_cache, old_signature)
+        self.assertEqual(
+            app.configuration_failed_signature_cache,
+            attempted_signature,
+        )
+        showerror.assert_called_once()
+        self.assertIn("No configuration was changed", showerror.call_args.args[1])
+
+    def test_failed_bootstrap_signature_remains_available_for_f5_retry(self):
+        app = LauncherApp.__new__(LauncherApp)
+        invalid_signature = (("invalid", 2, 2),)
+        app._configuration_signature = Mock(return_value=invalid_signature)
+        app.configuration_signature_cache = (("old", 1, 1),)
+        app.configuration_failed_signature_cache = None
+
+        app._record_bootstrap_configuration_signature(
+            (True, True, False, True, True),
+            expected_signature=invalid_signature,
+        )
+
+        self.assertEqual(app.configuration_signature_cache, ())
+        self.assertEqual(
+            app.configuration_failed_signature_cache,
+            invalid_signature,
+        )
+
+    def test_changed_bootstrap_signature_is_not_accepted_or_suppressed(self):
+        app = LauncherApp.__new__(LauncherApp)
+        before_signature = (("changing", 1, 1),)
+        after_signature = (("changing", 2, 2),)
+        app._configuration_signature = Mock(return_value=after_signature)
+        app.configuration_signature_cache = (("old", 0, 0),)
+        app.configuration_failed_signature_cache = (("failed", 0, 0),)
+
+        app._record_bootstrap_configuration_signature(
+            (True, True, True, True, True),
+            expected_signature=before_signature,
+        )
+
+        self.assertEqual(app.configuration_signature_cache, ())
+        self.assertIsNone(app.configuration_failed_signature_cache)
+
+    def test_files_changed_during_staging_are_not_published(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.status_var = FakeVariable()
+        app.actions = [Mock(name="accepted_action")]
+        generation = object()
+        app._stage_runtime_configuration = Mock(return_value=generation)
+        app._publish_runtime_configuration = Mock()
+        app._render_command_surface = Mock()
+        app._refresh_results = Mock()
+        app._start_work_item_refresh = Mock()
+        accepted_signature = (("accepted", 1, 1),)
+        before_signature = (("changing", 2, 2),)
+        after_signature = (("changing", 3, 3),)
+        app.configuration_signature_cache = accepted_signature
+        app.configuration_failed_signature_cache = None
+        app._configuration_signature = Mock(
+            side_effect=[before_signature, after_signature]
+        )
+
+        with patch(
+            "context_palette.launcher.messagebox.showwarning"
+        ) as showwarning:
+            result = app._reload()
+
+        self.assertFalse(result)
+        app._publish_runtime_configuration.assert_not_called()
+        app._render_command_surface.assert_not_called()
+        app._refresh_results.assert_not_called()
+        app._start_work_item_refresh.assert_not_called()
+        self.assertEqual(app.configuration_signature_cache, accepted_signature)
+        self.assertIsNone(app.configuration_failed_signature_cache)
+        showwarning.assert_called_once()
+        self.assertIn(
+            "No configuration was changed",
+            showwarning.call_args.args[1],
+        )
 
     def test_inbox_is_loaded_from_storage_each_time_it_is_opened(self):
         app = LauncherApp.__new__(LauncherApp)
@@ -1329,6 +1505,28 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertTrue(app._work_item_belongs_to_context(item, "Database"))
         self.assertFalse(app._work_item_belongs_to_context(item, "Other"))
 
+    def test_work_item_refresh_rejects_old_source_with_reused_id(self):
+        old_source = WorkItemSource("cap40", "CAP40", Path("C:/old/workitems"))
+        current_source = WorkItemSource(
+            "cap40",
+            "CAP40",
+            Path("C:/current/workitems"),
+        )
+        app = LauncherApp.__new__(LauncherApp)
+        app.work_item_sources = (current_source,)
+        app.work_item_metadata = {}
+        app.actions = []
+        app.work_project_filter = None
+        app.item_tag_filter = None
+        app.discovery_scope = "test-only"
+        app.work_item_refresh_pending = False
+
+        app._accept_work_item_index(
+            WorkItemIndex((SourceRefreshResult(old_source, ()),), 1.0)
+        )
+
+        self.assertEqual(app.work_item_index.sources, ())
+
     def test_f5_reset_clears_transient_state_but_preserves_palette_state(self):
         app = LauncherApp.__new__(LauncherApp)
         app.item_context_filter = "Database"
@@ -1347,6 +1545,7 @@ class LauncherInteractionTests(unittest.TestCase):
         app.search_var = FakeVariable()
         app.search_var.value = "query"
         app.status_var = FakeVariable()
+        app.configuration_failed_signature_cache = (("failed", 1, 1),)
         app.palette_state = PaletteState(("pinned",), "Database", {})
         workspace_values: list[str] = []
         reloads: list[bool] = []
@@ -1376,6 +1575,7 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertEqual(app.search_var.value, "")
         self.assertEqual(workspace_values, [""])
         self.assertEqual(reloads, [True])
+        self.assertIsNone(app.configuration_failed_signature_cache)
         self.assertEqual(refreshes, [True])
         self.assertEqual(focus_requests, [True])
         self.assertEqual(app.palette_state, PaletteState(("pinned",), "General", {}))
@@ -1665,6 +1865,41 @@ class LauncherInteractionTests(unittest.TestCase):
         app.workspace_component.apply_incoming_text.assert_not_called()
         self.assertEqual(app.captured_selection, "still valid")
         self.assertEqual(app.source_foreground_handle, 123)
+
+    def test_drop_target_start_failure_sets_actionable_status(self) -> None:
+        app = LauncherApp.__new__(LauncherApp)
+        app.status_var = FakeVariable()
+        app.drop_target_window = Mock()
+        app.drop_target_window.start.return_value = False
+
+        with self.assertLogs("context_palette.launcher", level="WARNING"):
+            app._start_drop_target()
+
+        self.assertIn("Drop target unavailable", app.status_var.value)
+        self.assertIn("More", app.status_var.value)
+        app.drop_target_window.start.assert_called_once_with()
+
+    def test_show_unavailable_drop_target_explains_setup_and_restart(self) -> None:
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = object()
+        app.status_var = FakeVariable()
+        app.drop_target_window = Mock()
+        app.drop_target_window.show.return_value = False
+        app.drop_target_window.unavailable_reason = (
+            "The drop target window could not be initialized."
+        )
+
+        with patch("context_palette.launcher.messagebox.showwarning") as warning:
+            app._show_drop_target()
+
+        self.assertIn("remains usable", app.status_var.value)
+        message = warning.call_args.args[1]
+        self.assertIn("could not be initialized", message)
+        self.assertIn("Stop Context Palette", message)
+        self.assertIn("setup-context-palette.bat", message)
+        self.assertIn("restart", message.casefold())
+        self.assertIn("All other Context Palette features", message)
+        self.assertIs(warning.call_args.kwargs["parent"], app.root)
 
     def test_every_action_attempt_consumes_captured_destination(self):
         app = LauncherApp.__new__(LauncherApp)

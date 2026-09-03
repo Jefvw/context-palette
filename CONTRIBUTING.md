@@ -34,8 +34,10 @@ owning module, focused tests, and documentation that normally changes with it.
   structured arguments to ShellExecute; do not invent or parse a compound
   command language.
 - Keep effects constrained, visible, previewable, and testable.
-- Preserve the permanent Active/Archived Action lifecycle. Confirmed creation
-  and edits save immediately; do not reintroduce Draft or Trusted states.
+- Confirmed Action creation and edits save immediately. Deletion is a direct,
+  reviewed permanent operation; do not reintroduce Archive/Restore, Draft, or
+  Trusted states. Continue to read legacy Archived records as inactive,
+  deletion-only compatibility data.
 - Keep Tk widget access on the main thread.
 - Treat loaded configuration, captured text, and AI output as untrusted data.
 

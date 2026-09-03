@@ -630,6 +630,21 @@ class WindowsScriptTests(unittest.TestCase):
             '".venv\\Scripts\\python.exe" -c "import sys, tkinter"', script
         )
         self.assertIn("Run setup-context-palette.bat to repair it.", script)
+        self.assertIn(".context-palette-requirements.sha256", script)
+        self.assertIn(
+            "hashlib.sha256(pathlib.Path('requirements.txt').read_bytes())",
+            script,
+        )
+        stale_message = "Project dependencies are missing or out of date."
+        repair_message = (
+            "Run stop-context-palette.bat, then setup-context-palette.bat, "
+            "then run this launcher again."
+        )
+        launch = 'start "" ".\\.venv\\Scripts\\pythonw.exe" -m context_palette.main'
+        self.assertIn(stale_message, script)
+        self.assertIn(repair_message, script)
+        self.assertIn(launch, script)
+        self.assertLess(script.index("REQUIREMENTS_MARKER"), script.index(launch))
 
     def test_project_python_wrapper_sets_source_path_and_checks_environment(self) -> None:
         script = (ROOT / "python-context-palette.bat").read_text(encoding="utf-8")

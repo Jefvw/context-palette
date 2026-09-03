@@ -1,5 +1,171 @@
 # Decisions
 
+## 2026-08-28 - Publish runtime configuration as one validated generation
+
+**Decision:** After first-start bootstrap, stage shared and personal Actions,
+Contexts, Quick actions, palette state, and local Work Item configuration in
+memory before changing the running launcher. Publish the complete generation
+only after every domain validates and the participating file signature is
+unchanged. On failure, retain the entire previously accepted generation and do
+not render, refresh results, or start a Work Item refresh from partial data.
+
+Keep first-start loading fault-isolated. With no last-known-good generation to
+preserve, one malformed optional local area must not prevent otherwise valid
+configuration from opening. Once startup establishes the baseline, every
+manual or change-triggered reload uses the stricter all-or-nothing boundary.
+
+**Reason:** The former per-domain loaders individually preserved their own
+last-known-good values but ran sequentially. A later failure could therefore
+leave new Actions paired with old Contexts, menus, or slots, despite the
+documented transactional reload promise. One staged generation closes that
+mixed-state window without changing persistence schemas or startup recovery.
+
+**Consequences:** Stable invalid file signatures are remembered so automatic
+show requests do not repeat the same error dialog; an explicit reload still
+retries. A file set that changes while staging is rejected without publication
+and remains eligible for a fresh retry. Domain loaders continue to own parsing
+and validation, and no new persistence format or dependency is introduced.
+
+## 2026-08-28 - Delete Actions directly instead of archiving them
+
+**Decision:** Remove Archive and Restore from the ordinary Action workflow.
+Confirmed Actions remain Active and editable until the user reviews permanent
+deletion. Individual deletion names the exact Action and internal placement
+effects; bulk deletion uses one attended review and one effect-labelled
+**Delete N Actions permanently** command. Both remove the selected Action
+records, Context memberships, shortcut assignments, and configured-menu
+references transactionally. They never execute an Action or delete or modify
+its external target.
+
+Keep loading existing `Archived` records for compatibility, present them as
+**Legacy inactive**, and allow deletion only. Do not silently activate, migrate,
+or discard them, and do not create new Archived records. Automatic-menu
+membership remains derived: **Remove from submenu…** promotes an Action one
+level, configured **Remove from this menu…** removes only that reference, and
+an automatic-root leaf disappears only when its Action is deleted.
+
+**Reason:** The recoverable Archive stage adds another state, filter, set of
+commands, and bulk confirmation without enough practical value. Direct reviewed
+deletion gives Action management the expected create/read/update/delete model
+while retaining the important safety boundary: internal effects are explicit
+and reversible on write failure, and external targets remain untouched.
+
+**Consequences:** This decision supersedes the earlier Active/Archived and
+two-stage bulk-removal decisions for current behavior; their entries remain as
+history. The persisted `Archived` value remains a read-only compatibility form
+until old records are deleted. Current guides, tests, and repository policy must
+not describe Archive/Restore as available Action commands. Backup and restore,
+archive files, and unrelated domain-specific uses of those words are unchanged.
+
+## 2026-08-28 - Make derived automatic-submenu CRUD explicit
+
+**Decision:** Present explicit **New submenu**, **Rename**, **Move**, and
+**Remove submenu** tasks for the automatic Passwords, Folders, and Prompts
+hierarchies. Keep those hierarchies derived from Action type and
+`quick_action_path`: creating a submenu assigns at least one selected Active
+Action to a new child path; renaming or moving rewrites the branch prefix; and
+removing promotes direct Actions and nested submenus one level while preserving
+every Action and external target. The fixed automatic roots cannot be renamed,
+moved, or removed. Configured menus retain their separate persisted-record
+Create/Edit/Reorder/Delete behavior.
+
+An Action leaf inside an automatic submenu also exposes **Remove from
+submenu…**. That operation promotes the exact Action one level to the parent;
+the submenu manager provides the same operation for several selected direct
+members. An Active matching Action cannot be absent from its automatic root,
+so an Action already at the root has no Remove command. Archiving is the
+explicit way to remove that Action from runtime.
+
+**Reason:** The generic organizer and combined move/rename chooser technically
+supported the underlying effects, but did not teach a recognizable lifecycle.
+Users could not discover how to create or remove a derived submenu and could
+reasonably interpret removal as Action or folder deletion. Explicit verbs make
+the two menu models coherent without pretending an empty automatic branch is a
+stored record.
+
+**Consequences:** Automatic submenu operations reuse the existing reviewed,
+fingerprinted Action-placement transaction, including Active/Archived and
+Built-in/personal impact, stale detection, and exact-byte rollback. A final
+effect-labelled button is the only confirmation. **Remove submenu** never
+deletes Actions, folders, passwords, prompts, Work Items, or other targets; the
+term **Delete** remains reserved for persisted configured-menu records. Action
+identity, not its possibly duplicated title, controls a leaf removal. Fresh
+one-Action and bulk plans must still match the reviewed source placement and
+lifecycle state. Archive and permanent-delete commits likewise recheck their
+reviewed saved-reference impact before writing.
+
+## 2026-08-28 - Keep configured and automatic Quick-menu placements separate
+
+**Decision:** Keep automatic and configured placement as separate stored
+models, but present them together in one **Menu locations** chooser while a
+Folder, Password, or AI-prompt Action is created or edited. The automatic
+location is required and single-select; configured roots/branches are optional
+and multi-select. Saving the Action commits its record, Context memberships,
+and configured references as one rollback-protected operation. An attended
+**Other menus…** workflow remains available for one selected saved Active
+Action and edits only optional configured references.
+
+**Reason:** Users need one place to answer “where is this Action available?”
+and adjust several configured menus without opening each menu editor or saving,
+reselecting, and editing a second time. A combined screen removes that friction;
+keeping the storage models separate preserves their different ownership rules
+without a schema migration.
+
+**Consequences:** The form stages both kinds of placement but the automatic
+choice still updates only `quick_action_path`, while configured choices update
+only existing command-surface references. My configuration Actions cannot be
+newly assigned to Built-in menus. A storage change clears newly invalid staged
+choices visibly. No schema merge or migration is required, and existing JSON
+remains compatible.
+
+## 2026-08-28 - Choose automatic Quick-menu locations from the real tree
+
+**Decision:** Keep Passwords, Folders, and Prompts as projections of Action
+type plus `quick_action_path`, but stop asking users to type and remember that
+path. The Action form uses a structured root/branch chooser. Configure's
+automatic-menu tree adds destination-first assignment of existing matching
+Actions and reviewed branch move/rename. A branch operation includes Archived
+descendants and both Action stores, changes only placement, and uses stale-plan
+checks plus exact-byte rollback. Configured menus remain a separate command-
+surface model.
+
+**Reason:** A free-text `A > B > C` field hides the structure the user is
+trying to target and makes spelling/casing mistakes easy. The generated tree
+already knows the authoritative structure. Reusing it makes placement
+discoverable without duplicating menu data or turning derived branches into
+independent records.
+
+**Consequences:** Menu root is a visible choice, existing casing is reused,
+and a new submenu comes into existence only when at least one Action is saved
+there. Moving the last Action out removes the empty branch automatically.
+Branch organization can change tracked Built-in Actions and therefore reports
+that impact, but it never deletes or executes Actions or changes their external
+targets.
+
+## 2026-08-27 - Detect stale local dependencies without making Drop mandatory
+
+**Decision:** Make the normal launcher compare `requirements.txt` with the
+machine-local marker written by successful setup. Refuse launch on a missing or
+stale marker and instruct the user to stop, run setup, and start again. Keep
+native TkDND loading, target registration, event binding, and window display
+behind the existing optional Drop-target boundary; failures there clean up any
+partial window, remain cached until restart, and provide actionable in-app
+status and repair guidance.
+
+**Reason:** Git transfers the dependency declaration but not another PC's
+ignored `.venv`. Previously, an old environment still passed the launcher's
+Python/Tkinter check, while the Drop target silently disappeared. Requiring
+setup for a declared environment change prevents that ambiguous partial
+upgrade. Keeping native TkDND failure isolated preserves every non-drop feature
+on a PC where the adapter itself cannot initialize.
+
+**Consequences:** Normal Run remains fast and never installs or downloads
+packages. Pulling changed requirements requires setup before Run. Repairing a
+failed Drop component also requires restarting the resident process because
+its unavailable state is deliberately cached. Technical exceptions stay in
+the ignored local log; user-facing messages do not expose raw environment
+paths.
+
 ## 2026-08-27 - Reuse one live-Excel workbook and worksheet chooser
 
 **Decision:** Render the already-open workbook and visible-worksheet selection

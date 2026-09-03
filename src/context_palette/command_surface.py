@@ -168,6 +168,14 @@ def load_command_groups(path: Path) -> list[CommandGroup]:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return []
+    except UnicodeError as exc:
+        raise CommandSurfaceError(
+            f"Command-surface file is not valid UTF-8: {path}"
+        ) from exc
+    except OSError as exc:
+        raise CommandSurfaceError(
+            f"Command-surface file could not be read: {path}"
+        ) from exc
     except json.JSONDecodeError as exc:
         raise CommandSurfaceError(f"Command-surface file is not valid JSON: {path}") from exc
 

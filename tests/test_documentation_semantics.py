@@ -29,9 +29,11 @@ def _table_rows(section: str) -> dict[str, str]:
 
 
 class DocumentationSemanticsTests(unittest.TestCase):
-    def test_current_policy_uses_active_archived_lifecycle(self):
+    def test_current_policy_uses_direct_reviewed_deletion(self):
         contributing = _read("CONTRIBUTING.md")
-        self.assertIn("Active/Archived Action lifecycle", contributing)
+        self.assertIn("Deletion is a direct", contributing)
+        self.assertIn("deletion-only compatibility data", contributing)
+        self.assertNotIn("Active/Archived Action lifecycle", contributing)
         current_guides = [ROOT / "README.md", ROOT / "CONTRIBUTING.md"]
         current_guides.extend(
             path

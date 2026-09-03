@@ -75,6 +75,7 @@ from .command_surface import (
     command_item_targets,
     load_combined_command_groups,
 )
+from .configuration_mutation import configuration_mutation_gate
 from .configuration_window import ConfigurationWindow
 from .context_membership import (
     actions_with_canonical_contexts,
@@ -228,6 +229,34 @@ class _SendDestination:
     folder_path: Path
     menu_path: tuple[str, ...] = ()
     search_text: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeConfigurationGeneration:
+    """One fully validated configuration generation awaiting publication."""
+
+    actions: tuple[Action, ...]
+    local_action_ids: frozenset[str]
+    command_groups: tuple[CommandGroup, ...]
+    context_definitions: tuple[ContextDefinition, ...]
+    local_context_names: tuple[tuple[str, str], ...]
+    palette_state: PaletteState
+    available_context_names: tuple[str, ...]
+    work_item_sources: tuple[WorkItemSource, ...]
+    work_item_metadata: tuple[tuple[str, WorkItemMetadata], ...]
+
+
+class _RuntimeConfigurationStageError(RuntimeError):
+    """A user configuration stage failed before publication."""
+
+    def __init__(self, stage: str, cause: Exception) -> None:
+        super().__init__(str(cause))
+        self.stage = stage
+        self.cause = cause
+
+
+class _RuntimeConfigurationChangedError(RuntimeError):
+    """Configuration files changed while a generation was being staged."""
 
 
 def bounded_sash_position(
@@ -408,6 +437,9 @@ class LauncherApp:
         self.work_project_filter_var = tk.StringVar(value="All project codes")
         self.work_tag_filter_var = tk.StringVar(value="All work tags")
         self.configuration_signature_cache: tuple[tuple[str, int, int], ...] = ()
+        self.configuration_failed_signature_cache: (
+            tuple[tuple[str, int, int], ...] | None
+        ) = None
         self.search_var = tk.StringVar()
         self.actions_heading_var = tk.StringVar(value="Actions")
         self.results_count_var = tk.StringVar(value="0 actions")
@@ -434,14 +466,20 @@ class LauncherApp:
 
         self._build_ui()
         self._migrate_context_memberships()
-        self._load_actions()
-        self._load_command_surface(render=False)
-        self._load_contexts()
-        self._load_palette_state(render=False)
-        self._load_work_item_configuration()
+        bootstrap_signature = self._configuration_signature()
+        bootstrap_results = (
+            self._load_actions(),
+            self._load_command_surface(render=False),
+            self._load_contexts(),
+            self._load_palette_state(render=False),
+            self._load_work_item_configuration(),
+        )
         self._render_command_surface()
         self._refresh_results()
-        self.configuration_signature_cache = self._configuration_signature()
+        self._record_bootstrap_configuration_signature(
+            bootstrap_results,
+            expected_signature=bootstrap_signature,
+        )
         if not self.instance_server.start():
             self.root.after(0, self.root.destroy)
             return
@@ -969,6 +1007,7 @@ class LauncherApp:
         self.source_foreground_handle = None
         self._set_workspace_text("")
         self.search_var.set("")
+        self.configuration_failed_signature_cache = None
         self._reload_if_changed()
         self._refresh_results()
         self.focus_search()
@@ -1253,6 +1292,9 @@ class LauncherApp:
     def _start_drop_target(self) -> None:
         target = getattr(self, "drop_target_window", None)
         if target is not None and not target.start():
+            self.status_var.set(
+                "Drop target unavailable — choose More → Show drop target for repair help."
+            )
             LOGGER.warning("Always-on-top drop target is unavailable")
 
     def _show_drop_target(self) -> None:
@@ -1261,10 +1303,16 @@ class LauncherApp:
             self.status_var.set("Drop target is ready for files, links, or text.")
             return
         self.status_var.set("Drop target is unavailable; Context Palette remains usable.")
+        reason = (
+            getattr(target, "unavailable_reason", None)
+            or "The Windows drag-and-drop component could not be loaded."
+        )
         messagebox.showwarning(
             "Drop target unavailable",
-            "The optional Windows drag-and-drop component could not be loaded. "
-            "Run setup-context-palette.bat to repair the local environment. "
+            f"{reason}\n\n"
+            "Stop Context Palette, run setup-context-palette.bat to repair the "
+            "local environment, then start Context Palette again. A failed "
+            "drag-and-drop initialization is retained until restart.\n\n"
             "All other Context Palette features remain available.",
             parent=self.root,
         )
@@ -1538,7 +1586,7 @@ class LauncherApp:
         x, y = centered_work_area_position((width, height), work_area)
         self.root.geometry(f"{x:+d}{y:+d}")
 
-    def _load_actions(self) -> None:
+    def _load_actions(self) -> bool:
         try:
             self.actions, self.local_action_ids = load_combined_actions(
                 self.actions_path,
@@ -1561,6 +1609,7 @@ class LauncherApp:
                 self.work_tag_filter_var.set("All work tags")
             self._sync_filter_indicators()
             self.status_var.set(f"Loaded {len(self.actions)} actions")
+            return True
         except ActionError as exc:
             self.status_var.set(
                 f"Actions could not be loaded; kept {len(self.actions)} previous action(s)."
@@ -1571,14 +1620,18 @@ class LauncherApp:
                 parent=self.root,
             )
             LOGGER.exception("Action configuration failed to load")
+            return False
 
-    def _load_work_item_configuration(self) -> None:
+    def _load_work_item_configuration(self) -> bool:
         try:
             sources = load_work_item_sources(
                 self.local_work_item_sources_path
             )
             metadata = load_work_item_metadata(
                 self.local_work_item_metadata_path
+            )
+            load_work_item_creation_settings(
+                self.local_work_item_settings_path
             )
         except WorkItemStorageError as exc:
             self.status_var.set("Work Items configuration could not be loaded.")
@@ -1588,11 +1641,12 @@ class LauncherApp:
                 parent=self.root,
             )
             LOGGER.exception("Work Items local configuration failed to load")
-            return
+            return False
         self.work_item_sources = sources
         self.work_item_metadata = metadata
         if not sources:
             self.work_item_index = WorkItemIndex()
+        return True
 
     def _start_work_item_refresh(self) -> None:
         if not self.work_item_sources:
@@ -1646,14 +1700,15 @@ class LauncherApp:
             return
 
     def _accept_work_item_index(self, index: WorkItemIndex) -> None:
-        configured_source_ids = {
-            source.id.casefold() for source in self.work_item_sources
+        configured_sources = {
+            source.id.casefold(): source for source in self.work_item_sources
         }
         self.work_item_index = WorkItemIndex(
             tuple(
                 result
                 for result in index.sources
-                if result.source.id.casefold() in configured_source_ids
+                if configured_sources.get(result.source.id.casefold())
+                == result.source
             ),
             index.elapsed_seconds,
         )
@@ -1725,7 +1780,8 @@ class LauncherApp:
         tags.update(self._available_work_tags())
         return tuple(sorted(tags, key=str.casefold))
 
-    def _load_command_surface(self, *, render: bool = True) -> None:
+    def _load_command_surface(self, *, render: bool = True) -> bool:
+        loaded = True
         try:
             self.command_groups = load_combined_command_groups(
                 self.command_surface_path,
@@ -1745,8 +1801,10 @@ class LauncherApp:
                 parent=self.root,
             )
             LOGGER.exception("Quick-action configuration failed to load")
+            loaded = False
         if render:
             self._render_command_surface()
+        return loaded
 
     def _render_command_surface(self) -> None:
         for tooltip in self.command_surface_tooltips:
@@ -2414,16 +2472,15 @@ class LauncherApp:
     def _action_storage_path(self, action: Action) -> Path:
         return self.local_actions_path if action.id in self.local_action_ids else self.actions_path
 
-    def _load_contexts(self) -> None:
+    def _load_contexts(self) -> bool:
         try:
             loaded_contexts = load_combined_contexts(
                 self.contexts_path,
                 self.local_contexts_path,
             )
-            local_contexts = (
-                load_contexts(self.local_contexts_path)
-                if self.local_contexts_path.exists()
-                else []
+            local_contexts = load_contexts(
+                self.local_contexts_path,
+                missing_ok=True,
             )
             self.context_definitions = loaded_contexts
             self.local_context_names = {
@@ -2434,6 +2491,7 @@ class LauncherApp:
                 self.actions,
                 self.context_definitions,
             )
+            return True
         except ContextError as exc:
             self.actions = actions_with_canonical_contexts(
                 self.actions,
@@ -2448,6 +2506,7 @@ class LauncherApp:
                 parent=self.root,
             )
             LOGGER.exception("Context configuration failed to load")
+            return False
 
     def _active_authoring_context(self) -> str:
         """Return a Context that can own a newly created personal Action."""
@@ -2456,7 +2515,8 @@ class LauncherApp:
         local_names = getattr(self, "local_context_names", {})
         return local_names.get(active.casefold(), "General")
 
-    def _load_palette_state(self, *, render: bool = True) -> None:
+    def _load_palette_state(self, *, render: bool = True) -> bool:
+        loaded = True
         try:
             loaded_state = load_palette_state(self.palette_path)
         except ActionError as exc:
@@ -2469,6 +2529,7 @@ class LauncherApp:
                 parent=self.root,
             )
             LOGGER.exception("Palette configuration failed to load")
+            loaded = False
         else:
             self.palette_state = loaded_state
         resolved = resolve_focus_state(
@@ -2503,6 +2564,7 @@ class LauncherApp:
         self._sync_filter_indicators()
         if render:
             self._render_command_surface()
+        return loaded
 
     def _refresh_results(self) -> None:
         started_at = time.perf_counter()
@@ -3051,6 +3113,203 @@ class LauncherApp:
         self.search_refresh_after_id = None
         self._refresh_results()
 
+    def _stage_runtime_configuration(
+        self,
+        stage_timings_ms: dict[str, float],
+    ) -> _RuntimeConfigurationGeneration:
+        """Load and validate one complete generation without changing live state."""
+
+        def run_stage(name: str, callback: Callable[[], object]) -> object:
+            stage_started_at = time.perf_counter()
+            try:
+                return callback()
+            except (
+                ActionError,
+                CommandSurfaceError,
+                ContextError,
+                WorkItemStorageError,
+                OSError,
+                UnicodeError,
+            ) as exc:
+                raise _RuntimeConfigurationStageError(name, exc) from exc
+            finally:
+                stage_timings_ms[name.casefold().replace(" ", "_")] = (
+                    time.perf_counter() - stage_started_at
+                ) * 1000
+
+        with configuration_mutation_gate():
+            loaded_actions, local_action_ids = run_stage(
+                "Actions",
+                lambda: load_combined_actions(
+                    self.actions_path,
+                    self.local_actions_path,
+                    inspect_external_paths=False,
+                ),
+            )
+            command_groups = run_stage(
+                "Quick actions",
+                lambda: load_combined_command_groups(
+                    self.command_surface_path,
+                    self.local_command_surface_path,
+                ),
+            )
+
+            def load_context_generation() -> tuple[
+                list[Action],
+                list[ContextDefinition],
+                dict[str, str],
+            ]:
+                definitions = load_combined_contexts(
+                    self.contexts_path,
+                    self.local_contexts_path,
+                )
+                local_contexts = load_contexts(
+                    self.local_contexts_path,
+                    missing_ok=True,
+                )
+                local_names = {
+                    context.name.casefold(): context.name
+                    for context in local_contexts
+                }
+                canonical_actions = actions_with_canonical_contexts(
+                    loaded_actions,
+                    definitions,
+                )
+                return canonical_actions, definitions, local_names
+
+            canonical_actions, context_definitions, local_context_names = run_stage(
+                "Contexts",
+                load_context_generation,
+            )
+
+            def load_work_item_generation() -> tuple[
+                tuple[WorkItemSource, ...],
+                dict[str, WorkItemMetadata],
+            ]:
+                sources = load_work_item_sources(
+                    self.local_work_item_sources_path
+                )
+                metadata = load_work_item_metadata(
+                    self.local_work_item_metadata_path
+                )
+                load_work_item_creation_settings(
+                    self.local_work_item_settings_path
+                )
+                return sources, metadata
+
+            work_item_sources, work_item_metadata = run_stage(
+                "Work Items",
+                load_work_item_generation,
+            )
+
+            def load_resolved_palette() -> tuple[PaletteState, tuple[str, ...]]:
+                loaded_state = load_palette_state(self.palette_path)
+                resolved = resolve_focus_state(
+                    canonical_actions,
+                    context_definitions,
+                    loaded_state,
+                )
+                return resolved.palette_state, resolved.available_names
+
+            palette_state, available_context_names = run_stage(
+                "Palette settings",
+                load_resolved_palette,
+            )
+
+        return _RuntimeConfigurationGeneration(
+            actions=tuple(canonical_actions),
+            local_action_ids=frozenset(local_action_ids),
+            command_groups=tuple(command_groups),
+            context_definitions=tuple(context_definitions),
+            local_context_names=tuple(local_context_names.items()),
+            palette_state=palette_state,
+            available_context_names=tuple(available_context_names),
+            work_item_sources=tuple(work_item_sources),
+            work_item_metadata=tuple(work_item_metadata.items()),
+        )
+
+    def _publish_runtime_configuration(
+        self,
+        generation: _RuntimeConfigurationGeneration,
+    ) -> None:
+        """Publish one validated generation, then reconcile dependent UI state."""
+
+        sources_changed = tuple(self.work_item_sources) != generation.work_item_sources
+        published_state: dict[str, object] = {
+            "actions": list(generation.actions),
+            "local_action_ids": set(generation.local_action_ids),
+            "command_groups": list(generation.command_groups),
+            "context_definitions": list(generation.context_definitions),
+            "local_context_names": dict(generation.local_context_names),
+            "palette_state": generation.palette_state,
+            "available_context_names": list(generation.available_context_names),
+            "work_item_sources": generation.work_item_sources,
+            "work_item_metadata": dict(generation.work_item_metadata),
+        }
+        if sources_changed or not generation.work_item_sources:
+            published_state["work_item_index"] = WorkItemIndex()
+        self.__dict__.update(published_state)
+
+        available_tags = self._available_item_tags()
+        panel = getattr(self, "action_discovery_panel", None)
+        if panel is not None:
+            panel.set_tags(available_tags)
+            panel.set_contexts(tuple(self.available_context_names))
+        selected_tag = getattr(self, "item_tag_filter", None)
+        if (
+            selected_tag is not None
+            and selected_tag.casefold()
+            not in {tag.casefold() for tag in available_tags}
+        ):
+            self.item_tag_filter = None
+            self.action_tag_filter = None
+            self.work_tag_filter = None
+            self.item_tag_filter_var.set("All tags")
+            self.action_tag_filter_var.set("All tags")
+            self.work_tag_filter_var.set("All work tags")
+
+        specific_contexts = {
+            name.casefold(): name
+            for name in self.available_context_names
+            if name.casefold() != "general"
+        }
+        selected_context = getattr(self, "item_context_filter", None)
+        canonical_context = (
+            specific_contexts.get(selected_context.casefold())
+            if selected_context is not None
+            else None
+        )
+        self.item_context_filter = canonical_context
+        self.item_context_filter_var.set(
+            context_filter_display_label(
+                tuple(self.available_context_names),
+                canonical_context,
+            )
+        )
+        self._sync_slot_context_to_filter()
+        self._sync_filter_indicators()
+        self.status_var.set(f"Loaded {len(self.actions)} actions")
+
+    def _record_bootstrap_configuration_signature(
+        self,
+        stage_results: tuple[bool, ...],
+        *,
+        expected_signature: tuple[tuple[str, int, int], ...],
+    ) -> None:
+        """Record whether fault-isolated startup established a valid baseline."""
+
+        signature = self._configuration_signature()
+        if signature != expected_signature:
+            self.configuration_signature_cache = ()
+            self.configuration_failed_signature_cache = None
+            return
+        if all(stage_results):
+            self.configuration_signature_cache = signature
+            self.configuration_failed_signature_cache = None
+            return
+        self.configuration_signature_cache = ()
+        self.configuration_failed_signature_cache = signature
+
     def _configuration_signature(self) -> tuple[tuple[str, int, int], ...]:
         paths = (
             self.actions_path,
@@ -3074,12 +3333,16 @@ class LauncherApp:
         return tuple(signature)
 
     def _reload_if_changed(self) -> None:
-        if self._configuration_signature() == self.configuration_signature_cache:
+        current_signature = self._configuration_signature()
+        if current_signature == self.configuration_signature_cache:
             LOGGER.debug("Configuration unchanged; skipped full reload")
+            return
+        if current_signature == self.configuration_failed_signature_cache:
+            LOGGER.debug("Unchanged invalid configuration; skipped repeated reload")
             return
         self._reload()
 
-    def _reload(self) -> None:
+    def _reload(self) -> bool:
         started_at = time.perf_counter()
         stage_timings_ms: dict[str, float] = {}
 
@@ -3093,29 +3356,53 @@ class LauncherApp:
         self.status_var.set("Refreshing actions, contexts, and buttons…")
         self.root.configure(cursor="wait")
         self.root.update_idletasks()
+        attempted_signature = self._configuration_signature()
         try:
-            run_stage("actions", self._load_actions)
+            generation = self._stage_runtime_configuration(stage_timings_ms)
+            completed_signature = self._configuration_signature()
+            if completed_signature != attempted_signature:
+                raise _RuntimeConfigurationChangedError
             run_stage(
-                "buttons",
-                lambda: self._load_command_surface(render=False),
-            )
-            run_stage("contexts", self._load_contexts)
-            run_stage("work_items", self._load_work_item_configuration)
-            run_stage(
-                "palette",
-                lambda: self._load_palette_state(render=False),
+                "publish",
+                lambda: self._publish_runtime_configuration(generation),
             )
             run_stage("quick_actions", self._render_command_surface)
             run_stage("results", self._refresh_results)
-            self._start_work_item_refresh()
-            run_stage(
-                "signature",
-                lambda: setattr(
-                    self,
-                    "configuration_signature_cache",
-                    self._configuration_signature(),
-                ),
+            run_stage("work_item_refresh", self._start_work_item_refresh)
+            self.configuration_signature_cache = completed_signature
+            self.configuration_failed_signature_cache = None
+            return True
+        except _RuntimeConfigurationStageError as exc:
+            failed_signature = self._configuration_signature()
+            self.configuration_failed_signature_cache = (
+                attempted_signature
+                if failed_signature == attempted_signature
+                else None
             )
+            self.status_var.set(
+                f"{exc.stage} could not be reloaded; kept the previous configuration."
+            )
+            messagebox.showerror(
+                "Configuration could not be reloaded",
+                f"{exc.stage} could not be loaded:\n\n{exc.cause}\n\n"
+                "No configuration was changed. Correct the file and reload.",
+                parent=self.root,
+            )
+            LOGGER.exception("Configuration reload failed during %s", exc.stage)
+            return False
+        except _RuntimeConfigurationChangedError:
+            self.configuration_failed_signature_cache = None
+            self.status_var.set(
+                "Configuration changed while it was being reloaded; kept the previous configuration."
+            )
+            messagebox.showwarning(
+                "Configuration changed during reload",
+                "Configuration files changed while Context Palette was reading them. "
+                "No configuration was changed in the running interface. Reload again.",
+                parent=self.root,
+            )
+            LOGGER.warning("Configuration changed while a generation was staged")
+            return False
         finally:
             self.root.configure(cursor="")
             _warn_if_slow(

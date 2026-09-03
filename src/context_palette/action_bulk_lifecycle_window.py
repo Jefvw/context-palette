@@ -1,9 +1,8 @@
-"""Attended bulk removal workflow for personal Actions.
+"""Attended one-stage deletion workflow for personal Actions.
 
-The window deliberately keeps the permanent Active -> Archived -> deleted
-lifecycle while avoiding a second picker.  A selected Active batch is archived
-first, the same selection is then reviewed as Archived, and the second explicit
-button permanently deletes it.  No Action is ever executed here.
+The window reviews exact Action records, saved-reference cleanup, and sequence
+dependencies before one effect-labelled deletion. External targets are never
+changed and no Action is executed.
 """
 
 from __future__ import annotations
@@ -14,14 +13,13 @@ from tkinter import messagebox, ttk
 from typing import Callable, Iterable
 
 from .action_bulk_lifecycle import (
-    ARCHIVE_OPERATION,
-    DELETE_OPERATION,
+    BulkActionLifecycleCandidate,
     BulkActionLifecycleError,
     BulkActionLifecyclePaths,
     BulkActionLifecyclePlan,
-    commit_bulk_action_lifecycle,
-    eligible_personal_actions_for_lifecycle,
-    plan_bulk_action_lifecycle,
+    commit_bulk_action_deletion,
+    eligible_personal_actions_for_deletion,
+    plan_bulk_action_deletion,
 )
 from .action_deletion import ActionDeletionReport
 from .action_types import ACTION_TYPES
@@ -30,7 +28,7 @@ from .window_geometry import configure_standard_window
 
 
 class ActionBulkLifecycleWindow:
-    """Review and apply plural personal-Action lifecycle changes."""
+    """Review and permanently delete one or more personal Actions."""
 
     def __init__(
         self,
@@ -59,19 +57,14 @@ class ActionBulkLifecycleWindow:
             palette_path=Path(palette_path),
         )
         self.on_change = on_change
-        self.operation = (
-            ARCHIVE_OPERATION
-            if self._eligible_for(ARCHIVE_OPERATION)
-            else DELETE_OPERATION
-        )
-        self.eligible_actions: tuple[Action, ...] = ()
+        self.eligible_actions = self._eligible()
         self.selected_action_ids: set[str] = set()
         self.plan: BulkActionLifecyclePlan | None = None
         self.submitting = False
         self._transition_message = ""
 
         self.window = tk.Toplevel(parent)
-        self.window.title("Remove personal Actions")
+        self.window.title("Delete personal Actions")
         configure_standard_window(self.window, parent)
         self.window.protocol("WM_DELETE_WINDOW", self.close)
         self.window.bind("<Escape>", lambda _event: self.close())
@@ -82,9 +75,9 @@ class ActionBulkLifecycleWindow:
         outer = ttk.Frame(self.window, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
         outer.columnconfigure(0, weight=1)
-        outer.rowconfigure(4, weight=1)
+        outer.rowconfigure(3, weight=1)
 
-        ttk.Label(outer, text="Remove personal Actions", style="Title.TLabel").grid(
+        ttk.Label(outer, text="Delete personal Actions", style="Title.TLabel").grid(
             row=0,
             column=0,
             sticky=tk.W,
@@ -92,10 +85,9 @@ class ActionBulkLifecycleWindow:
         self.intro_label = ttk.Label(
             outer,
             text=(
-                "Select personal Actions once. Preparation removes Active Actions "
-                "from use and saved placements while keeping a recoverable record; "
-                "then the same selection can be permanently deleted. External "
-                "targets are never changed."
+                "Select personal Actions and review exactly what will be removed. "
+                "Deletion removes the saved Action records and their placements. "
+                "External targets are never changed."
             ),
             style="Muted.TLabel",
             wraplength=740,
@@ -103,23 +95,8 @@ class ActionBulkLifecycleWindow:
         )
         self.intro_label.grid(row=1, column=0, sticky=tk.EW, pady=(2, 8))
 
-        stage_row = ttk.Frame(outer)
-        stage_row.grid(row=2, column=0, sticky=tk.EW, pady=(0, 6))
-        self.stage_var = tk.StringVar()
-        ttk.Label(
-            stage_row,
-            textvariable=self.stage_var,
-            style="Heading.TLabel",
-        ).pack(side=tk.LEFT)
-        self.stage_switch_button = ttk.Button(
-            stage_row,
-            command=self.switch_stage,
-            style="Compact.TButton",
-        )
-        self.stage_switch_button.pack(side=tk.RIGHT)
-
         filter_row = ttk.Frame(outer)
-        filter_row.grid(row=3, column=0, sticky=tk.EW, pady=(0, 7))
+        filter_row.grid(row=2, column=0, sticky=tk.EW, pady=(0, 7))
         ttk.Label(filter_row, text="Find").pack(side=tk.LEFT)
         self.filter_var = tk.StringVar()
         self.filter_entry = ttk.Entry(filter_row, textvariable=self.filter_var)
@@ -146,7 +123,7 @@ class ActionBulkLifecycleWindow:
         ).pack(side=tk.RIGHT, padx=(8, 0))
 
         review = ttk.Panedwindow(outer, orient=tk.VERTICAL)
-        review.grid(row=4, column=0, sticky=tk.NSEW)
+        review.grid(row=3, column=0, sticky=tk.NSEW)
 
         table_frame = ttk.Frame(review)
         review.add(table_frame, weight=3)
@@ -154,7 +131,14 @@ class ActionBulkLifecycleWindow:
         horizontal_scrollbar = ttk.Scrollbar(table_frame, orient=tk.HORIZONTAL)
         self.tree = ttk.Treeview(
             table_frame,
-            columns=("use", "action", "type", "dependencies", "status"),
+            columns=(
+                "use",
+                "action",
+                "type",
+                "availability",
+                "dependencies",
+                "status",
+            ),
             show="headings",
             selectmode="browse",
             yscrollcommand=vertical_scrollbar.set,
@@ -166,10 +150,11 @@ class ActionBulkLifecycleWindow:
         horizontal_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         for column, label, width, stretch, anchor in (
-            ("use", "Remove", 62, False, tk.CENTER),
+            ("use", "Delete", 62, False, tk.CENTER),
             ("action", "Action", 190, True, tk.W),
             ("type", "Type", 125, False, tk.W),
-            ("dependencies", "Dependencies", 215, True, tk.W),
+            ("availability", "Availability", 110, False, tk.W),
+            ("dependencies", "Dependencies", 195, True, tk.W),
             ("status", "Status", 92, False, tk.W),
         ):
             self.tree.heading(column, text=label)
@@ -188,7 +173,7 @@ class ActionBulkLifecycleWindow:
         review.add(detail_frame, weight=2)
         ttk.Label(
             detail_frame,
-            text="Selected Action and batch impact",
+            text="Selected Action and deletion impact",
             style="Heading.TLabel",
         ).pack(anchor=tk.W)
         detail_scrollbar = ttk.Scrollbar(detail_frame, orient=tk.VERTICAL)
@@ -212,81 +197,40 @@ class ActionBulkLifecycleWindow:
             style="Status.TLabel",
             wraplength=740,
             justify=tk.LEFT,
-        ).grid(row=5, column=0, sticky=tk.EW, pady=(7, 0))
+        ).grid(row=4, column=0, sticky=tk.EW, pady=(7, 0))
 
         footer = ttk.Frame(outer)
-        footer.grid(row=6, column=0, sticky=tk.EW, pady=(8, 0))
-        self.prepare_button = ttk.Button(
-            footer,
-            command=self.commit_selected,
-            state=tk.DISABLED,
-            style="Danger.TButton",
-        )
-        self.prepare_button.pack(side=tk.LEFT)
-        self.close_button = ttk.Button(footer, text="Close", command=self.close)
-        self.close_button.pack(side=tk.RIGHT)
+        footer.grid(row=5, column=0, sticky=tk.EW, pady=(8, 0))
         self.delete_button = ttk.Button(
             footer,
             command=self.commit_selected,
             state=tk.DISABLED,
             style="Danger.TButton",
         )
+        self.delete_button.pack(side=tk.LEFT)
+        self.close_button = ttk.Button(footer, text="Close", command=self.close)
+        self.close_button.pack(side=tk.RIGHT)
 
         self.filter_var.trace_add("write", lambda *_args: self._render())
-        self._refresh_stage(clear_selection=True)
+        self._render()
         self.window.transient(parent)
         self.window.lift()
         self.window.after_idle(self.filter_entry.focus_set)
 
     @property
     def commit_button(self) -> ttk.Button:
-        """Return the effect button for the currently visible lifecycle stage."""
+        """Return the window's single effect-labelled deletion button."""
 
-        return (
-            self.prepare_button
-            if self.operation == ARCHIVE_OPERATION
-            else self.delete_button
-        )
+        return self.delete_button
 
     def close(self) -> None:
         self.window.destroy()
 
-    def _eligible_for(self, operation: str) -> tuple[Action, ...]:
-        return eligible_personal_actions_for_lifecycle(
+    def _eligible(self) -> tuple[Action, ...]:
+        return eligible_personal_actions_for_deletion(
             self.actions,
             self.local_action_ids,
-            operation=operation,
         )
-
-    def _refresh_stage(self, *, clear_selection: bool) -> str | None:
-        self.eligible_actions = self._eligible_for(self.operation)
-        eligible_ids = {action.id for action in self.eligible_actions}
-        if clear_selection:
-            self.selected_action_ids.clear()
-        else:
-            self.selected_action_ids.intersection_update(eligible_ids)
-        self.plan = None
-        if self.selected_action_ids:
-            return self._replan(show_error=False)
-        self._render()
-        return None
-
-    def switch_stage(self) -> None:
-        """Switch between Active preparation and prepared permanent deletion."""
-
-        if self.submitting:
-            return
-        other_operation = (
-            DELETE_OPERATION
-            if self.operation == ARCHIVE_OPERATION
-            else ARCHIVE_OPERATION
-        )
-        if not self._eligible_for(other_operation):
-            return
-        self.operation = other_operation
-        self._transition_message = ""
-        self._refresh_stage(clear_selection=True)
-        self.tree.focus_set()
 
     def _load_current_actions(self) -> None:
         actions, local_ids = load_combined_stored_actions(
@@ -296,16 +240,14 @@ class ActionBulkLifecycleWindow:
         )
         self.actions = tuple(actions)
         self.local_action_ids = frozenset(local_ids)
+        self.eligible_actions = self._eligible()
 
     def _focus_find(self, _event: tk.Event | None = None) -> str:
         self.filter_entry.focus_set()
         self.filter_entry.selection_range(0, tk.END)
         return "break"
 
-    def _select_all_from_key(
-        self,
-        event: tk.Event | None = None,
-    ) -> str | None:
+    def _select_all_from_key(self, event: tk.Event | None = None) -> str | None:
         source = getattr(event, "widget", None)
         if source is None:
             source = self.window.focus_get()
@@ -326,12 +268,12 @@ class ActionBulkLifecycleWindow:
             if action_matches_search(action, query)
         )
 
-    def _candidate_by_id(self) -> dict[str, object]:
+    def _candidate_by_id(self) -> dict[str, BulkActionLifecycleCandidate]:
         if self.plan is None:
             return {}
         return {candidate.action_id: candidate for candidate in self.plan.candidates}
 
-    def _candidate_for_iid(self, iid: str) -> object | None:
+    def _candidate_for_iid(self, iid: str) -> BulkActionLifecycleCandidate | None:
         if not iid.startswith("action-"):
             return None
         return self._candidate_by_id().get(iid[7:])
@@ -350,15 +292,12 @@ class ActionBulkLifecycleWindow:
         self.tree.delete(*self.tree.get_children())
         candidates = self._candidate_by_id()
         visible = self._visible_actions()
-        selected_hidden = len(self.selected_action_ids - {item.id for item in visible})
+        selected_hidden = len(
+            self.selected_action_ids - {item.id for item in visible}
+        )
         self.shown_var.set(
             f"{len(visible)} shown"
             + (f" · {selected_hidden} selected hidden" if selected_hidden else "")
-        )
-        self.stage_var.set(
-            "Prepare Active Actions for deletion"
-            if self.operation == ARCHIVE_OPERATION
-            else "Delete prepared Actions permanently"
         )
 
         for action in visible:
@@ -380,7 +319,14 @@ class ActionBulkLifecycleWindow:
                 "",
                 tk.END,
                 iid=f"action-{action.id}",
-                values=(marker, action.title, type_label, dependencies, status),
+                values=(
+                    marker,
+                    action.title,
+                    type_label,
+                    _availability_label(action),
+                    dependencies,
+                    status,
+                ),
             )
 
         retained = [iid for iid in selected_iids if self.tree.exists(iid)]
@@ -459,7 +405,9 @@ class ActionBulkLifecycleWindow:
                 parent=self.window,
             )
             return
-        self._refresh_stage(clear_selection=False)
+        eligible_ids = {action.id for action in self.eligible_actions}
+        self.selected_action_ids.intersection_update(eligible_ids)
+        self._replan(show_error=False)
 
     def _replan(self, *, show_error: bool = True) -> str | None:
         if not self.selected_action_ids:
@@ -468,8 +416,7 @@ class ActionBulkLifecycleWindow:
             return None
         review_error: str | None = None
         try:
-            self.plan = plan_bulk_action_lifecycle(
-                self.operation,
+            self.plan = plan_bulk_action_deletion(
                 tuple(sorted(self.selected_action_ids)),
                 paths=self.paths,
             )
@@ -478,7 +425,7 @@ class ActionBulkLifecycleWindow:
             review_error = str(exc)
             if show_error:
                 messagebox.showerror(
-                    "Action removal could not be reviewed",
+                    "Action deletion could not be reviewed",
                     review_error,
                     parent=self.window,
                 )
@@ -487,77 +434,49 @@ class ActionBulkLifecycleWindow:
 
     def _update_controls(self) -> None:
         count = len(self.selected_action_ids)
-        if self.operation == ARCHIVE_OPERATION:
-            label = f"Prepare {_action_count(count)} for deletion"
-            self.delete_button.pack_forget()
-            if not self.prepare_button.winfo_manager():
-                self.prepare_button.pack(side=tk.LEFT)
-        else:
-            label = f"Delete {_action_count(count)} permanently"
-            self.prepare_button.pack_forget()
-            if not self.delete_button.winfo_manager():
-                self.delete_button.pack(side=tk.RIGHT, padx=(0, 8))
         can_commit = bool(
             count
             and self.plan is not None
             and self.plan.can_commit
             and not self.submitting
         )
-        self.commit_button.configure(
-            text=label,
+        self.delete_button.configure(
+            text=f"Delete {_action_count(count)} permanently",
             state=tk.NORMAL if can_commit else tk.DISABLED,
         )
         self.select_all_button.configure(
-            state=tk.DISABLED if self.submitting or not self._visible_actions() else tk.NORMAL
+            state=(
+                tk.DISABLED
+                if self.submitting or not self._visible_actions()
+                else tk.NORMAL
+            )
         )
         self.clear_button.configure(
             state=tk.DISABLED if self.submitting or not count else tk.NORMAL
         )
-        other_operation = (
-            DELETE_OPERATION
-            if self.operation == ARCHIVE_OPERATION
-            else ARCHIVE_OPERATION
-        )
-        self.stage_switch_button.configure(
-            text=(
-                "Show prepared Actions"
-                if self.operation == ARCHIVE_OPERATION
-                else "Show Active Actions"
-            ),
-            state=(
-                tk.NORMAL
-                if not self.submitting and self._eligible_for(other_operation)
-                else tk.DISABLED
-            ),
-        )
 
         if self._transition_message:
             self.status_var.set(self._transition_message)
-            return
-        if not self.eligible_actions:
-            self.status_var.set(
-                "No personal Active Actions are available to prepare."
-                if self.operation == ARCHIVE_OPERATION
-                else "No personal Archived Actions are available to delete."
-            )
+        elif not self.eligible_actions:
+            self.status_var.set("No personal Actions are available to delete.")
         elif not count:
             self.status_var.set(
-                f"{len(self.eligible_actions)} personal "
-                + ("Active" if self.operation == ARCHIVE_OPERATION else "Archived")
-                + " Action(s) available. Select the Actions to review."
+                f"{len(self.eligible_actions)} personal Action(s) available. "
+                "Select the Actions to review."
             )
         elif self.plan is None:
             self.status_var.set("The selected Actions could not be reviewed.")
         elif self.plan.can_commit:
             self.status_var.set(
-                f"{count} selected and ready. Review the exact impact before continuing."
+                f"{count} selected and ready. Review the exact impact before deleting."
             )
         else:
             blocked = sum(
                 candidate.status == "Blocked" for candidate in self.plan.candidates
             )
             self.status_var.set(
-                f"{count} selected · {blocked} blocked. Resolve or clear blocked Actions."
+                f"{count} selected · {blocked} blocked. "
+                "Delete the dependent sequences too, or edit them first."
             )
 
     def _show_detail(self) -> None:
@@ -567,14 +486,14 @@ class ActionBulkLifecycleWindow:
         if action is None:
             self._set_detail(
                 "Select an Action to inspect it. Use the checkbox column or Space "
-                "to include it in the reviewed batch."
+                "to include it in the reviewed deletion."
             )
             return
 
         lines = [
             f"Action: {action.title}",
             f"Action ID: {action.id}",
-            f"State: {action.state}",
+            f"Availability: {_availability_label(action)}",
         ]
         if candidate is None:
             lines.extend(("", "Select this Action to review its exact effects."))
@@ -593,7 +512,7 @@ class ActionBulkLifecycleWindow:
 
         if self.plan is not None:
             lines.extend(("", "Selected batch impact:"))
-            lines.extend(_impact_lines(self.operation, self.plan.impact))
+            lines.extend(_impact_lines(self.plan.impact))
         lines.extend(("", "External targets: not deleted or changed."))
         self._set_detail("\n".join(lines))
 
@@ -611,23 +530,24 @@ class ActionBulkLifecycleWindow:
             or not self.plan.can_commit
         ):
             return
-        operation = self.operation
-        selected_ids = frozenset(self.selected_action_ids)
+        selected_count = len(self.selected_action_ids)
         self.submitting = True
         self._transition_message = ""
         self._update_controls()
         try:
-            report = commit_bulk_action_lifecycle(self.plan)
+            report = commit_bulk_action_deletion(self.plan)
         except (BulkActionLifecycleError, OSError) as exc:
             self.submitting = False
             try:
                 self._load_current_actions()
-                self._refresh_stage(clear_selection=False)
+                eligible_ids = {action.id for action in self.eligible_actions}
+                self.selected_action_ids.intersection_update(eligible_ids)
+                self._replan(show_error=False)
             except (ActionError, OSError):
                 self.plan = None
                 self._render()
             messagebox.showerror(
-                "Action removal did not complete as reviewed",
+                "Action deletion did not complete as reviewed",
                 str(exc),
                 parent=self.window,
             )
@@ -648,52 +568,23 @@ class ActionBulkLifecycleWindow:
             )
             return
 
-        if operation == ARCHIVE_OPERATION:
-            self.operation = DELETE_OPERATION
-            self.selected_action_ids = set(selected_ids)
-            review_error = self._refresh_stage(clear_selection=False)
-            if review_error is None:
-                self._transition_message = (
-                    f"Prepared {_action_count(len(selected_ids))}. Review the permanent "
-                    "deletion impact; the same Actions remain selected."
-                )
-            else:
-                self._transition_message = (
-                    f"Prepared {_action_count(len(selected_ids))}, but permanent "
-                    "deletion could not be reviewed. The Actions remain prepared. "
-                    "Press F5 to refresh before deleting them."
-                )
-                messagebox.showerror(
-                    "Permanent deletion could not be reviewed",
-                    "The Actions were prepared successfully, but Context Palette "
-                    "could not review their permanent-deletion impact. They remain "
-                    "Archived and the Delete button is disabled. Press F5 to retry "
-                    f"the review.\n\n{review_error}",
-                    parent=self.window,
-                )
-            self._render()
-            self.tree.focus_set()
-        else:
-            self.selected_action_ids.clear()
-            self._transition_message = (
-                f"Deleted {_action_count(len(selected_ids))} permanently. Removed "
-                f"{report.references_removed} saved reference(s). External targets "
-                "were unchanged."
-            )
-            self._refresh_stage(clear_selection=True)
+        self.selected_action_ids.clear()
+        self.plan = None
+        self._transition_message = (
+            f"Deleted {_action_count(selected_count)} permanently. Removed "
+            f"{report.references_removed} saved reference(s). External targets "
+            "were unchanged."
+        )
+        self._render()
 
 
-def _impact_lines(
-    operation: str,
-    report: ActionDeletionReport,
-) -> tuple[str, ...]:
-    record_effect = (
-        "Action records: archived and retained."
-        if operation == ARCHIVE_OPERATION
-        else "Action records: deleted permanently."
-    )
+def _availability_label(action: Action) -> str:
+    return "Legacy inactive" if action.state == "Archived" else "Active"
+
+
+def _impact_lines(report: ActionDeletionReport) -> tuple[str, ...]:
     return (
-        record_effect,
+        "Action records: deleted permanently.",
         f"Saved references removed: {report.references_removed}",
         f"Empty Quick-action items removed: {report.buttons_removed}",
         f"Configuration files changed: {report.files_changed}",

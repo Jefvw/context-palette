@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +21,23 @@ from context_palette.work_items import WorkItemReference
 
 
 class ContextTests(unittest.TestCase):
+    def test_context_read_failures_are_reported_as_context_errors(self):
+        path = Path("contexts.json")
+        failures = (
+            (PermissionError("access denied"), "could not be read"),
+            (OSError("device unavailable"), "could not be read"),
+            (
+                UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid byte"),
+                "not valid UTF-8",
+            ),
+        )
+
+        for failure, message in failures:
+            with self.subTest(failure=type(failure).__name__):
+                with patch.object(Path, "read_text", side_effect=failure):
+                    with self.assertRaisesRegex(ContextError, message):
+                        load_contexts(path)
+
     def test_work_item_memberships_can_be_replaced_across_personal_contexts(self):
         reference = WorkItemReference("work", "ISS-example")
         other = WorkItemReference("work", "ISS-other")
@@ -138,6 +156,27 @@ class ContextTests(unittest.TestCase):
             shared.write_text(json.dumps({"contexts": [{"name": "General"}]}), encoding="utf-8")
             contexts = load_combined_contexts(shared, Path(directory) / "local_contexts.json")
         self.assertEqual([context.name for context in contexts], ["General"])
+
+    def test_context_loader_allows_only_explicitly_optional_missing_file(self):
+        path = Path("missing-contexts.json")
+
+        self.assertEqual(load_contexts(path, missing_ok=True), [])
+        with self.assertRaisesRegex(ContextError, "was not found"):
+            load_contexts(path)
+
+    def test_combined_contexts_do_not_treat_optional_read_error_as_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            shared = Path(directory) / "contexts.json"
+            local = Path(directory) / "local-contexts.json"
+            shared.write_text(
+                json.dumps({"contexts": [{"name": "General"}]}),
+                encoding="utf-8",
+            )
+            local.mkdir()
+
+            with patch.object(Path, "exists", return_value=False):
+                with self.assertRaisesRegex(ContextError, "could not be read"):
+                    load_combined_contexts(shared, local)
 
     def test_combined_contexts_reject_case_insensitive_duplicates(self):
         with tempfile.TemporaryDirectory() as directory:

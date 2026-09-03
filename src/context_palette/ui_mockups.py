@@ -82,7 +82,7 @@ MOCKUP_DEFINITIONS = {
         (900, 520),
         (
             ("active", "Selected Active Action"),
-            ("archived", "Selected Archived Action"),
+            ("legacy-inactive", "Selected legacy inactive Action"),
         ),
     ),
 }
@@ -749,7 +749,7 @@ class ConfigureMockup(MockupView):
     def _build_actions_page(self) -> None:
         page = self._new_page("actions")
         page.columnconfigure(0, weight=1)
-        page.rowconfigure(2, weight=1)
+        page.rowconfigure(3, weight=1)
         self.actions_page = page
         other_menu = tk.Menu(page, tearoff=False)
         other_menu.add_command(
@@ -774,8 +774,8 @@ class ConfigureMockup(MockupView):
             command=lambda: self._mock_status("Mockup: the attended bulk update review would open."),
         )
         other_menu.add_command(
-            label="Remove multiple personal Actions...",
-            command=lambda: self._mock_status("Mockup: the attended two-stage Action removal review would open."),
+            label="Delete multiple personal Actions...",
+            command=lambda: self._mock_status("Mockup: the attended permanent-deletion review would open."),
         )
         other_menu.add_separator()
         other_menu.add_command(
@@ -786,7 +786,7 @@ class ConfigureMockup(MockupView):
         self.actions_new_button = self._page_header(
             page,
             title="Manage Actions",
-            purpose="Create, find, edit, archive, and restore saved Actions.",
+            purpose="Create, find, edit, and permanently delete saved Actions.",
             primary_text="New Action...",
             primary_command=lambda: self._mock_status("Mockup: the Action type chooser would open."),
             secondary=other_button,
@@ -801,45 +801,45 @@ class ConfigureMockup(MockupView):
         self.action_search = ttk.Entry(find, textvariable=self.action_search_var)
         self.action_search.grid(row=0, column=1, sticky=tk.EW)
         self.action_search.bind("<KeyRelease>", lambda _event: self._render_actions())
-        ttk.Label(find, text="Show").grid(row=0, column=2, padx=(10, 6))
-        self.action_state_var = tk.StringVar(value="Active")
-        self.action_state = ttk.Combobox(
-            find,
-            textvariable=self.action_state_var,
-            values=("Active", "Archived", "All"),
-            state="readonly",
-            width=10,
-        )
-        self.action_state.grid(row=0, column=3)
-        self.action_state.bind("<<ComboboxSelected>>", lambda _event: self._render_actions())
         self.action_count_var = tk.StringVar()
         ttk.Label(find, textvariable=self.action_count_var, style="Muted.TLabel").grid(
-            row=0, column=4, padx=(8, 0)
+            row=0, column=2, padx=(8, 0)
         )
 
+        ttk.Label(
+            page,
+            text=(
+                "Legacy inactive records from older versions stay hidden from runtime "
+                "and can only be deleted."
+            ),
+            style="Muted.TLabel",
+        ).grid(row=2, column=0, sticky=tk.W, pady=(0, 5))
+
         self.actions_tree_frame, self.actions_tree = _scrollable_tree(
-            page, ("type", "contexts", "source")
+            page, ("type", "contexts", "source", "state")
         )
-        self.actions_tree_frame.grid(row=2, column=0, sticky=tk.NSEW)
+        self.actions_tree_frame.grid(row=3, column=0, sticky=tk.NSEW)
         for column, label in (
             ("#0", "Action"),
             ("type", "Type"),
             ("contexts", "Contexts"),
             ("source", "Source"),
+            ("state", "State"),
         ):
             self.actions_tree.heading(column, text=label)
         self.actions_tree.column("#0", width=310, minwidth=220, stretch=True)
         self.actions_tree.column("type", width=150, minwidth=120, stretch=False)
         self.actions_tree.column("contexts", width=150, minwidth=120, stretch=False)
         self.actions_tree.column("source", width=140, minwidth=120, stretch=False)
+        self.actions_tree.column("state", width=100, minwidth=90, stretch=False)
         self.actions_tree.bind("<<TreeviewSelect>>", self._action_selected)
         page.bind("<Configure>", self._resize_action_columns, add="+")
 
         self.action_selection = ttk.Frame(page, style="Mockup.Card.TFrame", padding=(10, 8))
-        self.action_selection.grid(row=3, column=0, sticky=tk.EW, pady=(10, 0))
+        self.action_selection.grid(row=4, column=0, sticky=tk.EW, pady=(10, 0))
         self.action_selection.columnconfigure(0, weight=1)
         self.action_detail_title_var = tk.StringVar(value="Select an Action")
-        self.action_detail_meta_var = tk.StringVar(value="Contexts, tags, ownership, and lifecycle appear here.")
+        self.action_detail_meta_var = tk.StringVar(value="Contexts, tags, ownership, and availability appear here.")
         ttk.Label(
             self.action_selection,
             textvariable=self.action_detail_title_var,
@@ -860,26 +860,25 @@ class ConfigureMockup(MockupView):
             command=lambda: self._mock_status("Mockup: the selected Action editor would open."),
         )
         self.action_edit_button.pack(side=tk.LEFT)
-        self.action_lifecycle_button = ttk.Button(
+        self.action_placements_button = ttk.Button(
             action_commands,
-            text="Archive...",
+            text="Other menus...",
             state=tk.DISABLED,
-            command=self._mock_lifecycle,
+            command=lambda: self._mock_status("Mockup: saved menu placements would open."),
         )
-        self.action_lifecycle_button.pack(side=tk.LEFT, padx=(6, 0))
+        self.action_placements_button.pack(side=tk.LEFT, padx=(6, 0))
         self.action_delete_button = ttk.Button(
             action_commands,
-            text="Delete permanently...",
+            text="Delete Action...",
             state=tk.DISABLED,
             style="Mockup.Danger.TButton",
             command=lambda: self._mock_status("Mockup only: no Action was deleted."),
         )
         self.critical(
             self.action_search,
-            self.action_state,
             self.actions_tree,
             self.action_edit_button,
-            self.action_lifecycle_button,
+            self.action_placements_button,
             self.action_delete_button,
         )
         self._render_actions()
@@ -896,9 +895,9 @@ class ConfigureMockup(MockupView):
             else:
                 self._select_first(self.work_tree)
         elif self.selected_page == "actions":
-            if self.scenario == "archived":
-                self.action_state_var.set("Archived")
-                self._render_actions()
+            if self.scenario == "legacy-inactive":
+                self._select_action_named("Older greeting")
+                return
             self._select_first(self.actions_tree)
 
     @staticmethod
@@ -908,6 +907,14 @@ class ConfigureMockup(MockupView):
             tree.selection_set(children[0])
             tree.focus(children[0])
             tree.event_generate("<<TreeviewSelect>>")
+
+    def _select_action_named(self, name: str) -> None:
+        for iid in self.actions_tree.get_children(""):
+            if str(self.actions_tree.item(iid, "text")) == name:
+                self.actions_tree.selection_set(iid)
+                self.actions_tree.focus(iid)
+                self.actions_tree.event_generate("<<TreeviewSelect>>")
+                return
 
     def _mock_status(self, message: str) -> None:
         self.status_var.set(message)
@@ -1000,15 +1007,13 @@ class ConfigureMockup(MockupView):
 
     def _render_actions(self) -> None:
         query = self.action_search_var.get().strip().casefold() if hasattr(self, "action_search_var") else ""
-        state = self.action_state_var.get() if hasattr(self, "action_state_var") else "Active"
         selected = self.actions_tree.selection() if hasattr(self, "actions_tree") else ()
         if hasattr(self, "actions_tree"):
             self.actions_tree.delete(*self.actions_tree.get_children(""))
             visible = [
                 action
                 for action in ACTION_EXAMPLES
-                if (state == "All" or action.state == state)
-                and (
+                if (
                     not query
                     or query in " ".join(
                         (action.name, action.kind, action.contexts, action.source, action.tags)
@@ -1021,7 +1026,12 @@ class ConfigureMockup(MockupView):
                     tk.END,
                     iid=f"action-{index}",
                     text=action.name,
-                    values=(action.kind, action.contexts, action.source),
+                    values=(
+                        action.kind,
+                        action.contexts,
+                        action.source,
+                        "Legacy inactive" if action.state == "Archived" else "Active",
+                    ),
                     tags=(action.state.casefold(),),
                 )
             self.action_count_var.set(f"{len(visible)} shown")
@@ -1029,7 +1039,7 @@ class ConfigureMockup(MockupView):
                 self.actions_tree.selection_set(selected[0])
             elif not visible:
                 self.action_detail_title_var.set("No Actions match this view")
-                self.action_detail_meta_var.set("Change Find or Show to see Actions.")
+                self.action_detail_meta_var.set("Clear Find to see saved Actions.")
                 self._set_action_commands(None)
 
     def _selected_action(self) -> ActionExample | None:
@@ -1046,7 +1056,8 @@ class ConfigureMockup(MockupView):
             self._set_action_commands(None)
             return
         self.action_detail_title_var.set(
-            f"{action.name}    {action.kind} - {action.state} - {action.source}"
+            f"{action.name}    {action.kind} - "
+            f"{'Legacy inactive' if action.state == 'Archived' else 'Active'} - {action.source}"
         )
         self.action_detail_meta_var.set(
             f"Contexts: {action.contexts}    Tags: {action.tags}"
@@ -1055,34 +1066,22 @@ class ConfigureMockup(MockupView):
 
     def _set_action_commands(self, action: ActionExample | None) -> None:
         state = tk.NORMAL if action is not None else tk.DISABLED
-        archived = action is not None and action.state == "Archived"
-        self.action_edit_button.configure(state=state)
-        self.action_lifecycle_button.configure(
-            state=state,
-            text="Restore..." if archived else "Archive...",
+        legacy_inactive = action is not None and action.state == "Archived"
+        self.action_edit_button.configure(
+            state=tk.DISABLED if legacy_inactive else state
         )
-        self.action_delete_button.configure(
-            state=tk.NORMAL if archived else tk.DISABLED
+        self.action_placements_button.configure(
+            state=tk.DISABLED if legacy_inactive else state
         )
-        if archived:
-            self.action_delete_button.pack(side=tk.LEFT, padx=(6, 0))
-        else:
-            self.action_delete_button.pack_forget()
-
-    def _mock_lifecycle(self) -> None:
-        action = self._selected_action()
-        if action is None:
-            return
-        verb = "restore" if action.state == "Archived" else "archive"
-        self.status_var.set(f"Mockup only: would review references before {verb}.")
+        self.action_delete_button.configure(state=state)
 
     def _resize_action_columns(self, event: tk.Event) -> None:
         if not hasattr(self, "actions_tree"):
             return
         self.actions_tree.configure(
-            displaycolumns=("type", "contexts", "source")
-            if int(event.width) >= 720
-            else ("type", "source")
+            displaycolumns=("type", "contexts", "source", "state")
+            if int(event.width) >= 800
+            else ("type", "source", "state")
         )
 
 

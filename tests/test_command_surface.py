@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +30,23 @@ from context_palette.work_items import WorkItemReference
 
 
 class CommandSurfaceTests(unittest.TestCase):
+    def test_command_surface_read_failures_are_reported_as_domain_errors(self):
+        path = Path("command-surface.json")
+        failures = (
+            (PermissionError("access denied"), "could not be read"),
+            (OSError("device unavailable"), "could not be read"),
+            (
+                UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid byte"),
+                "not valid UTF-8",
+            ),
+        )
+
+        for failure, message in failures:
+            with self.subTest(failure=type(failure).__name__):
+                with patch.object(Path, "read_text", side_effect=failure):
+                    with self.assertRaisesRegex(CommandSurfaceError, message):
+                        load_command_groups(path)
+
     def test_mixed_targets_preserve_action_and_work_item_order(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "local.json"

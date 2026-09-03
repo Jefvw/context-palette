@@ -79,7 +79,7 @@ configuration action files.
 | --- | --- |
 | `id`, `title` | Stable identity and visible name |
 | `type`, `value` | Allow-listed behavior and its primary configured value |
-| `state` | Permanent `Active` or `Archived` lifecycle |
+| `state` | `Active`; legacy files may contain deletion-only `Archived` records |
 | `arguments`, `working_directory` | Structured launch details where supported |
 | `tags`, `description` | Search and explanation metadata |
 | `quick_action_path` | Optional derived-menu path for Password, Folder, or Prompt actions |
@@ -186,7 +186,7 @@ Action, but the resulting Action is independent.
 | --- | --- |
 | Context membership/preference → Action | Hard; the Action must exist |
 | Personal Context membership/preference → Work Item | Soft; retained while its source/item is unavailable |
-| Legacy palette pin → Action | Compatibility-only hard reference; still cleaned during Action lifecycle changes but not projected or executed |
+| Legacy palette pin → Action | Compatibility-only hard reference; still cleaned during Action deletion but not projected or executed |
 | Palette Context slot → Action or Work Item | Action is hard; Work Item is soft |
 | Legacy palette focus/context-slot key → Context | Canonicalized case-insensitively for compatibility; unknown historical slot keys are currently preserved |
 | Quick-action Action target → Action | Hard; the Action must exist |
@@ -257,8 +257,9 @@ must be rebuilt from the restored persisted model and current environment.
 model for the structured assets above. It loads each asset independently through
 its existing domain loader so a malformed file does not suppress unrelated
 state or counts. Its snapshot retains Built-in and personal Actions, Contexts,
-and command surfaces separately; stored Archived Actions remain present, while
-the combined executable Action projection contains Active Actions only. Ordered
+and command surfaces separately; stored legacy inactive Actions remain present
+for deletion compatibility, while the combined executable Action projection
+contains Active Actions only. Ordered
 collections are tuples and dictionary-like data is exposed read-only, including
 a defensive copy of palette Context slots.
 

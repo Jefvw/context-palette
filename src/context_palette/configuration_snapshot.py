@@ -893,7 +893,7 @@ def _report_action_reference(
             else ValidationIssueCode.ACTION_REFERENCE_MISSING
         ),
         asset_id,
-        f"{owner} references {'archived' if archived else 'missing'} action: "
+        f"{owner} references {'legacy inactive' if archived else 'missing'} action: "
         f"{action_id}",
         ValidationCategory.REFERENCE,
         (action_id,),

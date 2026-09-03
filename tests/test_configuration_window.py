@@ -38,6 +38,12 @@ from context_palette.configuration_window import (
     _focus_entry,
 )
 from context_palette.action_deletion import ActionDeletionError, ActionDeletionReport
+from context_palette.action_configured_placement import (
+    ConfiguredActionPlacementInventory,
+    ConfiguredPlacementError,
+    ConfiguredPlacementKey,
+    ConfiguredPlacementLocation,
+)
 from context_palette.action_suggestions import ActionCreationSuggestion
 from context_palette.action_bound_quick_actions import action_bound_quick_groups
 from context_palette.action_picker import ActionPickerField
@@ -51,6 +57,7 @@ from context_palette.command_surface import (
 from context_palette.contexts import ContextDefinition
 from context_palette.palette_items import PaletteItemReference
 from context_palette.palette_state import PaletteState, load_palette_state
+from context_palette.quick_menu_path_dialog import QuickMenuPlacementSelection
 from context_palette.work_items import DiscoveredWorkItem, WorkItemReference
 
 
@@ -91,6 +98,20 @@ class FakeWindow:
     def update(self) -> None:
         self.update_calls += 1
 
+
+def configured_placement_inventory(
+    storage: str,
+    locations: tuple[ConfiguredPlacementLocation, ...],
+    current: tuple[ConfiguredPlacementKey, ...] = (),
+) -> ConfiguredActionPlacementInventory:
+    return ConfiguredActionPlacementInventory(
+        action_id="",
+        action_title="",
+        action_state="Active",
+        action_storage=storage,
+        locations=locations,
+        current_locations=current,
+    )
 
 class FakeFocusWindow:
     def __init__(self) -> None:
@@ -918,6 +939,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.quick_item_move_menu = Mock()
         configuration.quick_item_move_button = Mock()
         configuration.quick_item_delete_button = Mock()
+        configuration.quick_item_remove_button = Mock()
 
         configuration._update_button_preview()
 
@@ -986,6 +1008,45 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.quick_item_edit_button.pack.assert_called_once()
         configuration.quick_item_move_button.pack.assert_not_called()
         configuration.quick_item_delete_button.pack.assert_not_called()
+
+    def test_automatic_root_action_explains_delete_and_has_no_remove_command(
+        self,
+    ) -> None:
+        action = Action("folder", "Reports folder", "General", "open_folder", ".")
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.actions = [action]
+        configuration.button_tree = FakeSelectedActionTree("automatic-folder")
+        configuration.action_bound_button_records = {
+            "automatic-folder": ActionBoundQuickSelection(
+                "Folders",
+                "open_folder",
+                (),
+                action.id,
+            )
+        }
+        configuration.button_preview_var = FakeVariable()
+        configuration.button_detail_title_var = FakeVariable()
+        configuration.quick_item_edit_button = Mock()
+        configuration.new_quick_item_button = Mock()
+        configuration.quick_item_move_menu = Mock()
+        configuration.quick_item_move_button = Mock()
+        configuration.quick_item_delete_button = Mock()
+        configuration.quick_item_remove_button = Mock()
+
+        configuration._update_button_preview()
+
+        configuration.quick_item_remove_button.configure.assert_called_once_with(
+            state="disabled"
+        )
+        configuration.quick_item_remove_button.pack.assert_not_called()
+        self.assertIn(
+            "must remain in this automatic menu",
+            configuration.button_preview_var.value,
+        )
+        self.assertIn(
+            "delete the Action from Ac",
+            configuration.button_preview_var.value,
+        )
 
     def test_configured_quick_manager_selects_exact_stable_submenu(self) -> None:
         child = CommandItem("child", "Child")
@@ -1068,6 +1129,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.quick_item_move_menu = Mock()
         configuration.quick_item_move_button = Mock()
         configuration.quick_item_delete_button = Mock()
+        configuration.quick_item_remove_button = Mock()
 
         configuration._update_button_preview()
 
@@ -1085,12 +1147,18 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.quick_item_delete_button.configure.assert_called_once_with(
             state="disabled"
         )
+        configuration.quick_item_remove_button.configure.assert_called_once_with(
+            state="normal"
+        )
         configuration.quick_item_edit_button.pack.assert_called_once()
         configuration.new_quick_item_button.pack.assert_not_called()
         configuration.quick_item_move_button.pack.assert_not_called()
         configuration.quick_item_delete_button.pack.assert_not_called()
+        configuration.quick_item_remove_button.pack.assert_called_once()
+        self.assertIn("ID: folder", configuration.button_preview_var.value)
+        self.assertIn("moves it one level up", configuration.button_preview_var.value)
 
-    def test_automatic_branch_offers_typed_add_and_matching_actions(self) -> None:
+    def test_automatic_branch_offers_typed_add_and_submenu_management(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         configuration.actions = []
         configuration.button_tree = FakeSelectedActionTree("automatic-work")
@@ -1116,8 +1184,12 @@ class ConfigurationDialogTests(unittest.TestCase):
             state="normal",
         )
         configuration.quick_item_edit_button.configure.assert_called_once_with(
-            text="Find matching Actions…",
+            text="Manage this submenu…",
             state="normal",
+        )
+        self.assertIn(
+            "creates, renames, moves, or removes derived submenus",
+            configuration.button_preview_var.value,
         )
         configuration.new_quick_item_button.pack.assert_called_once()
         configuration.quick_item_edit_button.pack.assert_called_once()
@@ -1129,7 +1201,6 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.stored_actions = [action]
         configuration.initial_action_id = None
         configuration.action_filter_var = FakeVariable("hidden query")
-        configuration.action_state_filter_var = FakeVariable("Archived")
         configuration.notebook = Mock()
         configuration.work_items_panel = Mock()
         configuration.window = Mock()
@@ -1153,7 +1224,6 @@ class ConfigurationDialogTests(unittest.TestCase):
             callback()
 
         self.assertEqual(configuration.action_filter_var.value, "")
-        self.assertEqual(configuration.action_state_filter_var.value, "Active")
         self.assertEqual(configuration.focus_context, "Customer")
         configuration._reload.assert_called_once_with()
         configuration.notebook.select.assert_called_once_with(1)
@@ -1334,6 +1404,33 @@ class ConfigurationDialogTests(unittest.TestCase):
             configuration._create_action_for_type("copy_text")
 
         self.assertEqual(dialog.call_args.kwargs["initial_contexts"], ("Customer",))
+
+    def test_folder_creation_receives_both_storage_placement_inventories(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.focus_context = "General"
+        configuration.local_actions_path = Path("local_actions.json")
+        configuration.window = Mock()
+        configuration.actions = []
+        configuration.contexts = []
+        configuration.local_contexts = []
+        configuration._save_action = Mock()
+        configuration.action_creation_dialog = None
+        inventories = {
+            LOCAL_DESTINATION: configured_placement_inventory("local", ()),
+            PROJECT_DESTINATION: configured_placement_inventory("shared", ()),
+        }
+        configuration._draft_action_placement_inventories = Mock(
+            return_value=inventories
+        )
+
+        with patch("context_palette.configuration_window.ActionDialog") as dialog:
+            configuration._create_action_for_type("open_folder")
+
+        self.assertIs(
+            dialog.call_args.kwargs["configured_placement_inventories"],
+            inventories,
+        )
+        configuration._draft_action_placement_inventories.assert_called_once_with()
 
     def test_workspace_suggestion_prefills_the_existing_creation_dialog(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
@@ -1686,10 +1783,10 @@ class ConfigurationDialogTests(unittest.TestCase):
         self.assertEqual(configuration.action_tree.seen, "action-1")
         self.assertEqual(
             configuration.action_tree.configuration["displaycolumns"],
-            ("type", "contexts", "source"),
+            ("type", "contexts", "source", "state"),
         )
 
-    def test_action_state_filter_shows_archived_records_without_exposing_them_as_active(self) -> None:
+    def test_actions_list_shows_legacy_inactive_without_exposing_it_as_active(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         active = Action("active", "Active", "General", "copy_text", "one")
         archived = Action(
@@ -1705,21 +1802,24 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.local_action_ids = {"active", "archived"}
         configuration.initial_action_id = None
         configuration.action_filter_var = FakeVariable()
-        configuration.action_state_filter_var = FakeVariable("Archived")
         configuration.action_filter_count_var = FakeVariable()
         configuration.action_tree = FakeActionTree()
 
         configuration._render_actions()
 
-        self.assertEqual(configuration.action_tree.inserted, ["action-1"])
-        self.assertEqual(configuration.action_filter_count_var.value, "1 archived")
+        self.assertEqual(configuration.action_tree.inserted, ["action-0", "action-1"])
+        self.assertEqual(configuration.action_filter_count_var.value, "2 actions")
         self.assertEqual(
             configuration.action_tree.configuration["displaycolumns"],
-            ("type", "contexts", "source"),
+            ("type", "contexts", "source", "state"),
+        )
+        self.assertEqual(
+            configuration.action_tree.rows["action-1"][1]["values"][-1],
+            "Legacy inactive",
         )
         self.assertEqual(configuration.actions, [active])
 
-    def test_permanent_delete_is_visible_only_for_archived_actions(self) -> None:
+    def test_direct_delete_is_available_for_active_and_legacy_inactive_actions(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         active = Action("active", "Active", "General", "copy_text", "one")
         archived = Action(
@@ -1737,34 +1837,88 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.action_detail_title_var = FakeVariable()
         configuration.action_detail_summary_var = FakeVariable()
         configuration.action_edit_button = Mock()
-        configuration.action_lifecycle_button = Mock()
+        configuration.action_placements_button = Mock()
         configuration.delete_action_button = Mock()
 
         configuration._update_action_controls()
 
-        configuration.delete_action_button.configure.assert_called_with(
-            state=tk.DISABLED
+        configuration.action_placements_button.configure.assert_called_with(
+            state=tk.NORMAL
         )
-        configuration.delete_action_button.pack_forget.assert_called_once_with()
-        configuration.delete_action_button.pack.assert_not_called()
+        configuration.delete_action_button.configure.assert_called_with(
+            state=tk.NORMAL
+        )
 
         configuration.action_tree = FakeSelectedActionTree("action-1")
         configuration.delete_action_button.reset_mock()
 
         configuration._update_action_controls()
 
+        configuration.action_placements_button.configure.assert_called_with(
+            state=tk.DISABLED
+        )
         configuration.delete_action_button.configure.assert_called_with(
             state=tk.NORMAL
         )
-        configuration.delete_action_button.pack.assert_called_once_with(
-            side=tk.LEFT,
-            padx=(6, 0),
+        configuration.action_edit_button.configure.assert_called_with(
+            state=tk.DISABLED
         )
-        configuration.delete_action_button.pack_forget.assert_not_called()
 
-    def test_archive_confirmation_reports_impact_and_runs_lifecycle_service(self) -> None:
+    def test_action_card_shows_exact_automatic_quick_menu_location(self) -> None:
+        folder = Action(
+            "folder",
+            "Reports",
+            "General",
+            "open_folder",
+            ".",
+            quick_action_path=("Work", "Reports"),
+        )
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
-        action = Action("local", "Local action", "General", "copy_text", "one")
+        configuration.actions = [folder]
+        configuration.stored_actions = [folder]
+        configuration.local_action_ids = {folder.id}
+        configuration.action_tree = FakeSelectedActionTree("action-0")
+        configuration.action_detail_title_var = FakeVariable()
+        configuration.action_detail_summary_var = FakeVariable()
+        configuration.action_edit_button = Mock()
+        configuration.action_placements_button = Mock()
+        configuration.delete_action_button = Mock()
+        configuration.groups = [
+            CommandGroup(
+                "apps",
+                "Apps",
+                (
+                    CommandItem(
+                        "work",
+                        "Work",
+                        targets=(CommandTarget(action_id=folder.id),),
+                    ),
+                ),
+                action_ids=(folder.id,),
+            )
+        ]
+
+        configuration._update_action_controls()
+
+        self.assertIn(
+            "Automatic: Folders > Work > Reports",
+            configuration.action_detail_summary_var.value,
+        )
+        self.assertIn(
+            "Configured menus: Apps; Apps > Work",
+            configuration.action_detail_summary_var.value,
+        )
+
+    def test_active_action_deletion_reviews_impact_and_runs_direct_service(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        action = Action(
+            "local",
+            "Local folder",
+            "General",
+            "open_folder",
+            r"D:\work",
+            quick_action_path=("Development",),
+        )
         configuration.actions = [action]
         configuration.stored_actions = [action]
         configuration.local_action_ids = {"local"}
@@ -1778,120 +1932,89 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.palette_path = Path("palette.json")
         configuration.window = FakeWindow()
         configuration.initial_action_id = action.id
-        configuration.action_state_filter_var = FakeVariable("Active")
         configuration.feedback_var = FakeVariable()
         configuration.feedback_label = Mock()
         configuration.on_change = Mock()
         configuration._reload = Mock()
 
+        reviewed_action = Action(
+            "local",
+            "Reviewed folder",
+            "General",
+            "open_folder",
+            r"D:\reviewed",
+            quick_action_path=("Reviewed",),
+        )
+        deletion_plan = Mock(
+            target=reviewed_action,
+            impact=ActionDeletionReport(3, 1, 3),
+        )
         with (
             patch(
-                "context_palette.configuration_window.inspect_action_references",
-                return_value=ActionDeletionReport(3, 1, 2),
-            ),
+                "context_palette.configuration_window.plan_action_deletion",
+                return_value=deletion_plan,
+            ) as plan_delete,
             patch(
                 "context_palette.configuration_window.messagebox.askyesno",
                 return_value=True,
             ) as confirmation,
             patch(
-                "context_palette.configuration_window.archive_action_and_references",
+                "context_palette.configuration_window.commit_action_deletion",
                 return_value=ActionDeletionReport(3, 1, 3),
-            ) as archive,
+            ) as delete,
         ):
-            configuration._change_action_state()
+            configuration._delete_action()
 
         self.assertIn("3 saved reference(s)", confirmation.call_args.args[1])
-        self.assertIn("does not recreate", confirmation.call_args.args[1])
-        self.assertIn("deleted permanently", confirmation.call_args.args[1])
-        archive.assert_called_once()
-        self.assertEqual(configuration.action_state_filter_var.value, "Archived")
-        self.assertEqual(configuration.initial_action_id, action.id)
+        self.assertIn("Reviewed folder", confirmation.call_args.args[1])
+        self.assertIn("Folders > Reviewed", confirmation.call_args.args[1])
+        self.assertNotIn("Folders > Development", confirmation.call_args.args[1])
+        self.assertIn("External file", confirmation.call_args.args[1])
+        self.assertIn("Action ID: local", confirmation.call_args.args[1])
+        plan_delete.assert_called_once_with(
+            Path("local-actions.json"),
+            action.id,
+            context_paths=(Path("contexts.json"), Path("local-contexts.json")),
+            command_surface_paths=(
+                Path("commands.json"),
+                Path("local-commands.json"),
+            ),
+            palette_path=Path("palette.json"),
+            sequence_paths=(
+                Path("shared-actions.json"),
+                Path("local-actions.json"),
+            ),
+        )
+        delete.assert_called_once_with(deletion_plan)
+        self.assertEqual(configuration.stored_actions, [])
+        self.assertEqual(configuration.initial_action_id, None)
         configuration.on_change.assert_called_once_with()
         configuration._reload.assert_called_once_with()
-        self.assertIn("Archived action", configuration.feedback_var.value)
-        self.assertIn("Delete permanently", configuration.feedback_var.value)
+        self.assertIn("Deleted action", configuration.feedback_var.value)
 
-    def test_restore_switches_to_active_and_does_not_claim_assignments_return(self) -> None:
+    def test_legacy_inactive_action_cannot_be_edited_or_restored(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         action = Action(
             "shared",
             "Shared action",
             "General",
-            "copy_text",
-            "one",
+            "open_folder",
+            r"D:\work",
             state="Archived",
+            quick_action_path=("Development",),
         )
         configuration.actions = []
         configuration.stored_actions = [action]
         configuration.local_action_ids = set()
-        configuration.action_tree = FakeSelectedActionTree("action-0")
-        configuration.shared_actions_path = Path("shared-actions.json")
-        configuration.local_actions_path = Path("local-actions.json")
         configuration.window = FakeWindow()
-        configuration.action_state_filter_var = FakeVariable("Archived")
-        configuration.feedback_var = FakeVariable()
-        configuration.feedback_label = Mock()
-        configuration.on_change = Mock()
-        configuration._reload = Mock()
 
-        with (
-            patch(
-                "context_palette.configuration_window.messagebox.askyesno",
-                return_value=True,
-            ) as confirmation,
-            patch("context_palette.configuration_window.restore_action") as restore,
-        ):
-            configuration._change_action_state()
+        with patch(
+            "context_palette.configuration_window.messagebox.showinfo"
+        ) as information:
+            configuration._edit_action_record(action)
 
-        self.assertIn("will not be recreated", confirmation.call_args.args[1])
-        self.assertIn("tracked through Git", confirmation.call_args.args[1])
-        restore.assert_called_once_with(Path("shared-actions.json"), "shared")
-        self.assertEqual(configuration.action_state_filter_var.value, "Active")
-        self.assertEqual(configuration.initial_action_id, "shared")
-        self.assertIn("Reassign saved placements", configuration.feedback_var.value)
-
-    def test_archive_failure_reloads_views_that_may_have_lost_placements(self) -> None:
-        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
-        action = Action("local", "Local action", "General", "copy_text", "one")
-        configuration.actions = [action]
-        configuration.stored_actions = [action]
-        configuration.local_action_ids = {"local"}
-        configuration.action_tree = FakeSelectedActionTree("action-0")
-        configuration.shared_actions_path = Path("shared-actions.json")
-        configuration.local_actions_path = Path("local-actions.json")
-        configuration.contexts_path = Path("contexts.json")
-        configuration.local_contexts_path = Path("local-contexts.json")
-        configuration.command_surface_path = Path("commands.json")
-        configuration.local_command_surface_path = Path("local-commands.json")
-        configuration.palette_path = Path("palette.json")
-        configuration.window = FakeWindow()
-        configuration.on_change = Mock()
-        configuration._reload = Mock()
-
-        with (
-            patch(
-                "context_palette.configuration_window.inspect_action_references",
-                return_value=ActionDeletionReport(1, 0, 1),
-            ),
-            patch(
-                "context_palette.configuration_window.messagebox.askyesno",
-                return_value=True,
-            ),
-            patch(
-                "context_palette.configuration_window.archive_action_and_references",
-                side_effect=ActionDeletionError(
-                    "The Action remains Active; placements may have changed."
-                ),
-            ),
-            patch(
-                "context_palette.configuration_window.messagebox.showerror"
-            ) as error,
-        ):
-            configuration._change_action_state()
-
-        configuration.on_change.assert_called_once_with()
-        configuration._reload.assert_called_once_with()
-        self.assertIn("remains Active", error.call_args.args[1])
+        self.assertEqual(information.call_args.args[0], "Legacy inactive Action")
+        self.assertIn("can only be deleted", information.call_args.args[1])
 
     def test_editing_shared_action_warns_and_saves_to_shared_file(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
@@ -1968,7 +2091,50 @@ class ConfigurationDialogTests(unittest.TestCase):
             configuration.on_change.assert_called_once_with()
             configuration._reload.assert_called_once_with()
 
-    def test_archived_action_edit_requires_restore_before_context_assignment(self) -> None:
+    def test_folder_edit_stages_current_configured_locations_in_same_form(self) -> None:
+        folder = Action(
+            "folder",
+            "Folder",
+            "General",
+            "open_folder",
+            ".",
+        )
+        key = ConfiguredPlacementKey("local", "apps")
+        inventory = configured_placement_inventory("local", (), (key,))
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.actions = [folder]
+        configuration.stored_actions = [folder]
+        configuration.local_action_ids = {folder.id}
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.shared_actions_path = Path("actions.json")
+        configuration.contexts = []
+        configuration.window = FakeWindow()
+        configuration.action_edit_dialog = None
+        configuration._draft_action_placement_inventories = Mock(
+            return_value={LOCAL_DESTINATION: inventory}
+        )
+        configuration._save_edited_action = Mock(return_value=True)
+
+        with patch("context_palette.configuration_window.ActionDialog") as dialog:
+            configuration._edit_action_record(folder)
+            save_callback = dialog.call_args.args[3]
+            self.assertTrue(save_callback(folder, (key,)))
+
+        self.assertEqual(
+            dialog.call_args.kwargs["initial_destination"],
+            LOCAL_DESTINATION,
+        )
+        self.assertEqual(
+            dialog.call_args.kwargs["configured_placement_inventories"],
+            {LOCAL_DESTINATION: inventory},
+        )
+        configuration._save_edited_action.assert_called_once_with(
+            folder,
+            Path("local-actions.json"),
+            (key,),
+        )
+
+    def test_legacy_inactive_action_edit_is_rejected(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         archived = Action(
             "archived",
@@ -2004,7 +2170,7 @@ class ConfigurationDialogTests(unittest.TestCase):
             )
 
         self.assertFalse(saved)
-        self.assertIn("Restore it first", error.call_args.args[1])
+        self.assertIn("can only be deleted", error.call_args.args[1])
         update.assert_not_called()
 
     def test_action_edit_write_failure_preserves_file_and_open_editor_state(self) -> None:
@@ -2484,31 +2650,158 @@ class ConfigurationDialogTests(unittest.TestCase):
 
         configuration._edit_action_record.assert_called_once_with(folder)
 
-    def test_editing_automatic_folder_group_opens_filtered_actions(self) -> None:
+    def test_removing_automatic_leaf_opens_exact_review_preselected(self) -> None:
+        folder = Action(
+            "folder-id",
+            "D:\\dev",
+            "General",
+            "open_folder",
+            r"D:\dev",
+            quick_action_path=("Development",),
+        )
+        selection = ActionBoundQuickSelection(
+            "Folders",
+            "open_folder",
+            ("Development",),
+            folder.id,
+        )
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
-        configuration.actions = []
+        configuration.button_tree = FakeSelectedActionTree("automatic-folder")
+        configuration.action_bound_button_records = {
+            "automatic-folder": selection,
+        }
+        organizer = Mock()
+        configuration._open_action_quick_menu_organizer = Mock(
+            return_value=organizer
+        )
+
+        configuration._remove_action_bound_leaf_from_submenu()
+
+        configuration._open_action_quick_menu_organizer.assert_called_once_with(
+            selection
+        )
+        organizer.review_action_removal.assert_called_once_with(folder.id)
+
+    def test_editing_automatic_folder_group_opens_exact_organizer(self) -> None:
+        folder = Action(
+            "folder",
+            "Reports",
+            "General",
+            "open_folder",
+            ".",
+            quick_action_path=("Work",),
+        )
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.actions = [folder]
+        configuration.stored_actions = [folder]
+        configuration.local_action_ids = {folder.id}
         configuration.button_tree = FakeSelectedActionTree("automatic-folders")
         configuration.action_bound_button_records = {
             "automatic-folders": ActionBoundQuickSelection(
                 "Folders",
                 "open_folder",
+                ("Work",),
             )
         }
-        configuration.notebook = FakeNotebook(selected=4)
-        configuration.action_filter_var = FakeVariable()
-        configuration.action_state_filter_var = FakeVariable("Archived")
-        configuration.action_filter_entry = FakeEntry()
-        configuration.feedback_var = FakeVariable()
-        configuration.feedback_label = Mock()
+        configuration.window = FakeWindow()
+        configuration.shared_actions_path = Path("actions.json")
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.on_change = Mock()
+        configuration.action_quick_menu_organization_window = None
 
-        configuration._edit_button()
+        with patch(
+            "context_palette.configuration_window.ActionQuickMenuOrganizationWindow"
+        ) as organizer:
+            opened = organizer.return_value
+            opened.window = Mock()
+            configuration._edit_button()
 
-        self.assertEqual(configuration.notebook.selected, 1)
-        self.assertEqual(configuration.action_state_filter_var.value, "Active")
-        self.assertEqual(configuration.action_filter_var.value, "Open a folder")
-        self.assertEqual(configuration.action_filter_entry.focus_calls, 1)
-        self.assertIsNotNone(configuration.action_filter_entry.selection)
-        self.assertIn("Folders action", configuration.feedback_var.value)
+        organizer.assert_called_once_with(
+            configuration.window,
+            group_label="Folders",
+            action_type="open_folder",
+            actions=[folder],
+            local_action_ids={folder.id},
+            current_path=("Work",),
+            shared_actions_path=configuration.shared_actions_path,
+            local_actions_path=configuration.local_actions_path,
+            on_change=configuration._automatic_quick_menu_changed,
+            on_refresh=configuration._reload,
+        )
+        self.assertIs(
+            configuration.action_quick_menu_organization_window,
+            opened,
+        )
+
+    def test_requesting_another_automatic_menu_replaces_open_organizer(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.actions = []
+        configuration.stored_actions = []
+        configuration.local_action_ids = set()
+        configuration.window = FakeWindow()
+        configuration.shared_actions_path = Path("actions.json")
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.on_change = Mock()
+        existing = Mock()
+        existing.window.winfo_exists.return_value = True
+        existing.action_type = "open_folder"
+        existing.current_path = ("Work",)
+        configuration.action_quick_menu_organization_window = existing
+
+        with patch(
+            "context_palette.configuration_window.ActionQuickMenuOrganizationWindow"
+        ) as organizer:
+            opened = organizer.return_value
+            opened.window = Mock()
+            configuration._open_action_quick_menu_organizer(
+                ActionBoundQuickSelection("Prompts", "ai_prompt", ("Writing",))
+            )
+
+        existing.close.assert_called_once_with()
+        organizer.assert_called_once()
+        self.assertIs(
+            configuration.action_quick_menu_organization_window,
+            opened,
+        )
+
+    def test_action_placements_opens_configured_menu_manager(self) -> None:
+        action = Action(
+            "folder",
+            "Reports",
+            "General",
+            "open_folder",
+            ".",
+            quick_action_path=("Work",),
+        )
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.stored_actions = [action]
+        configuration.actions = [action]
+        configuration.action_tree = FakeSelectedActionTree("action-0")
+        configuration.window = FakeWindow()
+        configuration.shared_actions_path = Path("actions.json")
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.command_surface_path = Path("commands.json")
+        configuration.local_command_surface_path = Path("local-commands.json")
+        configuration.action_configured_placement_window = None
+
+        with patch(
+            "context_palette.configuration_window.ActionConfiguredPlacementWindow"
+        ) as manager:
+            opened = manager.return_value
+            opened.window = Mock()
+            configuration._manage_action_placements()
+
+        manager.assert_called_once_with(
+            configuration.window,
+            action=action,
+            shared_actions_path=configuration.shared_actions_path,
+            local_actions_path=configuration.local_actions_path,
+            shared_command_surface_path=configuration.command_surface_path,
+            local_command_surface_path=configuration.local_command_surface_path,
+            on_change=configuration._configured_action_placements_changed,
+            on_refresh=configuration._reload,
+        )
+        self.assertIs(configuration.action_configured_placement_window, opened)
 
     def test_project_quick_action_save_rejects_local_action_reference(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
@@ -2676,27 +2969,51 @@ class ConfigurationDialogTests(unittest.TestCase):
         self.assertEqual(error.call_args.args[0], "Quick-action item was not saved")
         self.assertIn("left unchanged", error.call_args.args[1])
 
-    def test_active_action_delete_explains_archive_requirement(self) -> None:
+    def test_active_action_can_be_deleted_directly(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         action = Action("local", "Active Action", "General", "copy_text", "one")
         configuration.actions = [action]
         configuration.stored_actions = [action]
+        configuration.local_action_ids = {action.id}
         configuration.action_tree = FakeSelectedActionTree("action-0")
+        configuration.contexts_path = Path("contexts.json")
+        configuration.local_contexts_path = Path("local-contexts.json")
+        configuration.command_surface_path = Path("commands.json")
+        configuration.local_command_surface_path = Path("local-commands.json")
+        configuration.palette_path = Path("palette.json")
+        configuration.shared_actions_path = Path("actions.json")
+        configuration.local_actions_path = Path("local-actions.json")
         configuration.window = FakeWindow()
+        configuration.initial_action_id = action.id
+        configuration.on_change = Mock()
+        configuration._reload = Mock()
+        configuration.feedback_var = FakeVariable()
+        configuration.feedback_label = Mock()
 
+        deletion_plan = Mock(
+            target=action,
+            impact=ActionDeletionReport(files_changed=1),
+        )
         with (
             patch(
-                "context_palette.configuration_window.messagebox.showinfo"
-            ) as information,
+                "context_palette.configuration_window.plan_action_deletion",
+                return_value=deletion_plan,
+            ),
             patch(
-                "context_palette.configuration_window.delete_action_and_references"
+                "context_palette.configuration_window.messagebox.askyesno",
+                return_value=True,
+            ) as confirmation,
+            patch(
+                "context_palette.configuration_window.commit_action_deletion",
+                return_value=ActionDeletionReport(files_changed=1),
             ) as delete,
         ):
             configuration._delete_action()
 
-        self.assertEqual(information.call_args.args[0], "Archive action first")
-        self.assertIn("keeps it selected", information.call_args.args[1])
-        delete.assert_not_called()
+        self.assertIn("Action ID: local", confirmation.call_args.args[1])
+        self.assertIn("not deleted or changed", confirmation.call_args.args[1])
+        delete.assert_called_once()
+        self.assertEqual(configuration.stored_actions, [])
 
     def test_cancelling_shared_action_deletion_preserves_action(self) -> None:
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
@@ -2718,25 +3035,31 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.command_surface_path = Path("commands.json")
         configuration.local_command_surface_path = Path("local-commands.json")
         configuration.palette_path = Path("palette.json")
+        configuration.shared_actions_path = Path("actions.json")
+        configuration.local_actions_path = Path("local-actions.json")
         configuration.window = FakeWindow()
 
+        deletion_plan = Mock(
+            target=configuration.actions[0],
+            impact=ActionDeletionReport(3, 1, 3),
+        )
         with (
             patch(
-                "context_palette.configuration_window.inspect_action_references",
-                return_value=ActionDeletionReport(3, 1, 2),
+                "context_palette.configuration_window.plan_action_deletion",
+                return_value=deletion_plan,
             ),
             patch(
                 "context_palette.configuration_window.messagebox.askyesno",
                 return_value=False,
             ) as confirmation,
             patch(
-                "context_palette.configuration_window.delete_action_and_references"
+                "context_palette.configuration_window.commit_action_deletion"
             ) as delete,
         ):
             configuration._delete_action()
 
         self.assertIn("3 saved reference(s)", confirmation.call_args.args[1])
-        self.assertIn("built-in action", confirmation.call_args.args[1])
+        self.assertIn("Built-in Action", confirmation.call_args.args[1])
         delete.assert_not_called()
         self.assertEqual([action.id for action in configuration.actions], ["shared"])
 
@@ -2765,23 +3088,23 @@ class ConfigurationDialogTests(unittest.TestCase):
         configuration.on_change = Mock()
         configuration._reload = Mock()
 
+        deletion_plan = Mock(
+            target=action,
+            impact=ActionDeletionReport(1, 0, 1),
+        )
         with (
             patch(
-                "context_palette.configuration_window.dependent_sequences",
-                return_value=(),
-            ),
-            patch(
-                "context_palette.configuration_window.inspect_action_references",
-                return_value=ActionDeletionReport(1, 0, 0),
+                "context_palette.configuration_window.plan_action_deletion",
+                return_value=deletion_plan,
             ),
             patch(
                 "context_palette.configuration_window.messagebox.askyesno",
                 return_value=True,
             ),
             patch(
-                "context_palette.configuration_window.delete_action_and_references",
+                "context_palette.configuration_window.commit_action_deletion",
                 side_effect=ActionDeletionError("The Action file is locked."),
-            ),
+            ) as delete,
             patch(
                 "context_palette.configuration_window.messagebox.showerror"
             ) as error,
@@ -2794,6 +3117,7 @@ class ConfigurationDialogTests(unittest.TestCase):
         self.assertIn("reloaded the current state", error.call_args.args[1])
         self.assertNotIn("fewer", error.call_args.args[1])
         self.assertEqual(configuration.stored_actions, [action])
+        delete.assert_called_once_with(deletion_plan)
 
     def test_focus_entry_schedules_focus_and_selects_existing_text(self) -> None:
         window = FakeFocusWindow()
@@ -3111,7 +3435,7 @@ class ConfigurationDialogTests(unittest.TestCase):
                 root.update_idletasks()
                 dialog.title_var.set("Open reports")
                 dialog.value.insert("1.0", directory)
-                dialog.quick_action_path_var.set("Work > Reports > Monthly")
+                dialog._set_quick_menu_path(("Work", "Reports", "Monthly"))
 
                 dialog._save()
 
@@ -3156,16 +3480,34 @@ class ConfigurationDialogTests(unittest.TestCase):
     def test_automatic_menu_creation_uses_full_action_form_and_prefills_branch(self) -> None:
         root = tk.Tk()
         root.withdraw()
+        apps_key = ConfiguredPlacementKey("local", "apps", ("work",))
+        apps_location = ConfiguredPlacementLocation(
+            key=apps_key,
+            menu_path=("Apps", "Work"),
+            assigned=False,
+            assignable=True,
+            unavailable_reason="",
+            action_target_count=0,
+            work_item_target_count=0,
+            child_menu_count=0,
+            reference_mode="targets",
+        )
         try:
             dialog = ActionDialog(
                 root,
                 "open_folder",
                 [],
-                lambda _action: True,
+                lambda _action, _destination, _locations: True,
                 context_names=["General", "Work"],
                 choose_destination=True,
                 initial_contexts=("Work",),
                 initial_quick_action_path=("Projects", "Reports"),
+                configured_placement_inventories={
+                    LOCAL_DESTINATION: configured_placement_inventory(
+                        "local",
+                        (apps_location,),
+                    )
+                },
             )
             root.update_idletasks()
 
@@ -3175,6 +3517,35 @@ class ConfigurationDialogTests(unittest.TestCase):
                 dialog.quick_action_path_var.get(),
                 "Projects > Reports",
             )
+            self.assertEqual(
+                dialog.quick_action_location_var.get(),
+                "Folders > Projects > Reports (automatic) · Also in: none",
+            )
+            self.assertEqual(
+                str(dialog.quick_action_location_entry.cget("state")),
+                "readonly",
+            )
+            self.assertEqual(
+                dialog.quick_action_location_label.cget("text"),
+                "Menu locations",
+            )
+            placement_tooltip = next(
+                tooltip
+                for tooltip in dialog.tooltips
+                if tooltip.widget is dialog.quick_action_location_entry
+            )
+            self.assertIn("appears automatically in Folders", placement_tooltip.text)
+            self.assertIn("other configured menus", placement_tooltip.text)
+            dialog._set_quick_menu_placements(
+                QuickMenuPlacementSelection(
+                    ("Projects", "Reports"),
+                    (apps_key,),
+                )
+            )
+            self.assertIn(
+                "Also in: Apps > Work",
+                dialog.quick_action_location_var.get(),
+            )
             self.assertTrue(dialog.context_field.entry.winfo_exists())
             self.assertTrue(dialog.tag_field.entry.winfo_exists())
             self.assertEqual(dialog.destination_var.get(), LOCAL_DESTINATION)
@@ -3182,6 +3553,324 @@ class ConfigurationDialogTests(unittest.TestCase):
             for child in root.winfo_children():
                 child.destroy()
             root.destroy()
+
+    def test_action_dialog_stages_automatic_and_configured_locations_together(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = tk.Tk()
+            root.withdraw()
+            apps_key = ConfiguredPlacementKey("local", "apps", ("work",))
+            apps_location = ConfiguredPlacementLocation(
+                key=apps_key,
+                menu_path=("Apps", "Work"),
+                assigned=False,
+                assignable=True,
+                unavailable_reason="",
+                action_target_count=0,
+                work_item_target_count=0,
+                child_menu_count=0,
+                reference_mode="targets",
+            )
+            captured: list[tuple[Action, str, tuple[ConfiguredPlacementKey, ...]]] = []
+            try:
+                dialog = ActionDialog(
+                    root,
+                    "open_folder",
+                    [],
+                    lambda action, destination, locations: (
+                        captured.append((action, destination, locations)) or True
+                    ),
+                    context_names=["General"],
+                    choose_destination=True,
+                    configured_placement_inventories={
+                        LOCAL_DESTINATION: configured_placement_inventory(
+                            "local",
+                            (apps_location,),
+                        )
+                    },
+                )
+                dialog.title_var.set("Open reports")
+                assert dialog.value is not None
+                dialog.value.insert("1.0", directory)
+                dialog._set_quick_menu_placements(
+                    QuickMenuPlacementSelection(("Reports",), (apps_key,))
+                )
+
+                dialog._save()
+
+                self.assertEqual(len(captured), 1)
+                action, destination, locations = captured[0]
+                self.assertEqual(action.quick_action_path, ("Reports",))
+                self.assertEqual(destination, LOCAL_DESTINATION)
+                self.assertEqual(locations, (apps_key,))
+                self.assertFalse(dialog.window.winfo_exists())
+            finally:
+                for child in root.winfo_children():
+                    child.destroy()
+                root.destroy()
+
+    def test_action_dialog_storage_change_clears_now_invalid_menu_location(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        shared_key = ConfiguredPlacementKey("shared", "standard", ("work",))
+        shared_available = ConfiguredPlacementLocation(
+            key=shared_key,
+            menu_path=("Standard", "Work"),
+            assigned=False,
+            assignable=True,
+            unavailable_reason="",
+            action_target_count=0,
+            work_item_target_count=0,
+            child_menu_count=0,
+            reference_mode="targets",
+        )
+        shared_blocked = ConfiguredPlacementLocation(
+            key=shared_key,
+            menu_path=("Standard", "Work"),
+            assigned=False,
+            assignable=False,
+            unavailable_reason="Built-in menus require a Built-in Action.",
+            action_target_count=0,
+            work_item_target_count=0,
+            child_menu_count=0,
+            reference_mode="targets",
+        )
+        try:
+            dialog = ActionDialog(
+                root,
+                "open_folder",
+                [],
+                lambda _action, _destination, _locations: True,
+                context_names=["General"],
+                choose_destination=True,
+                initial_destination=PROJECT_DESTINATION,
+                configured_placement_inventories={
+                    PROJECT_DESTINATION: configured_placement_inventory(
+                        "shared",
+                        (shared_available,),
+                    ),
+                    LOCAL_DESTINATION: configured_placement_inventory(
+                        "local",
+                        (shared_blocked,),
+                    ),
+                },
+            )
+            dialog._set_quick_menu_placements(
+                QuickMenuPlacementSelection((), (shared_key,))
+            )
+
+            dialog.destination_var.set(LOCAL_DESTINATION)
+
+            self.assertEqual(dialog.configured_location_keys, ())
+            self.assertIn("was cleared", dialog.placement_notice_var.get())
+            self.assertIn(
+                "Also in: none",
+                dialog.quick_action_location_var.get(),
+            )
+        finally:
+            for child in root.winfo_children():
+                child.destroy()
+            root.destroy()
+
+    def test_configuration_create_uses_composite_action_and_placement_save(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.shared_actions_path = Path("actions.json")
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.contexts_path = Path("contexts.json")
+        configuration.local_contexts_path = Path("local-contexts.json")
+        configuration.command_surface_path = Path("command-surface.json")
+        configuration.local_command_surface_path = Path(
+            "local-command-surface.json"
+        )
+        configuration.local_action_ids = set()
+        configuration.window = FakeWindow()
+        configuration.action_filter_var = FakeVariable()
+        configuration.feedback_var = FakeVariable()
+        configuration.feedback_label = Mock()
+        configuration.on_change = Mock()
+        configuration._reload = Mock()
+        action = Action(
+            "reports",
+            "Reports",
+            "General",
+            "open_folder",
+            ".",
+        )
+        key = ConfiguredPlacementKey("local", "apps")
+
+        with patch(
+            "context_palette.configuration_window.save_action_with_configured_placements"
+        ) as save:
+            saved = configuration._save_action(
+                action,
+                LOCAL_DESTINATION,
+                (key,),
+            )
+
+        self.assertTrue(saved)
+        save.assert_called_once_with(
+            action,
+            (key,),
+            action_is_local=True,
+            shared_actions_path=Path("actions.json"),
+            local_actions_path=Path("local-actions.json"),
+            shared_contexts_path=Path("contexts.json"),
+            local_contexts_path=Path("local-contexts.json"),
+            shared_command_surface_path=Path("command-surface.json"),
+            local_command_surface_path=Path("local-command-surface.json"),
+        )
+
+    def test_configuration_edit_uses_composite_action_and_placement_save(self) -> None:
+        original = Action(
+            "reports",
+            "Reports",
+            "General",
+            "open_folder",
+            ".",
+        )
+        edited = Action(
+            "reports",
+            "Reports renamed",
+            "General",
+            "open_folder",
+            ".",
+        )
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.actions = [original]
+        configuration.stored_actions = [original]
+        configuration.shared_actions_path = Path("actions.json")
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.contexts_path = Path("contexts.json")
+        configuration.local_contexts_path = Path("local-contexts.json")
+        configuration.command_surface_path = Path("command-surface.json")
+        configuration.local_command_surface_path = Path(
+            "local-command-surface.json"
+        )
+        configuration.local_action_ids = {original.id}
+        configuration.window = FakeWindow()
+        configuration.action_filter_var = FakeVariable()
+        configuration.feedback_var = FakeVariable()
+        configuration.feedback_label = Mock()
+        configuration.on_change = Mock()
+        configuration._reload = Mock()
+        key = ConfiguredPlacementKey("local", "apps")
+
+        with patch(
+            "context_palette.configuration_window.save_action_with_configured_placements"
+        ) as save:
+            saved = configuration._save_edited_action(
+                edited,
+                configuration.local_actions_path,
+                (key,),
+            )
+
+        self.assertTrue(saved)
+        save.assert_called_once_with(
+            edited,
+            (key,),
+            previous_action=original,
+            action_is_local=True,
+            shared_actions_path=Path("actions.json"),
+            local_actions_path=Path("local-actions.json"),
+            shared_contexts_path=Path("contexts.json"),
+            local_contexts_path=Path("local-contexts.json"),
+            shared_command_surface_path=Path("command-surface.json"),
+            local_command_surface_path=Path("local-command-surface.json"),
+        )
+
+    def test_incomplete_create_rollback_closes_editor_and_forces_reload(self) -> None:
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.shared_actions_path = Path("actions.json")
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.contexts_path = Path("contexts.json")
+        configuration.local_contexts_path = Path("local-contexts.json")
+        configuration.command_surface_path = Path("command-surface.json")
+        configuration.local_command_surface_path = Path(
+            "local-command-surface.json"
+        )
+        configuration.local_action_ids = set()
+        configuration.window = FakeWindow()
+        creation_dialog = Mock()
+        configuration.action_creation_dialog = creation_dialog
+        configuration.on_change = Mock()
+        configuration._reload = Mock()
+        action = Action("reports", "Reports", "General", "open_folder", ".")
+
+        with (
+            patch(
+                "context_palette.configuration_window.save_action_with_configured_placements",
+                side_effect=ConfiguredPlacementError(
+                    "rollback incomplete",
+                    rollback_completed=False,
+                ),
+            ),
+            patch("context_palette.configuration_window.messagebox.showerror"),
+        ):
+            saved = configuration._save_action(
+                action,
+                LOCAL_DESTINATION,
+                (),
+            )
+
+        self.assertFalse(saved)
+        creation_dialog.window.destroy.assert_called_once_with()
+        self.assertIsNone(configuration.action_creation_dialog)
+        configuration.on_change.assert_called_once_with()
+        configuration._reload.assert_called_once_with()
+
+    def test_incomplete_edit_rollback_closes_editor_and_forces_reload(self) -> None:
+        original = Action(
+            "reports",
+            "Reports",
+            "General",
+            "open_folder",
+            ".",
+        )
+        edited = Action(
+            "reports",
+            "Reports renamed",
+            "General",
+            "open_folder",
+            ".",
+        )
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.actions = [original]
+        configuration.stored_actions = [original]
+        configuration.shared_actions_path = Path("actions.json")
+        configuration.local_actions_path = Path("local-actions.json")
+        configuration.contexts_path = Path("contexts.json")
+        configuration.local_contexts_path = Path("local-contexts.json")
+        configuration.command_surface_path = Path("command-surface.json")
+        configuration.local_command_surface_path = Path(
+            "local-command-surface.json"
+        )
+        configuration.local_action_ids = {original.id}
+        configuration.window = FakeWindow()
+        edit_dialog = Mock()
+        configuration.action_edit_dialog = edit_dialog
+        configuration.on_change = Mock()
+        configuration._reload = Mock()
+
+        with (
+            patch(
+                "context_palette.configuration_window.save_action_with_configured_placements",
+                side_effect=ConfiguredPlacementError(
+                    "rollback incomplete",
+                    rollback_completed=False,
+                ),
+            ),
+            patch("context_palette.configuration_window.messagebox.showerror"),
+        ):
+            saved = configuration._save_edited_action(
+                edited,
+                configuration.local_actions_path,
+                (),
+            )
+
+        self.assertFalse(saved)
+        edit_dialog.window.destroy.assert_called_once_with()
+        self.assertIsNone(configuration.action_edit_dialog)
+        configuration.on_change.assert_called_once_with()
+        configuration._reload.assert_called_once_with()
 
     def test_transform_action_dialog_uses_readable_operation_and_parameters(self) -> None:
         root = tk.Tk()

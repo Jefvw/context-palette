@@ -4,6 +4,62 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Made runtime configuration reload atomic in memory. Actions, Contexts,
+  Quick actions, palette slots, and Work Item configuration are now staged as
+  one validated generation before any live launcher state changes. A late
+  validation or read failure keeps the complete previously accepted interface,
+  and files that change during staging are rejected for a fresh reload instead
+  of publishing a mixed generation.
+- Removed the ordinary Action Archive/Restore workflow. Active Actions now use
+  one reviewed permanent-delete operation, individually or through the
+  personal bulk-delete review. Deletion removes the Action's Context, shortcut,
+  and configured-menu references transactionally while leaving every external
+  target unchanged. Existing Archived records remain readable as
+  **Legacy inactive** and can only be deleted; they are never silently
+  reactivated or discarded. This supersedes the earlier unreleased
+  Active/Archived and two-stage-removal entries below.
+- Made automatic Passwords, Folders, and Prompts submenu management explicit.
+  **Manage menu…** now offers **New submenu**, and a selected derived submenu
+  offers **Rename**, **Move**, and **Remove submenu**. Creation requires an
+  Active Action because empty automatic branches are not stored. Removal
+  promotes direct Active Actions and nested branches to the parent and uses an
+  exact reviewed effect button such as **Remove
+  submenu; keep N Actions**; no Action or external target is deleted. Saved
+  configured menus retain their separate New/Edit/Reorder/Delete lifecycle.
+  An automatic Action leaf inside a submenu now has **Remove from submenu…**,
+  and the submenu organizer has **Remove selected from this submenu**. Both
+  promote exact Action IDs one level and keep the Actions and external targets;
+  an Action at the automatic root instead explains that deleting the Action is
+  the only way to remove it from runtime. Duplicate titles are disambiguated
+  with stable Action IDs. Fresh placement plans must still match the reviewed
+  source path and Active state, and Action deletion refuses a changed reviewed
+  saved-reference impact before writing.
+- Replaced the free-text automatic **Quick menu** path in Password, Folder,
+  and AI-prompt Action forms with a searchable tree chooser that shows the
+  actual Passwords, Folders, or Prompts structure, Action counts, an explicit
+  menu root, and bounded new-submenu creation. Configure → Quick actions now
+  also organizes existing matching Actions destination-first and can move or
+  rename a complete automatic branch with an exact Built-in/personal and
+  Active impact review. These operations change only saved placement;
+  empty derived branches disappear and no Action or external target is deleted.
+- Added one **Menu locations** chooser to Folder, Password, and AI-prompt
+  Action creation and editing. It shows the required type-driven automatic
+  location and optional configured menu roots/branches together, then saves
+  the Action, Context memberships, and configured references as one
+  rollback-protected change. The standalone **Other menus…** manager remains a
+  fast route for an already-saved Active Action's optional configured
+  references. One Action may appear in zero
+  or several configured menus in addition to its automatic menu.
+  Existing Built-in/My configuration ownership remains enforced, and stale or
+  incomplete-rollback outcomes stop further writes. This reuses the existing
+  command-surface schema; it does not merge automatic and configured menus or
+  migrate data.
+- Made second-PC startup detect a missing or stale core-requirements marker
+  before launching and provide the exact stop, setup, and restart sequence.
+  Native TkDND import, registration, binding, or show failures remain isolated
+  to the Drop target, but now clean up partial windows, write a useful local
+  diagnostic, set an actionable launcher status, and give explicit repair and
+  restart guidance through **More → Show drop target**.
 - Unified the already-open Excel workbook and worksheet chooser used by the
   live format-template and scientific-notation conversion Actions. Both now
   share the same disambiguated labels, captured-F9 workbook preference,

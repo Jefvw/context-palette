@@ -5,7 +5,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from dataclasses import dataclass
 from pathlib import Path
 import re
-from typing import Callable
+from typing import Callable, Iterable
 
 from .actions import (
     ACTION_BOUND_QUICK_MENU_SPECS,
@@ -26,10 +26,8 @@ from .actions import (
 )
 from .action_deletion import (
     ActionDeletionError,
-    archive_action_and_references,
-    delete_action_and_references,
-    inspect_action_references,
-    restore_action,
+    commit_action_deletion,
+    plan_action_deletion,
 )
 from .action_types import ACTION_TYPES, CREATABLE_ACTION_TYPES
 from .action_sequences import (
@@ -43,6 +41,20 @@ from .action_sequences import (
 from .action_suggestions import ActionCreationSuggestion
 from .action_type_picker import ActionTypePickerDialog, ActionTypePickerOption
 from .action_bound_quick_actions import action_bound_quick_groups
+from .action_quick_menu_organization_window import (
+    ActionQuickMenuOrganizationWindow,
+)
+from .action_configured_placement import (
+    ConfiguredActionPlacementInventory,
+    ConfiguredPlacementError,
+    ConfiguredPlacementKey,
+    configured_action_placement_paths,
+    draft_configured_action_placement_inventory,
+    save_action_with_configured_placements,
+)
+from .action_configured_placement_window import (
+    ActionConfiguredPlacementWindow,
+)
 from .action_bulk_window import ActionBulkWindow
 from .action_bulk_lifecycle_window import ActionBulkLifecycleWindow
 from .action_bulk_update import eligible_personal_actions_for_update
@@ -105,6 +117,11 @@ from .palette_state import (
     slot_display_number,
 )
 from .palette_items import PaletteItemReference
+from .quick_menu_path_dialog import (
+    QuickMenuPathDialog,
+    QuickMenuPlacementSelection,
+    quick_menu_root_label,
+)
 from .context_membership_field import (
     ContextMembershipField,
     TagSelectionField,
@@ -660,8 +677,6 @@ class ConfigurationWindow:
         self.groups: list[CommandGroup] = []
         self.action_filter_var = tk.StringVar()
         self.action_filter_count_var = tk.StringVar()
-        self.action_state_filter_var = tk.StringVar(value="Active")
-        self.action_state_help_var = tk.StringVar()
         self.context_filter_var = tk.StringVar()
         self.context_filter_count_var = tk.StringVar()
         self.button_filter_var = tk.StringVar()
@@ -781,8 +796,6 @@ class ConfigurationWindow:
         self.initial_action_id = initial_action_id
         if initial_action_id and self.action_filter_var.get():
             self.action_filter_var.set("")
-        if initial_action_id and self.action_state_filter_var.get() != "Active":
-            self.action_state_filter_var.set("Active")
         self._reload()
         self.notebook.select(CONFIGURATION_TAB_INDEXES.get(initial_tab, 0))
         if initial_work_item_key:
@@ -1138,7 +1151,7 @@ class ConfigurationWindow:
             ),
             (
                 "Find or edit Actions",
-                "Manage saved Actions and their Active or Archived state.",
+                "Manage saved Actions or delete them after one impact review.",
                 lambda: self._show_config_named_tab("actions"),
             ),
             (
@@ -1219,7 +1232,7 @@ class ConfigurationWindow:
         ).pack(anchor=tk.W)
         ttk.Label(
             heading,
-            text="Create, find, edit, archive, and restore saved Actions.",
+            text="Create, find, edit, and permanently delete saved Actions.",
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(2, 0))
         header_commands = ttk.Frame(header)
@@ -1254,7 +1267,7 @@ class ConfigurationWindow:
             command=self._show_bulk_action_update,
         )
         self.other_action_creation_menu.add_command(
-            label="Remove multiple personal Actions…",
+            label="Delete multiple personal Actions…",
             command=self._show_bulk_action_lifecycle,
         )
         self.other_action_creation_menu.add_separator()
@@ -1291,15 +1304,6 @@ class ConfigurationWindow:
             textvariable=self.action_filter_var,
         )
         self.action_filter_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(6, 8))
-        ttk.Label(filter_row, text="Show").pack(side=tk.LEFT)
-        self.action_state_filter = ttk.Combobox(
-            filter_row,
-            textvariable=self.action_state_filter_var,
-            values=("Active", "Archived", "All"),
-            state="readonly",
-            width=10,
-        )
-        self.action_state_filter.pack(side=tk.LEFT, padx=(6, 8))
         ttk.Label(
             filter_row,
             textvariable=self.action_filter_count_var,
@@ -1307,7 +1311,10 @@ class ConfigurationWindow:
         ).pack(side=tk.RIGHT)
         ttk.Label(
             tab,
-            textvariable=self.action_state_help_var,
+            text=(
+                "Legacy inactive records from older versions stay hidden from "
+                "runtime and can only be deleted."
+            ),
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(0, 5))
         self.action_tree_frame, self.action_tree = scrollable_tree(
@@ -1335,9 +1342,6 @@ class ConfigurationWindow:
             "<<TreeviewSelect>>", lambda _event: self._update_action_controls()
         )
         self.action_filter_var.trace_add("write", lambda *_args: self._render_actions())
-        self.action_state_filter_var.trace_add(
-            "write", lambda *_args: self._render_actions()
-        )
 
         selection = ttk.Frame(
             tab,
@@ -1362,7 +1366,7 @@ class ConfigurationWindow:
         )
         self.action_detail_title_label.grid(row=0, column=0, sticky=tk.EW)
         self.action_detail_summary_var = tk.StringVar(
-            value="Contexts, tags, ownership, and lifecycle appear here."
+            value="Contexts, tags, ownership, and availability appear here."
         )
         self.action_detail_summary_label = ttk.Label(
             selection,
@@ -1385,20 +1389,21 @@ class ConfigurationWindow:
             state=tk.DISABLED,
         )
         self.action_edit_button.pack(side=tk.LEFT)
-        self.action_lifecycle_button = ttk.Button(
+        self.action_placements_button = ttk.Button(
             self.action_commands_frame,
-            text="Archive…",
-            command=self._change_action_state,
+            text="Other menus…",
+            command=self._manage_action_placements,
             state=tk.DISABLED,
         )
-        self.action_lifecycle_button.pack(side=tk.LEFT, padx=(6, 0))
+        self.action_placements_button.pack(side=tk.LEFT, padx=(6, 0))
         self.delete_action_button = ttk.Button(
             self.action_commands_frame,
-            text="Delete permanently…",
+            text="Delete Action…",
             command=self._delete_action,
             state=tk.DISABLED,
             style="Danger.TButton",
         )
+        self.delete_action_button.pack(side=tk.LEFT, padx=(6, 0))
         selection.bind("<Configure>", self._resize_action_summary, add="+")
 
     def _resize_action_summary(self, event: tk.Event) -> None:
@@ -1738,20 +1743,20 @@ class ConfigurationWindow:
         heading.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Label(
             heading,
-            text="Manage Quick actions",
+            text="Manage Quick-action menus",
             style="Title.TLabel",
         ).pack(anchor=tk.W)
         ttk.Label(
             heading,
             text=(
-                "Arrange custom shortcut menus; Passwords, Folders, and Prompts "
-                "are generated from Actions."
+                "Manage saved menus and automatic menus. Passwords, Folders, "
+                "and Prompts are built from Action placements."
             ),
             style="Muted.TLabel",
         ).pack(anchor=tk.W, pady=(2, 0))
         self.new_quick_menu_button = ttk.Button(
             header,
-            text="New menu…",
+            text="New saved menu…",
             command=self._add_group,
             style="Accent.TButton",
         )
@@ -1780,7 +1785,7 @@ class ConfigurationWindow:
             ("source", "actions"),
         )
         self.button_tree.heading("#0", text="Menu / item")
-        self.button_tree.heading("source", text="Managed by")
+        self.button_tree.heading("source", text="Source")
         self.button_tree.heading("actions", text="Targets / contents")
         self.button_tree.column("#0", width=180, minwidth=150)
         self.button_tree.column("source", width=105, minwidth=100, stretch=False)
@@ -1868,6 +1873,12 @@ class ConfigurationWindow:
             style="Danger.TButton",
         )
         self.quick_item_delete_button.pack(side=tk.LEFT, padx=(6, 0))
+        self.quick_item_remove_button = ttk.Button(
+            button_commands,
+            text="Remove from submenu…",
+            command=self._remove_action_bound_leaf_from_submenu,
+            state=tk.DISABLED,
+        )
         self.button_tree.bind("<Double-1>", lambda _event: self._edit_button())
         self.button_tree.bind("<Return>", lambda _event: self._edit_button())
         self.button_tree.bind(
@@ -2085,6 +2096,22 @@ class ConfigurationWindow:
         initial_contexts = (
             () if authoring_context.casefold() == "general" else (authoring_context,)
         )
+        configured_placement_inventories: dict[
+            str, ConfiguredActionPlacementInventory
+        ] = {}
+        if action_type in ACTION_BOUND_QUICK_TYPES:
+            try:
+                configured_placement_inventories = (
+                    self._draft_action_placement_inventories()
+                )
+            except (ConfiguredPlacementError, OSError) as exc:
+                messagebox.showerror(
+                    "Menu locations are unavailable",
+                    "Context Palette could not review the available Quick-menu "
+                    f"locations.\n\n{exc}",
+                    parent=self.window,
+                )
+                return
         dialog = ActionDialog(
             self.window,
             action_type,
@@ -2098,6 +2125,7 @@ class ConfigurationWindow:
             initial_value=suggestion.value if suggestion is not None else "",
             suggested_from_workspace=suggestion is not None,
             initial_quick_action_path=initial_quick_action_path,
+            configured_placement_inventories=configured_placement_inventories,
         )
         self.action_creation_dialog = dialog
         dialog.window.bind(
@@ -2121,6 +2149,32 @@ class ConfigurationWindow:
             "General",
         )
 
+    def _draft_action_placement_inventories(
+        self,
+        action: Action | None = None,
+        *,
+        destination: str | None = None,
+    ) -> dict[str, ConfiguredActionPlacementInventory]:
+        """Load stable configured-menu choices for create/edit staging."""
+
+        destinations = (
+            (destination,)
+            if destination is not None
+            else (LOCAL_DESTINATION, PROJECT_DESTINATION)
+        )
+        return {
+            candidate: draft_configured_action_placement_inventory(
+                action_storage=(
+                    "local" if candidate == LOCAL_DESTINATION else "shared"
+                ),
+                action_id=action.id if action is not None else "",
+                action_title=action.title if action is not None else "",
+                shared_command_surface_path=self.command_surface_path,
+                local_command_surface_path=self.local_command_surface_path,
+            )
+            for candidate in destinations
+        }
+
     def _clear_action_creation_dialog(
         self,
         event: tk.Event,
@@ -2129,10 +2183,27 @@ class ConfigurationWindow:
         if event.widget is dialog.window and self.action_creation_dialog is dialog:
             self.action_creation_dialog = None
 
+    def _stop_action_editor_after_incomplete_rollback(
+        self,
+        dialog_attribute: str,
+    ) -> None:
+        """Close stale editor state and reload after an uncertain mutation."""
+
+        dialog = getattr(self, dialog_attribute, None)
+        if dialog is not None:
+            try:
+                dialog.window.destroy()
+            except tk.TclError:
+                pass
+        setattr(self, dialog_attribute, None)
+        self.on_change()
+        self._reload()
+
     def _save_action(
         self,
         action: Action,
         destination: str = LOCAL_DESTINATION,
+        configured_locations: Iterable[ConfiguredPlacementKey] | None = None,
     ) -> bool:
         local = destination != PROJECT_DESTINATION
         if (
@@ -2150,19 +2221,53 @@ class ConfigurationWindow:
             return False
         target_path = self.local_actions_path if local else self.shared_actions_path
         try:
-            append_actions_with_context_memberships(
-                target_path,
-                [action],
-                actions_are_local=local,
-                shared_contexts_path=self.contexts_path,
-                local_contexts_path=self.local_contexts_path,
+            if configured_locations is None:
+                append_actions_with_context_memberships(
+                    target_path,
+                    [action],
+                    actions_are_local=local,
+                    shared_contexts_path=self.contexts_path,
+                    local_contexts_path=self.local_contexts_path,
+                )
+            else:
+                save_action_with_configured_placements(
+                    action,
+                    tuple(configured_locations),
+                    action_is_local=local,
+                    shared_actions_path=self.shared_actions_path,
+                    local_actions_path=self.local_actions_path,
+                    shared_contexts_path=self.contexts_path,
+                    local_contexts_path=self.local_contexts_path,
+                    shared_command_surface_path=self.command_surface_path,
+                    local_command_surface_path=self.local_command_surface_path,
+                )
+        except (ActionError, ContextError, ConfiguredPlacementError, OSError) as exc:
+            rollback_unknown = (
+                isinstance(exc, ConfiguredPlacementError)
+                and exc.rollback_completed is False
             )
-        except (ActionError, ContextError, OSError) as exc:
+            if rollback_unknown:
+                detail = (
+                    f"Context Palette could not create this action.\n\n{exc}\n\n"
+                    "Some configuration files may have changed. The Action editor "
+                    "will close and Configure will reload. Inspect Actions and "
+                    "Quick actions before trying again."
+                )
+            else:
+                detail = (
+                    f"Context Palette could not create this action.\n\n{exc}\n\n"
+                    "No reviewed change was kept, or all participating files "
+                    "were restored."
+                )
             messagebox.showerror(
                 "Action was not created",
-                f"Context Palette could not create this action.\n\n{exc}",
+                detail,
                 parent=self.window,
             )
+            if rollback_unknown:
+                self._stop_action_editor_after_incomplete_rollback(
+                    "action_creation_dialog"
+                )
             return False
         self.on_change()
         self.initial_action_id = action.id
@@ -2563,8 +2668,8 @@ class ConfigurationWindow:
                 iid=group_iid,
                 text=group.label,
                 values=(
-                    "Automatic",
-                    f"{len(eligible_actions)} Active action(s) · edit actions to organize",
+                    "From Actions",
+                    f"{len(eligible_actions)} Active action(s) · choose Manage menu",
                 ),
                 tags=("automatic",),
                 open=True,
@@ -2596,7 +2701,7 @@ class ConfigurationWindow:
                         LOCAL_DESTINATION
                         if action.id in self.local_action_ids
                         else PROJECT_DESTINATION,
-                        "At menu root · edit Action to organize",
+                        f"At menu root · ID {action.id} · manage placement",
                     ),
                     tags=(
                         "local"
@@ -2639,7 +2744,7 @@ class ConfigurationWindow:
                         iid=item_iid,
                         text=item.label,
                         values=(
-                            "Automatic",
+                            "From Actions",
                             f"{len(direct_action_ids)} action(s)"
                             + (f" · {len(item.items)} submenu(s)" if item.items else ""),
                         ),
@@ -2668,7 +2773,7 @@ class ConfigurationWindow:
                                 LOCAL_DESTINATION
                                 if action.id in self.local_action_ids
                                 else PROJECT_DESTINATION,
-                                "Edit action to change its Quick menu path",
+                                f"ID {action.id} · manage or remove placement",
                             ),
                             tags=(
                                 "local"
@@ -2716,20 +2821,11 @@ class ConfigurationWindow:
     def _render_actions(self) -> None:
         self.action_tree.delete(*self.action_tree.get_children())
         query = self.action_filter_var.get()
-        state_filter_var = getattr(self, "action_state_filter_var", None)
-        state_filter = state_filter_var.get() if state_filter_var is not None else "Active"
         stored_actions = getattr(self, "stored_actions", self.actions)
-        state_actions = [
-            action
-            for action in stored_actions
-            if state_filter == "All" or action.state == state_filter
-        ]
         matching_iids: list[str] = []
         requested_iid: str | None = None
         for index, action in enumerate(stored_actions):
             local = action.id in self.local_action_ids
-            if action not in state_actions:
-                continue
             if not action_matches_filter(action, query, personal=local):
                 continue
             iid = f"action-{index}"
@@ -2742,7 +2838,7 @@ class ConfigurationWindow:
                     ACTION_TYPES[action.type].display_label,
                     ", ".join(action.effective_contexts) or "General only",
                     LOCAL_DESTINATION if local else PROJECT_DESTINATION,
-                    action.state,
+                    "Legacy inactive" if action.state == "Archived" else "Active",
                 ),
                 tags=(
                     "archived",
@@ -2759,43 +2855,12 @@ class ConfigurationWindow:
                 requested_iid = iid
         self.action_tree.tag_configure("shared", foreground="#666666")
         self.action_tree.tag_configure("archived", foreground="#777777")
-        self.action_tree.configure(
-            displaycolumns=(
-                ("type", "contexts", "source", "state")
-                if state_filter == "All"
-                else ("type", "contexts", "source")
-            )
-        )
+        self.action_tree.configure(displaycolumns=("type", "contexts", "source", "state"))
         self.action_filter_count_var.set(
-            f"{len(matching_iids)} of {len(state_actions)}"
+            f"{len(matching_iids)} of {len(stored_actions)}"
             if query.strip()
-            else (
-                f"{len(state_actions)} {state_filter.lower()}"
-                if state_filter != "All"
-                else f"{len(state_actions)} actions"
-            )
+            else f"{len(stored_actions)} actions"
         )
-        if hasattr(self, "action_state_help_var"):
-            guidance = {
-                "Active": (
-                    "Active actions appear in the launcher and can be run. "
-                    "Archive one before deleting it permanently."
-                ),
-                "Archived": (
-                    "Archived actions do not appear in the launcher. Select one "
-                    "to restore or delete permanently."
-                ),
-                "All": "Archived actions are kept but cannot run until restored.",
-            }[state_filter]
-            if not state_actions:
-                guidance = (
-                    "No Archived actions. Archive an Action when you may want it later."
-                    if state_filter == "Archived"
-                    else "No Active actions. Switch Show to Archived to restore one."
-                    if state_filter == "Active"
-                    else "No actions have been configured yet."
-                )
-            self.action_state_help_var.set(guidance)
         if matching_iids:
             selected_iid = requested_iid or matching_iids[0]
             self.action_tree.selection_set(selected_iid)
@@ -2811,44 +2876,49 @@ class ConfigurationWindow:
         return stored_actions[int(selection[0].split("-")[1])]
 
     def _update_action_controls(self) -> None:
-        if not hasattr(self, "action_lifecycle_button"):
+        if not hasattr(self, "delete_action_button"):
             return
         action = self._selected_stored_action()
         if action is None:
             self.action_detail_title_var.set("Select an Action")
             self.action_detail_summary_var.set(
-                "Contexts, tags, ownership, and lifecycle appear here."
+                "Contexts, tags, ownership, and availability appear here."
             )
             self.action_edit_button.configure(state=tk.DISABLED)
-            self.action_lifecycle_button.configure(state=tk.DISABLED)
-            self._set_action_delete_available(False)
+            self.action_placements_button.configure(state=tk.DISABLED)
+            self.delete_action_button.configure(state=tk.DISABLED)
             return
-        archived = action.state == "Archived"
+        legacy_inactive = action.state == "Archived"
         local = action.id in self.local_action_ids
+        automatic_location = _automatic_quick_menu_location(action)
+        if action.type in ACTION_BOUND_QUICK_TYPES:
+            automatic_summary = f"Automatic: {automatic_location}"
+        else:
+            automatic_summary = "Automatic: none for this Action type"
+        configured_paths = configured_action_placement_paths(
+            action.id,
+            getattr(self, "groups", ()),
+        )
+        configured_summary = _configured_placement_summary(configured_paths)
         self.action_detail_title_var.set(compact_selection_title(action.title))
         self.action_detail_summary_var.set(
             (
-                f"{ACTION_TYPES[action.type].display_label} · {action.state} · "
+                f"{ACTION_TYPES[action.type].display_label} · "
+                f"{'Legacy inactive' if legacy_inactive else 'Active'} · "
                 f"{LOCAL_DESTINATION if local else PROJECT_DESTINATION}\n"
                 f"Contexts: {', '.join(action.effective_contexts) or 'General only'}   "
                 f"Tags: {', '.join(action.effective_tags) or '—'}"
+                f"\n{automatic_summary}"
+                f"\nConfigured menus: {configured_summary}"
             )
         )
-        self.action_edit_button.configure(state=tk.NORMAL)
-        self.action_lifecycle_button.configure(
-            text="Restore…" if archived else "Archive…",
-            state=tk.NORMAL,
+        self.action_edit_button.configure(
+            state=tk.DISABLED if legacy_inactive else tk.NORMAL
         )
-        self._set_action_delete_available(archived)
-
-    def _set_action_delete_available(self, available: bool) -> None:
-        self.delete_action_button.configure(
-            state=tk.NORMAL if available else tk.DISABLED
+        self.action_placements_button.configure(
+            state=tk.DISABLED if legacy_inactive else tk.NORMAL
         )
-        if available:
-            self.delete_action_button.pack(side=tk.LEFT, padx=(6, 0))
-        else:
-            self.delete_action_button.pack_forget()
+        self.delete_action_button.configure(state=tk.NORMAL)
 
     def _selected_context_record(
         self,
@@ -2964,6 +3034,14 @@ class ConfigurationWindow:
         self._pending_action_edit_id = None
 
     def _edit_action_record(self, action: Action) -> None:
+        if action.state == "Archived":
+            messagebox.showinfo(
+                "Legacy inactive Action",
+                "This record came from an older Context Palette version. It stays "
+                "inactive for compatibility and can only be deleted.",
+                parent=self.window,
+            )
+            return
         existing_dialog = getattr(self, "action_edit_dialog", None)
         if existing_dialog is not None:
             try:
@@ -2986,13 +3064,48 @@ class ConfigurationWindow:
             ):
             return
         target_path = self.local_actions_path if local else self.shared_actions_path
+        destination = LOCAL_DESTINATION if local else PROJECT_DESTINATION
+        configured_placement_inventories: dict[
+            str, ConfiguredActionPlacementInventory
+        ] = {}
+        if action.type in ACTION_BOUND_QUICK_TYPES and action.state == "Active":
+            try:
+                configured_placement_inventories = (
+                    self._draft_action_placement_inventories(
+                        action,
+                        destination=destination,
+                    )
+                )
+            except (ConfiguredPlacementError, OSError) as exc:
+                messagebox.showerror(
+                    "Menu locations are unavailable",
+                    "Context Palette could not review this Action's current "
+                    f"Quick-menu locations.\n\n{exc}",
+                    parent=self.window,
+                )
+                return
+        if configured_placement_inventories:
+            save_callback: Callable[..., bool] = (
+                lambda edited, configured: self._save_edited_action(
+                    edited,
+                    target_path,
+                    configured,
+                )
+            )
+        else:
+            save_callback = lambda edited: self._save_edited_action(
+                edited,
+                target_path,
+            )
         dialog = ActionDialog(
             self.window,
             action.type,
             getattr(self, "stored_actions", self.actions),
-            lambda edited: self._save_edited_action(edited, target_path),
+            save_callback,
             action=action,
             context_names=[context.name for context in self.contexts],
+            initial_destination=destination,
+            configured_placement_inventories=configured_placement_inventories,
             default_text_file_path=(
                 self.local_actions_path.with_name(DEFAULT_TEXT_ACTION_FILENAME)
                 if action.type == "transform_file_text"
@@ -3016,12 +3129,17 @@ class ConfigurationWindow:
         if event.widget is dialog.window and self.action_edit_dialog is dialog:
             self.action_edit_dialog = None
 
-    def _save_edited_action(self, action: Action, target_path: Path) -> bool:
-        if action.state == "Archived" and action.effective_contexts:
+    def _save_edited_action(
+        self,
+        action: Action,
+        target_path: Path,
+        configured_locations: Iterable[ConfiguredPlacementKey] | None = None,
+    ) -> bool:
+        if action.state == "Archived":
             messagebox.showerror(
                 "Action was not saved",
-                "An Archived Action cannot be assigned to a Context. Restore it "
-                "first, then add the wanted Context membership.",
+                "Legacy inactive Actions can only be deleted. Create a new Action "
+                "if this saved effect is still needed.",
                 parent=self.window,
             )
             return False
@@ -3054,23 +3172,56 @@ class ConfigurationWindow:
             )
             return False
         try:
-            update_action_with_context_memberships(
-                target_path,
-                action,
-                previous_action,
-                action_is_local=local,
-                shared_contexts_path=self.contexts_path,
-                local_contexts_path=self.local_contexts_path,
+            if configured_locations is None:
+                update_action_with_context_memberships(
+                    target_path,
+                    action,
+                    previous_action,
+                    action_is_local=local,
+                    shared_contexts_path=self.contexts_path,
+                    local_contexts_path=self.local_contexts_path,
+                )
+            else:
+                save_action_with_configured_placements(
+                    action,
+                    tuple(configured_locations),
+                    previous_action=previous_action,
+                    action_is_local=local,
+                    shared_actions_path=self.shared_actions_path,
+                    local_actions_path=self.local_actions_path,
+                    shared_contexts_path=self.contexts_path,
+                    local_contexts_path=self.local_contexts_path,
+                    shared_command_surface_path=self.command_surface_path,
+                    local_command_surface_path=self.local_command_surface_path,
+                )
+        except (ActionError, ContextError, ConfiguredPlacementError, OSError) as exc:
+            rollback_unknown = (
+                isinstance(exc, ConfiguredPlacementError)
+                and exc.rollback_completed is False
             )
-        except (ActionError, ContextError, OSError) as exc:
+            if rollback_unknown:
+                detail = (
+                    f"Context Palette could not save this action.\n\n{exc}\n\n"
+                    "Some configuration files may have changed. The Action editor "
+                    "will close and Configure will reload. Inspect the Action and "
+                    "its menu locations before editing again."
+                )
+            else:
+                detail = (
+                    f"Context Palette could not save this action.\n\n{exc}\n\n"
+                    "The existing configuration was left unchanged or restored. "
+                    "Close any program that may be locking a configuration file, "
+                    "check that its folder is available, and try again."
+                )
             messagebox.showerror(
                 "Action was not saved",
-                f"Context Palette could not save this action.\n\n{exc}\n\n"
-                "The existing action file was left unchanged. Close any program "
-                "that may be locking the file, check that its folder is available, "
-                "and try again.",
+                detail,
                 parent=self.window,
             )
+            if rollback_unknown:
+                self._stop_action_editor_after_incomplete_rollback(
+                    "action_edit_dialog"
+                )
             return False
         self.on_change()
         if self.action_filter_var.get():
@@ -3080,110 +3231,14 @@ class ConfigurationWindow:
         self.feedback_label.configure(style="Success.TLabel")
         return True
 
-    def _change_action_state(self) -> None:
+    def _delete_action(self) -> None:
         action = self._selected_stored_action()
         if action is None:
             return
         local = action.id in self.local_action_ids
         action_path = self.local_actions_path if local else self.shared_actions_path
-        shared_warning = ""
-        if not local:
-            shared_warning = (
-                "\n\nThis changes Built-in starter configuration tracked through "
-                "Git and can affect other computers after commit, push, and pull."
-            )
-
-        if action.state == "Archived":
-            if action.type == "sequence":
-                try:
-                    resolve_sequence_steps(
-                        action.sequence_steps,
-                        self.actions,
-                        sequence_id=action.id,
-                    )
-                except ActionSequenceError as exc:
-                    messagebox.showerror(
-                        "Action was not restored",
-                        f"Repair its sequence steps first.\n\n{exc}",
-                        parent=self.window,
-                    )
-                    return
-            if not messagebox.askyesno(
-                "Restore action?",
-                f'Restore "{action.title}" as Active?\n\nIt will return to normal '
-                "launcher search. Previous Context membership, context slots, "
-                f"and configured Quick actions will not be recreated.{shared_warning}",
-                parent=self.window,
-            ):
-                return
-            try:
-                restore_action(action_path, action.id)
-            except (ActionDeletionError, OSError) as exc:
-                messagebox.showerror(
-                    "Action was not restored", str(exc), parent=self.window
-                )
-                return
-            self.action_state_filter_var.set("Active")
-            self.initial_action_id = action.id
-            self.on_change()
-            self._reload()
-            owner = LOCAL_DESTINATION.lower() if local else "built-in"
-            self.feedback_var.set(
-                f"Restored {owner} action: {action.title}. "
-                "Reassign saved placements as needed."
-            )
-            self.feedback_label.configure(style="Success.TLabel")
-            return
-
-        blockers = dependent_sequences(
-            self.stored_actions,
-            action.id,
-            include_archived=False,
-        )
-        if blockers:
-            messagebox.showerror(
-                "Action was not archived",
-                "Archive or edit these active sequences first:\n\n"
-                + "\n".join(sequence.title for sequence in blockers),
-                parent=self.window,
-            )
-            return
         try:
-            usage = inspect_action_references(
-                action.id,
-                context_paths=(self.contexts_path, self.local_contexts_path),
-                command_surface_paths=(
-                    self.command_surface_path,
-                    self.local_command_surface_path,
-                ),
-                palette_path=self.palette_path,
-            )
-        except (ActionDeletionError, OSError) as exc:
-            messagebox.showerror("Action was not archived", str(exc), parent=self.window)
-            return
-        impact = (
-            f"{usage.references_removed} saved reference(s) will be removed."
-            if usage.references_removed
-            else "It has no saved context slots, Contexts, or Quick actions."
-        )
-        if usage.buttons_removed:
-            impact += (
-                f"\n{usage.buttons_removed} empty Quick-action button(s) will also "
-                "be removed."
-            )
-        if not messagebox.askyesno(
-            "Archive action?",
-            f'Archive "{action.title}"?\n\nIt will disappear from normal '
-            f"discovery and saved placements. {impact}\n\nThe Action remains "
-            "under Show: Archived, where it can be restored or deleted "
-            "permanently. Restoring does not recreate removed assignments."
-            f"{shared_warning}",
-            icon=messagebox.WARNING,
-            parent=self.window,
-        ):
-            return
-        try:
-            report = archive_action_and_references(
+            deletion_plan = plan_action_deletion(
                 action_path,
                 action.id,
                 context_paths=(self.contexts_path, self.local_contexts_path),
@@ -3195,105 +3250,64 @@ class ConfigurationWindow:
                 sequence_paths=(self.shared_actions_path, self.local_actions_path),
             )
         except (ActionDeletionError, OSError) as exc:
-            # The lifecycle service rolls attempted writes back. Reload to
-            # reflect either the restored state or an explicitly reported
-            # incomplete rollback.
-            self.on_change()
-            self._reload()
-            messagebox.showerror("Action was not archived", str(exc), parent=self.window)
-            return
-        self.action_state_filter_var.set("Archived")
-        self.initial_action_id = action.id
-        self.on_change()
-        self._reload()
-        self.feedback_var.set(
-            f"Archived action: {action.title}. Removed "
-            f"{report.references_removed} saved reference(s). "
-            "Delete permanently… is now available."
-        )
-        self.feedback_label.configure(style="Success.TLabel")
-
-    def _delete_action(self) -> None:
-        action = self._selected_stored_action()
-        if action is None:
-            return
-        if action.state != "Archived":
-            messagebox.showinfo(
-                "Archive action first",
-                "Archive this Action before deleting it permanently. After "
-                "archiving, Context Palette keeps it selected under Show: "
-                "Archived and makes Delete permanently available.",
-                parent=self.window,
-            )
-            return
-        local = action.id in self.local_action_ids
-        blockers = dependent_sequences(
-            self.stored_actions,
-            action.id,
-            include_archived=True,
-        )
-        if blockers:
             messagebox.showerror(
                 "Action was not deleted",
-                "Edit or delete these sequences first:\n\n"
-                + "\n".join(sequence.title for sequence in blockers),
+                str(exc),
                 parent=self.window,
             )
             return
-        try:
-            usage = inspect_action_references(
-                action.id,
-                context_paths=(self.contexts_path, self.local_contexts_path),
-                command_surface_paths=(
-                    self.command_surface_path,
-                    self.local_command_surface_path,
-                ),
-                palette_path=self.palette_path,
-            )
-        except (ActionDeletionError, OSError) as exc:
-            messagebox.showerror("Context Palette", str(exc), parent=self.window)
-            return
+        reviewed_action = deletion_plan.target
+        reviewed_report = deletion_plan.impact
 
         impact = (
-            f"{usage.references_removed} saved reference(s) will also be removed."
-            if usage.references_removed
+            f"{reviewed_report.references_removed} saved reference(s) will also be removed."
+            if reviewed_report.references_removed
             else "No saved context slots, Contexts, or Quick actions reference it."
         )
-        if usage.buttons_removed:
+        if reviewed_report.buttons_removed:
             impact += (
-                f"\n{usage.buttons_removed} quick button(s) with no remaining "
-                "action will be removed."
+                "\nEmpty configured menu items removed: "
+                f"{reviewed_report.buttons_removed}."
             )
+        automatic_impact = ""
+        if (
+            reviewed_action.state != "Archived"
+            and reviewed_action.type in ACTION_BOUND_QUICK_TYPES
+        ):
+            automatic_impact = (
+                f"\nAutomatic menu location removed: "
+                f"{_automatic_quick_menu_location(reviewed_action)}."
+            )
+        legacy_impact = (
+            "\nRuntime status: already inactive legacy record."
+            if reviewed_action.state == "Archived"
+            else ""
+        )
         shared_warning = ""
         if not local:
             shared_warning = (
-                "\n\nThis is a built-in action. Its deletion and reference changes "
-                "alter the starter configuration tracked through Git."
+                "\n\nThis is a Built-in Action. Its deletion and reference changes "
+                "alter Git-tracked starter configuration and can affect other "
+                "computers after commit, push, and pull."
             )
         if not messagebox.askyesno(
-            "Delete archived action permanently?",
-            f'Delete “{action.title}”?\n\n{impact}{shared_warning}\n\n'
+            "Delete Action permanently?",
+            f'Delete “{reviewed_action.title}” permanently?\n\n'
+            f"Action ID: {reviewed_action.id}\n"
+            f"Action record: deleted permanently.{legacy_impact}{automatic_impact}\n"
+            f"{impact}\n\n"
+            "External file, folder, application, website, credential, or other "
+            f"target: not deleted or changed.{shared_warning}\n\n"
             "This cannot be undone inside Context Palette.",
             icon=messagebox.WARNING,
             parent=self.window,
         ):
             return
 
-        action_path = self.local_actions_path if local else self.shared_actions_path
         try:
-            report = delete_action_and_references(
-                action_path,
-                action.id,
-                context_paths=(self.contexts_path, self.local_contexts_path),
-                command_surface_paths=(
-                    self.command_surface_path,
-                    self.local_command_surface_path,
-                ),
-                palette_path=self.palette_path,
-                sequence_paths=(self.shared_actions_path, self.local_actions_path),
-            )
+            report = commit_action_deletion(deletion_plan)
         except (ActionDeletionError, OSError) as exc:
-            # The lifecycle service rolls attempted writes back. Reload to
+            # The deletion service rolls attempted writes back. Reload to
             # reflect either the restored state or an explicitly reported
             # incomplete rollback.
             self.on_change()
@@ -3305,14 +3319,20 @@ class ConfigurationWindow:
             )
             return
         self.stored_actions[:] = [
-            existing for existing in self.stored_actions if existing.id != action.id
+            existing
+            for existing in self.stored_actions
+            if existing.id.casefold() != reviewed_action.id.casefold()
         ]
-        self.local_action_ids.discard(action.id)
+        self.local_action_ids = {
+            action_id
+            for action_id in self.local_action_ids
+            if action_id.casefold() != reviewed_action.id.casefold()
+        }
         self.initial_action_id = None
         self.on_change()
         self._reload()
         self.feedback_var.set(
-            f"Deleted action: {action.title}. "
+            f"Deleted action: {reviewed_action.title}. "
             f"Removed {report.references_removed} saved reference(s)."
         )
         self.feedback_label.configure(style="Success.TLabel")
@@ -3809,7 +3829,7 @@ class ConfigurationWindow:
                     )
                     self._reload()
                 return
-            self._manage_action_bound_quick_selection(action_bound)
+            self._open_action_quick_menu_organizer(action_bound)
             return
         selected = self._selected_button_record()
         if selected is None:
@@ -3850,6 +3870,134 @@ class ConfigurationWindow:
             work_items=() if not local else self._available_work_items(),
         )
 
+    def _open_action_quick_menu_organizer(
+        self,
+        selection: ActionBoundQuickSelection,
+    ) -> ActionQuickMenuOrganizationWindow:
+        existing = getattr(self, "action_quick_menu_organization_window", None)
+        if existing is not None:
+            try:
+                if existing.window.winfo_exists():
+                    if (
+                        existing.action_type == selection.action_type
+                        and tuple(existing.current_path) == tuple(selection.path)
+                    ):
+                        existing.window.lift()
+                        existing.window.focus_force()
+                        return existing
+                    existing.close()
+            except tk.TclError:
+                pass
+            self.action_quick_menu_organization_window = None
+        dialog = ActionQuickMenuOrganizationWindow(
+            self.window,
+            group_label=selection.group_label,
+            action_type=selection.action_type,
+            actions=getattr(self, "stored_actions", self.actions),
+            local_action_ids=self.local_action_ids,
+            current_path=selection.path,
+            shared_actions_path=self.shared_actions_path,
+            local_actions_path=self.local_actions_path,
+            on_change=self._automatic_quick_menu_changed,
+            on_refresh=self._reload,
+        )
+        self.action_quick_menu_organization_window = dialog
+        dialog.window.bind(
+            "<Destroy>",
+            lambda event, opened=dialog: self._clear_action_quick_menu_organizer(
+                event,
+                opened,
+            ),
+            add="+",
+        )
+        return dialog
+
+    def _remove_action_bound_leaf_from_submenu(self) -> None:
+        selection = self._selected_action_bound_button_record()
+        if selection is None or not selection.action_id:
+            return
+        if not selection.path:
+            self._show_action_bound_quick_guidance(selection)
+            return
+        organizer = self._open_action_quick_menu_organizer(selection)
+        organizer.review_action_removal(selection.action_id)
+
+    def _clear_action_quick_menu_organizer(
+        self,
+        event: tk.Event,
+        dialog: ActionQuickMenuOrganizationWindow,
+    ) -> None:
+        if (
+            event.widget is dialog.window
+            and self.action_quick_menu_organization_window is dialog
+        ):
+            self.action_quick_menu_organization_window = None
+
+    def _automatic_quick_menu_changed(self) -> None:
+        self.on_change()
+        self._reload()
+        self.feedback_var.set(
+            "Updated automatic Quick-menu structure and Action placements. "
+            "Empty submenus were removed."
+        )
+        self.feedback_label.configure(style="Success.TLabel")
+
+    def _manage_action_placements(self) -> None:
+        action = self._selected_stored_action()
+        if action is None or action.state != "Active":
+            return
+        existing = getattr(self, "action_configured_placement_window", None)
+        if existing is not None:
+            try:
+                if existing.window.winfo_exists():
+                    if existing.action.id.casefold() == action.id.casefold():
+                        existing.window.lift()
+                        existing.window.focus_force()
+                        return
+                    existing.close()
+            except tk.TclError:
+                pass
+            self.action_configured_placement_window = None
+        dialog = ActionConfiguredPlacementWindow(
+            self.window,
+            action=action,
+            shared_actions_path=self.shared_actions_path,
+            local_actions_path=self.local_actions_path,
+            shared_command_surface_path=self.command_surface_path,
+            local_command_surface_path=self.local_command_surface_path,
+            on_change=self._configured_action_placements_changed,
+            on_refresh=self._reload,
+        )
+        self.action_configured_placement_window = dialog
+        dialog.window.bind(
+            "<Destroy>",
+            lambda event, opened=dialog: self._clear_action_configured_placement_window(
+                event,
+                opened,
+            ),
+            add="+",
+        )
+
+    def _clear_action_configured_placement_window(
+        self,
+        event: tk.Event,
+        dialog: ActionConfiguredPlacementWindow,
+    ) -> None:
+        if (
+            event.widget is dialog.window
+            and self.action_configured_placement_window is dialog
+        ):
+            self.action_configured_placement_window = None
+
+    def _configured_action_placements_changed(self) -> None:
+        action = self._selected_stored_action()
+        if action is not None:
+            self.initial_action_id = action.id
+        self.on_change()
+        self._reload()
+        self.feedback_var.set("Updated configured Quick-menu placements.")
+        self.feedback_label.configure(style="Success.TLabel")
+
     def _manage_action_bound_quick_selection(
         self,
         selection: ActionBoundQuickSelection,
@@ -3858,12 +4006,12 @@ class ConfigurationWindow:
         if selection.path:
             query_parts.extend(selection.path)
         self.notebook.select(CONFIGURATION_TAB_INDEXES["actions"])
-        self.action_state_filter_var.set("Active")
         self.action_filter_var.set(" ".join(query_parts))
         self.action_filter_entry.focus_set()
         self.action_filter_entry.selection_range(0, tk.END)
         self.feedback_var.set(
-            f"Edit a {selection.group_label} action and change Quick menu to reorganize it."
+            f"Edit a {selection.group_label} action and use its menu location chooser "
+            "to reorganize it."
         )
         self.feedback_label.configure(style="Success.TLabel")
 
@@ -3875,9 +4023,10 @@ class ConfigurationWindow:
             "Automatic Quick-action menu",
             f"{selection.group_label} is generated from Active "
             f"{ACTION_TYPES[selection.action_type].display_label} actions.\n\n"
-            "Choose Edit selected, then edit an action's Quick menu field to "
-            "create, rename, or move nested levels. Create another matching "
-            "action to add it automatically.",
+            "Use Manage menu to create a submenu with selected Actions, rename or "
+            "move a submenu, or remove it while keeping its contents. When editing "
+            "one Action, use its structured menu-location chooser. Empty submenus "
+            "disappear automatically.",
             parent=self.window,
         )
 
@@ -4099,6 +4248,7 @@ class ConfigurationWindow:
         move_up: bool,
         move_down: bool,
         delete_enabled: bool,
+        remove_enabled: bool = False,
     ) -> None:
         if not hasattr(self, "quick_item_edit_button"):
             return
@@ -4124,12 +4274,19 @@ class ConfigurationWindow:
         self.quick_item_delete_button.configure(
             state=tk.NORMAL if delete_enabled else tk.DISABLED,
         )
+        remove_button = getattr(self, "quick_item_remove_button", None)
+        if remove_button is not None:
+            remove_button.configure(
+                state=tk.NORMAL if remove_enabled else tk.DISABLED,
+            )
         commands = (
             (self.new_quick_item_button, new_enabled),
             (self.quick_item_edit_button, edit_enabled),
             (self.quick_item_move_button, move_up or move_down),
             (self.quick_item_delete_button, delete_enabled),
         )
+        if remove_button is not None:
+            commands = (*commands, (remove_button, remove_enabled))
         for command, _visible in commands:
             command.pack_forget()
         first = True
@@ -4167,7 +4324,15 @@ class ConfigurationWindow:
                     compact_selection_summary(
                         f"Automatic menu: {path} · Action: "
                         f"{action.title if action is not None else 'Unavailable'} · "
-                        "Edit the Action to change its Quick menu path."
+                        f"ID: {action.id if action is not None else 'Unavailable'} · "
+                        + (
+                            "Remove from this submenu moves it one level up and "
+                            "keeps the Action Active."
+                            if action_bound.path
+                            else f"Every Active {action_bound.group_label} Action "
+                            "must remain in this automatic menu; move it into a "
+                            "submenu or delete the Action from Actions."
+                        )
                     )
                 )
                 self._set_button_selection_state(
@@ -4178,6 +4343,7 @@ class ConfigurationWindow:
                     move_up=False,
                     move_down=False,
                     delete_enabled=False,
+                    remove_enabled=bool(action_bound.path),
                 )
             else:
                 if hasattr(self, "button_detail_title_var"):
@@ -4188,14 +4354,15 @@ class ConfigurationWindow:
                     compact_selection_summary(
                         f"Automatic menu: {path} · Membership follows Active "
                         f"{ACTION_TYPES[action_bound.action_type].display_label} actions. "
-                        "View Actions opens the matching list."
+                        "Manage creates, renames, moves, or removes derived submenus "
+                        "and assigns existing Actions."
                     )
                 )
                 self._set_button_selection_state(
                     edit_label=(
-                        "Find matching Actions…"
+                        "Manage this submenu…"
                         if action_bound.path
-                        else "Find all Actions…"
+                        else "Manage menu…"
                     ),
                     edit_enabled=True,
                     new_label=(
@@ -4311,6 +4478,10 @@ class ActionDialog:
         initial_value: str = "",
         suggested_from_workspace: bool = False,
         initial_quick_action_path: tuple[str, ...] = (),
+        initial_destination: str = LOCAL_DESTINATION,
+        configured_placement_inventories: dict[
+            str, ConfiguredActionPlacementInventory
+        ] | None = None,
     ) -> None:
         self.action_type = action_type
         self.action = action
@@ -4319,6 +4490,15 @@ class ActionDialog:
         self.choose_destination = choose_destination
         self.default_text_file_path = default_text_file_path
         self.context_names = tuple(context_names or ())
+        self.configured_placement_inventories = dict(
+            configured_placement_inventories or {}
+        )
+        self.placement_integration = bool(
+            self.configured_placement_inventories
+        )
+        self.configured_locations = ()
+        self.configured_location_keys: tuple[ConfiguredPlacementKey, ...] = ()
+        self.placement_notice_var = tk.StringVar()
         definition = ACTION_TYPES[action_type]
         self.window = tk.Toplevel(parent)
         self.window.bind("<Escape>", lambda _event: self.window.destroy())
@@ -4419,7 +4599,7 @@ class ActionDialog:
                 wraplength=610,
             )
             self.suggestion_notice.pack(fill=tk.X, pady=(2, 5))
-        self.destination_var = tk.StringVar(value=LOCAL_DESTINATION)
+        self.destination_var = tk.StringVar(value=initial_destination)
         if choose_destination:
             self.destination_field = self._compact_combobox(
                 form,
@@ -4448,13 +4628,23 @@ class ActionDialog:
         self.tags_var = tk.StringVar(
             value=", ".join(action.effective_tags) if action else ""
         )
-        self.quick_action_path_var = tk.StringVar(
-            value=(
-                " > ".join(action.quick_action_path)
-                if action
-                else " > ".join(initial_quick_action_path)
-            )
+        self.quick_action_path = (
+            action.quick_action_path if action else initial_quick_action_path
         )
+        self.quick_action_path_var = tk.StringVar(
+            value=" > ".join(self.quick_action_path)
+        )
+        if self.placement_integration:
+            inventory = self.configured_placement_inventories.get(
+                self.destination_var.get()
+            )
+            if inventory is not None:
+                self.configured_locations = inventory.locations
+                self.configured_location_keys = inventory.current_locations
+        self.quick_action_location_var = tk.StringVar(
+            value=self._quick_menu_placement_text()
+        )
+        self.quick_menu_path_dialog: QuickMenuPathDialog | None = None
         self.arguments_var = tk.StringVar(
             value="\n".join(action.arguments) if action else ""
         )
@@ -4517,16 +4707,50 @@ class ActionDialog:
             "Search and choose tags already in use.",
         )
         if action_type in ACTION_BOUND_QUICK_TYPES:
-            self._compact_entry(
-                form,
-                "Quick menu",
-                self.quick_action_path_var,
-                help_text=(
-                    "Optional nested placement in the fixed Quick-action menu. "
-                    "Separate up to three levels with >. Leave blank to show "
-                    "the Action at the menu root."
-                ),
+            automatic_root = quick_menu_root_label(action_type)
+            help_text = (
+                f"Every Active {ACTION_TYPES[action_type].display_label} Action "
+                f"appears automatically in {automatic_root}. Choose its location "
+                "there and optionally choose other configured menus where the "
+                "same Action should also appear."
+                if self.placement_integration
+                else
+                f"Every Active {ACTION_TYPES[action_type].display_label} Action "
+                f"appears automatically in {automatic_root}. Choose its location "
+                "inside that automatic menu."
             )
+            quick_row, quick_label = self._compact_row(
+                form,
+                "Menu locations" if self.placement_integration else "Automatic menu",
+            )
+            self.quick_action_location_label = quick_label
+            self.quick_action_location_entry = ttk.Entry(
+                quick_row,
+                textvariable=self.quick_action_location_var,
+                state="readonly",
+            )
+            self.quick_action_location_entry.pack(
+                side=tk.LEFT,
+                fill=tk.X,
+                expand=True,
+            )
+            self.quick_action_choose_button = ttk.Button(
+                quick_row,
+                text="Choose…",
+                command=self._choose_quick_menu_path,
+            )
+            self.quick_action_choose_button.pack(side=tk.LEFT, padx=(8, 0))
+            self._tooltip(quick_label, help_text)
+            self._tooltip(self.quick_action_location_entry, help_text)
+            self._tooltip(self.quick_action_choose_button, help_text)
+            if self.placement_integration:
+                self.placement_notice_label = ttk.Label(
+                    form,
+                    textvariable=self.placement_notice_var,
+                    style="Muted.TLabel",
+                    wraplength=610,
+                )
+                self.placement_notice_label.pack(fill=tk.X, pady=(2, 0))
         label = {
             "open_url": "Website",
             "open_windows_target": "Windows target",
@@ -4625,6 +4849,11 @@ class ActionDialog:
                 self.working_directory_var,
                 help_text="Optional working folder used when the action starts.",
             )
+        if self.placement_integration and choose_destination:
+            self.destination_var.trace_add(
+                "write",
+                lambda *_args: self._destination_changed(),
+            )
         self.window.transient(parent)
         self.window.grab_set()
         _focus_entry(self.window, title_entry)
@@ -4704,6 +4933,130 @@ class ActionDialog:
             self.action_guidance,
             parent=self.window,
         )
+
+    def _quick_menu_location_text(self, path: tuple[str, ...]) -> str:
+        if self.action_type not in ACTION_BOUND_QUICK_TYPES:
+            return " > ".join(path) if path else "Menu root"
+        root = quick_menu_root_label(self.action_type)
+        if not path:
+            return f"{root} > Menu root"
+        return " > ".join((root, *path))
+
+    def _quick_menu_placement_text(self) -> str:
+        automatic = self._quick_menu_location_text(self.quick_action_path)
+        if not getattr(self, "placement_integration", False):
+            return automatic
+        labels_by_key = {
+            location.key: " > ".join(location.menu_path)
+            for location in self.configured_locations
+        }
+        configured = tuple(
+            labels_by_key[key]
+            for key in self.configured_location_keys
+            if key in labels_by_key
+        )
+        also_in = "; ".join(configured) if configured else "none"
+        return f"{automatic} (automatic) · Also in: {also_in}"
+
+    def _destination_changed(self) -> None:
+        if not getattr(self, "placement_integration", False):
+            return
+        inventory = self.configured_placement_inventories.get(
+            self.destination_var.get()
+        )
+        if inventory is None:
+            self.configured_locations = ()
+            cleared = len(self.configured_location_keys)
+            self.configured_location_keys = ()
+        else:
+            self.configured_locations = inventory.locations
+            available = {
+                location.key
+                for location in inventory.locations
+                if location.assignable
+                or location.key in inventory.current_locations
+            }
+            retained = tuple(
+                key for key in self.configured_location_keys if key in available
+            )
+            cleared = len(self.configured_location_keys) - len(retained)
+            self.configured_location_keys = retained
+        self.placement_notice_var.set(
+            (
+                f"{cleared} configured menu selection"
+                f"{'s were' if cleared != 1 else ' was'} cleared because that "
+                "storage cannot use the selected location."
+            )
+            if cleared
+            else ""
+        )
+        self.quick_action_location_var.set(self._quick_menu_placement_text())
+
+    def _set_quick_menu_placements(
+        self,
+        selection: QuickMenuPlacementSelection,
+    ) -> None:
+        self.quick_action_path = tuple(selection.automatic_path)
+        self.quick_action_path_var.set(" > ".join(self.quick_action_path))
+        self.configured_location_keys = tuple(
+            selection.configured_location_keys
+        )
+        self.placement_notice_var.set("")
+        self.quick_action_location_var.set(self._quick_menu_placement_text())
+
+    def _set_quick_menu_path(self, path: tuple[str, ...]) -> None:
+        self.quick_action_path = tuple(path)
+        self.quick_action_path_var.set(" > ".join(self.quick_action_path))
+        self.quick_action_location_var.set(self._quick_menu_placement_text())
+
+    def _choose_quick_menu_path(self) -> None:
+        existing = self.quick_menu_path_dialog
+        if existing is not None:
+            try:
+                if existing.window.winfo_exists():
+                    existing.window.lift()
+                    existing.window.focus_force()
+                    return
+            except tk.TclError:
+                pass
+            self.quick_menu_path_dialog = None
+        if getattr(self, "placement_integration", False):
+            dialog = QuickMenuPathDialog(
+                self.window,
+                action_type=self.action_type,
+                actions=self.available_actions,
+                current_path=self.quick_action_path,
+                configured_locations=self.configured_locations,
+                selected_configured_location_keys=(
+                    self.configured_location_keys
+                ),
+                on_select_placements=self._set_quick_menu_placements,
+            )
+        else:
+            dialog = QuickMenuPathDialog(
+                self.window,
+                action_type=self.action_type,
+                actions=self.available_actions,
+                current_path=self.quick_action_path,
+                on_select=self._set_quick_menu_path,
+            )
+        self.quick_menu_path_dialog = dialog
+        dialog.window.bind(
+            "<Destroy>",
+            lambda event, opened=dialog: self._clear_quick_menu_path_dialog(
+                event,
+                opened,
+            ),
+            add="+",
+        )
+
+    def _clear_quick_menu_path_dialog(
+        self,
+        event: tk.Event,
+        dialog: QuickMenuPathDialog,
+    ) -> None:
+        if event.widget is dialog.window and self.quick_menu_path_dialog is dialog:
+            self.quick_menu_path_dialog = None
 
     def _build_sequence_fields(self, parent: ttk.Frame) -> None:
         eligible = [
@@ -5093,6 +5446,7 @@ class ActionDialog:
                     else self.arguments_var.get().splitlines()
                 )
             quick_action_path_var = getattr(self, "quick_action_path_var", None)
+            quick_action_path = getattr(self, "quick_action_path", None)
             values = dict(
                 title=self.title_var.get(),
                 description=self.description_var.get(),
@@ -5103,10 +5457,14 @@ class ActionDialog:
                 value=value,
                 arguments=arguments,
                 working_directory=self.working_directory_var.get(),
-                quick_action_path=_quick_action_path(
-                    quick_action_path_var.get()
-                    if quick_action_path_var is not None
-                    else ""
+                quick_action_path=(
+                    tuple(quick_action_path)
+                    if quick_action_path is not None
+                    else _quick_action_path(
+                        quick_action_path_var.get()
+                        if quick_action_path_var is not None
+                        else ""
+                    )
                 ),
                 sequence_steps=sequence_steps,
                 available_actions=getattr(self, "available_actions", ()),
@@ -5119,11 +5477,25 @@ class ActionDialog:
         except (ActionError, ActionSequenceError) as exc:
             messagebox.showerror("Context Palette", str(exc), parent=self.window)
             return
-        saved = (
-            self.on_save(action, self.destination_var.get())
-            if getattr(self, "choose_destination", False)
-            else self.on_save(action)
-        )
+        if getattr(self, "placement_integration", False):
+            saved = (
+                self.on_save(
+                    action,
+                    self.destination_var.get(),
+                    tuple(self.configured_location_keys),
+                )
+                if getattr(self, "choose_destination", False)
+                else self.on_save(
+                    action,
+                    tuple(self.configured_location_keys),
+                )
+            )
+        else:
+            saved = (
+                self.on_save(action, self.destination_var.get())
+                if getattr(self, "choose_destination", False)
+                else self.on_save(action)
+            )
         if saved:
             self.window.destroy()
 
@@ -6355,6 +6727,26 @@ def _quick_action_path(value: str) -> tuple[str, ...]:
             "Quick menu paths cannot contain an empty level between > separators."
         )
     return parts
+
+
+def _automatic_quick_menu_location(action: Action) -> str:
+    if action.type not in ACTION_BOUND_QUICK_TYPES:
+        return "None for this Action type"
+    root = quick_menu_root_label(action.type)
+    if not action.quick_action_path:
+        return f"{root} > Menu root"
+    return " > ".join((root, *action.quick_action_path))
+
+
+def _configured_placement_summary(
+    paths: tuple[tuple[str, ...], ...],
+) -> str:
+    if not paths:
+        return "none"
+    labels = [" > ".join(path) for path in paths]
+    if len(labels) <= 2:
+        return "; ".join(labels)
+    return f"{'; '.join(labels[:2])}; +{len(labels) - 2} more"
 
 
 def _action_choices(actions: list[Action]) -> dict[str, str]:

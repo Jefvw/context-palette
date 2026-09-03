@@ -122,11 +122,12 @@ The representative page uses:
 - one `New Action...` primary action;
 - a `More Action tasks` menu for bulk create/update/removal, the type catalogue, and
   Harvest, including distinct `Export personal Actions for update...` and
-  `Review updated Actions workbook...` routes plus `Remove multiple personal
-  Actions...` for the centered two-stage lifecycle review;
-- one Action table with readable type and ownership;
-- Edit, Archive/Restore, and visibly destructive permanent deletion in the
-  selected-item strip.
+  `Review updated Actions workbook...` routes plus `Delete multiple personal
+  Actions...` for the centered one-effect review;
+- one Action table with readable type, ownership, and explicit **Legacy
+  inactive** status where old data requires it;
+- Edit, Other menus, and visibly destructive direct Action deletion in the
+  selected-item strip; legacy inactive records offer deletion only.
 
 ## Reconciled sizing decision
 

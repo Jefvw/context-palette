@@ -96,6 +96,26 @@ class PaletteStateTests(unittest.TestCase):
             ):
                 load_palette_state(path)
 
+    def test_invalid_utf8_is_reported_as_an_action_error(self):
+        path = Path("palette.json")
+        failure = UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid byte")
+
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", side_effect=failure),
+        ):
+            with self.assertRaisesRegex(ActionError, "not valid UTF-8"):
+                load_palette_state(path)
+
+    def test_optional_palette_read_error_is_not_treated_as_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "palette.json"
+            path.mkdir()
+
+            with patch.object(Path, "exists", return_value=False):
+                with self.assertRaisesRegex(ActionError, "could not be read"):
+                    load_palette_state(path)
+
     def test_context_slots_do_not_borrow_unrelated_global_actions(self):
         slots = action_slots(self.actions, PaletteState((), "Mail", {}))
 

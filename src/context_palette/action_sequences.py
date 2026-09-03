@@ -184,7 +184,9 @@ def resolve_sequence_steps(
             if action is None:
                 raise ActionSequenceError(f"Step {index} references a missing Action: {reference_id}")
             if action.state == "Archived":
-                raise ActionSequenceError(f"Step {index} references an Archived Action: {action.title}")
+                raise ActionSequenceError(
+                    f"Step {index} references a legacy inactive Action: {action.title}"
+                )
             if action.type == "sequence":
                 raise ActionSequenceError(f"Step {index} cannot reference another sequence.")
             if action.type not in ALLOWED_ACTION_TYPES:
