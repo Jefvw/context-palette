@@ -16,6 +16,8 @@ This directory separates current behavior, durable direction, historical rationa
 ### Users
 
 - [Help](HELP.md) — complete operation and troubleshooting.
+- [Current batch UAT](UAT_CURRENT_BATCH.md) — owner acceptance record and
+  optional follow-up checks.
 - [Keyboard shortcuts](SHORTCUTS.md) — authoritative shortcut reference,
   also available from **More → Keyboard shortcuts** in the app.
 - [Action types](ACTION_TYPES.md) — generated catalogue of supported actions.

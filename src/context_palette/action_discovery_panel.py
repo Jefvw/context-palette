@@ -6,7 +6,7 @@ from typing import Callable
 
 from .action_types import ACTION_TYPES
 from .searchable_selection import SearchableSelectionPopup
-from .style import COLORS
+from .style import COLORS, configure_result_row_tags
 from .tooltips import ListboxItemTooltip, TreeviewItemTooltip
 from .ui_icons import load_ui_icons
 
@@ -122,6 +122,7 @@ class ActionDiscoveryPanel:
             self.frame,
             (
                 "filters",
+                "create_action",
                 "edit",
                 "folder",
                 "configure",
@@ -136,7 +137,7 @@ class ActionDiscoveryPanel:
         scope_row = ttk.Frame(navigation)
         scope_row.pack(fill=tk.X)
         for column in range(3):
-            scope_row.columnconfigure(column, weight=1, uniform="scope")
+            scope_row.columnconfigure(column, weight=1)
 
         body = ttk.Frame(self.frame)
         body.pack(fill=tk.BOTH, expand=True)
@@ -160,6 +161,7 @@ class ActionDiscoveryPanel:
             search_header,
             textvariable=search_var,
             font=("Segoe UI", 11),
+            width=1,
         )
         self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
         tooltip_adder(self.search_entry, lambda: self.find_help_text)
@@ -181,8 +183,9 @@ class ActionDiscoveryPanel:
             button = ttk.Button(
                 scope_row,
                 text=label,
+                width=0,
                 command=lambda selected=scope: select_scope(selected),
-                style="RailAccent.TButton" if scope == DISCOVERY_ALL else "Compact.TButton",
+                style="ScopeSelected.TButton" if scope == DISCOVERY_ALL else "Scope.TButton",
             )
             button.grid(
                 row=0,
@@ -202,8 +205,9 @@ class ActionDiscoveryPanel:
         self.work_items_button = ttk.Button(
             scope_row,
             text="Work Items",
+            width=0,
             command=lambda: select_scope(DISCOVERY_WORK_ITEMS),
-            style="Compact.TButton",
+            style="Scope.TButton",
         )
         self.work_items_button.grid(
             row=0,
@@ -329,14 +333,17 @@ class ActionDiscoveryPanel:
 
         self.new_action_button = ttk.Button(
             self.tool_rail,
-            text="+A",
+            text="Create Action",
+            image=self.ui_icons["create_action"],
+            compound=tk.NONE,
+            width=0,
             command=create_action,
-            style="RailIconAccent.TButton",
+            style="ToolbarIcon.TButton",
         )
         self.new_action_button.grid(row=1, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
         tooltip_adder(
             self.new_action_button,
-            "+ Action — Choose an Action type, then complete the validated Action form.",
+            "Create Action — Choose an Action type, then complete the validated Action form.",
         )
         self.capture_button = ttk.Button(
             self.tool_rail,
@@ -365,7 +372,7 @@ class ActionDiscoveryPanel:
             self.tool_rail,
             image=self.ui_icons["edit"],
             command=edit_item,
-            style="Icon.TButton",
+            style="ToolbarIcon.TButton",
         )
         self.edit_button.grid(row=3, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
         tooltip_adder(
@@ -425,7 +432,8 @@ class ActionDiscoveryPanel:
             self.primary_action_frame,
             text="Run",
             command=execute_selected,
-            style="RailAccent.TButton",
+            style="Primary.TButton",
+            width=0,
         )
         self.run_button.pack(side=tk.LEFT, fill=tk.X, expand=True)
         tooltip_adder(
@@ -437,7 +445,7 @@ class ActionDiscoveryPanel:
             image=self.ui_icons["folder"],
             width=3,
             command=lambda: execute_selected(open_folder=True),
-            style="Compact.TButton",
+            style="ToolbarIcon.TButton",
             takefocus=True,
         )
         tooltip_adder(
@@ -490,11 +498,8 @@ class ActionDiscoveryPanel:
             height=visible_rows,
             style="Flat.Treeview",
         )
-        self.focus_tree.tag_configure(
-            FOCUS_SLOT_ROW_TAG,
-            background=COLORS["slot_focus"],
-            foreground=COLORS["text"],
-        )
+        # Shortcut identity is separate from paint: one background tag per row.
+        configure_result_row_tags(self.focus_tree)
         self.focus_tree.tag_configure(
             FOCUS_GROUP_ROW_TAG,
             background=COLORS["surface"],
@@ -613,9 +618,9 @@ class ActionDiscoveryPanel:
         for candidate, button in self.scope_buttons.items():
             button.configure(
                 style=(
-                    "RailAccent.TButton"
+                    "ScopeSelected.TButton"
                     if candidate == scope
-                    else "Compact.TButton"
+                    else "Scope.TButton"
                 )
             )
         if scope == DISCOVERY_WORK_ITEMS:
@@ -711,7 +716,7 @@ class ActionDiscoveryPanel:
                 if self.discovery_scope == DISCOVERY_WORK_ITEMS
                 else "Open / Run"
             ),
-            style="RailAccent.TButton",
+            style="Primary.TButton",
         )
         self.primary_help_text = (
             "Stop the sequence before its next step starts."
@@ -727,6 +732,9 @@ class ActionDiscoveryPanel:
         if selected_work_item and can_select and not self._sequence_running:
             self.work_item_folder_button.pack(side=tk.RIGHT, padx=(0, 4))
         self.run_button.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        # A new label or folder button can need more room without resizing the
+        # toolbar itself. Let its owner reapply the existing compact-row policy.
+        self.tool_rail.event_generate("<<ExecutionControlsChanged>>", when="tail")
 
     def set_work_item_mode(
         self,

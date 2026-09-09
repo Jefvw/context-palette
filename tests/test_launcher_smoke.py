@@ -1912,11 +1912,11 @@ class LauncherSmokeTests(unittest.TestCase):
                         if group.id.casefold() != "standard"
                     ]
                     expected_surface_labels = [
-                        "Standard ▾",
-                        *(f"{group.label} ▾" for group in configurable_groups),
-                        "Passwords ▾",
-                        "Folders ▾",
-                        "Prompts ▾",
+                        "Standard",
+                        *(group.label for group in configurable_groups),
+                        "Passwords",
+                        "Folders",
+                        "Prompts",
                     ]
                     self.assertEqual(
                         len(surface_areas),

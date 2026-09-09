@@ -195,7 +195,7 @@ class WorkspacePanel:
             image=self.ui_icons["back"],
             command=self.show_previous_content,
             state=tk.DISABLED,
-            style="Icon.TButton",
+            style="ToolbarIcon.TButton",
         )
         self.content_back_button.pack(side=tk.LEFT)
         self.content_forward_button = ttk.Button(
@@ -203,13 +203,13 @@ class WorkspacePanel:
             image=self.ui_icons["forward"],
             command=self.show_next_content,
             state=tk.DISABLED,
-            style="Icon.TButton",
+            style="ToolbarIcon.TButton",
         )
         self.content_forward_button.pack(side=tk.LEFT, padx=(4, 0))
         self.text_tools_button = ttk.Menubutton(
             header,
             image=self.ui_icons["text_tools"],
-            style="Icon.TButton",
+            style="ToolbarIcon.TMenubutton",
             takefocus=True,
         )
         self.text_tools_button.pack(side=tk.RIGHT)
@@ -218,7 +218,7 @@ class WorkspacePanel:
             image=self.ui_icons["ocr"],
             command=self._extract_text,
             state=tk.NORMAL if extract_text is not None else tk.DISABLED,
-            style="Icon.TButton",
+            style="ToolbarIcon.TButton",
         )
         self.ocr_button.pack(side=tk.RIGHT, padx=(0, 4))
         self.create_action_button = ttk.Button(
@@ -226,7 +226,7 @@ class WorkspacePanel:
             image=self.ui_icons["create_from_input"],
             command=self._create_action,
             state=tk.DISABLED,
-            style="Icon.TButton",
+            style="ToolbarIcon.TButton",
         )
         self.create_action_button.pack(side=tk.RIGHT, padx=(0, 4))
         self.inbox_button = ttk.Button(
@@ -234,7 +234,7 @@ class WorkspacePanel:
             image=self.ui_icons["inbox"],
             command=show_inbox,
             state=tk.NORMAL if show_inbox is not None else tk.DISABLED,
-            style="Icon.TButton",
+            style="ToolbarIcon.TButton",
         )
         self.inbox_button.pack(side=tk.RIGHT, padx=(0, 4))
         self.capture_button = ttk.Button(
@@ -242,12 +242,13 @@ class WorkspacePanel:
             image=self.ui_icons["capture"],
             command=capture,
             state=tk.NORMAL if capture is not None else tk.DISABLED,
-            style="Icon.TButton",
+            style="ToolbarIcon.TButton",
         )
         self.capture_button.pack(side=tk.RIGHT, padx=(0, 4))
         self.send_to_button = ttk.Menubutton(
             header,
             text="Send to…",
+            style="Toolbar.TMenubutton",
             takefocus=True,
         )
         self.send_to_menu = tk.Menu(
@@ -288,14 +289,23 @@ class WorkspacePanel:
         body.pack(fill=tk.BOTH, expand=True)
         self.text = tk.Text(
             body,
+            exportselection=False,
             height=8,
             wrap=tk.WORD,
             undo=True,
             font=("Consolas", 10),
-            borderwidth=1,
-            relief=tk.SOLID,
+            borderwidth=0,
+            relief=tk.FLAT,
             padx=7,
             pady=6,
+            highlightthickness=1,
+            highlightbackground=COLORS["border"],
+            highlightcolor=COLORS["focus"],
+            background=COLORS["surface"],
+            foreground=COLORS["text"],
+            insertbackground=COLORS["text"],
+            selectbackground=COLORS["accent"],
+            selectforeground=COLORS["white"],
         )
         self.text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.text.bind("<Control-a>", self.select_all)

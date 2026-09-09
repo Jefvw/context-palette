@@ -189,6 +189,24 @@ class FileTransferWindowTests(unittest.TestCase):
         window._poll()
         self.root.update()
 
+    def test_review_is_visible_with_hidden_palette_and_can_be_shown_after_owner_hides(self) -> None:
+        self.root.withdraw()
+        window = self._window()
+        self.assertEqual(self.root.state(), "withdrawn")
+        self.assertTrue(window.window.winfo_viewable())
+        self.assertEqual(str(window.window.transient()), "")
+        self.assertEqual(self.coordinator.calls[-1]["phase"], "plan")
+        self.root.deiconify()
+        self.root.update()
+        window.show()
+        self.assertEqual(str(window.window.transient()), str(self.root))
+        self.root.withdraw()
+        self.root.update()
+        window.show()
+        self.root.update()
+        self.assertEqual(self.root.state(), "withdrawn")
+        self.assertTrue(window.window.winfo_viewable())
+
     def test_conflict_free_destination_is_the_only_confirmation_and_sources_stay_unchanged(self) -> None:
         original = self.source.read_bytes()
         window = self._window()

@@ -16,7 +16,10 @@ from tkinter import font as tkfont
 from tkinter import ttk
 from typing import Callable, Iterable
 
-from .style import CAPTION_FONT, COLORS, DEFAULT_FONT, configure_theme
+from .style import (
+    CAPTION_FONT, COLORS, DEFAULT_FONT, configure_result_row_tags, configure_theme,
+    result_row_color_key,
+)
 from .ui_icons import load_ui_icons
 
 
@@ -160,23 +163,6 @@ def _configure_mockup_theme(
         "Mockup.Danger.TButton",
         background=[("active", "#fde8e7")],
         foreground=[("disabled", COLORS["muted_text"]), ("!disabled", COLORS["error"])],
-    )
-    style.configure(
-        "Mockup.Scope.TButton",
-        padding=(6, 4),
-        font=("Segoe UI", 9),
-    )
-    style.configure(
-        "Mockup.ScopeSelected.TButton",
-        padding=(6, 4),
-        background=COLORS["accent"],
-        foreground=COLORS["white"],
-        font=("Segoe UI Semibold", 9),
-    )
-    style.map(
-        "Mockup.ScopeSelected.TButton",
-        background=[("active", COLORS["accent_hover"])],
-        foreground=[("!disabled", COLORS["white"])],
     )
     return style
 
@@ -1122,6 +1108,7 @@ class MainPaletteMockup(MockupView):
                 "inbox",
                 "ocr",
                 "create_from_input",
+                "create_action",
                 "text_tools",
             ),
             foreground=COLORS["text"],
@@ -1162,9 +1149,9 @@ class MainPaletteMockup(MockupView):
             button = ttk.Button(
                 scopes,
                 text=label,
-                width=1,
+                width=0,
                 command=lambda value=key: self._set_scope(value),
-                style="Mockup.ScopeSelected.TButton" if key == "all" else "Mockup.Scope.TButton",
+                style="ScopeSelected.TButton" if key == "all" else "Scope.TButton",
             )
             button.grid(row=0, column=column, sticky=tk.EW, padx=(0 if column == 0 else 2, 0))
             self.scope_buttons[key] = button
@@ -1222,7 +1209,7 @@ class MainPaletteMockup(MockupView):
         self.results_tree_frame.grid(row=0, column=0, sticky=tk.NSEW)
         self.results.configure(show="tree", selectmode="browse")
         self.results.column("#0", stretch=True, width=260, minwidth=180)
-        self.results.tag_configure("context_slot", background=COLORS["slot_focus"])
+        configure_result_row_tags(self.results)
         self.results.bind("<<TreeviewSelect>>", self._selection_changed)
         self.results.bind("<Double-1>", lambda _event: self._activate_primary())
         self.empty_state = ttk.Frame(
@@ -1242,19 +1229,23 @@ class MainPaletteMockup(MockupView):
 
         toolbar = ttk.Frame(self.discovery)
         toolbar.grid(row=3, column=0, sticky=tk.EW, pady=(6, 0))
+        self.execution_toolbar = toolbar
         toolbar.columnconfigure(2, weight=1)
         self.new_action_button = ttk.Button(
             toolbar,
-            text="+A",
+            text="Create Action",
+            image=self.icons["create_action"],
+            compound=tk.NONE,
             command=lambda: self._mock_preview("Mockup: the normal Action type chooser would open."),
-            style="RailAccent.TButton",
+            style="ToolbarIcon.TButton",
+            width=0,
         )
-        self.new_action_button.grid(row=0, column=0, sticky=tk.EW)
+        self.new_action_button.grid(row=0, column=0)
         self.edit_button = ttk.Button(
             toolbar,
             image=self.icons["edit"],
             command=lambda: self._mock_preview("Mockup: the selected item editor would open."),
-            style="Icon.TButton",
+            style="ToolbarIcon.TButton",
             state=tk.DISABLED,
         )
         self.edit_button.grid(row=0, column=1, padx=(4, 0))
@@ -1262,21 +1253,36 @@ class MainPaletteMockup(MockupView):
             toolbar,
             image=self.icons["folder"],
             command=lambda: self._mock_preview("Mockup only: no Work Item folder was opened."),
-            style="Icon.TButton",
+            style="ToolbarIcon.TButton",
         )
         self.folder_button.grid(row=0, column=3, padx=(4, 0))
         self.folder_button.grid_remove()
+        self.preview_button = ttk.Button(
+            toolbar,
+            text="Preview",
+            command=lambda: self._mock_preview(
+                "Mockup: the selected Action or Work Item would be previewed; nothing would run or open."
+            ),
+            style="Toolbar.TButton",
+            state=tk.DISABLED,
+            width=7,
+        )
+        self.preview_button.grid(row=0, column=4, sticky=tk.E, padx=(4, 0))
         self.primary_button = ttk.Button(
             toolbar,
             text="Open / Run",
             command=self._activate_primary,
-            style="RailAccent.TButton",
+            style="Primary.TButton",
             state=tk.DISABLED,
         )
-        self.primary_button.grid(row=0, column=4, sticky=tk.E, padx=(4, 0))
-        self._hint(self.new_action_button, "New Action - choose a type and review its form.")
+        self.primary_button.grid(row=0, column=5, sticky=tk.E, padx=(4, 0))
+        self.compact_execution_row = ttk.Frame(toolbar)
+        self.compact_execution_row.lower()
+        toolbar.bind("<Configure>", self._layout_execution_controls, add="+")
+        self._hint(self.new_action_button, "Create Action - choose a type and review its form.")
         self._hint(self.edit_button, "Edit the selected Action or Work Item.")
         self._hint(self.folder_button, "Open the selected Work Item folder.")
+        self._hint(self.preview_button, "Preview the selected Action or Work Item without running or opening it.")
 
         self.quick_host = ttk.Frame(self.discovery)
         self.quick_host.grid(row=4, column=0, sticky=tk.EW, pady=(7, 0))
@@ -1333,14 +1339,14 @@ class MainPaletteMockup(MockupView):
             app_controls,
             image=self.icons["configure"],
             command=lambda: self._mock_preview("Mockup: Configure would open."),
-            style="Icon.TButton",
+            style="ToolbarIcon.TButton",
         )
         self.configure_button.pack(side=tk.LEFT)
         self.help_button = ttk.Button(
             app_controls,
             image=self.icons["help"],
             command=lambda: self._mock_preview("Mockup: task-oriented Help would open."),
-            style="Icon.TButton",
+            style="ToolbarIcon.TButton",
         )
         self.help_button.pack(side=tk.LEFT, padx=(4, 0))
         more_menu = tk.Menu(app_controls, tearoff=False)
@@ -1351,7 +1357,7 @@ class MainPaletteMockup(MockupView):
             app_controls,
             image=self.icons["more"],
             menu=more_menu,
-            style="Icon.TButton",
+            style="ToolbarIcon.TMenubutton",
         )
         self.more_button.pack(side=tk.LEFT, padx=(4, 0))
         self._hint(self.configure_button, "Configure Context Palette.")
@@ -1365,6 +1371,7 @@ class MainPaletteMockup(MockupView):
             self.results,
             self.new_action_button,
             self.edit_button,
+            self.preview_button,
             self.primary_button,
             self.quick_canvas,
             self.configure_button,
@@ -1404,6 +1411,7 @@ class MainPaletteMockup(MockupView):
             tool_commands,
             text="Send to…",
             menu=send_menu,
+            style="Toolbar.TMenubutton",
             takefocus=True,
         )
         self.send_to_button.pack(side=tk.LEFT, padx=(0, 8))
@@ -1427,7 +1435,7 @@ class MainPaletteMockup(MockupView):
                 tool_commands,
                 image=self.icons[icon],
                 command=lambda message=status: self._mock_preview(message),
-                style="Icon.TButton",
+                style="ToolbarIcon.TButton",
                 takefocus=True,
             )
             button.pack(side=tk.LEFT, padx=(0, 4))
@@ -1446,7 +1454,7 @@ class MainPaletteMockup(MockupView):
             tool_commands,
             image=self.icons["text_tools"],
             menu=text_menu,
-            style="Icon.TButton",
+            style="ToolbarIcon.TMenubutton",
             takefocus=True,
         )
         self.text_tools_button.pack(side=tk.LEFT)
@@ -1464,9 +1472,16 @@ class MainPaletteMockup(MockupView):
             height=1,
             font=("Consolas", 10),
             undo=True,
-            borderwidth=1,
-            relief=tk.SOLID,
-            highlightthickness=0,
+            borderwidth=0,
+            relief=tk.FLAT,
+            highlightthickness=1,
+            highlightbackground=COLORS["border"],
+            highlightcolor=COLORS["focus"],
+            background=COLORS["surface"],
+            foreground=COLORS["text"],
+            insertbackground=COLORS["text"],
+            selectbackground=COLORS["accent"],
+            selectforeground=COLORS["white"],
         )
         text_scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=self.text.yview)
         self.text.configure(yscrollcommand=text_scrollbar.set)
@@ -1517,6 +1532,43 @@ class MainPaletteMockup(MockupView):
         except tk.TclError:
             return
 
+    def _layout_execution_controls(self, event: tk.Event) -> None:
+        """Match the production fallback when long execution labels need room."""
+
+        toolbar = event.widget
+        fixed_controls = (self.new_action_button, self.edit_button)
+        if self.folder_button.winfo_manager():
+            fixed_controls += (self.folder_button,)
+        required = sum(widget.winfo_reqwidth() for widget in (
+            *fixed_controls,
+            self.preview_button,
+            self.primary_button,
+        )) + 16
+        if event.width < required:
+            self.compact_execution_row.grid(
+                row=1,
+                column=0,
+                columnspan=6,
+                sticky=tk.E,
+                pady=(4, 0),
+            )
+            self.preview_button.grid(
+                in_=self.compact_execution_row,
+                row=0,
+                column=0,
+                padx=(0, 4),
+            )
+            self.primary_button.grid(
+                in_=self.compact_execution_row,
+                row=0,
+                column=1,
+            )
+            self.compact_execution_row.lower()
+        else:
+            self.preview_button.grid(in_=toolbar, row=0, column=4, sticky=tk.E, padx=(4, 0))
+            self.primary_button.grid(in_=toolbar, row=0, column=5, sticky=tk.E, padx=(4, 0))
+            self.compact_execution_row.grid_remove()
+
     def _queue_split(self, event: tk.Event) -> None:
         width = int(event.width)
         if width <= 1 or width == self._last_split_width:
@@ -1548,7 +1600,7 @@ class MainPaletteMockup(MockupView):
         self.scope = scope
         for key, button in self.scope_buttons.items():
             button.configure(
-                style="Mockup.ScopeSelected.TButton" if key == scope else "Mockup.Scope.TButton"
+                style="ScopeSelected.TButton" if key == scope else "Scope.TButton"
             )
         self._render_results()
 
@@ -1662,8 +1714,9 @@ class MainPaletteMockup(MockupView):
             key=lambda item: self._result_key(item, query),
         )
         rows = [*slotted, *((None, item) for item in ordinary)]
-        for slot, item in rows:
-            tags = ("context_slot",) if slot is not None else ()
+        for index, (slot, item) in enumerate(rows):
+            paint_tag = "result_" + result_row_color_key(index, context_shortcut=slot is not None)
+            tags = ("context_slot", paint_tag) if slot is not None else (paint_tag,)
             self.results.insert("", tk.END, iid=item.key, text=item.name, tags=tags)
             self.result_items[item.key] = item
 
@@ -1694,17 +1747,20 @@ class MainPaletteMockup(MockupView):
         if self.sequence_running:
             self.primary_button.configure(text="Stop remaining", state=tk.NORMAL)
             self.edit_button.configure(state=tk.DISABLED)
+            self.preview_button.configure(state=tk.DISABLED)
             self.folder_button.grid_remove()
             return
         if item is None:
             self.primary_button.configure(text="Open / Run", state=tk.DISABLED)
             self.edit_button.configure(state=tk.DISABLED)
+            self.preview_button.configure(state=tk.DISABLED)
             self.folder_button.grid_remove()
             self.preview_var.set(
                 "Select an Action or Work Item to see Input -> Effect before Run or Open."
             )
             return
         self.edit_button.configure(state=tk.NORMAL)
+        self.preview_button.configure(state=tk.NORMAL)
         if item.kind == "work-item":
             self.primary_button.configure(text="Open", state=tk.NORMAL)
             self.folder_button.grid()

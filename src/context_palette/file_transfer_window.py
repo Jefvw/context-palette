@@ -69,7 +69,7 @@ class FileTransferWindow:
         ttk.Label(
             outer,
             text=(
-                f"Copy the file paths in Input / Output to {self.destination_label}. "
+                f"Copy the supplied file paths to {self.destination_label}. "
                 "Source files stay unchanged."
             ),
             style="Muted.TLabel",
@@ -134,6 +134,10 @@ class FileTransferWindow:
     def show(self) -> None:
         if self._closed:
             return
+        # Automatic drops may start while the Palette is hidden. Do not tie
+        # review/results visibility to a withdrawn owner.
+        parent = self.window.master
+        self.window.transient(parent if parent.winfo_viewable() else "")
         self.window.deiconify()
         self.window.lift()
 

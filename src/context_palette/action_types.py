@@ -108,7 +108,7 @@ ACTION_TYPES = {
         ),
         _definition(
             "open_windows_target",
-            "⌁",
+            "⊞",
             "Open or run a Windows target",
             "Open target",
             "Ask Windows to open or run a target such as vscode:, shell:, a file URI, drive path, document, or associated script.",
@@ -118,7 +118,7 @@ ACTION_TYPES = {
         ),
         _definition(
             "open_file",
-            "▧",
+            "📄",
             "Open a file",
             "Open target",
             "Open one existing file with its associated Windows application.",
@@ -135,6 +135,16 @@ ACTION_TYPES = {
             "No runtime input.",
             "Opens the configured folder.",
             "Machine-local unless the path uses a supported portable placeholder.",
+        ),
+        _definition(
+            "send_files_to_folder",
+            "⇥",
+            "Send files to folder",
+            "File transfer",
+            "Send the reviewed files supplied by Input / Output to one configured destination folder.",
+            "Uses the exact Input / Output text as the file-source list.",
+            "Delegates the reviewed transfer to the attended file-transfer workflow; it does not change Input / Output or the clipboard.",
+            "The destination can use ordinary portable or date placeholders; the attended workflow checks sources and the destination before copying.",
         ),
         _definition(
             "launch_app",
@@ -158,7 +168,7 @@ ACTION_TYPES = {
         ),
         _definition(
             "sequence",
-            "⇥",
+            "≡",
             "Run a sequence",
             "Action sequence",
             "Start a short reviewed list of existing Actions in order, with optional bounded waits.",
@@ -178,7 +188,7 @@ ACTION_TYPES = {
         ),
         _definition(
             "build_url_open",
-            "⇱",
+            "?↗",
             "Build and open a URL from a prompt",
             "URL builder",
             "Insert prompted text into a reviewed HTTP/HTTPS URL template.",
@@ -188,7 +198,7 @@ ACTION_TYPES = {
         ),
         _definition(
             "build_url_selection_open",
-            "⇗",
+            "T↗",
             "Build and open a URL from selection",
             "URL builder",
             "Insert selected, workspace, or clipboard text into a reviewed URL template.",
@@ -219,7 +229,7 @@ ACTION_TYPES = {
         ),
         _definition(
             "transform_text",
-            "✎",
+            "T",
             "Transform Input / Output",
             "Input / Output transformation",
             "Apply a chosen reusable text operation with guided parameters.",

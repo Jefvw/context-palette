@@ -189,6 +189,7 @@ class ConfigurationSnapshot:
                         for context, references in palette.context_item_slots.items()
                     }
                 ),
+                palette.drop_settings,
             ),
         )
         object.__setattr__(self, "loaded_asset_ids", frozenset(self.loaded_asset_ids))

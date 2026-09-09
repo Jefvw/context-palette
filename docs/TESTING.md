@@ -2,6 +2,12 @@
 
 Context Palette combines automated domain/UI-construction tests with manual Windows checks for behavior that cannot be proven reliably in a headless test.
 
+The current Input / Output, Preview, Drop and Send-files batch has
+[owner acceptance for now with partial coverage](UAT_CURRENT_BATCH.md),
+recorded on 2026-09-09. Its checklist remains available for optional follow-up.
+Keep that decision separate from per-check results, automated output and
+simulated DPI; unreported manual checks remain unverified.
+
 ## Complete automated check
 
 From the repository root:
@@ -494,7 +500,7 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    none is guessed. Try an unavailable absolute document path and verify the
    review form appears immediately without waiting for the drive.
    Cancel each form and confirm nothing is created or run. Finally verify the
-   existing launcher **+ Action** control still opens its normal unprefilled type chooser.
+   existing launcher **Create Action** control still opens its normal unprefilled type chooser.
    On initial display, verify the command console occupies about 40% of the
    width, Input / Output occupies about 60% and nearly the full height, Find is
    no wider than its result list, and up to seven result rows are visible at
@@ -506,7 +512,7 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
    remain in the mixed results. Switch to Actions, then Work Items, and back;
    verify the shared Context/tag filters and chosen slot bank remain active and the
    filter menu changes between Action type tools and Work Item/project tools
-   without moving Find, the result list, or the stable `+A`/Edit/Run toolbar.
+   without moving Find, the result list, or the stable Create Action/Edit/Run toolbar.
    Verify Configure, Help, and More remain below Quick actions. Resize to the
    supported minimum and verify the filter control, item toolbar, app controls,
    and all three scope labels remain available. Drag

@@ -2,6 +2,11 @@
 
 This file contains actionable future work. Completed user-visible work belongs in [CHANGELOG.md](CHANGELOG.md), and ordered outcomes belong in [Roadmap](docs/ROADMAP.md).
 
+The owner accepted the current Input / Output, Preview, Drop, Send-files and
+cosmetic batch on 2026-09-09 with partial UAT coverage. See the
+[acceptance record](docs/UAT_CURRENT_BATCH.md). Unreported checks remain
+unverified and are deferred; they do not block this accepted batch.
+
 ## Now
 
 - Manually validate combined **Menu locations** while creating and editing a
@@ -202,6 +207,13 @@ This file contains actionable future work. Completed user-visible work belongs i
   boundary benefits; avoid line-count-only refactors.
 
 ## Later
+
+- Revisit the [current-batch follow-up checks](docs/UAT_CURRENT_BATCH.md) when
+  real-use feedback or a relevant change warrants them: Input / Output
+  selection/history, effect-free Preview, exact Drop input and replay,
+  Run/Quick-menu file copying, conflicts/open reviews/changed approval, and
+  physical 100%/125% DPI plus cross-monitor icon/control rendering. Owner
+  acceptance is closed for now; no unreported check is counted as a pass.
 
 - Consider direct source drag-and-drop and folder selection inside Harvest
   after its explicit multi-file workflow has real-use feedback. The implemented

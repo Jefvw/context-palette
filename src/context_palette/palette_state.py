@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from .actions import Action, ActionError
+from .drop_action import DropActionSettings, drop_action_settings_data, parse_drop_action_settings
 from .palette_items import PaletteItemReference, palette_item_reference_data
 from .persistence import atomic_write_json
 from .work_items import WorkItemDiscoveryError, WorkItemReference
@@ -27,6 +28,7 @@ class PaletteState:
     context_item_slots: dict[str, tuple[PaletteItemReference, ...]] = field(
         default_factory=dict
     )
+    drop_settings: DropActionSettings = field(default_factory=DropActionSettings)
 
 
 def load_palette_state(path: Path) -> PaletteState:
@@ -50,6 +52,7 @@ def load_palette_state(path: Path) -> PaletteState:
     slots = raw.get("context_slots", {})
     item_slots = raw.get("context_item_slots", {})
     context_membership_version = raw.get("context_membership_version", 0)
+    drop_settings = parse_drop_action_settings(raw.get("drop_settings", {}))
     if not isinstance(pinned, list) or not all(isinstance(item, str) for item in pinned):
         raise ActionError("Palette pins must be a list of action IDs.")
     if len(pinned) > 5:
@@ -96,6 +99,7 @@ def load_palette_state(path: Path) -> PaletteState:
         parsed_slots,
         context_membership_version,
         parsed_item_slots,
+        drop_settings,
     )
 
 
@@ -119,6 +123,8 @@ def save_palette_state(path: Path, state: PaletteState) -> None:
         }
     if state.context_membership_version:
         data["context_membership_version"] = state.context_membership_version
+    if state.drop_settings != DropActionSettings():
+        data["drop_settings"] = drop_action_settings_data(state.drop_settings)
     atomic_write_json(path, data)
 
 

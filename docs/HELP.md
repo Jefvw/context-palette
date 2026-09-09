@@ -3,7 +3,16 @@
 Context Palette is a fast, portable Windows launcher for reusable actions,
 work Contexts, captured material, and transformations.
 
-The interface uses a clean neutral surface with Segoe UI typography and a high-contrast dark teal accent. Teal is reserved for primary actions and active selections. Green rows identify the active Context bank's shortcuts 6–0, and neutral rows are ordinary results. Native focus borders make keyboard location visible.
+The interface uses a neutral surface with Segoe UI typography and a dark teal
+accent. The selected **All items / Actions / Work Items** control uses pale teal
+with dark text; **Run/Open** stays solid teal. Green rows identify the active
+Context bank's shortcuts 6–0, and neutral rows are ordinary results. Alternating
+light/darker row bands separate neighboring results, including within the
+green shortcut group; the selected row stays solid teal with white text. Focus
+borders make keyboard location visible. Input / Output keeps its monospace
+font, with a themed focus border and teal text selection. Quick-menu launchers
+have one right-aligned arrow; click, keyboard browsing, and right-click editing
+work as before.
 
 Developers can find the current implementation in
 [Architecture](ARCHITECTURE.md) and its chronological rationale in
@@ -531,10 +540,26 @@ The destination menu can contain:
 - **Manage Folder Actions…** for editing the reusable destinations.
 
 A Folder Action is reused only as a destination record inside **Send to…**.
-Running that same Action from Find or a Quick menu still opens its folder; it
-does not copy anything. Recent destinations are never written to configuration
-or backups, and source paths are never added to recent-destination state.
-Only Folder Actions whose destination can be resolved without clipboard text
+Running that same **Open a folder** Action from Find or a Quick menu still opens
+its folder; it does not copy anything. Recent destinations are never written
+to configuration or backups, and source paths are never added to that state.
+
+For a reusable copy command, create an Action of type **Send files to folder**
+and set its destination folder. Use an existing folder, optionally through a
+portable/date placeholder. It uses the exact file paths in Input / Output;
+it never substitutes the clipboard for missing input. Run it from the normal
+Action list or place it in any configured Quick menu. This is distinct from
+**Open a folder**, which opens Explorer rather than copying files.
+
+To copy on drop, choose that saved Action under **Drop window → Settings… →
+On drop → Run an Action…**. Saving explicitly permits copying each new drop
+to the named destination. Conflict-free copies start automatically; name
+conflicts use the existing review with overwrite off by default. Source files,
+clipboard and Input / Output remain unchanged. Only files are copied, not
+folder trees. Preview describes the input/destination/effect without inspecting
+or copying files. A later drop cannot replace an open copy review; changing
+the saved destination requires choosing and approving the Action again.
+Only **Open a folder** Actions whose destination can be resolved without clipboard text
 are offered here. An Action containing `%CLIPBOARD%`, `%CLIPBOARD_URL%`,
 `%pptxt%`, or `%cpy_txt_urlencode%` remains available through its ordinary Run
 route but is excluded from copy destinations. This prevents a missing clipboard
@@ -666,7 +691,7 @@ under **Set up** and backup or troubleshooting destinations under **Support**:
   deletion only; there is no Archive or Restore command.
   New actions default to **My configuration**; choose **Built-in** only when
   deliberately changing shipped starter data.
-- **+ Action / New Action:** use the visible launcher button, Configure's
+- **Create Action / New Action:** use the visible launcher button, Configure's
   **New Action…**, or press
   `Ctrl+N`, to search and choose a type before completing the usual Action
   form. The chooser supports typing, arrow keys, Enter, and Escape; it does
@@ -931,6 +956,16 @@ can show the current clipboard or captured selection. Actions can read or
   **Send to…** destination menu, and bitmap controls for Capture, Inbox,
   **Create from Input**, **Extract text**, and **Text tools**.
 
+Use the single **Input / Output** checkbox beside the application controls to
+hide or show this panel. It is shown by default each session. Hiding preserves
+its text, selection, Back/Forward history, and native Undo/Redo; the communication
+line stays visible on the left. A **•** on the collapsed control means it
+contains input. Normal clipboard/selection capture still works while hidden.
+A show-only drop reveals both the Palette and Input / Output; a configured
+Action runs directly and reveals text output only when it produces a result. Contexts and
+tags keep their separate controls and meanings; this is not a new layout or
+organization model.
+
 Numbered Action triggering is deliberately active only for Shift+6–0 while
 Find has focus. Shift+1–5 is retired, and in every other control—including
 Input / Output, the result list, filter controls, and buttons—number keys do
@@ -941,9 +976,10 @@ The bottom communication line always stays one row high. Hover over it for the c
 - A text selection captured with `Ctrl+Alt+P` appears here.
 - `Ctrl+V` pastes at the cursor; the right-click command `Replace with clipboard` replaces everything.
 - Drop files, folders, shortcuts, links, or text onto the separate drop target.
-  Empty Input / Output is replaced directly; existing content gets explicit
-  **Replace**, **Append**, and **Cancel** choices. The drop path does not read,
-  replace, or copy the clipboard.
+  In default show-only mode, empty Input / Output is replaced directly; existing content gets explicit
+  **Replace**, **Append**, and **Cancel** choices. Default show-only dropping
+  does not read, replace, or copy the clipboard. An explicitly configured Drop
+  Action can have its normal clipboard effects, as described in Drop settings.
 - Type or edit text directly.
 - Use the Back and Forward arrows to navigate the last ten meaningful complete
   Input / Output states from this session. Consecutive typing is kept as one
@@ -969,7 +1005,7 @@ The bottom communication line always stays one row high. Hover over it for the c
   target, unsupported addresses, line-broken content, relative paths, and
   script-like targets are explained instead of guessed. An unavailable absolute
   path can still be reviewed for portable or temporarily disconnected use. Use
-  the unchanged **+ Action** command to choose a type yourself.
+  the **Create Action** command to choose a type yourself.
 - Choose **Extract text** to read one local image into Input / Output. Context
   Palette first checks selected or complete Input / Output for one exact image
   path, otherwise reads a clipboard bitmap, and finally offers an image file
@@ -1082,7 +1118,8 @@ Controls stay beside the thing they affect. The three item views remain
 readable above Find. The bitmap-icon Filter control sits beside Find and owns
 Context, tag, Action type, and Work Item project constraints; its Context value
 also chooses slots 6–0. Below results, the stable item toolbar
-contains `+A`, Edit, and Run/Open; invalid selection commands are disabled
+contains the document-plus **Create Action** button, Edit, and Run/Open;
+invalid selection commands are disabled
 instead of failing after a click. Work Item-specific New, Inbox, Copy file, and
 project commands live in the filter/tools menu.
 
@@ -1090,8 +1127,16 @@ The Input / Output header contains Back, Forward, Capture, Inbox, Create from
 Input, Extract text, and Text tools. Configure, Help, and More sit below Quick
 actions. These icon-only controls use portable Tk bitmaps rather than font
 characters. Hover over or keyboard-focus any icon to see its complete name and
-explanation. The generic `+A` chooser and the conservative Create from Input
-route remain separate.
+explanation. The document-plus **Create Action** chooser and the wand-shaped
+**Create from Input** route remain separate. Creation has a neutral button so
+Run/Open remains the main visual command.
+
+Result-list symbols identify Action types: a document for a file, a pane-shaped
+window for Windows targets, ordered lines for a Sequence, and a transfer arrow
+for Send files. Website actions retain an opening arrow; `?↗` means the URL
+asks for a value, while `T↗` uses supplied text. `T` identifies a text
+transformation. The full type and effect remain available in the item tooltip
+and Preview. Icons do not change what an Action does.
 
 ### Run
 
@@ -1116,9 +1161,27 @@ structured Type, Input, Effect, configured-value, and recovery details. The
 compact line never includes captured input content, passwords, or technical
 action-type IDs.
 
+#### Optional Preview
+
+Select an Action or Work Item and choose **Preview** beside Run/Open. It shows
+the actual input source and snapshot, resolved target where available, expected
+effect, and recovery limitations. Text transformations and templates can show
+their computed result. File, application, sequence, and Excel operations show
+a plan only: Preview does not open targets, inspect workbook contents, retrieve
+passwords, write files, or write to the clipboard. Missing runtime choices are
+identified rather than guessed. Large inputs/results are bounded and any
+display truncation is labelled.
+
+Preview is optional. Close it and use normal Run/Open as before. It is a
+snapshot, not an approval or reservation: Run uses the then-current input and
+retains all existing checks and confirmations. A clipboard-based template
+previews the clipboard, not unrelated Input / Output text. Protected credential
+clipboard contents are never read by Preview. On narrow windows Preview and
+Run/Open share a second toolbar row so their labels remain visible.
+
 #### Run a sequence
 
-Create **Run a sequence** from **+ Action** when several reviewed launch/open
+Create **Run a sequence** from **Create Action** when several reviewed launch/open
 Actions should start in a fixed order. Add existing website, file, folder,
 application, or Windows-target Actions, optionally insert waits, and reorder the
 list. A sequence needs 2–12 steps. Each wait is 100–10,000 milliseconds; waits
@@ -1270,7 +1333,7 @@ object. Context Palette uses Tcl's native file-list decoder, normalizes useful
 paths and links in their original order, removes duplicates, and resolves only
 the target of a shortcut. It never imports shortcut arguments.
 
-After a useful drop, the palette appears without synchronizing from the
+In default show-only mode, a useful drop makes the palette and Input / Output appear without synchronizing from the
 clipboard. Any stale hotkey-captured selection or destination is discarded so
 it cannot replace or receive the dropped material. Input / Output placement is
 one Undo step. The target remembers the last ten successful non-empty drops for
@@ -1287,9 +1350,9 @@ Replace/Append/Cancel placement flow without resolving it again or creating a
 duplicate history entry. Errors and empty drops are not retained. Choose its
 **Hide** button to put it away and **More → Show drop target** to restore it.
 
-Dropping does not open or execute anything, save configuration, create an
-Action or Inbox item, write a log containing the dropped value, or modify the
-clipboard. An unreadable `.url` or unresolved `.lnk` remains as its original
+The default **Show in Context Palette** behaviour does not open or execute
+anything, save configuration, create an Action or Inbox item, write a log
+containing the dropped value, or modify the clipboard. An unreadable `.url` or unresolved `.lnk` remains as its original
 path with a warning. Showing details does not inspect a path, access a web link,
 re-resolve a shortcut, or copy anything. If TkDND cannot load or initialize,
 the target is unavailable but the resident launcher and every non-drop feature
@@ -1297,6 +1360,50 @@ continue to work. The launcher status points to **More → Show drop target**;
 that command explains the required stop, setup, and restart sequence. A failed
 Drop-target initialization is retained for the current process, so installing
 the dependency without restarting is not sufficient.
+
+Choose **Settings…** on the Drop window to set **On drop**:
+
+- **Show in Context Palette** is the default and can always be restored.
+- **Run an Action…** lets you choose a compatible Active Action. Review the
+  named Action and its effect before saving. This explicitly permits that
+  effect on each new drop; it is not a generic automation permission switch.
+
+Compatible Actions include text/list/slash transformations, selection-based
+URL builders, clipboard-placeholder templates/prompts/website/folder Actions,
+saved **Send files to folder** Actions, and the existing attended Excel CSV
+export workflow. The settings list other
+Actions with a reason they cannot use this invocation. Credential paste,
+arbitrary Windows targets, associated files/scripts, application launching,
+sequences, live Excel, and Actions that ignore dropped input remain manual.
+
+The Action receives exactly the new prepared dropped content, not the prior
+clipboard, captured selection, or older text already in Input / Output.
+It runs directly, without placing the drop in Input / Output and without a
+Replace/Append prompt. Copy/open/Excel Actions leave existing Input / Output
+alone; text-producing Actions show their completed result there afterward,
+with normal Undo/history. Default **Show in Context Palette** and explicit
+**Send again** still use Replace/Append/Cancel. Existing Action-specific
+confirmations remain: Excel CSV opens its normal review; name conflicts open
+the copy review. These windows can appear while the Palette stays hidden.
+A later drop cannot replace an already-open copy or Excel review.
+
+Results appear in the Action's workflow or, for text output, Input / Output.
+Blocked or failed execution shows an explanation in the Palette without
+replacing existing text. The original drop remains in Drop history; use
+**Show details** to inspect it or **Send again** to place it manually. Already
+completed external effects are not rolled back; inspect before manually
+retrying. There is no automatic retry.
+Shortcut warnings, missing/inactive Actions, changed execution configuration,
+or a failed configuration reload prevent automatic execution and explain why
+nothing ran. Changing an Action's target, parameters, name, or type
+requires choosing and saving it again in Drop settings; Context/tag/menu-only
+edits do not. An unavailable or changed approved Action is labelled
+**Action blocked — review Settings**; it does not silently become show-only.
+**Show details** describes the prepared dropped content retained in history,
+without promising an execution or Input / Output placement.
+Settings are local to this computer. **Previous**, **Next**, and
+**Send again** never repeat the automatic effect. A second drop is refused
+while the preceding drop's placement or synchronous Action dialog is active.
 
 ### Hide
 

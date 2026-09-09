@@ -605,6 +605,12 @@ def configured_action(
         else tuple(argument.strip() for argument in arguments if argument.strip())
     )
     clean_working_directory = working_directory.strip()
+    if action_type == "send_files_to_folder" and (
+        clean_arguments or clean_working_directory
+    ):
+        raise ActionError(
+            "Send files to folder Actions cannot store arguments or a working folder."
+        )
     if action_type == "excel_automation" and (
         clean_arguments or clean_working_directory
     ):
@@ -832,6 +838,7 @@ def execute_action(
     opener: Callable[[Action], None] | None = None,
     sequence_runner: Callable[[Action], str] | None = None,
     excel_automation_runner: Callable[[Action], str] | None = None,
+    file_transfer_runner: Callable[[Action, str], str] | None = None,
 ) -> str:
     if action.type == "sequence":
         if sequence_runner is None:
@@ -847,6 +854,12 @@ def execute_action(
         if credential_paster is None:
             raise ActionError("Protected credential paste is unavailable.")
         return credential_paster(action)
+    if action.type == "send_files_to_folder":
+        _validate_file_transfer_configuration(action)
+        if file_transfer_runner is None:
+            raise ActionError("File transfer execution is unavailable.")
+        expanded = expanded_action(action)
+        return file_transfer_runner(expanded, input_text or "")
 
     if action.type in {"workspace_template", "ai_prompt"}:
         expanded = expanded_action(action, clipboard_getter=clipboard_getter)
@@ -1069,6 +1082,26 @@ def validate_credential_target(value: str) -> None:
         raise ActionError("Windows credential target name cannot contain control characters.")
 
 
+def validate_file_transfer_destination(value: str) -> None:
+    """Validate a transfer destination without probing its machine-local state."""
+
+    if not value.strip():
+        raise ActionError("The destination folder cannot be empty.")
+    if any(token in value for token in CLIPBOARD_TEMPLATE_TOKENS):
+        raise ActionError(
+            "The destination folder cannot use clipboard placeholders. "
+            "Use a fixed, portable, or date-based destination instead."
+        )
+
+
+def _validate_file_transfer_configuration(action: Action) -> None:
+    validate_file_transfer_destination(action.value)
+    if action.arguments or action.working_directory:
+        raise ActionError(
+            "Send files to folder Actions cannot store arguments or a working folder."
+        )
+
+
 def validate_action_value(
     action_type: str,
     value: str,
@@ -1089,6 +1122,8 @@ def validate_action_value(
         raise ActionError("The action value cannot be empty.")
     if action_type == "open_url":
         validate_http_url(clean_value, label="Action URL")
+    elif action_type == "send_files_to_folder":
+        validate_file_transfer_destination(clean_value)
     elif action_type == "open_windows_target":
         validate_windows_target(clean_value)
     elif action_type == "transform_file_text" and inspect_external_paths:
@@ -1918,6 +1953,13 @@ def _parse_action(
     working_directory = item.get("working_directory")
     if working_directory is not None and not isinstance(working_directory, str):
         raise ActionError(f"Action #{index} has an invalid working directory.")
+    if action_type == "send_files_to_folder" and (
+        arguments or (working_directory is not None and working_directory.strip())
+    ):
+        raise ActionError(
+            f"Action #{index}: Send files to folder Actions cannot contain "
+            "arguments or a working directory."
+        )
     if action_type == "excel_automation" and (
         arguments or (working_directory is not None and working_directory.strip())
     ):

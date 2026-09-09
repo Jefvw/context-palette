@@ -42,6 +42,54 @@ class _Event:
 
 
 class DropTargetWindowTests(unittest.TestCase):
+    def test_modal_callback_blocks_nested_drop_and_resend_without_queuing(self):
+        result = DropResult(items=(DropItem("text", "one"),))
+        coordinator = Mock()
+        calls = []
+        def receive(value):
+            calls.append(value)
+            self.assertTrue(target._delivering)
+            self.assertEqual(target._handle_text_drop(_Event(self.root)), DROP_REFUSE_ACTION)
+            target._send_again()
+            target._complete(result)
+        target = DropTargetWindow(self.root, receive, coordinator=coordinator)
+        target._complete(result)
+        self.assertEqual(calls, [result])
+        self.assertEqual(target._drop_history, [result])
+        self.assertFalse(target._delivering)
+        coordinator.start.assert_not_called()
+        target._send_again()
+        self.assertEqual(calls, [result, result])
+
+    def test_delivery_guard_resets_when_callback_fails_without_retrying(self):
+        callback = Mock(side_effect=RuntimeError("failure"))
+        target = DropTargetWindow(self.root, callback)
+        result = DropResult(items=(DropItem("text", "one"),))
+        with self.assertRaisesRegex(RuntimeError, "failure"):
+            target._complete(result)
+        self.assertFalse(target._delivering)
+        callback.assert_called_once_with(result)
+        self.assertEqual(target._drop_history, [result])
+
+    def test_settings_callback_and_history_resend_do_not_repeat_new_drop_route(self):
+        dropped = Mock()
+        resent = Mock()
+        configure = Mock()
+        with patch("context_palette.drop_target_window._load_tk_dnd", return_value=_Dnd), \
+             patch.object(tk.Toplevel, "drop_target_register", create=True), \
+             patch.object(tk.Toplevel, "dnd_bind", create=True):
+            target = DropTargetWindow(self.root, dropped, on_resend=resent, on_configure=configure)
+            target.set_behavior_label("On drop: Uppercase")
+            target.show()
+            self.assertEqual(target._behavior_label.cget("text"), "On drop: Uppercase")
+            target.settings_button.invoke()
+            configure.assert_called_once_with()
+            result = DropResult(items=(DropItem("text", "example"),))
+            target._complete(result)
+            target.send_again_button.invoke()
+            dropped.assert_called_once_with(result)
+            resent.assert_called_once_with(result)
+
     def setUp(self) -> None:
         try:
             self.root = tk.Tk()
@@ -142,7 +190,7 @@ class DropTargetWindowTests(unittest.TestCase):
 
         self.assertEqual(
             drop_result_details(result),
-            "What will be sent to Input / Output (3 items)\n\n"
+            "Prepared dropped content (3 items)\n\n"
             "1. Path\n"
             "C:\\Dropped\\report.xlsx\n\n"
             "2. Web link\n"
@@ -162,7 +210,7 @@ class DropTargetWindowTests(unittest.TestCase):
 
         details = drop_result_details(result)
 
-        self.assertIn("... 1 more items are retained and will be sent.", details)
+        self.assertIn("... 1 more items are retained in Drop history.", details)
         self.assertEqual(result.items, items)
 
         long_result = DropResult(
@@ -371,7 +419,7 @@ class DropTargetWindowTests(unittest.TestCase):
             self.assertEqual(expanded_anchor, compact_anchor)
             self.assertEqual(
                 target._details_text.get("1.0", "end-1c"),
-                "What will be sent to Input / Output (1 item)\n\n"
+                "Prepared dropped content (1 item)\n\n"
                 "1. Text - 10 characters, 1 line\n"
                 "later text",
             )
@@ -380,7 +428,7 @@ class DropTargetWindowTests(unittest.TestCase):
             target.previous_button.invoke()
             self.assertEqual(
                 target._details_text.get("1.0", "end-1c"),
-                "What will be sent to Input / Output (1 item)\n\n"
+                "Prepared dropped content (1 item)\n\n"
                 "1. Path\n"
                 "C:\\Dropped\\report.xlsx\n\n"
                 "Warnings\n"

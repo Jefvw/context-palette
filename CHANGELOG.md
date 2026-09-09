@@ -4,6 +4,52 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Corrected Drop history details to describe retained input without promising
+  Input / Output placement. Changed or unavailable approved Drop Actions now
+  say **Action blocked — review Settings** instead of appearing to switch to
+  show-only. Added a focused owner acceptance guide and updated Create Action
+  instructions to match the current control.
+
+- Refined compact monochrome toolbar pictograms and replaced the +A badge
+  with a neutral document-plus Create Action button, keeping normal creation
+  separate from Create from Input. Clarified file, Windows-target, Sequence,
+  text-transformation and URL-builder symbols without changing type semantics,
+  title space, result widgets or execution behavior.
+- Made neighboring results easier to distinguish with alternating neutral row
+  bands and two green shades within Context shortcuts. All items, Actions and
+  Work Items retain their compact rows, names, ordering and keyboard behavior;
+  selection remains solid teal with white text.
+- Polished the existing Palette without changing its workflows: pale-teal
+  All items / Actions / Work Items selection, dominant solid-teal Run/Open,
+  aligned compact toolbar controls, themed Input / Output focus and selection,
+  and one right-aligned arrow per Quick-menu launcher. Kept the existing
+  window sizes, shortcuts, menu interactions, and monospace editing behavior.
+  Corrected a compact-layout frame that could cover Preview and Run, reflow
+  after selection changes, and Filter-button clipping at minimum width.
+- Corrected configured drop Actions to run immediately on the dropped content,
+  without Input / Output placement or Replace/Append. Copy/open/Excel leave
+  existing editor content alone; completed text results appear afterward.
+  Default show-only and history resend keep placement choices. Failed drops
+  stay in Drop history, and copy/CSV reviews work with the Palette hidden.
+- Added **Send files to folder** as a saved Action for Run, Quick menus and
+  explicitly configured Drop. It reuses Send-to planning/copying and conflict
+  review, keeps exact input snapshots, and does not alter source files or the
+  clipboard. Preview remains effect-free; new drops cannot replace an open
+  copy review. Opening targets, copying and Excel now share a small runtime
+  dispatch boundary without changing storage or live Excel safeguards.
+- Added a single show/hide **Input / Output** control, shown by default each
+  session. Hidden input is marked; text, selection, history, and Undo survive,
+  and show-only drops reveal the panel. Existing Context/tag controls remain distinct.
+- Added optional read-only **Preview** beside Run/Open: actual source snapshots,
+  resolved targets, bounded pure results, expected effects, and recovery limits.
+  It does not execute, write clipboard/files, or retrieve credentials.
+- Added **Settings… → On drop** on the Drop target. Default remains Show in
+  Context Palette; an explicitly chosen compatible Action receives only the
+  new dropped input and keeps its existing confirmations. Stale approval and
+  unresolved-shortcut warnings stop automatic effects, failures retain input,
+  and history resend never repeats automatic execution. Settings are local;
+  no Context/tag migration or general recipe/permission framework was added.
+
 - Made runtime configuration reload atomic in memory. Actions, Contexts,
   Quick actions, palette slots, and Work Item configuration are now staged as
   one validated generation before any live launcher state changes. A late

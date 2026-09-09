@@ -47,11 +47,19 @@ Action and its internal placements without changing its external target. See
   saved-placement effects are shown, stale state is rejected, failed writes
   restore exact configuration bytes, and external targets remain untouched.
 - Keeps a separate always-on-top drop target for files, folders, shortcuts,
-  links, and text. A successful drop reveals the ordinary non-topmost palette
+  links, and text. By default a successful drop reveals the ordinary non-topmost palette
   and offers the normalized result to Input / Output without changing the
   clipboard. The target remembers the last ten useful drops for the current
   session, identifies the selected prepared content, offers exact details on
   request, and can send it through the same placement flow again.
+- Shows Input / Output by default, with one hide/show control that preserves
+  content, selection, and Undo/history. Offers optional read-only Preview
+  beside Run/Open without adding a required execution step.
+- Offers **Settings… → On drop** on the Drop target: keep default show-only,
+  or explicitly choose a compatible Action to receive the exact dropped input.
+  Configured Actions run directly, without an Input / Output placement prompt.
+  Existing confirmations remain; failures retain the drop in session history
+  without replacing editor text or retrying. History resend only places input.
 - Optionally delegates reviewed closed-workbook CSV exports to a separately
   bootstrapped Python Excel installation. A direct sibling checkout is detected
   automatically, planning starts with the first workbook's folder as the
@@ -95,6 +103,9 @@ Action and its internal placements without changing its external target. See
   names receive deterministic `(1)`, `(2)` suffixes by default; an explicit
   reviewed **Allow overwrite** choice may replace only the unsuffixed files.
   Source files are never moved or changed.
+- Save **Send files to folder** as an Action with a fixed/portable destination
+  to reuse copying from Run, Quick menus or Drop settings. It uses only supplied
+  file paths and the same collision review; Preview does not copy anything.
 - The same **Send to…** menu has a separate **Open with → Open folder in VS
   Code** command for one existing absolute folder or file path. A folder opens
   itself; a file opens its containing folder through Windows' registered

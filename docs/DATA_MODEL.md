@@ -33,6 +33,18 @@ the discovery rows.
 
 ## Concept map
 
+Runtime operation requests are not stored records. An Action says what to do;
+a Work Item or folder supplies a resource; a request combines that operation
+with an explicit input snapshot. `FolderResource` is a temporary destination
+projection. Contexts/tags, Work Item identities and their storage stay unchanged.
+
+The `send_files_to_folder` Action uses the existing Action schema: `type` selects
+the copy operation and `value` stores its destination folder, optionally with
+portable/date placeholders. No arguments, working directory or clipboard-based
+destination is permitted. Actual source paths and dispatch receipts are not
+persisted in the Action. Existing Drop settings approve its exact configuration;
+changing the destination requires renewed Drop approval.
+
 ```mermaid
 erDiagram
     CONTEXT ||--o{ PALETTE_ITEM_REFERENCE : "groups and prefers"
@@ -119,6 +131,14 @@ There is one machine-local `PaletteState` aggregate.
 | `context_slots` | Context-name to ordered Action-reference overrides for slots 6–0 |
 | `context_item_slots` | Context-name to ordered typed Action/Work Item overrides for slots 6–0 |
 | `context_membership_version` | Marker for the completed membership migration, not a general file schema version |
+| `drop_settings` | Optional local object: `mode` (`show` or `action`), exact `action_id`, and execution-configuration `action_fingerprint`; default show-only is omitted on save |
+
+Existing palette files without drop settings remain show-only. An opted-in
+Action must still be Active, compatible, uniquely identified, and match its
+reviewed fingerprint before a new drop can invoke it. Context/tag/menu edits
+do not alter that fingerprint. Input / Output visibility and Preview snapshots
+are session-only UI state, not persisted records. No Context/tag migration or
+new recipe schema accompanies these enhancements.
 
 ### Quick-action command surface
 

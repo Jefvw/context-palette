@@ -22,6 +22,9 @@ from context_palette.configuration_snapshot import (
     load_configuration_snapshot,
 )
 from context_palette.data_catalog import AppDataPaths, asset_spec_by_id
+from context_palette.actions import Action
+from context_palette.drop_action import approve_drop_action
+from context_palette.palette_state import PaletteState
 
 
 def write_json(path: Path, payload: object) -> None:
@@ -222,6 +225,11 @@ def issue_codes(report) -> set[ValidationIssueCode]:
 
 
 class ConfigurationSnapshotTests(unittest.TestCase):
+    def test_snapshot_keeps_drop_authority_while_freezing_palette_collections(self):
+        settings = approve_drop_action(Action("upper", "Uppercase", "General", "transform_text", "uppercase"))
+        snapshot = ConfigurationSnapshot(AppDataPaths.from_root(ROOT), palette_state=PaletteState(drop_settings=settings))
+        self.assertEqual(snapshot.palette_state.drop_settings, settings)
+
     def test_complete_snapshot_loads_every_structured_asset(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             paths = write_complete_project(Path(directory))

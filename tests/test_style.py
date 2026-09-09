@@ -41,7 +41,9 @@ class FakeStyle:
     def map(self, style_name, **options):
         self.maps[style_name] = options
 
-    def layout(self, style_name, specification):
+    def layout(self, style_name, specification=None):
+        if specification is None:
+            return self.layouts.get(style_name, [])
         self.layouts[style_name] = specification
 
 

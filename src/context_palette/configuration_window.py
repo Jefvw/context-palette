@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import re
 from typing import Callable, Iterable
@@ -147,6 +147,7 @@ ACTION_TYPE_EXAMPLES = {
     ),
     "open_file": r"Example: Open %PROJECT_ROOT%\README.md in its associated application.",
     "open_folder": r"Example: Open %PROJECT_ROOT%\docs in File Explorer.",
+    "send_files_to_folder": r"Example: Send the reviewed Input / Output file list to %PROJECT_ROOT%\exports.",
     "launch_app": r"Example: Start C:\Tools\Example\Example.exe with reviewed arguments.",
     "excel_automation": "Example: Export Input / Output workbooks, format an open workbook, or review selected live columns for UAT-gated conversion to text.",
     "sequence": "Example: Start an import Action, wait briefly, then open its results folder.",
@@ -3428,6 +3429,10 @@ class ConfigurationWindow:
             context_item_slots,
         )
         try:
+            updated = replace(
+                updated,
+                drop_settings=load_palette_state(self.palette_path).drop_settings,
+            )
             save_palette_state(self.palette_path, updated)
         except (ActionError, OSError) as exc:
             messagebox.showerror(
@@ -4756,6 +4761,7 @@ class ActionDialog:
             "open_windows_target": "Windows target",
             "open_file": "File",
             "open_folder": "Folder",
+            "send_files_to_folder": "Folder",
             "launch_app": "Application",
             "excel_automation": "Automation",
             "paste_credential": "Credential",

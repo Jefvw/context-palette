@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import ctypes
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import logging
 import queue
 import time
@@ -31,6 +31,7 @@ from .actions import (
 )
 from .action_preview import (
     build_action_preview,
+    build_execution_preview,
     compact_preview_value,
     format_preview_summary,
 )
@@ -102,6 +103,8 @@ from .contexts import (
 from .data_catalog import AppDataPaths
 from .drop_adapter import DropResult
 from .drop_target_window import DropTargetWindow
+from .drop_action import DropActionSettings, resolve_drop_action
+from .drop_configuration_window import DropConfigurationWindow
 from .excel_automation import (
     ExcelAutomationInputError,
     live_text_conversion_uat_enabled,
@@ -111,6 +114,15 @@ from .excel_automation_window import ExcelAutomationWindow
 from .excel_live_format_window import ExcelLiveFormatWindow
 from .excel_live_text_conversion_window import ExcelLiveTextConversionWindow
 from .file_transfer_window import FileTransferWindow
+from .resource_operations import (
+    CopyFilesRequest,
+    ExcelWorkflowRequest,
+    FolderResource as _SendDestination,
+    OpenTargetRequest,
+    OperationDispatch,
+    ResourceOperationRequest,
+    dispatch_resource_operation,
+)
 from .inbox import InboxError, append_inbox_item, create_clipboard_item, load_inbox_items
 from .inbox_window import ActionCreator, InboxWindow, suggest_url_template
 from .ocr import (
@@ -125,7 +137,7 @@ from .ocr import (
 )
 from .single_instance import SingleInstanceServer
 from .searchable_selection import SearchableSelectionPopup
-from .style import COLORS, configure_theme
+from .style import COLORS, configure_theme, result_row_color_key
 from .tooltips import WidgetTooltip
 from .vscode_integration import (
     VsCodeIntegrationError,
@@ -141,6 +153,7 @@ from .palette_state import (
     action_slots,
     load_palette_state,
     palette_item_slots,
+    save_palette_state,
     slot_display_number,
 )
 from .palette_items import PaletteItemReference
@@ -218,17 +231,6 @@ ACTION_BOUND_QUICK_NOUNS = {
     "open_folder": "folder",
     "ai_prompt": "prompt",
 }
-
-
-@dataclass(frozen=True, slots=True)
-class _SendDestination:
-    """One runtime-only folder that can receive Input / Output files."""
-
-    key: str
-    label: str
-    folder_path: Path
-    menu_path: tuple[str, ...] = ()
-    search_text: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -449,6 +451,9 @@ class LauncherApp:
         self.command_surface_columns = 1
         self.configuration_window: ConfigurationWindow | None = None
         self.drop_target_window: DropTargetWindow | None = None
+        self.drop_configuration_window: DropConfigurationWindow | None = None
+        self.execution_preview_window: tk.Toplevel | None = None
+        self.workspace_visible = True
         self.excel_automation_window: (
             ExcelAutomationWindow
             | ExcelLiveFormatWindow
@@ -486,7 +491,10 @@ class LauncherApp:
         self.drop_target_window = DropTargetWindow(
             self.root,
             self._accept_drop_result,
+            on_configure=self._configure_drop_target,
+            on_resend=self._show_drop_result,
         )
+        self._refresh_drop_behavior_label()
         self.root.after_idle(self._start_drop_target)
         self.hotkey_available = self.hotkey.start()
         if self.hotkey_available:
@@ -552,6 +560,17 @@ class LauncherApp:
         workspace_container = ttk.Frame(content, padding=(6, 0, 0, 0))
         content.add(command_console, weight=2)
         content.add(workspace_container, weight=3)
+        self.collapsed_workspace_status = ttk.Label(
+            command_console,
+            textvariable=self.status_var,
+            style="Status.TLabel",
+            anchor=tk.W,
+            width=1,
+        )
+        self._tooltip(self.collapsed_workspace_status, self._status_tooltip_text)
+        self.collapsed_workspace_status.bind(
+            "<Button-1>", lambda _event: self._show_action_info_dialog()
+        )
         self._build_results_area(command_console)
         self._build_workspace(workspace_container)
         content.pack(fill=tk.BOTH, expand=True)
@@ -578,6 +597,8 @@ class LauncherApp:
             self._sync_main_split(event.width)
 
     def _sync_main_split(self, available_width: int | None = None) -> None:
+        if not getattr(self, "workspace_visible", True):
+            return
         width = available_width or self.main_content.winfo_width()
         if width <= 1:
             return
@@ -592,6 +613,8 @@ class LauncherApp:
         )
 
     def _remember_main_split(self, _event: tk.Event) -> None:
+        if not getattr(self, "workspace_visible", True):
+            return
         available_width = self.main_content.winfo_width()
         if available_width > 1:
             position = bounded_sash_position(
@@ -603,6 +626,54 @@ class LauncherApp:
             self.main_content.sashpos(0, position)
             self.main_split_ratio = position / available_width
             self.main_split_customized = True
+
+    def _toggle_workspace_visibility(self) -> None:
+        self._set_workspace_visible(self.workspace_visibility_var.get())
+
+    def _set_workspace_visible(self, visible: bool) -> None:
+        """Unmap, never rebuild, the editor so selection and history survive."""
+        content = getattr(self, "main_content", None)
+        if content is None:
+            return
+        current = getattr(self, "workspace_visible", True)
+        if current == visible:
+            self._update_workspace_visibility_control()
+            return
+        if visible:
+            self.workspace_visible = True
+            content.add(self.workspace_container, weight=3)
+            self.collapsed_workspace_status.pack_forget()
+            self.root.after_idle(self._restore_workspace_split)
+        else:
+            self._remember_main_split(None)
+            self.workspace_visible = False
+            content.forget(self.workspace_container)
+            self.collapsed_workspace_status.pack(
+                side=tk.BOTTOM, fill=tk.X, pady=(4, 0),
+                before=self.action_discovery_panel.frame,
+            )
+            self.focus_search()
+        self._update_workspace_visibility_control()
+
+    def _restore_workspace_split(self) -> None:
+        # ttk first gives the sole visible pane the complete width. Finish
+        # its pending re-add geometry before restoring the remembered sash;
+        # otherwise its own layout can overwrite that position and keep the
+        # editor at zero width even though it is listed as a pane again.
+        self.main_content.update_idletasks()
+        self._sync_main_split()
+
+    def _update_workspace_visibility_control(self) -> None:
+        button = getattr(self, "workspace_visibility_button", None)
+        if button is None:
+            return
+        visible = getattr(self, "workspace_visible", True)
+        self.workspace_visibility_var.set(visible)
+        component = getattr(self, "workspace_component", None)
+        has_input = component is not None and bool(component.raw_text())
+        button.configure(
+            text="Input / Output" + (" •" if has_input and not visible else "")
+        )
 
     def _focus_active_results(self) -> None:
         """Move keyboard users into the result view they explicitly opened."""
@@ -729,13 +800,7 @@ class LauncherApp:
 
         context = self.item_context_filter or "General"
         state = self.palette_state
-        self.palette_state = PaletteState(
-            state.pinned_action_ids,
-            context,
-            state.context_slots,
-            state.context_membership_version,
-            state.context_item_slots,
-        )
+        self.palette_state = replace(state, focus_context=context)
 
     def _sync_filter_indicators(self) -> None:
         panel = getattr(self, "action_discovery_panel", None)
@@ -819,6 +884,27 @@ class LauncherApp:
         self.type_filter = discovery.type_filter
         self.tag_filter = discovery.tag_filter
         self.run_button = discovery.run_button
+        self.preview_button = ttk.Button(
+            discovery.tool_rail,
+            text="Preview",
+            command=self._preview_selected,
+            style="Toolbar.TButton",
+            width=7,
+            state=tk.DISABLED,
+        )
+        discovery.tool_rail.columnconfigure(2, weight=0)
+        discovery.tool_rail.columnconfigure(3, weight=1)
+        self.preview_button.grid(row=0, column=2, padx=(0, 4))
+        discovery.primary_action_frame.grid(column=3, columnspan=1)
+        self.compact_execution_row = ttk.Frame(discovery.tool_rail)
+        self.compact_execution_row.lower()
+        self.compact_execution_row.columnconfigure(1, weight=1)
+        discovery.tool_rail.bind("<Configure>", self._layout_execution_controls)
+        discovery.tool_rail.bind("<<ExecutionControlsChanged>>", self._layout_execution_controls)
+        self._tooltip(
+            self.preview_button,
+            "Preview — Inspect current input, resolved target, effect and recovery without running, copying or saving.",
+        )
         self.work_item_folder_button = discovery.work_item_folder_button
         self.action_help_button = discovery.help_button
         self.new_action_button = discovery.new_action_button
@@ -917,6 +1003,19 @@ class LauncherApp:
             takefocus=True,
         )
         discovery.more_button.pack(side=tk.LEFT, padx=(4, 0))
+        self.workspace_visibility_var = tk.BooleanVar(value=True)
+        self.workspace_visibility_button = ttk.Checkbutton(
+            self.app_controls,
+            text="Input / Output",
+            variable=self.workspace_visibility_var,
+            command=self._toggle_workspace_visibility,
+            takefocus=True,
+        )
+        self.workspace_visibility_button.pack(side=tk.RIGHT, padx=(6, 0))
+        self._tooltip(
+            self.workspace_visibility_button,
+            "Show or hide Input / Output. Content, selection and Undo history are kept; • means hidden input is present. Shown by default each session.",
+        )
         self._tooltip(
             discovery.configure_button,
             "Configure — Manage Actions, Contexts, Quick actions, Work Items, and diagnostics.",
@@ -974,6 +1073,7 @@ class LauncherApp:
 
     def _reset_main_window(self, _event: tk.Event | None = None) -> str:
         """Restore the transient main-window state used by a fresh startup."""
+        self._set_workspace_visible(True)
         self.action_type_filter = None
         self.action_tag_filter = None
         self.work_project_filter = None
@@ -1198,6 +1298,121 @@ class LauncherApp:
         window.transient(self.root)
         window.lift()
 
+    def _layout_execution_controls(self, _event: tk.Event) -> None:
+        """Keep Preview and Run fully visible when the existing pane is narrow."""
+        panel = self.action_discovery_panel
+        required = sum(widget.winfo_reqwidth() for widget in (
+            panel.new_action_button, panel.edit_button,
+            self.preview_button, panel.run_button,
+        )) + 12
+        if panel.work_item_folder_button.winfo_manager():
+            required += panel.work_item_folder_button.winfo_reqwidth() + 4
+        narrow = panel.tool_rail.winfo_width() < required
+        if narrow:
+            self.compact_execution_row.grid(row=1, column=0, columnspan=4, sticky=tk.EW)
+            self.preview_button.grid(in_=self.compact_execution_row, row=0,
+                                     column=0, columnspan=1)
+            panel.primary_action_frame.grid(in_=self.compact_execution_row,
+                                            row=0, column=1, columnspan=1)
+            self.compact_execution_row.lower()
+        else:
+            self.preview_button.grid(in_=panel.tool_rail, row=0, column=2, columnspan=1)
+            panel.primary_action_frame.grid(in_=panel.tool_rail,
+                                            row=0, column=3, columnspan=1)
+            self.compact_execution_row.grid_remove()
+
+    def _preview_selected(self) -> None:
+        """Snapshot only the sources this Action reads; never execute it."""
+        item = self._selected_work_item()
+        if item is not None:
+            details, _summary = self._work_item_preview(item)
+            self._show_execution_preview(
+                f"Preview: {item.display_name}",
+                details + f"\n\nResolved open target\n{item.default_open_path}"
+                "\n\nPreview only. No target was opened or changed.",
+            )
+            return
+        action = self._selected_action()
+        if action is None:
+            self.status_var.set("Select an Action or Work Item to preview.")
+            return
+        workspace = (
+            self.workspace_component.raw_text() if action.type == "send_files_to_folder"
+            else self._workspace_text()
+        )
+        captured = self.captured_selection
+        clipboard = None
+        expands_templates = action.type in {
+            "copy_text", "workspace_template", "ai_prompt", "open_url",
+            "open_windows_target", "open_file", "open_folder", "launch_app",
+        }
+        needs_clipboard = (expands_templates and action_uses_clipboard_template(action)) or (
+            action.type == "build_url_selection_open" and not (workspace or captured)
+        )
+        if (
+            needs_clipboard
+            and action.type != "paste_credential"
+            and getattr(self, "protected_clipboard_sequence", None) is None
+        ):
+            try:
+                clipboard = self._get_clipboard_text()
+            except (ActionError, tk.TclError):
+                pass
+        try:
+            preview = build_execution_preview(
+                action,
+                workspace_text=workspace,
+                captured_selection=captured,
+                clipboard_text=clipboard,
+                destination_available=self.source_foreground_handle is not None,
+                available_actions=self.actions,
+            )
+        except (ActionError, ValueError) as exc:
+            self._show_execution_preview(
+                f"Preview: {action.title}",
+                f"Preview could not be prepared.\n\n{exc}\n\nNothing was run or changed.",
+            )
+            return
+        self._show_execution_preview(f"Preview: {action.title}", preview.full_text())
+
+    def _show_execution_preview(self, title: str, content: str) -> None:
+        previous = getattr(self, "execution_preview_window", None)
+        if previous is not None and previous.winfo_exists():
+            previous.destroy()
+        window = tk.Toplevel(self.root)
+        self.execution_preview_window = window
+        window.title(title)
+        configure_standard_window(window, self.root)
+        window.transient(self.root)
+        outer = ttk.Frame(window, padding=12)
+        outer.pack(fill=tk.BOTH, expand=True)
+        controls = ttk.Frame(outer)
+        controls.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
+        close = ttk.Button(controls, text="Close", command=window.destroy)
+        close.pack(side=tk.RIGHT)
+        ttk.Label(
+            controls,
+            text="Preview only — Run / Open remains unchanged.",
+            style="Muted.TLabel",
+        ).pack(side=tk.LEFT)
+        body = ttk.Frame(outer)
+        body.pack(fill=tk.BOTH, expand=True)
+        scrollbar = ttk.Scrollbar(body, orient=tk.VERTICAL)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        text = tk.Text(
+            body, wrap=tk.WORD, font=("Segoe UI", 10), padx=8, pady=8,
+            yscrollcommand=scrollbar.set,
+        )
+        text.pack(fill=tk.BOTH, expand=True)
+        scrollbar.configure(command=text.yview)
+        if len(content) > 65_536:
+            content = content[:65_536] + "\n\n[Display truncated; input was not changed.]"
+        text.insert("1.0", content)
+        text.configure(state=tk.DISABLED)
+        window.bind("<Escape>", lambda _event: window.destroy())
+        window.lift()
+        close.focus_set()
+
     def _audit_tooltips(self) -> None:
         descriptions = {
             "6–0  CONTEXT SLOTS": (
@@ -1318,6 +1533,13 @@ class LauncherApp:
         )
 
     def _accept_drop_result(self, result: DropResult) -> None:
+        self._place_drop_result(result, run_configured=True)
+
+    def _show_drop_result(self, result: DropResult) -> None:
+        """Explicit history replay is intake, not another automatic trigger."""
+        self._place_drop_result(result, run_configured=False)
+
+    def _place_drop_result(self, result: DropResult, *, run_configured: bool) -> None:
         if result.error is not None:
             self.status_var.set(
                 f"Drop was not accepted: {result.error.message}"
@@ -1332,12 +1554,17 @@ class LauncherApp:
         # earlier window. Invalidate both sources before showing the palette.
         self.captured_selection = None
         self.source_foreground_handle = None
+        settings = getattr(getattr(self, "palette_state", None), "drop_settings", DropActionSettings())
+        if run_configured and settings.mode != "show":
+            if self._run_configured_drop_action(result, value):
+                return
         if not self._reveal_window(
             sync_workspace=False,
             focus_search=False,
             temporary_attention=False,
         ):
             return
+        self._set_workspace_visible(True)
         placement = self.workspace_component.apply_incoming_text(
             value,
             source_label="the drop target",
@@ -1358,6 +1585,109 @@ class LauncherApp:
             f"{warning_note}"
         )
         self.root.after_idle(self.workspace_component.text.focus_set)
+
+    def _run_configured_drop_action(self, result: DropResult, value: str) -> bool:
+        """Consume a new drop directly; the editor is never an input staging area.
+
+        Return False only when fresh settings explicitly switch back to show.
+        DropTargetWindow retains the snapshot in history before invoking us.
+        """
+        self._reload_if_changed()
+        settings = self.palette_state.drop_settings
+        if settings.mode == "show":
+            return False
+        resolution = resolve_drop_action(settings, self.actions)
+        reason = resolution.reason
+        if result.warnings:
+            reason = "Review the shortcut warnings before running an Action."
+        elif (
+            getattr(self, "_configuration_recovery_required", False)
+            or getattr(self, "configuration_failed_signature_cache", None) is not None
+            or not self.configuration_signature_cache
+            or self._configuration_signature() != self.configuration_signature_cache
+        ):
+            reason = "Configuration could not be reloaded; review Drop settings before running."
+        if reason or resolution.action is None:
+            self._report_drop_action_failure(f"Drop: no Action ran. {reason}")
+            return True
+        try:
+            accepted = self._execute_action(
+                resolution.action, input_snapshot=value
+            )
+        except Exception:
+            # No retries: an external effect may already have happened.
+            LOGGER.exception("Drop Action invocation failed: id=%s", resolution.action.id)
+            accepted = False
+        if not accepted:
+            self._report_drop_action_failure(
+                "Drop Action did not start or complete. Inspect any external effects before retrying."
+            )
+        return True
+
+    def _report_drop_action_failure(self, reason: str) -> None:
+        self._reveal_window(
+            sync_workspace=False, focus_search=False, temporary_attention=False,
+        )
+        self.status_var.set(
+            f"{reason} Dropped content is kept in Drop history; Send again only shows it."
+        )
+
+    def _publish_drop_output(self, value: str) -> None:
+        """Deliver completed text output, without first placing incoming input."""
+        self._set_workspace_text(value)
+        if self._reveal_window(
+            sync_workspace=False, focus_search=False, temporary_attention=False,
+        ):
+            self._set_workspace_visible(True)
+
+    def _refresh_drop_behavior_label(self) -> None:
+        target = getattr(self, "drop_target_window", None)
+        if target is None:
+            return
+        resolution = resolve_drop_action(self.palette_state.drop_settings, self.actions)
+        if resolution.reason:
+            label = "Action blocked — review Settings"
+        elif resolution.action is not None:
+            label = f"Run: {resolution.action.title}"
+        else:
+            label = "Show in Context Palette"
+        target.set_behavior_label(label)
+
+    def _configure_drop_target(self) -> None:
+        if getattr(self, "_configuration_recovery_required", False):
+            self.status_var.set("Restart for recovery before changing Drop settings.")
+            return
+        self._reload_if_changed()
+        previous = getattr(self, "drop_configuration_window", None)
+        if previous is not None and previous.window.winfo_exists():
+            previous.window.destroy()
+        target = getattr(self, "drop_target_window", None)
+        parent = target.window if target is not None and target.window is not None else self.root
+        self.drop_configuration_window = DropConfigurationWindow(
+            parent,
+            actions=self.actions,
+            settings=self.palette_state.drop_settings,
+            on_save=self._save_drop_settings,
+        )
+
+    def _save_drop_settings(self, settings: DropActionSettings) -> None:
+        if getattr(self, "_configuration_recovery_required", False):
+            raise ActionError("Restart for recovery before changing Drop settings.")
+        with configuration_mutation_gate():
+            current = load_palette_state(self.palette_path)
+            actions, _local_ids = load_combined_actions(
+                self.actions_path, self.local_actions_path, inspect_external_paths=False
+            )
+            resolution = resolve_drop_action(settings, actions)
+            if settings.mode != "show" and resolution.action is None:
+                raise ActionError(resolution.reason or "Select an available compatible Action.")
+            save_palette_state(self.palette_path, replace(current, drop_settings=settings))
+        self.palette_state = replace(self.palette_state, drop_settings=settings)
+        self._refresh_drop_behavior_label()
+        configuration = getattr(self, "configuration_window", None)
+        if configuration is not None and configuration.window.winfo_exists():
+            configuration.refresh_from_storage()
+        self.status_var.set("Drop behaviour saved on this computer.")
 
     def hide_window(self) -> None:
         self._cancel_scheduled_hide()
@@ -1951,7 +2281,7 @@ class LauncherApp:
     ) -> ttk.Label:
         control = ttk.Label(
             parent,
-            text=f"{label} ▾" if dropdown else label,
+            text=label,
             style="SurfaceMenu.TLabel",
             anchor=tk.W,
             relief=tk.SOLID,
@@ -2656,12 +2986,12 @@ class LauncherApp:
                 self._aligned_action_display_text(action),
             )
             row_tag = slot_row_tag(slot)
-            if row_tag == FOCUS_SLOT_ROW_TAG:
-                self.results.itemconfigure(
-                    index,
-                    background=COLORS["slot_focus"],
-                    foreground=COLORS["text"],
-                )
+            color_key = result_row_color_key(
+                index, context_shortcut=row_tag == FOCUS_SLOT_ROW_TAG,
+            )
+            self.results.itemconfigure(
+                index, background=COLORS[color_key], foreground=COLORS["text"],
+            )
         if self.displayed_actions:
             self.results.selection_set(0)
             self.results.activate(0)
@@ -2912,12 +3242,15 @@ class LauncherApp:
                 label = self._aligned_item_display_text("▣", item.display_name)
                 item_id = f"all-work-item:{index}:{reference.stable_key}"
             row_tag = slot_row_tag(slot)
+            paint_tag = "result_" + result_row_color_key(
+                index, context_shortcut=row_tag == FOCUS_SLOT_ROW_TAG,
+            )
             self.focus_tree.insert(
                 "",
                 tk.END,
                 iid=item_id,
                 text=label,
-                tags=(row_tag,) if row_tag else (),
+                tags=(row_tag, paint_tag) if row_tag else (paint_tag,),
             )
             self.focus_tree_items[item_id] = reference
 
@@ -2949,7 +3282,7 @@ class LauncherApp:
                 text=(
                     "No items match Find or the selected filters."
                     if has_filter
-                    else "No items are available. Use +A to create an Action."
+                    else "No items are available. Use Create Action to create an Action."
                 ),
                 tags=(FOCUS_GROUP_ROW_TAG,),
             )
@@ -3039,11 +3372,15 @@ class LauncherApp:
                     f"{item.source_id}/{item.relative_folder}".casefold(),
                 )
             )
-        for item in self.displayed_work_items:
+        for index, item in enumerate(self.displayed_work_items):
             kind = item.kind_name or "Work item"
             subject = item.subject.replace("-", " ")
             organisation = f"{item.organisation} " if item.organisation else ""
             self.results.insert(tk.END, f"{kind} → {organisation}{subject}")
+            self.results.itemconfigure(
+                index, background=COLORS[result_row_color_key(index)],
+                foreground=COLORS["text"],
+            )
         count = len(self.displayed_work_items)
         self.results_count_var.set(
             f"{count} work item" if count == 1 else f"{count} work items"
@@ -3494,22 +3831,38 @@ class LauncherApp:
             reference.work_item_ref,
         )
 
-    def _execute_action(self, action: Action) -> None:
+    def _execute_action(
+        self, action: Action, *, input_snapshot: str | None = None,
+    ) -> bool:
         if getattr(self, "sequence_run_plan", None) is not None:
             self.status_var.set("A sequence is running; stop it before another Action.")
-            return
-        destination = self.source_foreground_handle
+            return False
+        destination = self.source_foreground_handle if input_snapshot is None else None
         self.source_foreground_handle = None
         workspace_component = getattr(self, "workspace_component", None)
+        drop_outputs: list[str] = []
         try:
             message = execute_action(
                 action,
                 clipboard_setter=self._set_clipboard,
-                clipboard_getter=self._get_clipboard_text,
+                clipboard_getter=(
+                    self._get_clipboard_text if input_snapshot is None
+                    else lambda: input_snapshot
+                ),
                 input_provider=self._ask_for_action_input,
-                selected_text=self._workspace_text() or self.captured_selection,
-                input_text=self._workspace_text(),
-                output_setter=self._set_workspace_text,
+                selected_text=(
+                    self._workspace_text() or self.captured_selection
+                    if input_snapshot is None else input_snapshot
+                ),
+                input_text=(
+                    input_snapshot if input_snapshot is not None else
+                    workspace_component.raw_text() if action.type == "send_files_to_folder" else
+                    self._workspace_text()
+                ),
+                output_setter=(
+                    self._set_workspace_text if input_snapshot is None
+                    else drop_outputs.append
+                ),
                 file_preview_setter=(
                     workspace_component.show_file_preview
                     if workspace_component is not None
@@ -3521,34 +3874,73 @@ class LauncherApp:
                 ),
                 opener=self._open_action_target,
                 sequence_runner=self._run_action_sequence,
-                excel_automation_runner=lambda selected: self._run_excel_automation(
-                    selected,
-                    source_window_handle=destination,
+                file_transfer_runner=lambda selected, text: self._run_file_transfer_action(
+                    selected, text, dropped=input_snapshot is not None,
+                ),
+                excel_automation_runner=(
+                    (lambda selected: self._run_excel_automation(
+                        selected, source_window_handle=destination,
+                    )) if input_snapshot is None else
+                    (lambda selected: self._run_excel_automation(
+                        selected, workspace_snapshot=input_snapshot,
+                    ))
                 ),
             )
             if action.type == "copy_text":
                 message = self._paste_saved_text_if_destination(destination)
+            if drop_outputs:
+                self._publish_drop_output(drop_outputs[-1])
             self.status_var.set(message)
+            return True
         except ActionError as exc:
             self.status_var.set("Action failed")
             messagebox.showerror("Context Palette", str(exc))
             LOGGER.exception("Action failed: id=%s type=%s", action.id, action.type)
+            return False
 
     def _run_excel_automation(
         self,
         action: Action,
         *,
         source_window_handle: int | None = None,
+        workspace_snapshot: str | None = None,
     ) -> str:
+        self._available_excel_workflow("manual" if workspace_snapshot is None else "drop")
+        request = ExcelWorkflowRequest(
+            action=action,
+            input_text=(
+                self._workspace_text() if workspace_snapshot is None else workspace_snapshot
+            ) if action.value == EXCEL_AUTOMATION_ID else None,
+            invocation="manual" if workspace_snapshot is None else "drop",
+            source_window_handle=source_window_handle,
+        )
+        return self._dispatch_resource_operation(request).message
+
+    def _available_excel_workflow(
+        self, invocation: str,
+    ) -> ExcelAutomationWindow | ExcelLiveFormatWindow | ExcelLiveTextConversionWindow | None:
         existing = getattr(self, "excel_automation_window", None)
         if existing is not None:
+            if invocation == "drop":
+                existing.show()
+                raise ActionError(
+                    "An Excel review is already open. Close it before running another "
+                    "dropped workbook; the existing review was not changed."
+                )
             if existing.busy:
                 existing.show()
                 raise ActionError(
                     "Another Excel automation is still running. Wait for its "
                     "result before starting a new one."
                 )
+        return existing
+
+    def _start_excel_workflow(self, request: ExcelWorkflowRequest) -> str:
+        existing = self._available_excel_workflow(request.invocation)
+        if existing is not None:
             existing.close()
+        action = request.action
+        source_window_handle = request.source_window_handle
 
         if action.value == LIVE_FORMAT_PROFILE_AUTOMATION_ID:
             source_process_id = window_process_id(source_window_handle or 0)
@@ -3591,7 +3983,9 @@ class LauncherApp:
             raise ActionError("The selected Excel automation is unsupported.")
 
         try:
-            workbooks = workbook_paths_from_workspace(self._workspace_text())
+            workbooks = workbook_paths_from_workspace(
+                request.input_text or ""
+            )
         except ExcelAutomationInputError as exc:
             raise ActionError(str(exc)) from exc
 
@@ -3766,6 +4160,19 @@ class LauncherApp:
             pass
 
     def _open_action_target(self, action: Action) -> None:
+        self._dispatch_resource_operation(OpenTargetRequest(action))
+
+    def _dispatch_resource_operation(
+        self, request: ResourceOperationRequest,
+    ) -> OperationDispatch:
+        return dispatch_resource_operation(
+            request,
+            open_target=self._perform_open_target,
+            copy_files=self._start_file_transfer,
+            excel_workflow=self._start_excel_workflow,
+        )
+
+    def _perform_open_target(self, action: Action) -> None:
         """Open Markdown actions in-app and delegate every other safe target."""
         if action.type == "open_file":
             target = Path(action.value).expanduser()
@@ -4053,6 +4460,8 @@ class LauncherApp:
         return self.displayed_work_items[selected[0]]
 
     def _update_preview(self) -> None:
+        self._update_workspace_visibility_control()
+        self._refresh_drop_behavior_label()
         selected_reference = self._selected_focus_item()
         panel = getattr(self, "action_discovery_panel", None)
         if panel is not None:
@@ -4071,6 +4480,11 @@ class LauncherApp:
                 ),
                 sequence_running=getattr(self, "sequence_run_plan", None) is not None,
             )
+            preview_button = getattr(self, "preview_button", None)
+            if preview_button is not None:
+                preview_button.configure(
+                    state=tk.NORMAL if selected_work_item is not None or selected_action is not None else tk.DISABLED
+                )
         if self.work_items_mode and self.results_view == "flat":
             item = self._selected_work_item()
             if item is None:
@@ -4540,32 +4954,41 @@ class LauncherApp:
         )
 
     def _open_send_destination(self, destination: _SendDestination) -> None:
-        current = self.file_transfer_window
-        if current is not None:
-            try:
-                exists = bool(current.window.winfo_exists())
-            except (AttributeError, tk.TclError):
-                exists = False
-            if exists and current.busy:
-                current.show()
-                self.status_var.set(
-                    "A Send-to copy is already running; wait for it to finish."
-                )
-                return
-            if exists:
-                current.close()
+        try:
+            # Do not even acquire new input while another copy is running.
+            self._available_file_transfer("manual")
+            receipt = self._dispatch_resource_operation(CopyFilesRequest(
+                destination=destination,
+                input_text=self.workspace_component.raw_text(),
+            ))
+            self.status_var.set(receipt.message)
+        except ActionError as exc:
+            self.status_var.set(str(exc))
 
-        workspace_text = self.workspace_component.raw_text()
-        if not any(line.strip() for line in workspace_text.splitlines()):
-            self.status_var.set(
-                "Paste or drop one or more file paths before choosing Send to."
-            )
-            return
+    def _run_file_transfer_action(
+        self, action: Action, input_text: str, *, dropped: bool = False,
+    ) -> str:
+        destination = _SendDestination(
+            key=f"action:{action.id}",
+            label=action.title,
+            folder_path=resolve_local_folder_path(action.value),
+        )
+        return self._dispatch_resource_operation(CopyFilesRequest(
+            destination=destination,
+            input_text=input_text,
+            invocation="drop" if dropped else "manual",
+        )).message
+
+    def _start_file_transfer(self, request: CopyFilesRequest) -> str:
+        destination = request.destination
+        current = self._available_file_transfer(request.invocation)
+        if current is not None:
+            current.close()
 
         workflow: FileTransferWindow
         workflow = FileTransferWindow(
             self.root,
-            workspace_text=workspace_text,
+            workspace_text=request.input_text,
             destination_folder=destination.folder_path,
             destination_label=destination.label,
             status_setter=self.status_var.set,
@@ -4576,8 +4999,31 @@ class LauncherApp:
             on_close=lambda: self._forget_file_transfer_window(workflow),
         )
         self.file_transfer_window = workflow
-        self.status_var.set(f"Preparing to copy files to {destination.label}…")
         workflow.show()
+        return f"Preparing to copy files to {destination.label}…"
+
+    def _available_file_transfer(self, invocation: str) -> FileTransferWindow | None:
+        """Reject concurrent effects before changing a review or acquiring input."""
+        current = getattr(self, "file_transfer_window", None)
+        if current is not None:
+            try:
+                exists = bool(current.window.winfo_exists())
+            except (AttributeError, tk.TclError):
+                exists = False
+            if exists and invocation == "drop":
+                current.show()
+                raise ActionError(
+                    "A Send-to review is already open. Close it before running another "
+                    "dropped copy; the existing review was not changed."
+                )
+            if exists and current.busy:
+                current.show()
+                raise ActionError(
+                    "A Send-to copy is already running; wait for it to finish."
+                )
+            if exists:
+                return current
+        return None
 
     def _remember_send_destination(
         self,
@@ -5262,7 +5708,7 @@ class LauncherApp:
             else "open_folder"
         )
         try:
-            open_action_target(
+            self._open_action_target(
                 Action(
                     f"work-item:{item.source_id}:{item.relative_folder}",
                     item.display_name,

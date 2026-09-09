@@ -57,6 +57,35 @@ A bare first process displays its already-created root window without replaying 
 
 ## Source modules
 
+### `resource_operations.py`
+
+Runtime-only, immutable requests connect existing entry points to existing
+effect adapters. `OpenTargetRequest` carries an already-expanded Action;
+`CopyFilesRequest` carries exact input text and a `FolderResource` projected
+from an Action, Work Item or folder picker; `ExcelWorkflowRequest` carries
+either an exact CSV-source snapshot or manual live-workbook selection metadata.
+`dispatch_resource_operation` validates the request variant and invokes exactly
+one host callback. It acquires no clipboard/UI input and owns no persistence.
+
+The launcher adapts requests to its existing target handler, `FileTransferWindow`
+and Excel windows. Folder/workbook Work Items remain resources, not persisted
+Actions. Normal Run/Quick menus, Send to and approved Drop share these adapters.
+The new `send_files_to_folder` Action stores only its destination in the existing
+Action `value`; source files are supplied at invocation. It does not acquire
+automatic membership in the Folders menu.
+
+Invocation source is not run authority. Drop approval stays in `drop_action.py`;
+overwrite review, source fingerprints, partial outcomes and recovery remain
+domain-owned. Dispatch returns **opened** or **workflow_started**, never an
+asynchronous completion result. In particular, constructing `FileTransferWindow`
+can start conflict-free copying: Preview must never dispatch or construct it.
+New drops cannot replace an open copy or Excel review. Live Excel remains
+manual, with host-owned startup gating and existing workbook selection.
+
+This is not a recipe engine, a second Action catalogue or a data migration.
+The older single-file Work Item copy route retains its different no-overwrite
+contract rather than silently inheriting Send-to suffix/overwrite behavior.
+
 ### `main.py`
 
 Application entry point.
@@ -95,6 +124,13 @@ Presentation and application orchestration.
   source-window state, reveals the ordinary palette without clipboard
   synchronization or permanent topmost state, and asks `WorkspacePanel` to
   place the completed normalized text.
+- Unmaps/remaps the existing workspace pane for its session-only visibility
+  checkbox; the editor and histories are not rebuilt. A hidden-input marker and
+  fallback communication line remain visible. Show-only drops and completed
+  text results reveal the pane; direct copy/open/CSV drops do not stage input.
+- Builds optional execution previews from explicit input snapshots. Opt-in Drop
+  dispatch resolves an approved Action and supplies a separate exact input
+  snapshot through existing execution callbacks, retaining attended workflows.
 - Connects platform-independent action execution to Windows-specific callbacks.
 - Ensures Tk operations stay on the Tk main thread.
 - Resets transient presentation state through the main-window `F5` shortcut
@@ -405,12 +441,21 @@ The catalogue renders `docs/ACTION_TYPES.md`; an automated test requires the use
 
 Builds the side-effect-free, structured explanation shown before Action
 execution. It combines the selected Action with the canonical action-type
-catalogue and only boolean runtime availability supplied by the launcher; it
+catalogue and boolean runtime availability supplied by the launcher; that summary
 does not read the clipboard, expand templates, validate targets, or execute an
 effect. Every supported type produces a bounded **Input → Effect** summary plus
 full labelled details for Type, configured values, arguments, working folder,
 and recovery or limitations. Current workspace, captured-selection, and fresh
 destination availability refine the summary without exposing their contents.
+
+`build_execution_preview` additionally accepts explicit workspace, selection,
+and clipboard snapshots from the launcher and returns an immutable
+`ExecutionPreview`. It reuses existing template expansion, lexical validation,
+URL building, and pure transformation functions; it never acquires clipboard,
+credentials, file contents, or engine data itself. External operations are
+plan-only and unavailable sources are explicit. Computation/expansion and
+display sizes are bounded independently. Preview grants no execution authority:
+ordinary Run still evaluates current input and existing confirmations.
 
 ### `workspace_transforms.py`
 
@@ -485,12 +530,50 @@ and expose repair guidance through launcher status and **More → Show drop
 target**. The window
 retains only the last ten successful non-empty `DropResult` values in memory,
 identifies the selected result with type-level metadata, and can resend that
-immutable result through the same launcher callback without re-resolving or
+immutable result through a separate show-only launcher callback without re-resolving or
 duplicating it. A collapsed disclosure renders a bounded read-only preview of
 the exact prepared paths, web links, or text plus warnings; it performs no
 filesystem or network inspection and collapses on Hide or a new drop. Preview
 truncation never truncates the retained result. Errors and empty drops are not
 retained; process exit clears the history.
+
+Its small Settings entry delegates to the launcher; the target only displays
+the configured behaviour label. A delivery guard refuses nested new drops or
+history sends while a placement/Action callback is active, including Tk modal
+event loops. It clears in `finally`; it never queues retries.
+
+### `drop_action.py` and `drop_configuration_window.py`
+
+The pure drop policy owns compatibility reasons and `DropActionSettings`:
+show-only by default, or an exact Action ID plus a SHA-256 fingerprint of its
+execution-relevant configuration. Changed/missing/inactive/ambiguous Actions
+cannot inherit earlier approval. Contexts, tags, and menu placement are not
+execution authority. Compatible input-consuming Actions reuse their existing
+executor, including Excel CSV's attended review. Arbitrary Windows targets,
+associated files, app launch, credentials, sequences, and live Excel are not
+enabled for this invocation.
+
+The centered settings dialog uses the existing Action picker, shows effects
+and unavailable reasons, and never executes anything. Launcher saves under
+the configuration mutation gate, revalidates the selected Action, and merges
+fresh palette state so simultaneous Context-slot changes are preserved.
+`palette.json` has one optional local `drop_settings` member, omitted for the
+default; existing JSON records load unchanged. Focus normalization, runtime
+snapshots, and General-shortcut saves preserve it. No Context/tag migration or
+generic permissions/recipe schema is introduced.
+
+Drop intake clears stale capture/destination state, then separates execution
+from placement. A configured Action rechecks the published configuration and
+exact approval before receiving the immutable new drop directly. It neither
+reads nor stages input in the editor and never opens Replace/Append first.
+Default show-only intake and explicit history replay keep Replace/Append/Cancel.
+Text output is buffered until the synchronous Action succeeds, then published
+to Input / Output as a result; copy/open/CSV Actions leave the editor alone.
+Blocked/failed dispatch shows an explanation without changing existing text;
+the Drop target retains the original snapshot in session history, with no
+automatic retry. Existing copy/Excel reviews cannot be replaced by a new drop.
+Copy and CSV windows detach their transient owner when it is hidden, allowing
+their own review/results to remain visible without first opening the Palette.
 
 ### `ocr.py`
 
@@ -543,7 +626,7 @@ execution and returns no suggestion for mixed or ambiguous content.
 Owns construction and event wiring for the left action-discovery presentation:
 item-scope controls; one Find row containing the search field and unified
 Filter menu; an active-filter chip; flat result list, scrollbar, row tooltips;
-and the stable `+A`, Edit, and Run/Open result toolbar. Action-only and Work
+and the stable Create Action, Edit, and Run/Open result toolbar. Action-only and Work
 Item-only commands live in the Filter menu instead of reshaping the toolbar.
 Routine icon controls use retained 16-pixel Tk bitmap images with semantic
 tooltips, avoiding font-dependent Unicode toolbar symbols and new dependencies. Search
@@ -832,7 +915,7 @@ field; the shared reference boundary permits, but does not imply, that future
 feature.
 
 Action creation starts from the educational **Action types** catalogue, the
-launcher **+ Action** or Configure **New Action** searchable type chooser, or a conservative
+launcher **Create Action** or Configure **New Action** searchable type chooser, or a conservative
 **Create from Input** suggestion beside Input / Output. The suggestion route uses
 selected text first, requires one clear supported target, and prepopulates
 the existing form with a visible review notice. It does not change the general
@@ -1060,10 +1143,28 @@ Owns delayed tooltip behaviour for ordinary widgets and individual listbox rows.
 
 Owns the shared native ttk theme, Segoe UI font policy, grey/teal/aqua palette, and hover/focus state maps. Classic Tk widget defaults are applied through the root option database. The module changes presentation only; widget construction, layout, geometry, and action behaviour remain in their existing owners.
 
+Palette-specific scope, primary-command, and toolbar styles keep cosmetic
+changes separate from Configure navigation, result selection, and destructive
+commands. Bitmap-toolbar padding follows caption-font metrics so fixed-size
+icons align with text controls. Input / Output's classic `tk.Text` options are
+applied locally rather than changing every editor. Quick launchers retain
+their existing label bindings and a single theme-rendered right indicator.
+
+Shared result-row color keys and Treeview paint tags alternate neutral and
+Context-shortcut green bands in production and the inert mockup. Shortcut
+identity tags carry no competing background; each row has exactly one paint
+tag. Listbox rows use the same palette keys. Selection remains theme-owned;
+row height, labels, order, and execution mappings are unchanged.
+
 ### `ui_icons.py`
 
 Creates and retains portable 16×16 Tk bitmap icons for compact controls. It is
 presentation-only and owns no application behavior or persisted state.
+The document-plus Create Action icon uses the ordinary creation callback, not
+the separate Create from Input wand. Toolbar pictograms share a restrained
+monochrome stroke treatment. Action-type glyphs remain in `action_types.py`,
+the same source used by result labels and the generated type catalogue;
+no image-backed result-widget replacement or persisted icon data is required.
 
 ### `ui_mockups.py`
 
@@ -1656,7 +1757,7 @@ resizing in the session.
 The command console stacks discovery above the independently scrolling Quick
 actions. Discovery shows seven result rows at the standard size so the complete
 standard Quick-action grid remains visible. Item-scope navigation sits above
-Find; one unified Filter menu shares the Find row; and `+A`, Edit, and Run/Open
+Find; one unified Filter menu shares the Find row; and Create Action, Edit, and Run/Open
 form one stable row below the full-width results. All views offer Context and
 tag filters. Actions adds type filtering; Work Items adds New item, To inbox,
 Copy file, project filtering, Open, and Open folder through the same stable
@@ -1802,7 +1903,7 @@ credential targets, usernames, passwords, or window titles. Successful and
 clipboard-only outcomes use informational logging, unavailable destinations use
 warning logging, and dispatch failures retain their exception at error level.
 
-Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown normally and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. A successful drop uses a separate reveal path that deliberately skips clipboard synchronization, invalidates stale captured selection/destination state, and places only the normalized result. The outbound **Send to…** route snapshots exact path lines without changing Input / Output or the clipboard: copy destinations delegate reviewed background publication to `file_transfer.py`, while the one-path VS Code receiver delegates only registered-protocol opening to `vscode_integration.py`. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `workspace_panel.py` owns selection ranges, one-step Undo grouping, clipboard updates, menus, and a last-ten session history of meaningful complete states. Back/Forward navigation clears file-preview provenance rather than reconnecting historical text to a stale source hash. The launcher injects clipboard, status, and content-change callbacks and retains orchestration delegates. A selected item places its current-state **Input → Effect** summary in the slim bottom communication line; progress, success, and errors temporarily replace it. Hovering or clicking that line exposes the full structured explanation and current operational message.
+Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown normally and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. Show-only drops use a separate reveal path that skips clipboard synchronization and places the normalized result. Configured drop Actions instead receive the snapshot directly, without editor staging; both routes invalidate stale captured selection/destination state. The outbound **Send to…** route snapshots exact path lines without changing Input / Output or the clipboard: copy destinations delegate reviewed background publication to `file_transfer.py`, while the one-path VS Code receiver delegates only registered-protocol opening to `vscode_integration.py`. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `workspace_panel.py` owns selection ranges, one-step Undo grouping, clipboard updates, menus, and a last-ten session history of meaningful complete states. Back/Forward navigation clears file-preview provenance rather than reconnecting historical text to a stale source hash. The launcher injects clipboard, status, and content-change callbacks and retains orchestration delegates. A selected item places its current-state **Input → Effect** summary in the slim bottom communication line; progress, success, and errors temporarily replace it. Hovering or clicking that line exposes the full structured explanation and current operational message.
 
 The legacy generic `transform_text` action persists one catalogue operation key
 and only that operation's ordered parameters. It remains loadable and editable

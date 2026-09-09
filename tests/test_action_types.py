@@ -1,5 +1,7 @@
 from pathlib import Path
 import sys
+import tkinter as tk
+from tkinter import font as tkfont
 import unittest
 
 
@@ -17,7 +19,7 @@ from context_palette.action_types import (
 class ActionTypeCatalogueTests(unittest.TestCase):
     def test_catalogue_covers_every_supported_action_type(self):
         self.assertEqual(set(ACTION_TYPES), SUPPORTED_ACTION_TYPES)
-        self.assertEqual(len(ACTION_TYPES), 17)
+        self.assertEqual(len(ACTION_TYPES), 18)
         self.assertNotIn("build_url_copy", ACTION_TYPES)
         self.assertEqual(
             {
@@ -29,17 +31,56 @@ class ActionTypeCatalogueTests(unittest.TestCase):
         )
 
     def test_new_action_catalogue_hides_legacy_workspace_transform_types(self):
+        self.assertIn("send_files_to_folder", CREATABLE_ACTION_TYPES)
         self.assertIn("transform_file_text", CREATABLE_ACTION_TYPES)
         self.assertNotIn("transform_text", CREATABLE_ACTION_TYPES)
         self.assertNotIn("transform_list_csv", CREATABLE_ACTION_TYPES)
         self.assertNotIn("transform_slashes", CREATABLE_ACTION_TYPES)
 
-    def test_sequence_uses_the_intended_single_character_icon(self):
-        sequence = ACTION_TYPES["sequence"]
+    def test_distinctive_action_type_icons_match_the_reviewed_catalogue(self):
+        expected_icons = {
+            "send_files_to_folder": "⇥",
+            "open_url": "↗",
+            "sequence": "≡",
+            "open_windows_target": "⊞",
+            "open_file": "📄",
+            "transform_text": "T",
+            "build_url_open": "?↗",
+            "build_url_selection_open": "T↗",
+        }
 
-        self.assertEqual(sequence.icon, "⇥")
-        self.assertEqual(sequence.display_label, "⇥ Run a sequence")
-        self.assertNotIn("â", sequence.display_label)
+        self.assertEqual(
+            {action_type: ACTION_TYPES[action_type].icon for action_type in expected_icons},
+            expected_icons,
+        )
+        self.assertEqual(ACTION_TYPES["sequence"].display_label, "≡ Run a sequence")
+        self.assertNotIn("â", ACTION_TYPES["sequence"].display_label)
+
+    @unittest.skipUnless(sys.platform == "win32", "Requires Windows Tk font metrics.")
+    def test_reviewed_type_icons_fit_the_existing_listbox_glyph_budget_at_all_scales(self):
+        root = tk.Tk()
+        root.withdraw()
+        reviewed_icons = (
+            "send_files_to_folder", "open_url", "sequence", "open_windows_target",
+            "open_file", "transform_text", "build_url_open", "build_url_selection_open",
+        )
+        try:
+            for scale in (100, 125, 150):
+                with self.subTest(scale=scale):
+                    root.tk.call("tk", "scaling", 4 / 3 * scale / 100)
+                    font = tkfont.Font(root=root, font=("Segoe UI", 10))
+                    reference = max(
+                        font.measure(ACTION_TYPES[action_type].icon)
+                        for action_type in ("open_folder", "paste_credential")
+                    )
+                    for action_type in reviewed_icons:
+                        self.assertLessEqual(
+                            font.measure(ACTION_TYPES[action_type].icon),
+                            reference,
+                            action_type,
+                        )
+        finally:
+            root.destroy()
 
     def test_every_definition_has_user_and_ai_adaptation_metadata(self):
         for action_type, definition in ACTION_TYPES.items():

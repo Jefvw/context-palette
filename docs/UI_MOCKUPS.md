@@ -45,6 +45,10 @@ The direct developer command is:
 
 ### Main palette
 
+Result rows use the same alternating neutral and Context-shortcut green bands
+as production, without changing row heights or using color to identify Action
+types. Solid teal and white text identify selection.
+
 The main mockup deliberately has no repeated pane title, count, Find label, or
 Quick-actions heading. Its order is:
 
@@ -54,7 +58,7 @@ Quick-actions heading. Its order is:
 3. An explicit removable Context/tag/type/project filter chip when a filter is
    active.
 4. The dominant result list.
-5. Selection commands and Run/Open or Stop remaining.
+5. Selection commands, inert Preview, and Run/Open or Stop remaining.
 6. A bounded, scrollable Quick-action region with no heading.
 7. Configure, Help, and More controls that never scroll off screen.
 
@@ -83,6 +87,14 @@ The Context filter is the single Context model in the launcher:
 Quick-action launchers remain menu-only and are ordered as **Standard**, then
 personal configured menus, shared configured menus, and automatic
 Action-bound menus.
+
+The cosmetic review treatment uses pale-teal scope selection with dark text,
+a solid-teal primary command, matching compact toolbar controls, locally
+themed editor focus/selection, and one right-aligned Quick-menu indicator.
+Preview changes only fictional status text. Toolbar icons use the shared
+monochrome drawings; a neutral document-plus Create Action button replaces
+the former +A badge. It remains separate from the Create from Input wand.
+These controls are a styling baseline, not a new workflow.
 
 At the minimum-size 150% simulation, Quick actions show one scrollable row so
 the result list retains at least five rows. This is an intentional resolution
@@ -159,6 +171,18 @@ simulated 100%, 125%, and 150% text scaling. They currently protect:
 - one mapped Configure page with no `ttk.Notebook`;
 - useful table rows at the current minimum under normal scaling;
 - no horizontal table scrollbar.
+
+The cosmetic pass also tests production toolbar-height equality, full scope
+labels, combined disabled/pressed/hover colors, retained Quick-menu bindings,
+a visible right-hand indicator with long text, and compact-row stacking across
+resizes. Mapped widgets and matching bounds alone do not detect an opaque
+sibling frame covering a button.
+
+On 2026-09-04, fresh fictional mockups and isolated production widgets were
+visually reviewed on Windows at the available native 150% DPI. Normal/minimum
+100%, 125%, and 150% Tk text-scaling simulations were also checked; the desktop
+display settings and resident application were not changed. Physical 100% and
+125% and cross-monitor behavior remain outstanding.
 
 Simulation is not proof of actual Windows DPI rendering. Manual approval still
 requires the Normal and Minimum variants on real Windows at 100%, 125%, and

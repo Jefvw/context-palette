@@ -128,6 +128,7 @@ def resolve_focus_state(
             configured_slots,
             palette_state.context_membership_version,
             configured_item_slots,
+            palette_state.drop_settings,
         ),
         available_names,
     )

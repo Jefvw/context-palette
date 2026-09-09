@@ -126,6 +126,152 @@ class UiMockupTkTests(unittest.TestCase):
                 finally:
                     root.destroy()
 
+    def test_main_palette_proposes_accessible_scope_and_aligned_tools(self) -> None:
+        for scaling in SCALE_PERCENTAGES:
+            with self.subTest(scaling=scaling):
+                root, view = self.build(
+                    MOCKUP_MAIN,
+                    size=SIZE_MINIMUM,
+                    scaling=scaling,
+                    scenario="selected",
+                )
+                try:
+                    style = ttk.Style(root)
+                    selected_scope = "ScopeSelected.TButton"
+                    self.assertEqual(
+                        style.lookup(selected_scope, "background"),
+                        "#d8eeeb",
+                    )
+                    self.assertEqual(
+                        style.lookup(selected_scope, "foreground"),
+                        "#1f2933",
+                    )
+                    self.assertEqual(
+                        style.lookup(selected_scope, "foreground", ("active", "pressed")),
+                        "#1f2933",
+                    )
+                    self.assertEqual(
+                        style.lookup(selected_scope, "foreground", ("disabled", "active")),
+                        "#52616b",
+                    )
+                    self.assertEqual(
+                        style.lookup(selected_scope, "bordercolor", ("focus",)),
+                        "#005fcc",
+                    )
+                    self.assertEqual(view.preview_button.cget("text"), "Preview")
+                    self.assertEqual(str(view.preview_button.cget("state")), str(tk.NORMAL))
+                    for button in view.scope_buttons.values():
+                        self.assertGreaterEqual(button.winfo_width(), button.winfo_reqwidth())
+                    self.assertEqual(
+                        {button.winfo_height() for button in view.workspace_buttons},
+                        {view.send_to_button.winfo_height()},
+                    )
+                    self.assertEqual(
+                        view.preview_button.winfo_height(),
+                        view.send_to_button.winfo_height(),
+                    )
+                    self.assertEqual(
+                        style.layout("Toolbar.TMenubutton"),
+                        style.layout("TMenubutton"),
+                    )
+                    self.assertEqual(
+                        style.lookup(
+                            "ToolbarIcon.TButton",
+                            "background",
+                            ("active", "pressed"),
+                        ),
+                        "#d8eeeb",
+                    )
+                    self.assertEqual(
+                        style.lookup(
+                            "ToolbarIcon.TButton",
+                            "foreground",
+                            ("active", "pressed"),
+                        ),
+                        "#1f2933",
+                    )
+                    self.assertEqual(
+                        style.lookup(
+                            "ToolbarIcon.TButton",
+                            "foreground",
+                            ("disabled", "active"),
+                        ),
+                        "#52616b",
+                    )
+                    self.assertEqual(
+                        style.lookup(
+                            "Primary.TButton",
+                            "background",
+                            ("disabled", "active", "pressed"),
+                        ),
+                        "#eef2f4",
+                    )
+                    self.assertEqual(
+                        style.lookup(
+                            "Primary.TButton",
+                            "foreground",
+                            ("disabled", "active", "pressed"),
+                        ),
+                        "#52616b",
+                    )
+                    self.assertNotIn("▼", view.send_to_button.cget("text"))
+                    self.assertNotIn("▾", view.send_to_button.cget("text"))
+                    self.assertEqual(view.text.cget("font"), "Consolas 10")
+                    self.assertEqual(view.text.cget("highlightcolor"), "#005fcc")
+                    self.assertEqual(view.text.cget("selectbackground"), "#087f78")
+                    self.assertEqual(
+                        tuple(map(str, root.tk.splitlist(view.new_action_button.cget("image")))),
+                        (str(view.icons["create_action"]),),
+                    )
+                    self.assertEqual(view.new_action_button.cget("text"), "Create Action")
+                    self.assertEqual(str(view.new_action_button.cget("compound")), "none")
+                    self.assertIn("Create Action", view.new_action_button.mockup_accessible_name)
+                finally:
+                    root.destroy()
+
+    def test_main_palette_uses_compact_execution_row_for_work_item_open(self) -> None:
+        root, view = self.build(
+            MOCKUP_MAIN,
+            size=SIZE_MINIMUM,
+            scaling=150,
+            scenario="work-item",
+        )
+        try:
+            self.assertTrue(view.compact_execution_row.winfo_manager())
+            self.assertTrue(view.preview_button.winfo_ismapped())
+            self.assertTrue(view.primary_button.winfo_ismapped())
+            self.assertEqual(
+                view.preview_button.grid_info()["in"],
+                view.compact_execution_row,
+            )
+            toolbar_children = view.compact_execution_row.master.winfo_children()
+            self.assertLess(
+                toolbar_children.index(view.compact_execution_row),
+                toolbar_children.index(view.preview_button),
+            )
+            self.assertLess(
+                toolbar_children.index(view.compact_execution_row),
+                toolbar_children.index(view.primary_button),
+            )
+            self.assertGreater(view.preview_button.winfo_y(), view.edit_button.winfo_y())
+            self.assertGreater(view.primary_button.winfo_y(), view.edit_button.winfo_y())
+            self.assertEqual(view.primary_button.cget("text"), "Open")
+            self.assertEqual(view.layout_issues(), ())
+            event = type("Event", (), {"widget": view.execution_toolbar, "width": 1000})()
+            view._layout_execution_controls(event)
+            self.assertEqual(
+                view.preview_button.grid_info()["in"],
+                view.execution_toolbar,
+            )
+            event.width = 1
+            view._layout_execution_controls(event)
+            self.assertEqual(
+                view.preview_button.grid_info()["in"],
+                view.compact_execution_row,
+            )
+        finally:
+            root.destroy()
+
     def test_configure_uses_one_mapped_page_without_notebook(self) -> None:
         for screen in (MOCKUP_WORK_ITEMS, MOCKUP_ACTIONS):
             with self.subTest(screen=screen):

@@ -15,6 +15,8 @@ COLORS = {
     "row_light": "#e8f3f2",
     "slot_pinned": "#dbeafe",
     "slot_focus": "#dcfce7",
+    "slot_focus_alternate": "#c9efdc",
+    "result_alternate": "#edf2f5",
     "text": "#1f2933",
     "muted_text": "#52616b",
     "white": "#ffffff",
@@ -29,6 +31,19 @@ DEFAULT_FONT = "{Segoe UI} 10"
 TITLE_FONT = ("Segoe UI Semibold", 14)
 HEADING_FONT = ("Segoe UI Semibold", 11)
 CAPTION_FONT = ("Segoe UI", 9)
+
+
+def result_row_color_key(index: int, *, context_shortcut: bool = False) -> str:
+    """Choose paint only; ordering, shortcut membership and selection stay separate."""
+    if context_shortcut:
+        return "slot_focus_alternate" if index % 2 else "slot_focus"
+    return "result_alternate" if index % 2 else "surface"
+
+
+def configure_result_row_tags(tree: ttk.Treeview) -> None:
+    """Use one background tag per row, leaving selected colors to the theme."""
+    for color in ("surface", "result_alternate", "slot_focus", "slot_focus_alternate"):
+        tree.tag_configure(f"result_{color}", background=COLORS[color], foreground=COLORS["text"])
 
 
 def configure_theme(root: tk.Misc, style: ttk.Style | None = None) -> ttk.Style:
@@ -46,6 +61,14 @@ def configure_theme(root: tk.Misc, style: ttk.Style | None = None) -> ttk.Style:
     root.option_add("*Text.foreground", COLORS["text"])
     root.option_add("*Canvas.background", COLORS["background"])
     root.configure(background=COLORS["background"])
+    caption_line_height = (
+        tkfont.Font(root=root, font=CAPTION_FONT).metrics("linespace")
+        if hasattr(root, "tk")
+        else 16
+    )
+    icon_padding = max(0, caption_line_height - 10)
+    icon_top_padding = icon_padding // 2
+    icon_bottom_padding = icon_padding - icon_top_padding
 
     style.configure(".", background=COLORS["background"], foreground=COLORS["text"])
     style.configure("TFrame", background=COLORS["background"])
@@ -125,6 +148,71 @@ def configure_theme(root: tk.Misc, style: ttk.Style | None = None) -> ttk.Style:
         "Icon.TButton",
         background=[("active", COLORS["row_aqua"]), ("pressed", COLORS["accent"])],
         foreground=[("pressed", COLORS["white"])],
+        bordercolor=[("focus", COLORS["focus"])],
+    )
+    style.configure(
+        "Scope.TButton",
+        background=COLORS["topic_header"],
+        foreground=COLORS["text"],
+        bordercolor=COLORS["border"],
+        padding=(1, 3),
+        font=CAPTION_FONT,
+    )
+    style.map(
+        "Scope.TButton",
+        background=[("disabled", COLORS["background"]), ("pressed", COLORS["row_aqua"]), ("active", COLORS["row_light"])],
+        foreground=[("disabled", COLORS["muted_text"]), ("!disabled", COLORS["text"])],
+        bordercolor=[("focus", COLORS["focus"])],
+    )
+    style.configure(
+        "ScopeSelected.TButton",
+        background=COLORS["row_aqua"],
+        foreground=COLORS["text"],
+        bordercolor=COLORS["border"],
+        padding=(1, 3),
+        font=CAPTION_FONT,
+    )
+    style.map(
+        "ScopeSelected.TButton",
+        background=[("disabled", COLORS["background"]), ("pressed", COLORS["row_aqua"]), ("active", COLORS["row_light"])],
+        foreground=[("disabled", COLORS["muted_text"]), ("!disabled", COLORS["text"])],
+        bordercolor=[("focus", COLORS["focus"])],
+    )
+    for widget_class in ("TButton", "TMenubutton"):
+        style.configure(
+            f"Toolbar.{widget_class}",
+            background=COLORS["topic_header"], foreground=COLORS["text"],
+            bordercolor=COLORS["border"], borderwidth=1,
+            padding=(6, 3), font=CAPTION_FONT,
+        )
+        style.map(
+            f"Toolbar.{widget_class}",
+            background=[("disabled", COLORS["background"]), ("pressed", COLORS["row_aqua"]), ("active", COLORS["row_light"])],
+            foreground=[("disabled", COLORS["muted_text"]), ("!disabled", COLORS["text"])],
+            bordercolor=[("focus", COLORS["focus"])],
+        )
+        style.configure(
+            f"ToolbarIcon.{widget_class}",
+            background=COLORS["topic_header"], foreground=COLORS["text"],
+            bordercolor=COLORS["border"], borderwidth=1,
+            padding=(4, icon_top_padding, 4, icon_bottom_padding), font=CAPTION_FONT,
+        )
+        style.map(
+            f"ToolbarIcon.{widget_class}",
+            background=[("disabled", COLORS["background"]), ("pressed", COLORS["row_aqua"]), ("active", COLORS["row_light"])],
+            foreground=[("disabled", COLORS["muted_text"]), ("!disabled", COLORS["text"])],
+            bordercolor=[("focus", COLORS["focus"])],
+        )
+    style.layout("Toolbar.TMenubutton", style.layout("TMenubutton"))
+    style.layout("ToolbarIcon.TMenubutton", style.layout("TButton"))
+    style.configure(
+        "Primary.TButton", background=COLORS["accent"], foreground=COLORS["white"],
+        bordercolor=COLORS["border"], font=CAPTION_FONT, padding=(6, 3),
+    )
+    style.map(
+        "Primary.TButton",
+        background=[("disabled", COLORS["topic_header"]), ("pressed", COLORS["accent_hover"]), ("active", COLORS["accent_hover"])],
+        foreground=[("disabled", COLORS["muted_text"]), ("!disabled", COLORS["white"])],
         bordercolor=[("focus", COLORS["focus"])],
     )
     style.configure(
@@ -305,11 +393,11 @@ def configure_theme(root: tk.Misc, style: ttk.Style | None = None) -> ttk.Style:
                             {
                                 "sticky": tk.NSEW,
                                 "children": [
-                                    ("Label.label", {"side": tk.LEFT, "sticky": tk.W}),
                                     (
                                         "Menubutton.indicator",
                                         {"side": tk.RIGHT, "sticky": tk.E},
                                     ),
+                                    ("Label.label", {"side": tk.LEFT, "sticky": tk.W}),
                                 ],
                             },
                         )

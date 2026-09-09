@@ -297,6 +297,23 @@ class ExcelAutomationWindowTests(unittest.TestCase):
         self.root.update()
         return window
 
+    def test_csv_review_is_visible_without_revealing_hidden_palette(self) -> None:
+        window = self._window()
+        self.assertEqual(self.root.state(), "withdrawn")
+        self.assertTrue(window.window.winfo_viewable())
+        self.assertEqual(str(window.window.transient()), "")
+        self.assertFalse(any(call["phase"] == "execute" for call in self.coordinator.calls))
+        self.root.deiconify()
+        self.root.update()
+        window.show()
+        self.assertEqual(str(window.window.transient()), str(self.root))
+        self.root.withdraw()
+        self.root.update()
+        window.show()
+        self.root.update()
+        self.assertEqual(self.root.state(), "withdrawn")
+        self.assertTrue(window.window.winfo_viewable())
+
     def _clean_up_window(self, window: ExcelAutomationWindow) -> None:
         self.coordinator.running = False
         self.coordinator.completion_pending = False

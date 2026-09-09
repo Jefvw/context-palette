@@ -1056,6 +1056,84 @@ class ActionTests(unittest.TestCase):
         self.assertTrue(action_uses_clipboard_template(action))
         self.assertEqual(opened[0].value, r"D:\customers\acme")
 
+    def test_send_files_to_folder_serializes_and_rejects_clipboard_destinations(self):
+        action = configured_action(
+            title="Send exports",
+            context="General",
+            action_type="send_files_to_folder",
+            value=r"D:\exports\%YYYY%",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "actions.json"
+            append_action(path, action)
+            loaded = load_actions(path)[0]
+
+        self.assertEqual(loaded.type, "send_files_to_folder")
+        self.assertEqual(loaded.value, r"D:\exports\%YYYY%")
+        with self.assertRaisesRegex(ActionError, "clipboard placeholders"):
+            configured_action(
+                title="Unsafe destination",
+                context="General",
+                action_type="send_files_to_folder",
+                value=r"D:\exports\%CLIPBOARD%",
+            )
+
+    def test_send_files_to_folder_rejects_irrelevant_process_fields(self):
+        with self.assertRaisesRegex(ActionError, "cannot store arguments"):
+            configured_action(
+                title="Send exports",
+                context="General",
+                action_type="send_files_to_folder",
+                value=r"D:\exports",
+                arguments=("--quiet",),
+            )
+        path = self._write_actions(
+            [{
+                "id": "bad-transfer",
+                "title": "Send exports",
+                "type": "send_files_to_folder",
+                "value": r"D:\exports",
+                "working_directory": r"D:\work",
+            }]
+        )
+        with self.assertRaisesRegex(ActionError, "cannot contain arguments"):
+            load_actions(path)
+
+    def test_send_files_to_folder_passes_exact_input_without_side_effects(self):
+        action = Action(
+            "send-exports",
+            "Send exports",
+            "General",
+            "send_files_to_folder",
+            r"D:\exports\%YYYY%",
+        )
+        calls = []
+
+        message = execute_action(
+            action,
+            input_text="  C:\\one.txt\nC:\\two.txt  ",
+            file_transfer_runner=lambda expanded, source: calls.append(
+                (expanded, source)
+            ) or "Reviewed transfer",
+            clipboard_getter=lambda: (_ for _ in ()).throw(AssertionError("clipboard read")),
+            clipboard_setter=lambda _text: (_ for _ in ()).throw(AssertionError("clipboard write")),
+            output_setter=lambda _text: (_ for _ in ()).throw(AssertionError("output write")),
+        )
+
+        self.assertEqual(message, "Reviewed transfer")
+        self.assertEqual(calls[0][1], "  C:\\one.txt\nC:\\two.txt  ")
+        self.assertNotIn("%YYYY%", calls[0][0].value)
+        self.assertEqual(calls[0][0].arguments, ())
+        self.assertIsNone(calls[0][0].working_directory)
+
+    def test_send_files_to_folder_requires_a_transfer_runner(self):
+        action = Action(
+            "send-exports", "Send exports", "General", "send_files_to_folder", r"D:\exports"
+        )
+
+        with self.assertRaisesRegex(ActionError, "File transfer execution is unavailable"):
+            execute_action(action, input_text="C:\\one.txt")
+
     def test_folder_resolver_accepts_relative_paths_and_file_uris(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -1,5 +1,144 @@
 # Decisions
 
+## 2026-09-09 - Accept the current batch with partial owner UAT coverage
+
+**Decision:** The owner considers UAT done for now for the current Input /
+Output, Preview, Drop, Send-files and cosmetic batch, while explicitly noting
+that not everything was checked. Close this batch's owner acceptance and defer
+the remaining checks as follow-up. Do not infer individual Pass results or
+complete physical-DPI, cross-monitor or Excel coverage from that acceptance.
+
+**Boundary:** Keep automated evidence separate from the owner decision. The
+earlier verification logs remain historical records. This acceptance does not
+remove the separate live Excel conversion execution gate, close unrelated
+manual matrices, or authorize committing, pushing or publishing.
+
+**Record:** [Current batch owner acceptance](UAT_CURRENT_BATCH.md) retains the
+decision and optional checklist; MVP, Roadmap and Backlog reflect the closure.
+
+## 2026-09-04 - Clarify icons without replacing result widgets
+
+**Decision:** Refine the existing 16-pixel monochrome toolbar drawings and
+replace +A with a neutral document-plus Create Action control. Preserve its
+creation callback, keyboard access and semantic tooltip; Create from Input
+remains the separate wand. Keep Run/Open visually dominant.
+
+Action symbols stay in the canonical type catalogue. Separate Send files
+from Sequence, use recognizable document/window shapes, and distinguish URL
+builders by requested (`?↗`) versus supplied (`T↗`) text. Use `T` for text
+transformation. Keep familiar symbols where they remain clear. Native Tk
+measurements must fit the existing maximum icon column; never trade title
+space or change stored Action types merely to restyle the list.
+
+**Reason:** A font-symbol Listbox cannot embed bitmap icons. Replacing its
+selection, scrolling and event behavior would expand a cosmetic pass into
+an unnecessary widget migration. Validate candidate symbols and drawings
+through inert real-Tk rendering, then preserve existing callbacks and rows.
+
+**Verification:** Native Windows rendering and separately labelled scaling
+simulations; bitmap validity/distinctness, catalogue uniqueness and width,
+creation callback/image/tooltip, compact layout and complete repository checks.
+
+## 2026-09-04 - Polish existing controls without redesigning the Palette
+
+**Decision:** Validate scoped presentation changes in the inert real-Tk
+mockups before applying them to production: pale-teal scope selection,
+solid-teal Run/Open, matching compact toolbar controls, local editor focus and
+selection styling, and one theme-provided Quick-menu arrow. Preserve labels,
+grouping, navigation, shortcuts, execution boundaries, storage, and existing
+normal/minimum window sizes. Keep the existing responsive execution-row
+policy; its background frame must not obscure the controls it arranges.
+Reapply that same policy when a selected command changes its label or exposes
+the Work Item folder button, not only when the window is resized. Allow Find
+to shrink within its existing row so the Filter control stays reachable.
+
+**Reason:** Improve hierarchy and consistency without reopening the rejected
+UI redesign. A single implementation owner and independent review protect
+overlapping uncommitted UI work. Fixed bitmap icons require measured padding,
+and combined pressed/active/disabled states require real ttk lookups.
+
+**Verification:** Compare fresh fictional Tk fixtures, test normal/minimum
+sizes and 100/125/150% text-scaling simulations, inspect native Windows
+rendering where available, and run the complete check. Simulation is not
+native multi-monitor DPI validation. Icon redraws and replacing the +A badge
+are deferred; no new dependencies are introduced.
+
+## 2026-09-04 - Dispatch automatic drops without Input / Output staging
+
+**Decision:** A configured drop Action receives the prepared drop directly,
+after fresh configuration and approval validation. Input / Output is not an
+execution prerequisite: do not acquire its value, reveal it or show a placement
+dialog before dispatch. Show-only drops and explicit history resend retain
+their existing Replace/Append/Cancel behavior. This supersedes the earlier
+decision to retain incoming placement before every automatic invocation.
+
+**Delivery and recovery:** Copy/open/CSV operations leave editor state alone.
+Text-producing Actions buffer output until synchronous success, then deliver
+the result with normal editor Undo/history. Failed or blocked runs retain the
+original drop in session history, leave existing text untouched, and expose an
+explanation without automatic retry. Copy/CSV reviews must display even when
+the Palette is hidden. Keep overwrite review, Excel confirmation, stale-approval
+checks, history replay protection and existing-review concurrency guards.
+
+**Verification:** Exact-input/no-placement regression tests, failed-output
+isolation, default/history placement checks, real-Tk hidden-window visibility
+and unchanged editor selection/history/Undo, then the full repository check.
+
+## 2026-09-03 - Share resource execution adapters without a workflow engine
+
+**Decision:** Introduce typed, immutable runtime requests for opening targets,
+copying files and entering Excel workflows. Reuse existing operation adapters
+and their review/recovery behavior. Add **Send files to folder** as an ordinary
+saved Action so Run, Quick menus and approved Drop can use the same copy engine
+as Send to. Requests carry explicit input snapshots; they grant no authority.
+
+**Reason:** File/folder and Excel automation are the owner's primary reuse cases.
+This small boundary removes entry-point-specific execution wiring without
+flattening different operations into one generic executor. A Work Item remains
+a resource, not an automation definition. Contexts/tags and JSON storage remain
+unchanged. Recipes remain a design grammar; no recipe editor is introduced.
+
+**Compatibility:** Preserve default show-only Drop, exact new-drop input,
+existing overwrite-off conflict review, partial outcomes and no automatic retry.
+A dispatch receipt means workflow started, not succeeded. Live Excel stays
+manual with its chooser, confirmations and host UAT flag. Preview cannot
+instantiate effectful workflows. Keep the older Work Item single-file copy
+policy separate until an explicit behavior change is approved.
+
+**Verification:** Test shared adapter parity, exact manual/Drop snapshots,
+approval invalidation, Preview isolation, concurrent-review protection and
+Excel metadata/gating; retain domain engine tests and run the full check.
+
+## 2026-09-03 - Enhance the current UI without Find-and-Use or organization redesign
+
+**Decision:** Replace the proposed broad rework with three focused additions:
+one session-only Input / Output visibility control (default shown), optional
+snapshot Preview, and explicit Drop-window Action configuration (default
+show-only). Keep layout/navigation, result lists, Quick menus, normal Run/Open,
+and separate Context/tag assignments. Context controls focused results and
+shortcuts 6–0; tags only narrow results. No Context/tag storage migration.
+
+Use When → Get → Do → Deliver → Recover as a design checklist, not a mandatory
+recipe editor or new persistence model. A drop trigger grants no extra run
+authority: selecting and saving a compatible Action explicitly permits its
+described effect, bound to its execution configuration, with existing
+Action-specific confirmations intact. Input is the immutable new drop, never
+unrelated clipboard/capture or previously appended content. Replay is intake
+only; failures preserve input and never retry automatically.
+
+**Reason:** The owner rejected the redesign and organization merge while
+retaining these concrete benefits. Reusing the existing editor, pure execution
+functions, Action picker, attended Excel workflow, and local palette record
+keeps the slice small and compatible. Add only an optional local drop-setting
+member, not a migration. Preview remains separate from execution and clearly
+states when an external target cannot yet be resolved or inspected.
+
+**Verification:** Pure policy/preview tests, exact-input launcher integration
+tests, isolated Windows Tk hide/show/Undo and scaling tests, preservation tests
+for Context/slot/runtime snapshots, then the complete repository check.
+Manual validation can concentrate on these three additions; unrelated older
+UAT backlog is not a prerequisite for this implementation.
+
 ## 2026-08-28 - Publish runtime configuration as one validated generation
 
 **Decision:** After first-start bootstrap, stage shared and personal Actions,

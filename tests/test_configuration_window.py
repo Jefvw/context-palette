@@ -56,7 +56,8 @@ from context_palette.command_surface import (
 )
 from context_palette.contexts import ContextDefinition
 from context_palette.palette_items import PaletteItemReference
-from context_palette.palette_state import PaletteState, load_palette_state
+from context_palette.palette_state import PaletteState, load_palette_state, save_palette_state
+from context_palette.drop_action import approve_drop_action
 from context_palette.quick_menu_path_dialog import QuickMenuPlacementSelection
 from context_palette.work_items import DiscoveredWorkItem, WorkItemReference
 
@@ -733,6 +734,10 @@ class ConfigurationDialogTests(unittest.TestCase):
             configuration = ConfigurationWindow.__new__(ConfigurationWindow)
             configuration.palette_path = root / "palette.json"
             configuration.contexts_path = context_path
+            drop_settings = approve_drop_action(
+                Action("drop-upper", "Uppercase", "General", "transform_text", "uppercase")
+            )
+            save_palette_state(configuration.palette_path, PaletteState(drop_settings=drop_settings))
             configuration.palette_state = PaletteState(
                 ("pin",),
                 "Customer",
@@ -758,6 +763,7 @@ class ConfigurationDialogTests(unittest.TestCase):
             self.assertTrue(configuration._save_general_shortcuts(preferred))
 
             saved = load_palette_state(configuration.palette_path)
+            self.assertEqual(saved.drop_settings, drop_settings)
             self.assertEqual(saved.pinned_action_ids, ("pin",))
             self.assertEqual(saved.focus_context, "Customer")
             self.assertEqual(saved.context_membership_version, 7)
@@ -3448,6 +3454,33 @@ class ConfigurationDialogTests(unittest.TestCase):
                 for child in root.winfo_children():
                     child.destroy()
                 root.destroy()
+
+    def test_send_files_to_folder_dialog_uses_the_folder_field_and_saves(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        saved: list[Action] = []
+        try:
+            dialog = ActionDialog(
+                root,
+                "send_files_to_folder",
+                [],
+                lambda action: saved.append(action) or True,
+                context_names=["General"],
+            )
+            root.update_idletasks()
+            self.assertIsNone(dialog.arguments_text)
+            dialog.title_var.set("Send exports")
+            dialog.value.insert("1.0", r"D:\exports")
+
+            dialog._save()
+
+            self.assertEqual(len(saved), 1)
+            self.assertEqual(saved[0].type, "send_files_to_folder")
+            self.assertEqual(saved[0].value, r"D:\exports")
+        finally:
+            for child in root.winfo_children():
+                child.destroy()
+            root.destroy()
 
     def test_action_dialog_uses_compact_inline_fields_and_tooltip_guidance(self) -> None:
         root = tk.Tk()

@@ -4,6 +4,12 @@ The roadmap describes ordered product outcomes, not commitments or implemented b
 
 ## Now — make repeated actions effortless
 
+- Address real-use findings in the current UI enhancement, accepted by the
+  owner on 2026-09-09 with partial UAT coverage. Further checks are deferred
+  follow-up, not an open acceptance gate; see the [record](UAT_CURRENT_BATCH.md).
+  Keep Contexts and tags distinct; no Find-and-Use / Organization redesign,
+  recipe editor or Context/tag migration is planned.
+
 - Validate complete guided Configure management with real My configuration/Built-in
   actions, context deletion, and reordered multi-entry Quick-action menus.
 - Complete Work Items Phase 5: representative manual Windows checks on another

@@ -21,9 +21,23 @@ from context_palette.palette_items import PaletteItemReference
 from context_palette.work_items import WorkItemReference
 from context_palette.focus_model import resolve_focus_state
 from context_palette.contexts import ContextDefinition
+from context_palette.drop_action import DropActionSettings, approve_drop_action
 
 
 class PaletteStateTests(unittest.TestCase):
+    def test_drop_settings_default_legacy_round_trip_and_focus_projection(self):
+        action = Action("upper", "Uppercase", "General", "transform_text", "uppercase")
+        settings = approve_drop_action(action)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "palette.json"
+            save_palette_state(path, PaletteState())
+            self.assertNotIn("drop_settings", json.loads(path.read_text(encoding="utf-8")))
+            self.assertEqual(load_palette_state(path).drop_settings, DropActionSettings())
+            state = PaletteState(drop_settings=settings)
+            save_palette_state(path, state)
+            self.assertEqual(load_palette_state(path), state)
+            self.assertEqual(resolve_focus_state([action], [], state).palette_state.drop_settings, settings)
+
     def setUp(self):
         self.actions = [
             Action("a", "A", "Mail", "copy_text", "a"),

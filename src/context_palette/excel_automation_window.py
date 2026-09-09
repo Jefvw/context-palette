@@ -141,6 +141,8 @@ class ExcelAutomationWindow:
     def show(self) -> None:
         if self._closed:
             return
+        parent = self.window.master
+        self.window.transient(parent if parent.winfo_viewable() else "")
         self.window.deiconify()
         self.window.lift()
 

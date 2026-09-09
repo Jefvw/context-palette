@@ -75,7 +75,7 @@ def drop_result_details(result: DropResult) -> str:
 
     item_count = len(result.items)
     item_label = "item" if item_count == 1 else "items"
-    lines = [f"What will be sent to Input / Output ({item_count} {item_label})"]
+    lines = [f"Prepared dropped content ({item_count} {item_label})"]
     for index, item in enumerate(result.items[:DROP_DETAILS_ITEM_LIMIT], start=1):
         lines.append("")
         if item.kind == "text":
@@ -93,7 +93,7 @@ def drop_result_details(result: DropResult) -> str:
         lines.extend(
             (
                 "",
-                f"... {hidden_items} more items are retained and will be sent.",
+                f"... {hidden_items} more items are retained in Drop history.",
             )
         )
     if result.warnings:
@@ -104,7 +104,7 @@ def drop_result_details(result: DropResult) -> str:
         content = content[:DROP_DETAILS_CHARACTER_LIMIT].rstrip()
         content += (
             "\n\n... Preview truncated. The complete prepared content is retained "
-            "and will be sent."
+            "in Drop history."
         )
     return content
 
@@ -124,9 +124,16 @@ class DropTargetWindow:
         on_drop: Callable[[DropResult], None],
         *,
         coordinator: DropResolutionCoordinator | None = None,
+        on_configure: Callable[[], None] | None = None,
+        on_resend: Callable[[DropResult], None] | None = None,
     ) -> None:
         self.root = root
         self._on_drop = on_drop
+        self._on_resend = on_resend or on_drop
+        self._on_configure = on_configure
+        self._behavior_text = "On drop: Show in Context Palette"
+        self._behavior_label: ttk.Label | None = None
+        self.settings_button: ttk.Button | None = None
         self._coordinator = coordinator or DropResolutionCoordinator()
         self.window: tk.Toplevel | None = None
         self._status: ttk.Label | None = None
@@ -145,6 +152,7 @@ class DropTargetWindow:
         self._dnd_available: bool | None = None
         self.unavailable_reason: str | None = None
         self._polling = False
+        self._delivering = False
 
     def start(self) -> bool:
         if not self._ensure_dnd():
@@ -215,6 +223,8 @@ class DropTargetWindow:
             self.send_again_button = None
             self.details_button = None
             self.hide_button = None
+            self.settings_button = None
+            self._behavior_label = None
             self._details_frame = None
             self._details_text = None
             self._details_visible = False
@@ -304,6 +314,17 @@ class DropTargetWindow:
         self.details_button.pack(side=tk.LEFT, padx=(8, 0))
         self.hide_button = ttk.Button(footer, text="Hide", command=self.hide)
         self.hide_button.pack(side=tk.RIGHT)
+        if self._on_configure is not None:
+            behavior = ttk.Frame(frame)
+            behavior.grid(row=5, sticky="ew", pady=(8, 0))
+            self._behavior_label = ttk.Label(
+                behavior, text=self._behavior_text, wraplength=280,
+            )
+            self._behavior_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            self.settings_button = ttk.Button(
+                behavior, text="Settings…", command=self._on_configure,
+            )
+            self.settings_button.pack(side=tk.RIGHT, padx=(8, 0))
         self._sync_history_controls()
         window.drop_target_register("DND_Files", "DND_Text")
         window.dnd_bind("<<Drop:DND_Files>>", self._handle_files_drop)
@@ -394,6 +415,9 @@ class DropTargetWindow:
         return self._handle_drop(event, "DND_Text")
 
     def _handle_drop(self, event: object, drop_type: str) -> str:
+        if self._delivering:
+            self._set_status("Finish the previous drop in Context Palette before dropping again.")
+            return DROP_REFUSE_ACTION
         self._set_details_visible(False)
         values, error = decode_drop_values(event, drop_type)
         if error is not None:
@@ -417,6 +441,9 @@ class DropTargetWindow:
         self._complete(result)
 
     def _complete(self, result: DropResult) -> None:
+        if self._delivering:
+            self._set_status("Finish the previous drop in Context Palette before dropping again.")
+            return
         if result.error is not None:
             status = result.error.message
         elif not result.items:
@@ -426,7 +453,17 @@ class DropTargetWindow:
             self._remember_drop(result)
         self._set_status(status)
         self._sync_history_controls()
-        self._on_drop(result)
+        self._deliver(self._on_drop, result)
+
+    def _deliver(self, callback: Callable[[DropResult], None], result: DropResult) -> None:
+        """Guard modal Tk re-entry; never queue or repeat an effect implicitly."""
+        self._delivering = True
+        self._sync_history_controls()
+        try:
+            callback(result)
+        finally:
+            self._delivering = False
+            self._sync_history_controls()
 
     def _remember_drop(self, result: DropResult) -> None:
         self._drop_history.append(result)
@@ -435,7 +472,7 @@ class DropTargetWindow:
         self._history_index = len(self._drop_history) - 1
 
     def _move_history(self, offset: int) -> None:
-        if self._polling:
+        if self._polling or self._delivering:
             return
         destination = self._history_index + offset
         if not 0 <= destination < len(self._drop_history):
@@ -444,12 +481,22 @@ class DropTargetWindow:
         self._sync_history_controls()
 
     def _send_again(self) -> None:
-        if self._polling or not 0 <= self._history_index < len(self._drop_history):
+        if self._polling or self._delivering or not 0 <= self._history_index < len(self._drop_history):
             return
-        self._on_drop(self._drop_history[self._history_index])
+        self._deliver(self._on_resend, self._drop_history[self._history_index])
+
+    def set_behavior_label(self, text: str) -> None:
+        """Describe the injected route without deciding or performing effects."""
+        if text == self._behavior_text:
+            return
+        self._behavior_text = text
+        origin = self._window_origin()
+        if self._behavior_label is not None:
+            self._behavior_label.configure(text=text)
+        self._fit_window_to_monitor(origin=origin)
 
     def _toggle_details(self) -> None:
-        if self._polling or not 0 <= self._history_index < len(self._drop_history):
+        if self._polling or self._delivering or not 0 <= self._history_index < len(self._drop_history):
             return
         self._set_details_visible(not self._details_visible)
 
@@ -495,7 +542,7 @@ class DropTargetWindow:
         if self._details_visible:
             self._update_details()
 
-        busy = self._polling
+        busy = self._polling or self._delivering
         if self.previous_button is not None:
             self.previous_button.configure(
                 state=(
