@@ -2020,15 +2020,17 @@ class LauncherSmokeTests(unittest.TestCase):
                     self.assertEqual(
                         [
                             app.more_menu.entrycget(index, "label")
-                            for index in (0, 1, 3, 4)
+                            for index in range(app.more_menu.index("end") + 1)
+                            if app.more_menu.type(index) != "separator"
                         ],
                         [
-                            "Keyboard shortcuts",
                             "Show drop target",
+                            "Keyboard shortcuts",
                             "Hide",
                             "Quit",
                         ],
                     )
+                    self.assertFalse(hasattr(app, "edge_score_pdf_menu"))
                     self.assertIsNotNone(app.drop_target_window)
                     self.assertIsNotNone(app.drop_target_window.window)
                     self.assertEqual(app.drop_target_window.window.transient(), "")

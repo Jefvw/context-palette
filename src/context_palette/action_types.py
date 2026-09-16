@@ -147,6 +147,16 @@ ACTION_TYPES = {
             "The destination can use ordinary portable or date placeholders; the attended workflow checks sources and the destination before copying.",
         ),
         _definition(
+            "save_edge_score_pdf",
+            "♫",
+            "Save current score as PDF",
+            "Browser automation",
+            "Save the Official score or Guitar Pro tab open in Edge using Ultimate Guitar's PRINT layout.",
+            "The Edge window captured by F9 or Ctrl+Alt+P; Input / Output is not used.",
+            "Attempts to save a new PDF in the configured folder with duplicate numbering; at the accepted Save As handoff, choose the folder and filename and save manually in Edge.",
+            "Windows and English Edge controls required. Choose an available PDF folder on each PC. Manual only; no Drop or sequences.",
+        ),
+        _definition(
             "launch_app",
             "▶",
             "Run an application",

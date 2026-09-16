@@ -8,6 +8,160 @@ recorded on 2026-09-09. Its checklist remains available for optional follow-up.
 Keep that decision separate from per-check results, automated output and
 simulated DPI; unreported manual checks remain unverified.
 
+## Current Edge score PDF acceptance
+
+### Guitar Pro tab extension (2026-09-15)
+
+**Focused automated checks passed:** 44 Python/real-Tk tests covered the score
+boundary, Action routing/Preview, window lifecycle and generated catalogue.
+Two additional tests covered Python URL validation and AST-extracted PowerShell
+page-identity helpers, including the observed Guitar Pro URL/title, Official
+regression cases, type mismatches, and malformed URLs. These helpers did not
+inspect or drive a live browser.
+
+**Complete automated check passed:** `check-context-palette.bat` ran **1,476
+tests with 2 skipped in 318.487 seconds** on 2026-09-15. Configuration validation
+and compilation passed. The ignored machine-local log is
+`score-pdf-guitar-pro-check.log`.
+
+**Live Windows handoff passed:** After a graceful Palette restart, the saved
+Action was run from F9/Find on the open Dont Cry Sister Guitar Pro tab. Edge
+opened the site's print layout with a two-page PDF preview and native Save As.
+The Palette progress window closed without a failure popup. The dialog retained
+Edge's suggested filename and Downloads location and was left open for the user
+to choose the final folder/name and Save. No final Save was clicked, and no
+finished PDF or content fidelity was verified.
+
+An Official score was not retested live in this change. Its identity regression
+checks passed automatically. Final manual save/content inspection, alternate
+instruments, cancellation, changed foreground, scaling and second-PC checks
+remain unverified unless separately reported. This does not reopen the earlier
+requirement for full automatic saving. Historical complete-check and failed
+automatic-save records below remain separate evidence.
+
+**Owner accepted manual completion (2026-09-15).** Keep the observed behavior:
+run the score Action, then choose the folder/filename and finish Save in Edge.
+The owner prefers the chance to change the filename. Full automatic saving is
+not an acceptance requirement. The later request removes the failure popup for
+the known filename-control lookup failure after verified Save As: the Palette
+progress window closes, leaving manual completion in Edge. Other errors remain
+visible. Native execution is unchanged; this is not an implemented always-pause mode. The configured folder and
+automatic duplicate numbering do not apply to the observed manual finish.
+
+The failed automatic-save test below remains a failed technical test. Owner
+acceptance of manual completion does not claim that it passed, or that any
+previously unreported Windows UAT was performed. See the latest
+[owner decision](DECISIONS.md) and the
+[usage steps](HELP.md#save-the-current-ultimate-guitar-score-from-edge).
+
+**Handoff message change (2026-09-15):** 29 focused Python/real-Tk tests passed
+with a simulated renderer/helper. They cover the exact protocol classification,
+conflicting outcomes, ordinary errors, staging cleanup without PDF publication,
+and closing the progress window once without lifting a result dialog. This is
+not a live Edge test. The remaining focused Windows check is to run the Action,
+confirm Save As stays available without the Palette popup, then choose a folder
+and filename and save manually. At that point the application had not been restarted; see the later Guitar Pro live check above.
+
+The required complete check then passed: `check-context-palette.bat` ran
+**1,474 tests with 2 skipped in 174.911 seconds** on 2026-09-15, including
+configuration validation and compilation. The machine-local ignored log is
+`score-pdf-manual-handoff-check.log`. This does not claim a new live Edge test.
+
+**Historical automatic-save test: failed (2026-09-15).** The native-process fix now
+gets past dialog identity checks, but the live helper reports `filename_missing`.
+A separate live accessibility inspection finds the visible `File name:` Edit
+with AutomationId `1001` under `FileNameControlHost`. A bounded ten-second retry
+of the unchanged selector also failed on the existing Black Star score. The
+unproven polling change and its tests were reverted; no completed PDF was
+verified. Further automatic-save repair and repeat UAT are not required under
+the owner's manual-completion decision. The earlier
+1,469-test pass does not establish that automatic saving works.
+
+The score function has separate acceptance from generic webpage PDF rendering
+and the earlier accepted batch. Its automated tests use injected process/UI
+boundaries; Tk tests check window lifecycle and presentation. They do not execute
+the Windows accessibility helper against the user's browser.
+`test_edge_score_pdf_native.py` parses the PowerShell script and compiles the C#
+companion using Windows' own assemblies without invoking any UI/native method.
+`test_edge_score_pdf_controls.py` executes extracted PowerShell functions with
+fake controls. It covers normalized PRINT labels, ambiguity, visibility,
+source/page changes, and native Save As identity/readiness. Native host checks
+cover the exact foreground handle, a separate Edge process, case-insensitive
+executable equality, other-directory executables, missing/unreadable process
+paths, and a zero process ID. It does not inspect or operate the real browser.
+Python protocol tests also cover stage-specific
+failure messages and suppression of unrecognized raw output.
+
+On 2026-09-13, the reported control lookup failure was reproduced through the
+saved Action against the existing Edge score. Diagnostics confirmed surrounding
+whitespace in the accessible PRINT label. The corrected lookup reached Edge's
+PDF preview and Windows Save As. Save As discovery then failed; the foreground
+HWND correction reached Save As but rejected its identity. A subsequent read-only
+inspection confirmed the native dialog name, class, handle, and enabled state;
+it did not establish its process identity against the original browser window.
+The readiness retry also reached Save As and timed out on 2026-09-13. A later
+diagnostic from the original captured score isolated the mismatch to the UIA
+process ID; name, class, exact handle, source ownership and modal state matched.
+The correction now verifies the native host process's executable against the
+source Edge executable. It does not require equal process IDs. On 2026-09-15,
+desktop control stopped because it could not reliably determine Edge's current
+URL. The corrected complete live save remains unverified.
+
+The complete check for the native-process correction passed on 2026-09-15:
+configuration validation, source compilation, and **1,469 tests, 2 skipped**
+(343.356 seconds for the test suite). Focused controls/native checks also
+passed. `git diff --check` passed; no files are staged. These results cover
+simulation and native compilation, not a completed live browser save.
+
+The earlier check, before the native-process correction, passed on 2026-09-13:
+configuration validation, source compilation, and **1,469 tests, 2 skipped**
+(277.640 seconds for the test suite). `git diff --check` passed. No files were
+staged. These automated results do not establish a completed browser save.
+
+The user reported that the previous live happy path works. That report does not
+cover the saved-Action menu, shortcut, or folder-editing paths. Automated tests
+use injected process/UI boundaries; they do not execute the Windows accessibility
+helper against the user's browser.
+
+Optional follow-up checks, not a condition of the current owner acceptance:
+Action creation/folder editing, Music menu/right-click edit and slot 6 after
+F9 capture; correct instrument/pages after manual Save; manual filename/folder
+choice and Edge overwrite handling; Cancel, unavailable configured folder,
+wrong-page/printer refusal, changed foreground, display scaling and a second PC.
+Input / Output and clipboard preservation is assessed after the usual F9
+capture. These checks remain unverified unless separately recorded. Automatic
+publication, duplicate numbering and verified-result controls remain outside
+the accepted manual path; do not mark them passed from a manual PDF save.
+
+## Webpage PDF acceptance
+
+The new webpage PDF function has separate acceptance from the 2026-09-09 batch.
+Focused automated coverage lives in `test_webpage_pdf.py`,
+`test_webpage_pdf_window.py` and `test_webpage_pdf_integration.py`. Backend and
+routing tests use mocked process/picker boundaries. Window tests use actual Tk
+widgets with an injected renderer; they prove lifecycle behavior, not website fidelity.
+
+On 2026-09-13, a controlled Windows smoke used installed Edge 153.0.4234.32
+against a temporary loopback HTTP fixture. It produced a 50,809-byte, two-page
+PDF in 2.97 seconds. Both rendered PDF pages were visually inspected: text,
+print styles, accented/currency characters, a table, an inline SVG image and
+JavaScript-generated text were present. A second save preserved an existing
+PDF byte-for-byte. Cancelling a deliberately slow page left no destination or
+staging directory. A separate public `https://example.com/` render produced a
+readable one-page PDF with the expected Example Domain content. These checks
+prove browser integration, not arbitrary website fidelity or completed owner
+UAT. Test files are ignored runtime evidence.
+
+On Windows, paste a complete URL into Input / Output and choose **Send to… →
+Save webpage as PDF…**. Check a public article, a long page and a page containing
+images or JavaScript. Choose a new file, open it and inspect text, images and
+page breaks. Then check cancellation, repeated activation, Quit while busy,
+an existing destination, an invalid/multiple URL, and a failed page load. Keep
+Input / Output and clipboard sentinel text for comparison. Verify Open PDF and
+Open folder, keyboard access and controls at 100%, 125% and 150% Windows scaling.
+Use browser printing for pages that need sign-in; isolated output may contain a
+cookie notice or error page, which is not a successful content-fidelity check.
+
 ## Complete automated check
 
 From the repository root:

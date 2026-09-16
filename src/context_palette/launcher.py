@@ -30,6 +30,8 @@ from .actions import (
     search_actions,
 )
 from .action_preview import (
+    ExecutionPreview,
+    PreviewBlock,
     build_action_preview,
     build_execution_preview,
     compact_preview_value,
@@ -114,13 +116,18 @@ from .excel_automation_window import ExcelAutomationWindow
 from .excel_live_format_window import ExcelLiveFormatWindow
 from .excel_live_text_conversion_window import ExcelLiveTextConversionWindow
 from .file_transfer_window import FileTransferWindow
+from .webpage_pdf import WebpagePdfError, suggested_pdf_name, validate_webpage_url
+from .webpage_pdf_window import WebpagePdfWindow
+from .edge_score_pdf_window import EdgeScorePdfWindow
 from .resource_operations import (
     CopyFilesRequest,
+    EdgeScorePdfRequest,
     ExcelWorkflowRequest,
     FolderResource as _SendDestination,
     OpenTargetRequest,
     OperationDispatch,
     ResourceOperationRequest,
+    WebpagePdfRequest,
     dispatch_resource_operation,
 )
 from .inbox import InboxError, append_inbox_item, create_clipboard_item, load_inbox_items
@@ -380,6 +387,7 @@ class LauncherApp:
         self.excel_automation_settings_path = (
             self.data_paths.excel_automation_settings_file
         )
+        self.edge_score_pdf_settings_path = self.data_paths.edge_score_pdf_settings_file
         self.live_text_conversion_execution_enabled = (
             live_text_conversion_uat_enabled()
         )
@@ -917,7 +925,7 @@ class LauncherApp:
         ]
         self.more_menu = discovery.more_menu
         self.more_menu.insert_command(
-            1,
+            0,
             label="Show drop target",
             command=self._show_drop_target,
         )
@@ -1373,9 +1381,9 @@ class LauncherApp:
                 f"Preview could not be prepared.\n\n{exc}\n\nNothing was run or changed.",
             )
             return
-        self._show_execution_preview(f"Preview: {action.title}", preview.full_text())
+        self._show_execution_preview(f"Preview: {action.title}", preview)
 
-    def _show_execution_preview(self, title: str, content: str) -> None:
+    def _show_execution_preview(self, title: str, content: ExecutionPreview | str) -> None:
         previous = getattr(self, "execution_preview_window", None)
         if previous is not None and previous.winfo_exists():
             previous.destroy()
@@ -1392,7 +1400,7 @@ class LauncherApp:
         close.pack(side=tk.RIGHT)
         ttk.Label(
             controls,
-            text="Preview only — Run / Open remains unchanged.",
+            text="Read-only preview",
             style="Muted.TLabel",
         ).pack(side=tk.LEFT)
         body = ttk.Frame(outer)
@@ -1400,15 +1408,48 @@ class LauncherApp:
         scrollbar = ttk.Scrollbar(body, orient=tk.VERTICAL)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         text = tk.Text(
-            body, wrap=tk.WORD, font=("Segoe UI", 10), padx=8, pady=8,
-            yscrollcommand=scrollbar.set,
+            body, wrap=tk.WORD, font=("Segoe UI", 10), padx=16, pady=12,
+            background=COLORS["surface"], foreground=COLORS["text"],
+            relief=tk.FLAT, borderwidth=0, highlightthickness=1,
+            highlightbackground=COLORS["border"], highlightcolor=COLORS["focus"],
+            selectbackground=COLORS["accent"], selectforeground=COLORS["white"],
+            spacing1=2, spacing2=2, spacing3=3, yscrollcommand=scrollbar.set,
         )
         text.pack(fill=tk.BOTH, expand=True)
         scrollbar.configure(command=text.yview)
-        if len(content) > 65_536:
-            content = content[:65_536] + "\n\n[Display truncated; input was not changed.]"
-        text.insert("1.0", content)
-        text.configure(state=tk.DISABLED)
+        text.tag_configure("title", font=("Segoe UI Semibold", 15), spacing3=5)
+        text.tag_configure("subtitle", foreground=COLORS["muted_text"], spacing3=8)
+        text.tag_configure("heading", font=("Segoe UI Semibold", 10),
+                           foreground=COLORS["accent_hover"], spacing1=12, spacing3=2)
+        text.tag_configure("notice", background=COLORS["row_light"],
+                           lmargin1=10, lmargin2=10, rmargin=10, spacing1=7, spacing3=7)
+        text.tag_configure("content", background=COLORS["topic_header"],
+                           lmargin1=12, lmargin2=12, rmargin=12, spacing1=5, spacing3=5)
+        text.tag_configure("example", background=COLORS["topic_header"], font=("Consolas", 10),
+                           lmargin1=12, lmargin2=12, rmargin=12, spacing1=5, spacing3=5)
+        text.tag_configure("warning", foreground=COLORS["error"], spacing1=5, spacing3=5)
+        text.tag_configure("footnote", font=("Segoe UI", 9),
+                           foreground=COLORS["muted_text"], spacing1=14)
+        show_details = tk.BooleanVar(window, value=False)
+
+        def render() -> None:
+            if isinstance(content, ExecutionPreview):
+                blocks = content.display_blocks(include_details=show_details.get())
+            else:
+                report = content
+                if len(report) > 65_536:
+                    report = report[:65_536] + "\n\n[Display truncated; input was not changed.]"
+                blocks = (PreviewBlock("body", report),)
+            text.configure(state=tk.NORMAL)
+            text.delete("1.0", tk.END)
+            for block in blocks:
+                text.insert(tk.END, block.text + "\n", block.role)
+            text.configure(state=tk.DISABLED)
+
+        if isinstance(content, ExecutionPreview) and content.text_transform is not None:
+            ttk.Checkbutton(controls, text="Show details", variable=show_details,
+                            command=render).pack(side=tk.LEFT, padx=(16, 0))
+        render()
         window.bind("<Escape>", lambda _event: window.destroy())
         window.lift()
         close.focus_set()
@@ -1715,6 +1756,8 @@ class LauncherApp:
             + self._active_configuration_operations()
             + self._active_excel_automation_operations()
             + self._active_file_transfer_operations()
+            + self._active_webpage_pdf_operations()
+            + self._active_edge_score_pdf_operations()
             + ocr_operations
         )
         if active_operations:
@@ -1805,6 +1848,16 @@ class LauncherApp:
             return False
         self.quit_app()
         return True
+
+    def _active_webpage_pdf_operations(self) -> tuple[str, ...]:
+        workflow = getattr(self, "webpage_pdf_window", None)
+        if workflow is not None and workflow.busy:
+            return ("webpage PDF creation",)
+        return ()
+
+    def _active_edge_score_pdf_operations(self) -> tuple[str, ...]:
+        workflow = getattr(self, "edge_score_pdf_window", None)
+        return ("Edge score PDF saving",) if workflow is not None and workflow.busy else ()
 
     def focus_search(self) -> str:
         if self.search_entry is not None:
@@ -3842,6 +3895,8 @@ class LauncherApp:
         workspace_component = getattr(self, "workspace_component", None)
         drop_outputs: list[str] = []
         try:
+            if action.type == "save_edge_score_pdf" and input_snapshot is not None:
+                raise ActionError("Run the score PDF Action manually after pressing F9 in Edge.")
             message = execute_action(
                 action,
                 clipboard_setter=self._set_clipboard,
@@ -3851,11 +3906,11 @@ class LauncherApp:
                 ),
                 input_provider=self._ask_for_action_input,
                 selected_text=(
-                    self._workspace_text() or self.captured_selection
+                    None if action.type == "save_edge_score_pdf" else self._workspace_text() or self.captured_selection
                     if input_snapshot is None else input_snapshot
                 ),
                 input_text=(
-                    input_snapshot if input_snapshot is not None else
+                    "" if action.type == "save_edge_score_pdf" else input_snapshot if input_snapshot is not None else
                     workspace_component.raw_text() if action.type == "send_files_to_folder" else
                     self._workspace_text()
                 ),
@@ -3876,6 +3931,9 @@ class LauncherApp:
                 sequence_runner=self._run_action_sequence,
                 file_transfer_runner=lambda selected, text: self._run_file_transfer_action(
                     selected, text, dropped=input_snapshot is not None,
+                ),
+                edge_score_pdf_runner=lambda selected: self._run_edge_score_pdf_action(
+                    selected, source_window_handle=destination,
                 ),
                 excel_automation_runner=(
                     (lambda selected: self._run_excel_automation(
@@ -4170,6 +4228,8 @@ class LauncherApp:
             open_target=self._perform_open_target,
             copy_files=self._start_file_transfer,
             excel_workflow=self._start_excel_workflow,
+            webpage_pdf=self._start_webpage_pdf,
+            edge_score_pdf=self._start_edge_score_pdf,
         )
 
     def _perform_open_target(self, action: Action) -> None:
@@ -4615,17 +4675,29 @@ class LauncherApp:
         return self.workspace_component.get_text()
 
     def _populate_send_to_menu(self, menu: tk.Menu) -> None:
-        """Build the current outbound file-copy destinations on demand."""
+        """Offer webpage printing or the current outbound file destinations."""
 
         workspace_text = self.workspace_component.raw_text()
+        if workspace_text.strip().lower().startswith(("http:", "https:")):
+            menu.add_command(
+                label="Save webpage as PDF…",
+                command=self._save_workspace_webpage_as_pdf,
+            )
+            self._active_send_to_submenus = ()
+            return
         path_line_count = sum(
             1 for line in workspace_text.splitlines() if line.strip()
         )
         if path_line_count == 0:
             menu.add_command(
-                label="Paste or drop one or more file paths first",
+                label="Paste a webpage URL or file paths first",
                 state=tk.DISABLED,
             )
+            menu.add_command(
+                label="Save webpage as PDF…",
+                command=self._save_workspace_webpage_as_pdf,
+            )
+            self._active_send_to_submenus = ()
             return
 
         menu.add_command(
@@ -4738,6 +4810,105 @@ class LauncherApp:
                 state=tk.DISABLED,
             )
         self._active_send_to_submenus = tuple(submenus)
+        menu.add_separator()
+        menu.add_command(
+            label="Save webpage as PDF…",
+            command=self._save_workspace_webpage_as_pdf,
+        )
+
+    def _save_workspace_webpage_as_pdf(self) -> None:
+        try:
+            self._available_webpage_pdf()
+            url = validate_webpage_url(self.workspace_component.raw_text())
+            filename = filedialog.asksaveasfilename(
+                parent=self.root,
+                title="Save webpage as PDF — choose a new filename",
+                initialfile=suggested_pdf_name(url),
+                defaultextension=".pdf",
+                filetypes=(("PDF files", "*.pdf"),),
+                confirmoverwrite=False,
+            )
+            if not filename:
+                return
+            receipt = self._dispatch_resource_operation(WebpagePdfRequest(
+                input_text=url,
+                destination_path=Path(filename),
+            ))
+            self.status_var.set(receipt.message)
+        except (ActionError, WebpagePdfError) as exc:
+            self.status_var.set(str(exc))
+            messagebox.showerror("Could not save webpage as PDF", str(exc), parent=self.root)
+
+    def _check_edge_score_pdf_available(self) -> EdgeScorePdfWindow | None:
+        if getattr(self, "_configuration_recovery_required", False):
+            raise ActionError("Restart for recovery before saving an Edge score.")
+        current = getattr(self, "edge_score_pdf_window", None)
+        if current is not None and current.busy:
+            raise ActionError("An Edge score is being saved. Wait or cancel it first.")
+        return current
+
+    def _run_edge_score_pdf_action(
+        self, action: Action, *, source_window_handle: int | None,
+    ) -> str:
+        self._check_edge_score_pdf_available()
+        if not source_window_handle:
+            raise ActionError(
+                "Open the score in Edge, close any print dialog, then press F9 "
+                "and run Save current score as PDF from the Music menu or Find."
+            )
+        return self._dispatch_resource_operation(
+            EdgeScorePdfRequest(source_window_handle, Path(action.value)),
+        ).message
+
+    def _start_edge_score_pdf(self, request: EdgeScorePdfRequest) -> str:
+        current = self._check_edge_score_pdf_available()
+        if current is not None:
+            current.close()
+        workflow = EdgeScorePdfWindow(
+            self.root, source_hwnd=request.source_window_handle,
+            destination_folder=request.destination_folder,
+            status_setter=self.status_var.set,
+            on_close=lambda: self._forget_edge_score_pdf_window(workflow),
+            on_start=lambda: self._return_to_edge_score(request.source_window_handle),
+        )
+        self.edge_score_pdf_window = workflow
+        workflow.show()
+        return "Saving the current Edge score as PDF…"
+
+    def _return_to_edge_score(self, handle: int) -> None:
+        self.root.attributes("-topmost", False)
+        if not focus_window(handle):
+            raise ActionError("Could not return to Edge. Open the score and start again with F9.")
+
+    def _forget_edge_score_pdf_window(self, workflow: EdgeScorePdfWindow) -> None:
+        if getattr(self, "edge_score_pdf_window", None) is workflow:
+            self.edge_score_pdf_window = None
+
+    def _available_webpage_pdf(self) -> WebpagePdfWindow | None:
+        current = getattr(self, "webpage_pdf_window", None)
+        if current is not None and current.busy:
+            current.show()
+            raise ActionError("A webpage PDF is being created; wait or cancel it first.")
+        return current
+
+    def _start_webpage_pdf(self, request: WebpagePdfRequest) -> str:
+        current = self._available_webpage_pdf()
+        if current is not None:
+            current.close()
+        workflow = WebpagePdfWindow(
+            self.root,
+            url=request.input_text,
+            destination=request.destination_path,
+            status_setter=self.status_var.set,
+            on_close=lambda: self._forget_webpage_pdf_window(workflow),
+        )
+        self.webpage_pdf_window = workflow
+        workflow.show()
+        return "Creating webpage PDF…"
+
+    def _forget_webpage_pdf_window(self, workflow: WebpagePdfWindow) -> None:
+        if getattr(self, "webpage_pdf_window", None) is workflow:
+            self.webpage_pdf_window = None
 
     def _open_workspace_folder_in_vscode(self) -> None:
         workspace_text = self.workspace_component.raw_text()

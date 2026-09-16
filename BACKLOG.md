@@ -7,7 +7,27 @@ cosmetic batch on 2026-09-09 with partial UAT coverage. See the
 [acceptance record](docs/UAT_CURRENT_BATCH.md). Unreported checks remain
 unverified and are deferred; they do not block this accepted batch.
 
+The owner accepted the current Edge score workflow on 2026-09-15: prepare an
+Official or Guitar Pro Ultimate Guitar score, then choose its folder/filename and
+complete Save As manually. The accepted
+handoff now closes Palette's progress window without an error popup; the
+automatic-save mechanics are unchanged. Full automatic saving is no longer a required fix;
+broader unreported UAT remains optional. See [Testing](docs/TESTING.md).
+
 ## Now
+
+- Optional score-PDF follow-up: complete Save As manually and inspect the PDF's
+  score, instrument and page count. The Guitar Pro Action reached a two-page
+  preview and Save As without a Palette popup in the 2026-09-15 live check.
+  Official-score recheck, cancellation, changed foreground, scaling and another
+  PC remain unreported; see [Testing](docs/TESTING.md).
+
+- Validate the new **Send to… → Save webpage as PDF…** with a public article,
+  a longer page, and a page with images/JavaScript. Open the results and check
+  expected text, images and page breaks. Try Cancel, an existing filename and
+  an invalid address; confirm original PDFs, Input / Output and clipboard stay
+  unchanged. Check controls with keyboard and Windows scaling. This feature is
+  separate from the earlier accepted batch; see [Testing](docs/TESTING.md).
 
 - Manually validate combined **Menu locations** while creating and editing a
   Folder, Password, and AI-prompt Action, then validate **Other menus…** from a

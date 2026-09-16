@@ -37,6 +37,20 @@ _MAX_DISPLAY_VALUE = 20_000
 
 
 @dataclass(frozen=True)
+class PreviewBlock:
+    """A display role assigned by the application, never inferred from content."""
+
+    role: str
+    text: str
+
+
+@dataclass(frozen=True)
+class TextTransformExplanation:
+    description: str
+    example: tuple[str, str] | None = None
+
+
+@dataclass(frozen=True)
 class ExecutionPreview:
     """Snapshot-only report, not an executable plan or permission to run."""
 
@@ -49,35 +63,148 @@ class ExecutionPreview:
     output_text: str | None = None
     details: tuple[tuple[str, str], ...] = ()
     notices: tuple[str, ...] = ()
+    action_type_label: str = ""
+    output_label: str = "Text result"
+    text_transform: TextTransformExplanation | None = None
+
+    def display_blocks(self, *, include_details: bool = False) -> tuple[PreviewBlock, ...]:
+        if self.text_transform is not None:
+            return self._text_transform_blocks(include_details=include_details)
+        blocks = [PreviewBlock("title", self.title)]
+        if self.action_type_label:
+            blocks.append(PreviewBlock("subtitle", f"Action · {self.action_type_label}"))
+        blocks.append(PreviewBlock("notice", "Preview only — nothing has been run or changed."))
+
+        def section(label: str, value: str, role: str = "body") -> None:
+            blocks.extend((PreviewBlock("heading", label), PreviewBlock(role, _display_snapshot(value))))
+
+        if self.notices:
+            section("Before you run", "\n".join(f"• {notice}" for notice in self.notices), "notice")
+        section("When you run this Action", self.effect_text[:1].upper() + self.effect_text[1:])
+        section("Where the input comes from", self.input_source)
+        section("Where it goes", self.resolved_target)
+        section("Can I undo it?", self.recovery_text)
+        if self.output_text is not None:
+            section(self.output_label, self.output_text, "content")
+        if self.input_value is not None:
+            section("Input used for this preview", self.input_value, "content")
+        for label, value in self.details:
+            # Resolved content/targets are already shown above. Retain other
+            # settings (including arguments) even when their text is identical.
+            if (label.startswith(("Saved ", "Configured "))
+                    and value in (self.output_text, self.resolved_target)):
+                continue
+            section(label, value, "content")
+
+        footer = PreviewBlock(
+            "footnote",
+            "Close Preview, then choose Run when ready. Run uses the input available "
+            "at that time and keeps its usual checks and confirmations.",
+        )
+        return _bounded_preview_blocks(blocks, footer)
+
+    def _text_transform_blocks(self, *, include_details: bool) -> tuple[PreviewBlock, ...]:
+        explanation = self.text_transform
+        assert explanation is not None
+        blocks = [
+            PreviewBlock("title", self.title),
+            PreviewBlock("body", explanation.description),
+            PreviewBlock("subtitle", "Preview only — nothing has been run or changed."),
+        ]
+
+        def section(label: str, value: str, role: str = "body") -> None:
+            blocks.extend((PreviewBlock("heading", label), PreviewBlock(role, _display_snapshot(value))))
+
+        empty = self.input_value == ""
+        if empty:
+            section(
+                "Add text to see your result",
+                "Close this preview, then type or paste text in Input / Output.\n"
+                "Choose Preview again to see the change.",
+                "notice",
+            )
+            if explanation.example is not None:
+                before, after = explanation.example
+                section("Example only — not your text", f"Before: {before}\nAfter:  {after}", "example")
+        elif self.output_text is None:
+            section("Cannot show a result", "\n".join(self.notices), "warning")
+            blocks.append(PreviewBlock("body", "Check the text and Action settings, then try Preview again."))
+        elif self.output_text == self.input_value:
+            blocks.append(PreviewBlock("notice", "This Action would leave your text unchanged."))
+
+        section(
+            "When your text is ready" if empty or self.output_text is None else "What Run does",
+            "Replaces all text in Input / Output with the result and copies it, ready to paste. "
+            "This changes text only; files are not changed.",
+        )
+        if include_details:
+            section("Undo and clipboard", self.recovery_text)
+            section("Action type", self.action_type_label)
+            for label, value in self.details:
+                if label == "Operation":
+                    continue
+                section(label, value, "content")
+        if not empty:
+            section("Before · your text", self.input_value or "", "content")
+            if self.output_text is not None:
+                section("After · result", self.output_text, "content")
+        footer = PreviewBlock(
+            "footnote",
+            "Run uses the text in Input / Output at the time you run it."
+            if self.output_text is not None and not empty else
+            "Close this window to add or correct your text. Preview changes nothing.",
+        )
+        return _bounded_preview_blocks(blocks, footer)
 
     def full_text(self) -> str:
-        sections = [
-            self.title,
-            "Preview only — nothing has been run or changed.",
-            f"Input source\n{self.input_source}",
-        ]
-        if self.input_value is not None:
-            sections.append(f"Input snapshot\n{_display_snapshot(self.input_value)}")
-        sections.extend((
-            f"Resolved target / destination\n{_display_snapshot(self.resolved_target)}",
-            f"Effect on Run\n{self.effect_text}",
-            f"Recovery on Run\n{self.recovery_text}",
-        ))
-        if self.output_text is not None:
-            sections.append(f"Computed result\n{_display_snapshot(self.output_text)}")
-        sections.extend(
-            f"{label}\n{_display_snapshot(value)}" for label, value in self.details
+        return "\n\n".join(block.text for block in self.display_blocks(include_details=True))
+
+
+def _bounded_preview_blocks(blocks: list[PreviewBlock], footer: PreviewBlock) -> tuple[PreviewBlock, ...]:
+    truncated = PreviewBlock(
+        "notice", "[Preview display truncated. Nothing was run or changed; Run still uses current input.]",
+    )
+    # Reserve room for the truncation notice and the snapshot reminder.
+    remaining = 32_768 - len(footer.text) - len(truncated.text) - 6
+    bounded: list[PreviewBlock] = []
+    for block in blocks:
+        if len(block.text) + 2 > remaining:
+            bounded.append(PreviewBlock(block.role, block.text[:max(0, remaining - 2)]))
+            bounded.append(truncated)
+            break
+        bounded.append(block)
+        remaining -= len(block.text) + 2
+    return (*bounded, footer)
+
+
+def _explain_text_transform(action: Action) -> TextTransformExplanation:
+    operation = action.value
+    examples = {
+        "forward_to_back": ("Replace every forward slash (/) in your text with a backslash (\\).", "C:/Work/report.txt"),
+        "back_to_forward": ("Replace every backslash (\\) in your text with a forward slash (/).", "C:\\Work\\report.txt"),
+        "uppercase": ("Change every letter in your text to UPPERCASE.", "Hello World"),
+        "lowercase": ("Change every letter in your text to lowercase.", "Hello World"),
+    }
+    if action.type == "transform_list_csv":
+        description = (
+            "Turn pasted values into a comma-separated list, with each value in single quotes."
+            if operation == "sql_strings" else "Turn pasted values into a comma-separated list."
         )
-        if self.notices:
-            sections.append("Notes\n" + "\n".join(self.notices))
-        sections.append(
-            "This is a snapshot, not a reservation. Run uses current input and "
-            "rechecks its normal requirements and confirmations."
-        )
-        report = "\n\n".join(sections)
-        if len(report) > 32_768:
-            return report[:32_600] + "\n\n[Preview display truncated. Nothing was run or changed; Run still uses current input.]"
-        return report
+        return TextTransformExplanation(description)
+    if operation in examples:
+        description, before = examples[operation]
+        return TextTransformExplanation(description, (before, transform_text(before, operation)))
+    transform = WORKSPACE_TRANSFORMS.get(operation)
+    label = transform.label.rstrip("…") if transform else operation
+    descriptions = {
+        "literal_replace": "Find matching text and replace it throughout Input / Output.",
+        "keep_lines_containing": "Keep only the lines containing the text you specified.",
+        "remove_lines_containing": "Remove the lines containing the text you specified.",
+        "prefix_suffix_lines": "Add your saved prefix and suffix to every line.",
+        "json_pretty": "Add indentation and line breaks to make JSON easier to read.",
+        "json_minify": "Remove unnecessary spaces and line breaks from JSON.",
+    }
+    return TextTransformExplanation(descriptions.get(operation, f"Apply “{label}” to the text in Input / Output."))
 
 
 def build_execution_preview(
@@ -112,22 +239,23 @@ def build_execution_preview(
     output = None
     details = description.details
     notices: list[str] = []
+    text_explanation = None
     try:
         if action.type in {"transform_text", "transform_slashes", "transform_list_csv"}:
+            text_explanation = _explain_text_transform(action)
             source, input_value = "Input / Output (complete field)", workspace_text
             target = "Input / Output and the clipboard"
             recovery = (
-                "Input / Output Undo/history can restore prior text. Ordinary "
-                "clipboard changes are not automatically restored."
+                "Use Undo or history in Input / Output to bring back its previous text. "
+                "This does not restore the previous clipboard content."
             )
-            if not workspace_text and action.type != "transform_list_csv":
-                raise ActionError("The Input / Output field does not contain text.")
-            _check_preview_size(workspace_text, action.arguments)
-            output = (
-                list_to_comma_separated(workspace_text, sql_strings=action.value == "sql_strings")
-                if action.type == "transform_list_csv"
-                else transform_text(workspace_text, action.value, arguments=action.arguments)
-            )
+            if workspace_text or action.type == "transform_list_csv":
+                _check_preview_size(workspace_text, action.arguments)
+                output = (
+                    list_to_comma_separated(workspace_text, sql_strings=action.value == "sql_strings")
+                    if action.type == "transform_list_csv"
+                    else transform_text(workspace_text, action.value, arguments=action.arguments)
+                )
         elif action.type == "build_url_selection_open":
             if workspace_text:
                 source, input_value = "Input / Output (complete field)", workspace_text
@@ -166,6 +294,14 @@ def build_execution_preview(
             details = _configured_details(resolved)
             recovery = "Source files stay unchanged. Stop remaining prevents later copies; completed copies and replacements have no automatic rollback."
             notices.append("Preview does not inspect or copy files. Run checks every path and prepares the exact copy plan; name conflicts open the existing Send-to review.")
+        elif action.type == "save_edge_score_pdf":
+            validate_action_value(action.type, action.value, inspect_external_paths=False)
+            source = "The score open in the Edge window captured with F9"
+            target = action.value
+            recovery = "Existing PDFs are kept. Stop cancels unfinished work; a completed PDF can be deleted manually."
+            notices.append("Preview does not read Edge or print. On Run, Edge must show an Official score or Guitar Pro tab on Ultimate Guitar with the desired instrument selected.")
+            if not destination_available:
+                notices.append("Open the score in Edge and press F9 before running this Action.")
         elif action.type == "excel_automation":
             if action.value not in {LIVE_FORMAT_PROFILE_AUTOMATION_ID, LIVE_TEXT_CONVERSION_AUTOMATION_ID}:
                 source, input_value = "Input / Output (exact workbook paths)", workspace_text
@@ -176,7 +312,11 @@ def build_execution_preview(
             notices.append("The configured file is not read by this Preview. Run checks availability and computes its bounded file result.")
         else:
             needs_clipboard = action_uses_clipboard_template(action)
-            source = "Text clipboard snapshot + configured value" if needs_clipboard else "Configured value"
+            source = (
+                "Clipboard text + saved Action settings" if needs_clipboard
+                else description.input_text if action.type in {"copy_text", "workspace_template", "ai_prompt"}
+                else "Saved Action settings"
+            )
             input_value = clipboard_text if needs_clipboard else None
             target = "Configured target not resolved"
             if needs_clipboard and clipboard_text is None:
@@ -196,7 +336,13 @@ def build_execution_preview(
                     if action.type == "copy_text"
                     else "Input / Output and clipboard"
                 )
-                recovery = "Ordinary clipboard changes are not automatically restored. Input / Output changes can be recovered through Undo/history; pasting into another app has no automatic rollback."
+                recovery = (
+                    "Previous clipboard content is not restored automatically. "
+                    "Text pasted into another app cannot be undone by Context Palette."
+                    if action.type == "copy_text" else
+                    "Use Undo or history in Input / Output to recover its previous text. "
+                    "Previous clipboard content is not restored automatically."
+                )
             else:
                 target = resolved.value
                 recovery = "No automatic rollback for opened or launched targets. Any effects of the destination application are outside Context Palette."
@@ -206,7 +352,7 @@ def build_execution_preview(
             notices.append("Computed result exceeds the Preview limit; it is not displayed.")
     except (ActionError, ValueError) as exc:
         output = None
-        notices.append(f"Preview could not compute a result: {exc}")
+        notices.append(str(exc) if text_explanation is not None else f"Preview could not compute a result: {exc}")
     return ExecutionPreview(
         title=action.title,
         input_source=source,
@@ -217,6 +363,14 @@ def build_execution_preview(
         output_text=output,
         details=details,
         notices=tuple(notices),
+        action_type_label=ACTION_TYPES[action.type].display_label,
+        output_label={
+            "ai_prompt": "Prompt text",
+            "workspace_template": "Template text",
+            "copy_text": "Text to copy",
+            "build_url_selection_open": "URL to open",
+        }.get(action.type, "Text result"),
+        text_transform=text_explanation,
     )
 
 
@@ -357,6 +511,13 @@ def build_action_preview(
             "copy files to the configured folder; conflict-free copies start automatically, name conflicts open Send-to review",
             details,
             "Source files stay unchanged. Overwrite is off by default; completed copies or explicit replacements have no automatic rollback.",
+        )
+    if action.type == "save_edge_score_pdf":
+        return ActionPreview(
+            "captured Edge score" if destination_available else "needed: open the score in Edge, then press F9",
+            "save the current score as a new PDF in its configured folder",
+            details,
+            "Uses the site's PRINT layout and Save as PDF. Existing PDFs are kept; Input / Output and clipboard stay unchanged.",
         )
     if action.type == "excel_automation":
         if action.value == LIVE_FORMAT_PROFILE_AUTOMATION_ID:
@@ -541,6 +702,8 @@ def _configured_details(action: Action) -> tuple[tuple[str, str], ...]:
         label = "Configured Windows target"
     elif action.type == "open_file":
         label = "Configured file"
+    elif action.type == "save_edge_score_pdf":
+        label = "PDF folder"
     elif action.type in {"open_folder", "send_files_to_folder"}:
         label = "Configured folder"
     elif action.type == "launch_app":

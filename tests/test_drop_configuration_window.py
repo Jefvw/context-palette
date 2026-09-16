@@ -82,6 +82,8 @@ class DropConfigurationWindowTests(unittest.TestCase):
         self.assertEqual(str(dialog.configured_details.cget("state")), "disabled")
 
     def test_minimum_size_at_150_percent_keeps_details_and_footer_visible(self):
+        original_scaling = float(self.root.tk.call("tk", "scaling"))
+        self.addCleanup(self.root.tk.call, "tk", "scaling", original_scaling)
         self.root.tk.call("tk", "scaling", 2.0)
         self.root.geometry("700x480+-32000+-32000")
         self.root.deiconify()

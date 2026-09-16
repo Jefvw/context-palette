@@ -15,6 +15,7 @@ from .actions import (
     Action, ActionError, EXCEL_AUTOMATION_IDS,
 )
 from .excel_automation import EXCEL_AUTOMATION_ID
+from .webpage_pdf import WebpagePdfError, validate_webpage_url
 
 
 Invocation = Literal["manual", "drop"]
@@ -51,7 +52,24 @@ class ExcelWorkflowRequest:
     source_window_handle: int | None = None
 
 
-ResourceOperationRequest = OpenTargetRequest | CopyFilesRequest | ExcelWorkflowRequest
+@dataclass(frozen=True, slots=True)
+class WebpagePdfRequest:
+    input_text: str
+    destination_path: Path
+    invocation: Invocation = "manual"
+
+
+@dataclass(frozen=True, slots=True)
+class EdgeScorePdfRequest:
+    source_window_handle: int
+    destination_folder: Path
+    invocation: Invocation = "manual"
+
+
+ResourceOperationRequest = (
+    OpenTargetRequest | CopyFilesRequest | ExcelWorkflowRequest | WebpagePdfRequest
+    | EdgeScorePdfRequest
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +84,8 @@ def dispatch_resource_operation(
     open_target: Callable[[Action], None],
     copy_files: Callable[[CopyFilesRequest], str],
     excel_workflow: Callable[[ExcelWorkflowRequest], str],
+    webpage_pdf: Callable[[WebpagePdfRequest], str] | None = None,
+    edge_score_pdf: Callable[[EdgeScorePdfRequest], str] | None = None,
 ) -> OperationDispatch:
     """Route exactly one operation; do not acquire input or bypass its review."""
     if isinstance(request, OpenTargetRequest):
@@ -75,6 +95,29 @@ def dispatch_resource_operation(
             raise ActionError("The requested Action is not an open-target operation.")
         open_target(request.action)
         return OperationDispatch("opened", "Asked the target handler to open the resource.")
+    if isinstance(request, EdgeScorePdfRequest):
+        if request.invocation != "manual":
+            raise ActionError("Run the score PDF Action manually from Context Palette.")
+        if (
+            type(request.source_window_handle) is not int
+            or request.source_window_handle <= 0
+            or not isinstance(request.destination_folder, Path)
+            or not request.destination_folder.is_absolute()
+        ):
+            raise ActionError("Choose an Edge window and an absolute score PDF folder.")
+        if edge_score_pdf is None:
+            raise ActionError("Edge score PDF saving is unavailable here.")
+        return OperationDispatch("workflow_started", edge_score_pdf(request))
+    if isinstance(request, WebpagePdfRequest):
+        if request.invocation != "manual":
+            raise ActionError("Save a webpage as PDF from Input / Output's Send to menu.")
+        try:
+            validate_webpage_url(request.input_text)
+        except WebpagePdfError as exc:
+            raise ActionError(str(exc)) from exc
+        if webpage_pdf is None:
+            raise ActionError("Webpage PDF creation is unavailable here.")
+        return OperationDispatch("workflow_started", webpage_pdf(request))
     if not isinstance(request, (CopyFilesRequest, ExcelWorkflowRequest)):
         raise ActionError("Unsupported resource operation request.")
     if request.invocation not in {"manual", "drop"}:

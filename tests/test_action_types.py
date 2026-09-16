@@ -19,7 +19,7 @@ from context_palette.action_types import (
 class ActionTypeCatalogueTests(unittest.TestCase):
     def test_catalogue_covers_every_supported_action_type(self):
         self.assertEqual(set(ACTION_TYPES), SUPPORTED_ACTION_TYPES)
-        self.assertEqual(len(ACTION_TYPES), 18)
+        self.assertEqual(len(ACTION_TYPES), 19)
         self.assertNotIn("build_url_copy", ACTION_TYPES)
         self.assertEqual(
             {
@@ -60,6 +60,7 @@ class ActionTypeCatalogueTests(unittest.TestCase):
     def test_reviewed_type_icons_fit_the_existing_listbox_glyph_budget_at_all_scales(self):
         root = tk.Tk()
         root.withdraw()
+        original_scaling = float(root.tk.call("tk", "scaling"))
         reviewed_icons = (
             "send_files_to_folder", "open_url", "sequence", "open_windows_target",
             "open_file", "transform_text", "build_url_open", "build_url_selection_open",
@@ -80,6 +81,7 @@ class ActionTypeCatalogueTests(unittest.TestCase):
                             action_type,
                         )
         finally:
+            root.tk.call("tk", "scaling", original_scaling)
             root.destroy()
 
     def test_every_definition_has_user_and_ai_adaptation_metadata(self):

@@ -213,6 +213,10 @@ def write_complete_project(root: Path) -> AppDataPaths:
         paths.excel_automation_settings_file,
         {"launcher_path": str(root / "python-excel" / "python-excel.bat")},
     )
+    write_json(
+        paths.edge_score_pdf_settings_file,
+        {"destination_folder": str(root / "score-pdfs")},
+    )
     paths.managed_text_action_source_file.write_text(
         "managed private text",
         encoding="utf-8",
@@ -256,9 +260,11 @@ class ConfigurationSnapshotTests(unittest.TestCase):
         self.assertEqual(report.counts["work_item_metadata"], 1)
         self.assertEqual(report.counts["work_item_settings"], 1)
         self.assertEqual(report.counts["excel_automation_configured"], 1)
+        self.assertEqual(report.counts["edge_score_pdf_configured"], 1)
         self.assertIsNotNone(
             report.snapshot.excel_automation_settings.launcher_path
         )
+        self.assertEqual(report.snapshot.edge_score_pdf_folder, paths.application_root / "score-pdfs")
         self.assertTrue(report.snapshot.managed_text_content_present)
         self.assertFalse(
             {
@@ -283,6 +289,7 @@ class ConfigurationSnapshotTests(unittest.TestCase):
             "work-item-metadata",
             "work-item-settings",
             "excel-automation-settings",
+            "edge-score-pdf-settings",
             "managed-text-action-source",
         ):
             self.assertIn(asset_id, report.snapshot.loaded_asset_ids)
@@ -335,6 +342,7 @@ class ConfigurationSnapshotTests(unittest.TestCase):
         self.assertIsNone(
             report.snapshot.excel_automation_settings.launcher_path
         )
+        self.assertIsNone(report.snapshot.edge_score_pdf_folder)
         self.assertFalse(report.snapshot.managed_text_content_present)
 
     def test_missing_required_assets_are_errors_with_catalog_provenance(self) -> None:
@@ -780,6 +788,7 @@ class ConfigurationSnapshotTests(unittest.TestCase):
                 Path(directory),
                 built_in_actions=[
                     action("drive", action_type="open_file", value=r"C:\Private\one.txt"),
+                    action("score-pdf", action_type="save_edge_score_pdf", value=r"Z:\Music\Scores"),
                     action("unc", action_type="open_folder", value=r"\\server\share\folder"),
                     action(
                         "working",
@@ -821,7 +830,7 @@ class ConfigurationSnapshotTests(unittest.TestCase):
         }
         self.assertEqual(
             portability[ValidationIssueCode.PORTABILITY_ACTION_VALUE],
-            {"drive", "unc"},
+            {"drive", "unc", "score-pdf"},
         )
         self.assertEqual(
             portability[ValidationIssueCode.PORTABILITY_WORKING_DIRECTORY],

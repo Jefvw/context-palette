@@ -64,6 +64,12 @@ effect adapters. `OpenTargetRequest` carries an already-expanded Action;
 `CopyFilesRequest` carries exact input text and a `FolderResource` projected
 from an Action, Work Item or folder picker; `ExcelWorkflowRequest` carries
 either an exact CSV-source snapshot or manual live-workbook selection metadata.
+`WebpagePdfRequest` carries one exact URL and a chosen new PDF path; its adapter
+accepts manual invocation only. It adds no saved Action type or persisted data.
+`EdgeScorePdfRequest` instead carries a captured source HWND and an absolute
+destination folder from a `save_edge_score_pdf` Action for the current signed-in
+Edge score. It is manual-only; its adapter validates the actual browser/page
+before native execution.
 `dispatch_resource_operation` validates the request variant and invokes exactly
 one host callback. It acquires no clipboard/UI input and owns no persistence.
 
@@ -85,6 +91,56 @@ manual, with host-owned startup gating and existing workbook selection.
 This is not a recipe engine, a second Action catalogue or a data migration.
 The older single-file Work Item copy route retains its different no-overwrite
 contract rather than silently inheriting Send-to suffix/overwrite behavior.
+
+### `edge_score_pdf.py`, `edge_score_pdf.ps1`, and `edge_score_pdf_window.py`
+
+The owner accepts the current observed stop at Save As for manual folder/name
+choice and final Save. The native automation below still attempts automatic
+completion; it does not enforce a manual pause. The exact `filename_missing`
+protocol outcome now becomes a typed `EdgeScorePdfManualSave` handoff after
+helper exit. Staging cleanup finishes before the worker queues this outcome;
+the Tk window sets a neutral status and closes without lifting a failure dialog.
+Other failures and uncertain helper termination retain the error UI. The stopped path neither applies the
+configured folder nor verifies a later manual save or numbers its duplicates.
+These are accepted current limitations, not claims that automatic saving passed.
+
+The score adapter controls only the captured Microsoft Edge window and its
+Ultimate Guitar Official score or Guitar Pro tab PRINT workflow. It accepts the
+existing supported Official URL shape and the exact
+`https://tabs.ultimate-guitar.com/tab/{artist}/{song}-guitar-pro-{digits}`
+shape only when the inspected document title agrees with that page type. Normal
+text tabs, chords, and arbitrary webpages remain outside this adapter. Windows PowerShell and inbox
+.NET UI Automation provide named-control access without a Python dependency,
+extension, debugging port or browser-profile access. The helper verifies the
+page and PDF printer, fills a private staging filename and reports completion.
+The site PRINT lookup trims accessible-label whitespace within the verified
+document and requires a unique Button. Native Save As is resolved from the
+owned foreground HWND and checked for dialog identity and modal state. The
+native window's process must use the same executable path as the verified source
+Edge process; it need not have the same process ID or UIA provider attribution.
+The owner chain and foreground checks still bind it to the captured score
+window. Discovery does not depend on a fixed UI Automation tree location. Filename ID 1001 is also
+restricted to Edit controls because the address toolbar can share that ID.
+The small companion `edge_score_pdf_native.cs` checks native window ownership
+and isolates potentially blocking Invoke calls on background MTA threads inside
+that same helper process. It compiles through inbox PowerShell/.NET; no separately
+installed compiler is required and execution policy is not overridden.
+The Python boundary checks the staged PDF and publishes without overwriting.
+Cancellation terminates only the adapter helper, never the user's browser.
+
+The dedicated Tk window owns worker progress, cancel/close and saved-file
+controls; the launcher owns the saved-Action runner, captured-window handoff and
+Quit guard. `save_edge_score_pdf` stores one literal absolute folder in its
+ordinary Action value and accepts no arguments, working directory, or templates.
+It can use configured Quick actions and Context slots, but never Drop, AI
+proposals, or sequences. `edge_score_pdf_settings.py` continues to load the
+ignored legacy settings JSON; the saved Action configuration is authoritative.
+Input / Output and the general
+webpage renderer do not acquire browser automation behavior.
+
+The first version targets the observed English Edge/Windows controls and
+requires real Windows UAT. Test doubles cannot prove that a changing browser
+or website continues to expose those controls.
 
 ### `main.py`
 
@@ -456,6 +512,17 @@ credentials, file contents, or engine data itself. External operations are
 plan-only and unavailable sources are explicit. Computation/expansion and
 display sizes are bounded independently. Preview grants no execution authority:
 ordinary Run still evaluates current input and existing confirmations.
+
+`ExecutionPreview.display_blocks()` supplies bounded semantic display roles
+to the launcher's read-only Tk text widget; `full_text()` uses those same
+blocks. The UI tags headings, notices and literal content directly, without
+parsing user text as markup. It puts the Run explanation before large input
+snapshots and suppresses duplicate saved content/targets in the display only.
+Text transformations use a task-specific explanation and actual before/after
+snapshots. Safe static examples are separately labelled and never assigned to
+runtime input or computed output. Their optional details control only rerenders
+the immutable snapshot; it never rereads the clipboard or invokes an Action.
+The full text report retains the additional details within the same bounds.
 
 ### `workspace_transforms.py`
 
@@ -1390,6 +1457,25 @@ single-flight coordinator performs filesystem work off the Tk thread and
 delivers completion only through main-thread draining; it never logs source or
 destination values.
 
+### `webpage_pdf.py` and `webpage_pdf_window.py`
+
+`webpage_pdf.py` owns the UI-independent webpage printing boundary: one bounded
+HTTP(S) URL, installed Edge/Chrome discovery, an isolated temporary browser
+profile, a fixed headless argument list without a shell, cancellation and a
+finite timeout. It uses the browser's normal security checks and never reuses
+the user's signed-in profile. Completed output is checked as PDF and published
+under a new filename without replacing an existing or concurrently created
+file. PDF validity does not establish successful website content capture.
+
+`WebpagePdfWindow` owns one worker, cancellation and an attended result window.
+The worker returns through a queue; only Tk polling updates widgets. Busy state
+includes scheduled startup, preventing Quit during a pending or running job.
+The launcher snapshots the whole Input / Output field before its save picker,
+then dispatches a manual `WebpagePdfRequest`. It preserves Input / Output and
+clipboard, rejects overlapping PDF jobs, and clears window references by
+identity. For HTTP(S) input, Send to shows PDF creation instead of file-copy
+destinations. This is a workspace function, not a workflow engine or Drop route.
+
 ### `file_transfer_window.py`
 
 Owns the centered attended Send-to workflow. Selecting a destination is enough
@@ -1837,6 +1923,7 @@ The current allow-list includes:
 - `ai_prompt`
 - `open_windows_target`
 - `excel_automation`
+- `save_edge_score_pdf`
 
 Action types that cause external effects use constrained implementations.
 `launch_app`, for example, accepts an existing absolute `.exe`, fixed argument

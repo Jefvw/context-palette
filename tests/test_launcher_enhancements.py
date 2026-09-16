@@ -276,7 +276,7 @@ class LauncherEnhancementTests(unittest.TestCase):
         app = self.app(self.action(), value="preview this")
         app._execute_action = Mock()
         app._preview_selected()
-        self.assertIn("PREVIEW THIS", app._show_execution_preview.call_args.args[1])
+        self.assertIn("PREVIEW THIS", app._show_execution_preview.call_args.args[1].full_text())
         self.assertEqual(app.workspace_component.value, "preview this")
         self.assertEqual(app.source_foreground_handle, 123)
         self.assertEqual(app.captured_selection, "unrelated selection")
@@ -288,7 +288,7 @@ class LauncherEnhancementTests(unittest.TestCase):
     def test_preview_template_reads_real_source_without_changing_it(self):
         app = self.app(self.action("workspace_template", "From %CLIPBOARD%"))
         app._preview_selected()
-        self.assertIn("From unrelated clipboard", app._show_execution_preview.call_args.args[1])
+        self.assertIn("From unrelated clipboard", app._show_execution_preview.call_args.args[1].full_text())
         app._get_clipboard_text.assert_called_once()
         app._set_clipboard.assert_not_called()
         self.assertEqual(app.workspace_component.value, "old input")
@@ -298,7 +298,7 @@ class LauncherEnhancementTests(unittest.TestCase):
                                    arguments=("%CLIPBOARD%", "replaced")), value="%CLIPBOARD%")
         app._preview_selected()
         app._get_clipboard_text.assert_not_called()
-        self.assertIn("replaced", app._show_execution_preview.call_args.args[1])
+        self.assertIn("replaced", app._show_execution_preview.call_args.args[1].full_text())
 
     def test_preview_does_not_read_protected_clipboard_or_credentials(self):
         for action in (self.action("workspace_template", "%CLIPBOARD%"), self.action("paste_credential", "ContextPalette:Example")):

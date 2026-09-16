@@ -119,6 +119,14 @@ EXPECTED_ASSETS = {
         BackupPolicy.CORE_CONFIGURATION,
         1,
     ),
+    "edge-score-pdf-settings": (
+        "data/local_edge_score_pdf_settings.json",
+        AssetOwnership.MACHINE_LOCAL,
+        AssetRequirement.OPTIONAL,
+        AssetSensitivity.PRIVATE_PATHS,
+        BackupPolicy.CORE_CONFIGURATION,
+        1,
+    ),
     "inbox": (
         "data/inbox.json",
         AssetOwnership.CAPTURED_CONTENT,
@@ -224,6 +232,10 @@ class AppDataPathsTests(unittest.TestCase):
         self.assertEqual(
             paths.excel_automation_settings_file,
             root / "data" / "local_excel_automation_settings.json",
+        )
+        self.assertEqual(
+            paths.edge_score_pdf_settings_file,
+            root / "data" / "local_edge_score_pdf_settings.json",
         )
         self.assertEqual(
             paths.managed_text_action_source_file,

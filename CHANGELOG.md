@@ -4,6 +4,46 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Extended the constrained **Save current score as PDF** Action to the supported
+  Ultimate Guitar Guitar Pro tab URL shape as well as Official scores. The exact
+  supported URL type must agree with the displayed document title; ordinary text
+  tabs, chords, and arbitrary webpages remain excluded. PRINT, the verified PDF
+  printer, and Edge foreground/ownership guards are unchanged.
+
+- Removed the failure popup at the accepted Edge score Save As handoff. When the
+  helper cannot find the filename control in the verified Save As dialog,
+  Palette closes its progress window and leaves the user to choose the folder,
+  filename and Save in Edge. Other failures still show an explanation; this
+  handoff does not claim that a PDF was saved or change automatic-save mechanics.
+
+- Documented owner acceptance of the current Edge score export: run the Action,
+  then choose the folder/filename and finish Save As manually. The current
+  automatic-save attempt remains unchanged. The initial documentation-only
+  acceptance retained its error; the later message change above removes that
+  popup at the accepted handoff. Full
+  automatic completion is no longer a required fix; broader unreported UAT
+  remains optional.
+
+- Added the constrained **Save current score as PDF** Action, optional personal
+  Music menu/Context placement, and its existing automatic-save adapter. PRINT
+  label and native dialog identification were corrected, but live automation
+  stops at filename detection. The accepted manual finish does not use Palette's
+  configured destination or duplicate numbering. Drop, AI proposals and
+  sequences remain excluded.
+
+- Added **Input / Output → Send to… → Save webpage as PDF…** for one HTTP(S)
+  address. An installed Edge or Chrome renders in a temporary browser session
+  while the palette stays responsive. Choose a new PDF filename, cancel a job,
+  or open the saved PDF/folder; existing files, Input / Output and clipboard
+  remain unchanged. Pages requiring sign-in still need normal browser printing.
+
+- Made Action Preview easier to read with plain-language headings, a clear
+  Action type, and shaded prompt/result text. Text transformations now explain
+  the change through actual before/after text, clear missing-input guidance,
+  labelled slash/case examples, and optional details. Other Actions keep their
+  execution and recovery explanations; duplicate saved text is shown once.
+  Preview remains optional and performs no effects.
+
 - Corrected Drop history details to describe retained input without promising
   Input / Output placement. Changed or unavailable approved Drop Actions now
   say **Action blocked — review Settings** instead of appearing to switch to

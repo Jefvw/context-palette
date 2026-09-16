@@ -2558,7 +2558,7 @@ class LauncherInteractionTests(unittest.TestCase):
 
         self.assertEqual(
             menu.labels,
-            ["Paste or drop one or more file paths first"],
+            ["Paste a webpage URL or file paths first", "Save webpage as PDF…"],
         )
         self.assertEqual(
             menu.options_for(menu.labels[0])["state"],

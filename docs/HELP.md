@@ -88,7 +88,9 @@ Context Palette reads at most 1,000 populated rows from the exact versioned
 workbook. It does not start Excel or Python Excel, run macros, follow links, or
 evaluate formulas. Formula cells, changed headers, unsafe/corrupt packages, and
 unsupported Action types are rejected. Sequences and fixed Excel automation
-Actions are intentionally outside this generic workbook. Text-file transforms
+Actions are intentionally outside this generic workbook. The folder-only
+**Save current score as PDF** Action is allowed but is never run during import.
+Text-file transforms
 also stay in their guided editor because their operation parameters can include
 meaningful empty or whitespace-only values that a simple Excel cell cannot
 represent safely.
@@ -603,6 +605,100 @@ registered for those links. Context Palette does not search for or invoke a VS
 Code executable and does not request administrator rights. Empty, relative,
 missing, unavailable, unmatched-quote, and multiple paths are explained
 without opening anything.
+
+## Save the current Ultimate Guitar score from Edge
+
+This saved Action uses the score already open in Microsoft Edge, including your
+signed-in session and current score selection. **Accepted workflow: finish
+Save As yourself.** The owner has chosen to keep the current stopping point
+so the filename can be reviewed or changed before saving.
+
+1. Create or edit a **Save current score as PDF** Action and choose its absolute
+   **PDF folder**. The Action stores no arguments, working folder, or placeholders.
+   Put it in a personal Music Quick-action menu if desired.
+2. Open an **Official** score or **Guitar Pro** tab on Ultimate Guitar in Edge.
+   Choose the instrument and view you want. Close any existing print or Save As
+   dialog, then press **F9**.
+3. Run the saved Action from the Music menu or, when Music is selected and Find
+   is focused, press physical **Shift+6** for Music slot 6.
+4. Keep Edge in front while the operation runs. At the accepted **Save As**
+   handoff, the Context Palette progress window closes automatically. There is
+   no extra message to dismiss; finish in Edge's Save As window.
+5. In Edge, choose the **folder and filename**, then click **Save**. The dialog
+   may still show Downloads; do not assume the Action's configured folder has
+   been selected. Open the saved PDF and check its score and page count.
+
+This handoff means the final save is up to you; it does not mean a PDF has
+already been saved. Palette does not verify a PDF saved manually afterward.
+To keep an existing file, choose a different filename in Edge;
+Palette's automatic duplicate numbering does not apply to this stopped path.
+
+To set up the shortcut on another PC, create a Music Context in Configure and
+assign the saved Action to its slot 6. Music is personal configuration; a fresh
+clone does not include this menu or shortcut assignment.
+
+The function uses the website's **PRINT** button and Edge's **Save as PDF**
+printer. Select that printer in Edge once if the function asks you to; other
+printers are never used. It supports only the stated Official score and Guitar
+Pro tab page shapes; ordinary text tabs, chords, and arbitrary webpages are not
+score-PDF inputs. The first version supports the observed English Edge/Windows
+controls. A changed website, title/type mismatch, foreground window, or
+unrecognized dialog stops the save with an explanation. It does not sign you in
+or change instruments for you.
+
+If the Action stops before opening Save As, the message identifies the missing
+or ambiguous control. You can use the website's PRINT button and Edge's Save
+as PDF manually instead.
+For a hidden PRINT button, make it visible in Edge; for a disabled button, let
+the score finish loading. Close any leftover print or Save As dialog before
+running the Action again. When finishing manually, check the file in the
+folder you chose; Palette will not report or verify that manual save.
+
+The configured PDF folder remains required by the existing automation,
+but the observed stop leaves the final folder choice to Edge. The Action,
+Music menu and Music slot are personal configuration, excluded from Git. On
+another PC, configure an available folder there.
+
+The code still attempts automatic saving. Only the known filename-control
+lookup failure in the verified Save As dialog closes quietly; other failures
+still show an explanation. Manual completion is the accepted observed stopping
+point, not an enforced pause on every PC. Full automatic
+saving is not required by the current owner decision. Menu, shortcut and
+second-PC checks remain unverified where not reported.
+
+Cancel stops the automation; a print or Save As dialog may need closing in Edge.
+Quit is blocked until the worker finishes. This Action does not use or change
+Input / Output or the clipboard; F9 retains its usual selection-capture behavior.
+It is manual only: Drop, AI proposals, and Action sequences cannot run it. The
+old ignored local score-folder preference is retained as legacy data. The saved
+Action supplies the automation's configured folder; choose the final manual
+save location in Edge.
+
+## Save a webpage as PDF
+
+1. Paste one complete `https://` or `http://` webpage address into **Input / Output**.
+2. Choose **Send to… → Save webpage as PDF…**.
+3. Choose a folder and a **new PDF filename**. Existing files are never replaced.
+4. Wait for **PDF saved**, then choose **Open PDF** to check the content.
+
+This uses installed Microsoft Edge, or Google Chrome if Edge is unavailable,
+in a temporary browser session. No extra Python package is required. It works
+best for pages that open without signing in; it does not use your signed-in
+browser tabs or cookies. For a signed-in page, use your normal browser's print
+dialog and choose **Save as PDF** instead.
+
+The complete Input / Output field supplies the URL, even when text is selected.
+Your text and clipboard stay unchanged. Only one PDF job runs at a time. You
+can keep using the palette while it runs; **Cancel** requests a stop and waits
+for browser cleanup. Quit is blocked until the job finishes. If saving finished
+just before cancellation, the result still reports the saved file.
+
+The PDF uses the website's print layout. Cookie notices, sign-in screens,
+browser error pages or content that loads late may appear or be missing. A
+saved PDF is not proof that all expected website content was captured. Open it
+to check the result; use normal browser printing when it needs adjustment.
+
+This is an Input / Output function, not a saved Action or an automatic Drop Action.
 
 ## Quick-action surface
 
@@ -1171,6 +1267,24 @@ a plan only: Preview does not open targets, inspect workbook contents, retrieve
 passwords, write files, or write to the clipboard. Missing runtime choices are
 identified rather than guessed. Large inputs/results are bounded and any
 display truncation is labelled.
+
+Text transformation previews explain the change and show **Before · your
+text** and **After · result** using the whole Input / Output field.
+If the field is empty, Preview tells you to add text first; simple slash and
+letter-case conversions also show a clearly labelled **Example only — not
+your text**. Examples never become your input or result. Unchanged text is
+identified explicitly; invalid text shows its problem without inventing a
+result. **Show details** reveals settings and Undo/clipboard limitations using
+the same snapshot. Run replaces the editor text and copies the result; it
+does not change files. Undo can recover the editor text, not the old clipboard.
+
+Other Action previews lead with **When you run this Action**, **Where the input comes
+from**, **Where it goes**, and **Can I undo it?**. Bold headings separate the
+explanation from shaded **Prompt text**, **Template text**, or **Text result**
+blocks. These blocks preserve the actual text, including its line breaks;
+instructions inside a prompt are content, not something Preview carries out.
+Input snapshots and additional settings follow the explanation. Identical
+saved text is shown once, and missing-input notices appear near the top.
 
 Preview is optional. Close it and use normal Run/Open as before. It is a
 snapshot, not an approval or reservation: Run uses the then-current input and

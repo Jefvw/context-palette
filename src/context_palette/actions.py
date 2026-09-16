@@ -7,7 +7,7 @@ from hashlib import sha256
 import json
 import locale
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import re
 import subprocess
 import tempfile
@@ -611,11 +611,11 @@ def configured_action(
         raise ActionError(
             "Send files to folder Actions cannot store arguments or a working folder."
         )
-    if action_type == "excel_automation" and (
+    if action_type in {"excel_automation", "save_edge_score_pdf"} and (
         clean_arguments or clean_working_directory
     ):
         raise ActionError(
-            "Excel automation Actions cannot store process arguments or a working folder."
+            "This automation cannot store process arguments or a working folder."
         )
     if action_type == "transform_text":
         validate_text_transform(clean_value, clean_arguments)
@@ -839,7 +839,15 @@ def execute_action(
     sequence_runner: Callable[[Action], str] | None = None,
     excel_automation_runner: Callable[[Action], str] | None = None,
     file_transfer_runner: Callable[[Action, str], str] | None = None,
+    edge_score_pdf_runner: Callable[[Action], str] | None = None,
 ) -> str:
+    if action.type == "save_edge_score_pdf":
+        validate_action_value(action.type, action.value, inspect_external_paths=False)
+        if action.arguments or action.working_directory:
+            raise ActionError("Score PDF Actions accept a PDF folder only.")
+        if edge_score_pdf_runner is None:
+            raise ActionError("Score PDF saving requires the attended Context Palette window.")
+        return edge_score_pdf_runner(action)
     if action.type == "sequence":
         if sequence_runner is None:
             raise ActionError("Action sequence execution is unavailable.")
@@ -1110,6 +1118,13 @@ def validate_action_value(
 ) -> None:
     """Validate the configured value shared by guided creation and JSON loading."""
     clean_value = value.strip()
+    if action_type == "save_edge_score_pdf":
+        folder = PureWindowsPath(clean_value)
+        if (not folder.is_absolute() or str(folder).startswith(("\\\\?\\", "\\\\.\\"))
+                or any(ord(char) < 32 or char in '<>"|?*%' for char in clean_value)
+                or ":" in clean_value[2:] or ".." in folder.parts):
+            raise ActionError("Choose an absolute PDF folder, such as C:\\Music\\Scores. Placeholders are not supported.")
+        return
     if action_type == "sequence":
         if clean_value != "sequence-v1":
             raise ActionError("Sequence data uses an unsupported version.")
@@ -1960,11 +1975,11 @@ def _parse_action(
             f"Action #{index}: Send files to folder Actions cannot contain "
             "arguments or a working directory."
         )
-    if action_type == "excel_automation" and (
+    if action_type in {"excel_automation", "save_edge_score_pdf"} and (
         arguments or (working_directory is not None and working_directory.strip())
     ):
         raise ActionError(
-            f"Action #{index}: Excel automation Actions cannot contain process "
+            f"Action #{index}: This automation cannot contain process "
             "arguments or a working directory."
         )
 

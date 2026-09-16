@@ -6,6 +6,34 @@ described in [Architecture](ARCHITECTURE.md); repository rules remain in
 
 ## Before editing
 
+The owner accepts the current Edge score stop at Save As for manual filename
+and folder choice (2026-09-15). The subsequent owner request removes the error
+popup for this handoff only: the exact `filename_missing` helper outcome closes
+the progress window after cleanup; other errors remain visible. Do not resume
+automatic-save repair without a new request. The generated Action catalogue
+describes the supported score types and Save As fallback; Help and Testing detail this
+accepted manual finish and its limitations.
+
+For future requested Edge score PDF changes, use `action_types.py`, `actions.py`,
+`action_preview.py`, and `launcher.py` for the constrained saved Action and its
+manual runner; keep `edge_score_pdf.py` / `.ps1` and
+`edge_score_pdf_window.py` as the site-specific Windows/file boundary. Check
+configured Quick-action placement, Context slots, Drop/AI/sequence exclusions,
+and ordinary bulk import/update. The allowed Ultimate Guitar URL type must agree
+with the inspected document title: retain the existing Official shape and only
+the `tabs.ultimate-guitar.com/tab/{artist}/{song}-guitar-pro-{digits}` Guitar
+Pro shape. Do not broaden this into normal text tabs, chords, arbitrary webpages,
+or a general browser workflow. Run the Edge score, Action type, Action preview,
+launcher, configuration, bulk, and complete checks. Native control selection and
+actual PDF content still require Windows UAT.
+
+For webpage-to-PDF changes, start with `src/context_palette/webpage_pdf.py`
+(browser and file boundary), `webpage_pdf_window.py` (worker/result window),
+and `launcher.py` / `resource_operations.py` (Send-to routing). Run
+`tests.test_webpage_pdf`, `tests.test_webpage_pdf_window` and
+`tests.test_webpage_pdf_integration`, then the complete check. Keep the
+Windows content-fidelity checks in [Testing](TESTING.md) separate from mocks.
+
 1. Inspect `git status --short` and preserve existing work.
 2. Confirm the behavior in code and its focused tests.
 3. Keep personal files under `data/local_*`, `data/inbox.json`,

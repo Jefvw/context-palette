@@ -119,7 +119,7 @@ class ResourceOperationIntegrationTests(unittest.TestCase):
         factory.assert_not_called()
         app._dispatch_resource_operation.assert_not_called()
         app._get_clipboard_text.assert_not_called()
-        report = app._show_execution_preview.call_args.args[1]
+        report = app._show_execution_preview.call_args.args[1].full_text()
         self.assertIn("C:/input.txt", report)
         self.assertIn("C:/reports", report)
         self.assertIn("does not inspect or copy files", report)

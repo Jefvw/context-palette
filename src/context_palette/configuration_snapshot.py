@@ -41,6 +41,10 @@ from .excel_automation import (
     ExcelAutomationSettings,
     load_excel_automation_settings,
 )
+from .edge_score_pdf_settings import (
+    EdgeScorePdfSettingsError,
+    load_edge_score_pdf_folder,
+)
 from .palette_state import PaletteState, load_palette_state
 from .work_item_storage import (
     WorkItemCreationSettings,
@@ -144,6 +148,7 @@ class ConfigurationSnapshot:
     excel_automation_settings: ExcelAutomationSettings = field(
         default_factory=ExcelAutomationSettings
     )
+    edge_score_pdf_folder: Path | None = None
     managed_text_content_present: bool = False
     loaded_asset_ids: frozenset[str] = frozenset()
     present_asset_ids: frozenset[str] = frozenset()
@@ -263,6 +268,7 @@ _LOAD_ERRORS = (
     InboxError,
     WorkItemStorageError,
     ExcelAutomationError,
+    EdgeScorePdfSettingsError,
     OSError,
     UnicodeError,
 )
@@ -281,6 +287,7 @@ _ASSET_LABELS = {
     "work-item-metadata": "Work Item metadata",
     "work-item-settings": "Work Item settings",
     "excel-automation-settings": "Excel automation settings",
+    "edge-score-pdf-settings": "Edge score PDF settings",
 }
 
 _LOCAL_TARGET_ACTION_TYPES = frozenset(
@@ -290,6 +297,7 @@ _LOCAL_TARGET_ACTION_TYPES = frozenset(
         "open_folder",
         "launch_app",
         "transform_file_text",
+        "save_edge_score_pdf",
     }
 )
 
@@ -466,6 +474,12 @@ def load_configuration_snapshot(paths: AppDataPaths) -> SnapshotValidationReport
         ),
         ExcelAutomationSettings(),
     )
+    edge_score_pdf_folder = builder.load_asset(
+        "edge-score-pdf-settings",
+        paths.edge_score_pdf_settings_file,
+        lambda: load_edge_score_pdf_folder(paths.edge_score_pdf_settings_file),
+        None,
+    )
 
     managed_content_present = paths.managed_text_action_source_file.exists()
     if managed_content_present:
@@ -498,6 +512,7 @@ def load_configuration_snapshot(paths: AppDataPaths) -> SnapshotValidationReport
         work_item_metadata=work_item_metadata,
         work_item_settings=work_item_settings,
         excel_automation_settings=excel_automation_settings,
+        edge_score_pdf_folder=edge_score_pdf_folder,
         managed_text_content_present=managed_content_present,
         loaded_asset_ids=frozenset(builder.loaded_asset_ids),
         present_asset_ids=frozenset(builder.present_asset_ids),
@@ -527,6 +542,7 @@ def load_configuration_snapshot(paths: AppDataPaths) -> SnapshotValidationReport
         "excel_automation_configured": int(
             snapshot.excel_automation_settings.launcher_path is not None
         ),
+        "edge_score_pdf_configured": int(snapshot.edge_score_pdf_folder is not None),
         "managed_text_content": int(snapshot.managed_text_content_present),
     }
     return SnapshotValidationReport(snapshot, tuple(builder.issues), counts)

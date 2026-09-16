@@ -55,6 +55,12 @@ Action and its internal placements without changing its external target. See
 - Shows Input / Output by default, with one hide/show control that preserves
   content, selection, and Undo/history. Offers optional read-only Preview
   beside Run/Open without adding a required execution step.
+- Prepares the current Official or Guitar Pro Ultimate Guitar score in Edge through a personal
+  **Save current score as PDF** Action. The page type must agree with its displayed
+  title; ordinary text tabs, chords, and other webpages are refused. The owner accepts its current stop at
+  Save As: choose the final folder/name and save manually. At this handoff,
+  Palette closes its progress window without an error popup. Its Action and Music placement are personal; see
+  [Help](docs/HELP.md#save-the-current-ultimate-guitar-score-from-edge).
 - Offers **Settings… → On drop** on the Drop target: keep default show-only,
   or explicitly choose a compatible Action to receive the exact dropped input.
   Configured Actions run directly, without an Input / Output placement prompt.
@@ -111,6 +117,9 @@ Action and its internal placements without changing its external target. See
   itself; a file opens its containing folder through Windows' registered
   `vscode:` protocol. This command copies nothing and leaves Input / Output,
   the clipboard, and ordinary Folder Action execution unchanged.
+- Saves one webpage URL from **Input / Output → Send to… → Save webpage as PDF…**
+  using installed Edge or Chrome in a temporary browser session. Choose a new
+  filename and inspect the PDF; pages needing sign-in use normal browser printing.
 - Creates deterministic, validated complete-configuration backup archives from
   a service-level command, with explicit Inbox and managed-text privacy scope.
 - Stores personal data locally and writes application-managed JSON atomically.

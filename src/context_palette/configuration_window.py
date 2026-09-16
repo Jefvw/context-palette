@@ -148,6 +148,7 @@ ACTION_TYPE_EXAMPLES = {
     "open_file": r"Example: Open %PROJECT_ROOT%\README.md in its associated application.",
     "open_folder": r"Example: Open %PROJECT_ROOT%\docs in File Explorer.",
     "send_files_to_folder": r"Example: Send the reviewed Input / Output file list to %PROJECT_ROOT%\exports.",
+    "save_edge_score_pdf": r"Example: Choose the PDF folder, such as C:\Music\Scores. Open an Official Ultimate Guitar score in Edge, select its instrument, then press F9 to run this Action. Existing PDFs are kept.",
     "launch_app": r"Example: Start C:\Tools\Example\Example.exe with reviewed arguments.",
     "excel_automation": "Example: Export Input / Output workbooks, format an open workbook, or review selected live columns for UAT-gated conversion to text.",
     "sequence": "Example: Start an import Action, wait briefly, then open its results folder.",
@@ -4814,6 +4815,15 @@ class ActionDialog:
                     "engine-created recovery copy before changing eligible cells to text."
                 ),
             )
+        elif action_type == "save_edge_score_pdf":
+            self.score_pdf_folder_var = tk.StringVar(value=action.value if action else initial_value)
+            entry = self._compact_entry(
+                form, "PDF folder", self.score_pdf_folder_var, help_text=self.action_guidance,
+            )
+            self.score_pdf_folder_button = ttk.Button(
+                entry.master, text="Choose…", command=self._choose_score_pdf_folder,
+            )
+            self.score_pdf_folder_button.pack(side=tk.LEFT, padx=(6, 0))
         else:
             value_height = (
                 5
@@ -4866,6 +4876,14 @@ class ActionDialog:
 
     def _tooltip(self, widget: tk.Widget, text: str) -> None:
         self.tooltips.append(WidgetTooltip(widget, text))
+
+    def _choose_score_pdf_folder(self) -> None:
+        chosen = filedialog.askdirectory(
+            parent=self.window, title="Choose the PDF folder", mustexist=True,
+            initialdir=self.score_pdf_folder_var.get(),
+        )
+        if chosen:
+            self.score_pdf_folder_var.set(chosen)
 
     def _compact_row(
         self,
@@ -5441,6 +5459,9 @@ class ActionDialog:
                     arguments = parameters
             elif self.action_type == "excel_automation":
                 value = self.excel_automation_choices[self.excel_automation_var.get()]
+                arguments = []
+            elif self.action_type == "save_edge_score_pdf":
+                value = self.score_pdf_folder_var.get()
                 arguments = []
             else:
                 assert self.value is not None

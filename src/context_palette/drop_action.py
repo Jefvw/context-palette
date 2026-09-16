@@ -91,6 +91,10 @@ def drop_action_eligibility(action: Action) -> DropActionEligibility:
         return DropActionEligibility(
             False, reason="Live Excel Actions choose open workbooks, not dropped input. Run them from the Palette.",
         )
+    if action.type == "save_edge_score_pdf":
+        return DropActionEligibility(
+            False, reason="Score PDF uses the Edge window captured with F9, not dropped input. Run it from the Palette.",
+        )
     if action.type in {"workspace_template", "ai_prompt", "open_url", "open_folder"}:
         if not any(token in action.value for token in CLIPBOARD_TEMPLATE_TOKENS):
             return DropActionEligibility(False, reason="This Action does not consume dropped input. Use a supported input placeholder first.")

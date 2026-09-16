@@ -32,6 +32,10 @@ Only Shift plus a physical top-row key from `6` through `0` executes a slot.
 Historical global slots `1`–`5` are retired. Ctrl-, Alt-, AltGr-, plain
 number-row, and numpad input never execute Action slots.
 
+For a personal Music setup, assign **Save current score as PDF** to Music slot
+6. Press `F9` in Edge first, select Music, focus Find, then press physical
+`Shift+6`. This is a Context shortcut, not a new global shortcut.
+
 ## Configure
 
 | Shortcut | Result |

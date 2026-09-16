@@ -1,5 +1,206 @@
 # Decisions
 
+## 2026-09-15 - Extend the constrained score workflow to Guitar Pro tabs
+
+**Decision:** Allow the existing **Save current score as PDF** Action to run on
+the supported Ultimate Guitar Guitar Pro URL shape
+`https://tabs.ultimate-guitar.com/tab/{artist}/{song}-guitar-pro-{digits}` as
+well as the existing Official score shape. The inspected document title must
+agree with the URL type; the observed Guitar Pro title is `(1) DONT CRY SISTER
+TAB by J.J. Cale @ Ultimate-Guitar.Com`. Keep the existing PRINT control,
+verified **Save as PDF** printer, and captured-Edge foreground/ownership guards.
+
+**Boundary:** This does not accept ordinary text tabs, chords, arbitrary
+webpages, or a general browser-print feature. It adds no dependency,
+configuration, action type, or broader UAT commitment. The existing manual Save
+As handoff remains: `filename_missing` closes Palette quietly so the user can
+choose the folder/name and Save. Automation is still attempted and this is not
+an enforced pause; the stopped path neither applies the configured folder nor
+verifies a later manual save.
+
+**Verification:** Automated and live Guitar Pro checks are recorded separately
+in TESTING.md. Preserve the earlier 1,474-test/2-skipped complete-check result
+and failed automatic-save evidence as historical records; neither establishes a
+completed Guitar Pro PDF save.
+
+## 2026-09-15 - Remove the failure popup at the accepted Save As handoff
+
+**Owner request:** Remove the final message so the user can finish saving in
+Edge without closing a misleading Palette failure window first.
+
+**Decision:** Treat the helper's exact `filename_missing` outcome as manual
+completion pending. This stage occurs after native Save As identity/ownership
+and foreground checks, before the filename is changed or Save is invoked.
+After the helper has exited and staging cleanup has finished, close Palette's
+progress window, leave Edge alone and set a neutral status directing the user
+to choose the folder/filename and Save. Do not show failure or saved-PDF controls.
+
+**Boundary:** Other errors, ambiguous controls, contradictory helper output and
+uncertain helper termination retain their failure UI. The helper's automation
+mechanics are unchanged; this is not an always-pause mode. A later manual save
+is not verified by Palette and does not use its duplicate numbering or configured
+folder. This supersedes only the retained-message part of the earlier acceptance.
+
+## 2026-09-15 - Accept the current score export with manual Save As completion
+
+**Owner decision:** Leave the implementation as it is. The owner values the
+current stop at Edge's Save As dialog because it allows changing the filename
+before saving. Run the score Action, close the Palette result message, then
+choose the final folder/filename and complete Save in Edge. Full automatic
+saving is no longer a required fix.
+
+**Boundary:** This accepts the observed behavior; it does not implement an
+always-pause mode. The existing code still attempts automatic saving and can
+behave differently on another browser/PC. The current `PDF was not verified`
+and filename-control error messages remain unchanged. At the observed stop,
+the configured folder has not been applied. Palette does not verify a later
+manual save, and its automatic duplicate numbering does not apply. Edge's
+Save As location and overwrite handling govern the manual save.
+
+**Evidence:** Preserve the failed automatic-save tests as technical history.
+Owner acceptance of manual completion does not turn those tests into passes
+or claim that broader menu, shortcut and second-PC UAT was executed. This
+decision supersedes the requirement to resolve filename detection before
+accepting the owner's current workflow. Further behavior/message changes need
+a new request. This update changes documentation only.
+
+## 2026-09-15 - Verify the Save As host through its native window
+
+**Decision:** Resolve the Save As host process from its foreground native HWND
+with `GetWindowThreadProcessId`, then require its executable path to match the
+already-verified source Edge executable, case-insensitively. An unavailable
+process or unreadable/different path is not accepted. Preserve the captured
+source's process identity, owner chain, foreground, native dialog name/class,
+exact handle and enabled/modal checks.
+
+**Evidence:** A live diagnostic from the original captured score found that the
+Save As UIA process ID differed from the score's process ID while name, class,
+handle, enabled/modal state and source ownership matched. Waiting longer did
+not resolve that mismatch. The native window is the appropriate identity for
+the process check; provider attribution and same-process assumptions are not.
+No browser profile, extension, remote-debugging port or dependency is added.
+
+**Verification:** The regression harness uses fake native process lookup and
+process metadata. Native compilation and the complete check are separate from
+actual Windows saving. On resumption, desktop control stopped because it could
+not reliably identify the current Edge URL; the corrected end-to-end save still
+requires a live retry. See TESTING.md for recorded results.
+
+## 2026-09-13 - Identify score print controls without fragile UI tree assumptions
+
+**Decision:** Match only Button controls with the complete PRINT label after
+trimming surrounding whitespace, inside the already-verified Official score
+document. Require one visible, enabled match and recheck the source and URL
+before invoking it. Keep all printer, window ownership, private staging and
+non-overwrite checks.
+
+Resolve the native Save As dialog from the owned foreground window after Edge
+opens it, rather than assuming a fixed accessibility-tree location. Validate
+its native dialog class, name, process, handle and modal state. Identify its
+filename control by both Edit type and ID 1001: the address toolbar can share
+that ID. Report separate missing/ambiguous control stages.
+
+**Evidence:** The reported failure reproduced before print preview. Live helper
+diagnostics found one enabled PRINT Button whose accessible name included
+surrounding whitespace. After correcting that lookup, the Action reached Save
+As and exposed a second lookup failure; the native dialog appeared beneath Edge
+in the accessibility tree. Automated checks and the live save result are
+recorded separately in TESTING.md.
+
+## 2026-09-13 - Make Edge score saving a constrained saved Action
+
+**Decision:** Replace the More-menu score command and its private folder chooser
+with `save_edge_score_pdf`, a manual saved Action whose only value is a literal
+absolute PDF folder. It reuses the existing `EdgeScorePdfRequest` adapter and
+the F9-captured Edge HWND. The user may place it in a personal Music Quick-action
+menu and Music slot 6; `Shift+6` remains Context-scoped and is not global.
+
+**Boundary:** The Action has no arguments, working directory, or placeholders.
+It is not available to Drop, AI proposals, Action sequences, or a new hotkey.
+Ordinary Excel bulk import and update may carry its folder-only configuration but
+never execute it. The ignored former local folder preference remains retained
+legacy data; the Action value is authoritative. The adapter backend is unchanged.
+
+This supersedes the More-menu placement and folder preference in the earlier
+2026-09-13 score-saving decision below; its browser boundary remains in force.
+
+## 2026-09-13 - Save the current Edge score through its own print workflow
+
+
+**Decision:** Add a separate manual **More → Edge score PDF** function for an
+Official Ultimate Guitar score already open in Microsoft Edge. Capture the
+source window from the ordinary F9 invocation, then validate the live page
+before invoking its PRINT control. Use named Windows accessibility controls,
+require Save as PDF, stage in the chosen folder, verify a completed PDF and
+publish a new title-based filename without replacing existing files.
+
+**Reason:** Rendering the URL in a fresh browser cannot reproduce the user's
+signed-in score, instrument selection and website-generated print document.
+The observed site PRINT workflow produced the intended four-page score preview.
+A narrow Windows PowerShell/.NET accessibility adapter needs no new installed
+package, browser extension, profile copying or debugging connection.
+
+**Boundary:** This is an attended, site-specific adapter, not a browser workflow
+engine or new Action catalogue. The output folder is private machine-local
+configuration. Trigger selection does not grant authority to other windows,
+printers or pages. Closing/cancelling never terminates the user's Edge process.
+The generic URL-to-PDF function remains separate. Automated tests and observed
+print-preview controls do not establish an end-to-end Windows save: owner UAT
+for this function remains outstanding.
+
+## 2026-09-13 - Save a webpage URL as PDF from Input / Output
+
+**Decision:** Add **Send to… → Save webpage as PDF…** as a manual Input / Output
+function. The owner mainly needs pages that open without signing in. Snapshot
+one complete HTTP(S) URL, ask for a new PDF path, then render in the background
+with installed Edge (Chrome fallback) and an isolated temporary browser profile.
+Do not replace existing files or change Input / Output or clipboard. Provide
+cancellation, a guarded Quit and an explicit saved-file result.
+
+**Reason:** This meets the requested URL-to-PDF use case without a new dependency,
+an additional saved Action type, a generic automation engine or browser-account
+integration. A typed runtime request keeps routing consistent with existing
+resource operations. Pages needing the user's signed-in session remain a
+normal-browser print task. Internet, loopback and intranet HTTP(S) URLs are
+accepted; no user browser session or login state is reused.
+
+**Boundary:** A valid PDF does not prove the requested content loaded correctly.
+The result asks the user to inspect it; cookie screens, print styles and late
+content can affect output. Saved Actions, Quick menus, Drop execution authority,
+and effect-free Preview remain unchanged. Owner UAT for this new feature is
+separate from the earlier batch acceptance.
+
+## 2026-09-09 - Explain text transformations through before and after
+
+**Decision:** Replace the generic execution-report layout for text-transform
+Previews with a concise explanation and actual before/after text. Empty input
+gets a clear next step and, for simple slash/case conversions, an explicitly
+labelled illustration. An example is never runtime input or a computed result.
+Do not frame missing input as a calculation error or invite the user to Run
+when no result can be shown. Keep extra settings and recovery in Show details.
+
+**Reason:** The owner found the styled but generic empty slash-conversion
+Preview unintelligible. Typography alone did not explain what changes or how
+to proceed. External file, folder, credential and Excel Actions retain their
+destination, confirmation and recovery explanations; this is not a blanket
+removal of their execution information.
+
+**Boundary:** Run and its input rules remain unchanged. Preview is effect-free;
+details use the existing snapshot. Preserve exact user text and display limits.
+
+## 2026-09-09 - Give Action Preview a readable visual hierarchy
+
+**Decision:** Keep the compact, optional, read-only Preview dialog and use
+plain-language headings for Run, input, destination and recovery. Distinguish
+literal prompt/result text with a shaded block; preserve its text and line
+breaks without interpreting embedded instructions or markup. Show notices
+early, large input snapshots later, and identical saved content only once.
+
+**Boundary:** Presentation roles come from the structured snapshot model,
+not from recognizing headings inside user content. Keep display bounds and
+execution checks separate. This changes no Action behavior, input precedence,
+execution authority, or stored data and adds no dependency.
+
 ## 2026-09-09 - Accept the current batch with partial owner UAT coverage
 
 **Decision:** The owner considers UAT done for now for the current Input /

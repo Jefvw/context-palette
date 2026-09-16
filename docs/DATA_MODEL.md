@@ -243,6 +243,7 @@ not a new JSON field and does not itself change any stored format.
 | `data/local_work_item_metadata.json` | `work-item-metadata` | Personal/local | Optional | Configuration | Core configuration | 1 |
 | `data/local_work_item_settings.json` | `work-item-settings` | Machine-local | Optional | Private paths | Core configuration | 1 |
 | `data/local_excel_automation_settings.json` | `excel-automation-settings` | Machine-local | Optional | Private paths | Core configuration | 1 |
+| `data/local_edge_score_pdf_settings.json` | `edge-score-pdf-settings` | Machine-local legacy | Optional | Private paths | Retained ignored legacy data; saved `save_edge_score_pdf` Action value is authoritative | 1 |
 | `data/inbox.json` | `inbox` | Captured content | Optional | Captured content | Complete-configuration addition; explicit privacy notice and exclusion choice required | 1 |
 | `data/local_text_action_source.txt` | `managed-text-action-source` | Captured content | Optional | Captured content | Optional managed content | None |
 | `data/context-palette.log*` | `diagnostic-logs` | Derived/runtime | Optional | Diagnostics | Excluded | None |

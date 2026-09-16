@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from context_palette.actions import Action, execute_action
+from context_palette.action_preview import build_execution_preview
 from context_palette.drop_action import DropActionSettings, approve_drop_action
 from context_palette.drop_adapter import DropItem, DropResult
 from context_palette.drop_configuration_window import DropConfigurationWindow
@@ -46,6 +47,7 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
             (data / "cheatsheets").mkdir()
             root = tk.Tk()
             root.withdraw()
+            original_scaling = float(root.tk.call("tk", "scaling"))
             root.tk.call("tk", "scaling", scaling)
             clipboard_get = stack.enter_context(patch.object(root, "clipboard_get", return_value="Clipboard fixture"))
             clipboard_clear = stack.enter_context(patch.object(root, "clipboard_clear"))
@@ -80,6 +82,9 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
                 # interpreter only, never by the user's resident application.
                 for callback in root.tk.splitlist(root.tk.call("after", "info")):
                     root.tk.call("after", "cancel", callback)
+                # Scaling is shared between Tk interpreters in this process.
+                # A synthetic 150% check must not resize later test fixtures.
+                root.tk.call("tk", "scaling", original_scaling)
                 root.destroy()
 
     @staticmethod
@@ -285,6 +290,66 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
             self.assertEqual(panel.raw_text(), "Preserved input")
             clear.assert_not_called()
             append.assert_not_called()
+
+    def test_preview_readability_at_supported_scaling_preserves_literal_prompt(self):
+        prompt = "When you run this Action\n\n1. Explain the code.\n2. Keep its meaning.\n" + "More detail.\n" * 60
+        for percentage, scaling in ((100, 4 / 3), (125, 5 / 3), (150, 2.0)):
+            with self.subTest(percentage=percentage), self.launcher(scaling=scaling) as (app, _get, clear, append):
+                preview = build_execution_preview(Action("prompt", "Example prompt", "", "ai_prompt", prompt))
+                app._show_execution_preview("Preview: Example prompt", preview)
+                window = app.execution_preview_window
+                window.geometry("700x480+-32000+-32000")
+                app.root.update()
+                text = next(widget for widget in self.descendants(window) if isinstance(widget, tk.Text))
+                content_range = text.tag_ranges("content")
+                self.assertEqual(len(content_range), 2)
+                self.assertEqual(text.get(*content_range), prompt + "\n")
+                self.assertNotIn("heading", text.tag_names(content_range[0]))
+                self.assertNotEqual(text.tag_cget("content", "background"), text.cget("background"))
+                self.assertNotEqual(text.tag_cget("heading", "font"), text.cget("font"))
+                self.assertEqual(str(text.cget("state")), "disabled")
+                close = next(widget for widget in self.descendants(window) if isinstance(widget, ttk.Button) and widget.cget("text") == "Close")
+                self.assert_control_fits(close, window)
+                text.yview_moveto(1)
+                app.root.update()
+                self.assertGreater(float(text.yview()[0]), 0)
+                self.assertIsNotNone(text.bbox("end-2c"))
+                clear.assert_not_called()
+                append.assert_not_called()
+
+    def test_text_preview_empty_state_and_details_keep_the_same_snapshot(self):
+        for percentage, scaling in ((100, 4 / 3), (125, 5 / 3), (150, 2.0)):
+            with self.subTest(percentage=percentage), self.launcher(scaling=scaling) as (app, _get, clear, append):
+                action = Action("slashes", "Convert / to \\", "", "transform_slashes", "forward_to_back")
+                for original in ("", "C:/Work/report.txt"):
+                    app._show_execution_preview("Preview", build_execution_preview(action, workspace_text=original))
+                    window = app.execution_preview_window
+                    window.geometry("700x480+-32000+-32000")
+                    app.root.update()
+                    text = next(widget for widget in self.descendants(window) if isinstance(widget, tk.Text))
+                    report = text.get("1.0", "end-1c")
+                    if original:
+                        self.assertIn("Before · your text\nC:/Work/report.txt", report)
+                        self.assertIn("After · result\nC:\\Work\\report.txt", report)
+                        self.assertNotIn("Example only", report)
+                    else:
+                        self.assertIn("Add text to see your result", report)
+                        self.assertIn("Example only — not your text", report)
+                        self.assertNotIn("(empty)", report)
+                    self.assertNotIn("Undo and clipboard", report)
+                    toggle = next(widget for widget in self.descendants(window) if isinstance(widget, ttk.Checkbutton) and widget.cget("text") == "Show details")
+                    self.assert_control_fits(toggle, window)
+                    app.workspace_component.set_text("New input after preview")
+                    toggle.invoke()
+                    app.root.update()
+                    self.assertIn("Undo and clipboard", text.get("1.0", "end-1c"))
+                    self.assertNotIn("New input after preview", text.get("1.0", "end-1c"))
+                    toggle.invoke()
+                    self.assertEqual(text.get("1.0", "end-1c"), report)
+                    self.assertEqual(str(text.cget("state")), "disabled")
+                    self.assertEqual(app.workspace_component.raw_text(), "New input after preview")
+                clear.assert_not_called()
+                append.assert_not_called()
 
     def test_new_controls_fit_small_window_at_supported_scaling(self):
         for percentage, scaling in ((100, 4 / 3), (125, 5 / 3), (150, 2.0)):

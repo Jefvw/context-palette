@@ -104,7 +104,7 @@ class ExecutionPreviewTests(unittest.TestCase):
 
     def test_missing_and_invalid_transform_inputs_return_notices(self):
         for value, text, expected in (
-            ("uppercase", "", "does not contain text"),
+            ("uppercase", "", "Add text to see your result"),
             ("json_pretty", "{", "JSON is invalid"),
         ):
             with self.subTest(value=value):
@@ -141,6 +141,84 @@ class ExecutionPreviewTests(unittest.TestCase):
         report = preview.full_text()
         self.assertLessEqual(len(report), 32_768)
         self.assertIn("truncated", report)
+
+    def test_prompt_is_literal_and_shown_once_after_the_run_explanation(self):
+        prompt = "  When you run this Action\n\n1. Explain the code.\n2. Do not run it.  "
+        preview = build_execution_preview(self.action("ai_prompt", prompt))
+        blocks = preview.display_blocks()
+        content = [block.text for block in blocks if block.role == "content"]
+        self.assertEqual(content, [prompt])
+        headings = [block.text for block in blocks if block.role == "heading"]
+        self.assertIn("Prompt text", headings)
+        self.assertNotIn("Saved prompt", headings)
+        self.assertLess(headings.index("When you run this Action"), headings.index("Prompt text"))
+        self.assertEqual(preview.input_source, "saved prompt")
+        self.assertNotIn("pasted into another app", preview.recovery_text)
+
+    def test_notice_and_recovery_remain_visible_before_large_input(self):
+        preview = build_execution_preview(self.action("transform_text", "uppercase"), workspace_text="x" * 100_001)
+        report = preview.full_text()
+        self.assertLess(report.index("Preview limit"), report.index("Before · your text"))
+        self.assertLess(report.index("Undo and clipboard"), report.index("Before · your text"))
+        self.assertIn("Close this window to add or correct your text", report)
+        self.assertLessEqual(len(report), 32_768)
+
+    def test_empty_slash_preview_explains_both_directions_with_labelled_examples(self):
+        for kind in ("transform_slashes", "transform_text"):
+            for operation, before, after, description in (
+                ("forward_to_back", "C:/Work/report.txt", "C:\\Work\\report.txt", "forward slash (/)"),
+                ("back_to_forward", "C:\\Work\\report.txt", "C:/Work/report.txt", "backslash (\\)"),
+            ):
+                with self.subTest(kind=kind, operation=operation):
+                    preview = build_execution_preview(self.action(kind, operation), clipboard_text="Do not use this")
+                    blocks = preview.display_blocks()
+                    report = "\n".join(block.text for block in blocks)
+                    self.assertIn(description, report)
+                    self.assertIn("Add text to see your result", report)
+                    self.assertIn("Example only — not your text", report)
+                    self.assertIn(f"Before: {before}\nAfter:  {after}", report)
+                    self.assertIsNone(preview.output_text)
+                    self.assertEqual(preview.input_value, "")
+                    for clutter in ("could not compute", "Run will stop", "(empty)", "Where it goes", "Operation", "Do not use this", "choose Run when ready"):
+                        self.assertNotIn(clutter, report)
+
+    def test_transform_before_after_uses_actual_whole_input_and_no_example(self):
+        original = "  C:/One/file.txt\nD:/Two/file.txt  "
+        preview = build_execution_preview(self.action("transform_slashes", "forward_to_back"), workspace_text=original)
+        blocks = preview.display_blocks()
+        self.assertEqual([block.text for block in blocks if block.role == "content"], [original, original.replace("/", "\\")])
+        self.assertFalse(any(block.role == "example" for block in blocks))
+        self.assertIn("Replaces all text", preview.full_text())
+        self.assertIn("does not restore the previous clipboard", preview.full_text())
+
+    def test_unchanged_text_is_explicit_without_inventing_a_change(self):
+        original = "C:\\Work\\report.txt"
+        preview = build_execution_preview(self.action("transform_slashes", "forward_to_back"), workspace_text=original)
+        self.assertEqual(preview.output_text, original)
+        self.assertIn("would leave your text unchanged", preview.full_text())
+        self.assertNotIn("Example only", preview.full_text())
+
+    def test_invalid_input_shows_problem_and_no_example_or_run_invitation(self):
+        preview = build_execution_preview(self.action("transform_text", "json_pretty"), workspace_text="{")
+        report = preview.full_text()
+        self.assertIn("Cannot show a result", report)
+        self.assertIn("JSON is invalid", report)
+        self.assertIn("Check the text", report)
+        for misleading in ("Example only", "After · result", "choose Run when ready", "could not compute"):
+            self.assertNotIn(misleading, report)
+
+    def test_empty_comma_list_asks_for_input_without_showing_an_empty_result(self):
+        preview = build_execution_preview(self.action("transform_list_csv", "csv"))
+        self.assertIsNone(preview.output_text)
+        self.assertIn("Add text to see your result", preview.full_text())
+        self.assertNotIn("After · result", preview.full_text())
+        self.assertNotIn("Run will stop", preview.full_text())
+
+    def test_resolved_target_is_not_repeated_but_arguments_are_retained(self):
+        preview = build_execution_preview(self.action("launch_app", "C:/tool.exe", arguments=("C:/tool.exe",)))
+        headings = [block.text for block in preview.display_blocks() if block.role == "heading"]
+        self.assertNotIn("Configured application", headings)
+        self.assertIn("Arguments", headings)
 
     def test_missing_sequence_member_shows_existing_validation_without_running(self):
         preview = build_execution_preview(self.action(
@@ -182,6 +260,7 @@ class ExecutionPreviewTests(unittest.TestCase):
             "open_file": self.action("open_file", "C:/work/file.txt"),
             "open_folder": self.action("open_folder", "C:/work"),
             "send_files_to_folder": self.action("send_files_to_folder", "C:/work"),
+            "save_edge_score_pdf": self.action("save_edge_score_pdf", "C:/Music/Scores"),
             "launch_app": self.action("launch_app", "C:/tool.exe"),
             "excel_automation": self.action("excel_automation", "excel.export_workbooks_to_csv"),
             "paste_credential": self.action("paste_credential", "ContextPalette:Example"),
