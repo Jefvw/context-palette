@@ -175,7 +175,82 @@ class LauncherInteractionTests(unittest.TestCase):
             }
         )
 
-        app.root.geometry.assert_called_once_with("-1350+240")
+        app.root.geometry.assert_called_once_with("+-1350+240")
+
+    def test_show_resolves_cursor_monitor_each_time_including_after_undocking(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.root.winfo_width.return_value = app.root.winfo_reqwidth.return_value = 780
+        app.root.winfo_height.return_value = app.root.winfo_reqheight.return_value = 600
+        app._reveal_window = Mock(return_value=True)
+        locations = (
+            (-1000, 500, -1920, 40, 0, 1040),  # left external display
+            (100, 100, 0, 0, 1920, 1040),       # primary display
+            (2000, -500, 1920, -1080, 3840, -40),  # raised external display
+            (100, 100, 0, 0, 1366, 728),        # laptop only after undocking
+        )
+        with patch("context_palette.launcher.cursor_location", side_effect=locations) as cursor:
+            for _ in locations:
+                app.show_window()
+        self.assertEqual(cursor.call_count, 4)
+        self.assertEqual(app.root.geometry.call_args_list, [
+            call("+-1350+240"), call("+570+220"), call("+2490+-860"), call("+293+64"),
+        ])
+
+    def test_hotkey_keeps_captured_monitor_even_when_pointer_moves_during_copy(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.root.clipboard_get.return_value = "Selection"
+        app.root.winfo_width.return_value = app.root.winfo_reqwidth.return_value = 780
+        app.root.winfo_height.return_value = app.root.winfo_reqheight.return_value = 600
+        app._reveal_window = Mock(return_value=True)
+        app._set_workspace_text = Mock()
+        request = dict(zip(
+            ("cursor_x", "cursor_y", "work_left", "work_top", "work_right", "work_bottom"),
+            ("-1000", "500", "-1920", "40", "0", "1040"),
+        ))
+        with patch("context_palette.launcher.cursor_location") as cursor:
+            app._finish_selection_capture(request)
+        cursor.assert_not_called()
+        app.root.geometry.assert_called_once_with("+-1350+240")
+        app._set_workspace_text.assert_called_once_with("Selection")
+
+    def test_cursor_query_failure_keeps_existing_placement(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app._reveal_window = Mock(return_value=True)
+        with patch("context_palette.launcher.cursor_location", side_effect=OSError):
+            app.show_window()
+        app.root.geometry.assert_not_called()
+
+    def test_manual_resize_centers_actual_window_not_preferred_widget_size(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.root.winfo_width.return_value, app.root.winfo_height.return_value = 700, 480
+        app.root.winfo_reqwidth.return_value, app.root.winfo_reqheight.return_value = 780, 600
+        with patch("context_palette.launcher.cursor_location",
+                   return_value=(500, 500, 0, 0, 1920, 1040)):
+            app._position_for_hotkey()
+        app.root.geometry.assert_called_once_with("+610+280")
+
+    def test_large_window_shrinks_with_room_for_frame_on_smaller_screen(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app.root.winfo_width.return_value, app.root.winfo_height.return_value = 1800, 1200
+        app.root.minsize.return_value = (700, 480)
+        with patch("context_palette.launcher.cursor_location",
+                   return_value=(-1000, 500, -1024, 0, 0, 700)):
+            app._position_for_hotkey()
+        self.assertEqual(app.root.geometry.call_args_list, [
+            call("976x604"), call("+-1000+48"),
+        ])
+
+    def test_hotkey_rejects_empty_work_area(self):
+        app = LauncherApp.__new__(LauncherApp)
+        app.root = Mock()
+        app._position_for_hotkey(dict.fromkeys(
+            ("cursor_x", "cursor_y", "work_left", "work_top", "work_right", "work_bottom"), "0"))
+        app.root.geometry.assert_not_called()
 
     def test_ocr_request_uses_clipboard_image_and_places_background_result(self):
         app = LauncherApp.__new__(LauncherApp)

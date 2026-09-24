@@ -5,6 +5,8 @@ from ctypes import wintypes
 import threading
 from typing import Callable
 
+from .window_geometry import cursor_location
+
 
 MOD_ALT = 0x0001
 MOD_CONTROL = 0x0002
@@ -16,41 +18,6 @@ VK_V = 0x56
 VK_CONTROL = 0x11
 KEYEVENTF_KEYUP = 0x0002
 WM_HOTKEY = 0x0312
-MONITOR_DEFAULTTONEAREST = 0x00000002
-
-
-class MonitorInfo(ctypes.Structure):
-    _fields_ = [
-        ("cbSize", wintypes.DWORD),
-        ("rcMonitor", wintypes.RECT),
-        ("rcWork", wintypes.RECT),
-        ("dwFlags", wintypes.DWORD),
-    ]
-
-
-def cursor_location() -> tuple[int, int, int, int, int, int]:
-    """Return cursor coordinates and the nearest monitor work area."""
-    user32 = ctypes.windll.user32
-    user32.MonitorFromPoint.argtypes = [wintypes.POINT, wintypes.DWORD]
-    user32.MonitorFromPoint.restype = wintypes.HANDLE
-    user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MonitorInfo)]
-    user32.GetMonitorInfoW.restype = wintypes.BOOL
-    point = wintypes.POINT()
-    if not user32.GetCursorPos(ctypes.byref(point)):
-        raise OSError("Windows could not read the cursor position.")
-    monitor = user32.MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST)
-    info = MonitorInfo()
-    info.cbSize = ctypes.sizeof(MonitorInfo)
-    if not monitor or not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
-        raise OSError("Windows could not read the cursor monitor.")
-    return (
-        int(point.x),
-        int(point.y),
-        int(info.rcWork.left),
-        int(info.rcWork.top),
-        int(info.rcWork.right),
-        int(info.rcWork.bottom),
-    )
 
 
 def send_copy_shortcut() -> None:

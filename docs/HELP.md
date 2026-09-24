@@ -221,8 +221,12 @@ Harvest source automatically.
   Output occupies about 60%. Drag the vertical divider to adjust that balance
   for the current session.
 - Press `F9` or `Ctrl+Alt+P` to capture the current text selection and show the resident palette. On laptops in media-key mode, use `Fn+F9` or enable Fn Lock.
-- The mouse cursor chooses the monitor when `F9` or `Ctrl+Alt+P` is pressed;
-  the palette opens in the middle of that monitor's usable area.
+- The mouse cursor chooses the monitor at startup, ordinary Show, or when
+  `F9` / `Ctrl+Alt+P` is pressed. The palette opens in the middle of that
+  monitor's usable area, including screens arranged left of or above the main
+  screen. Each new opening checks the monitor again, so returning to laptop-only
+  use does not reuse an old external-screen location. Hotkeys keep the monitor
+  chosen when pressed, even if the pointer moves during selection capture.
 - Configuration, Help, action editors, pickers, Sheets, AI, Inbox, Harvest, and
   Work Item windows open in the middle of the usable area of their owner's
   current monitor. Moving an owning window to another monitor before opening

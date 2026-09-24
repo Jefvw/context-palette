@@ -151,6 +151,9 @@ from .vscode_integration import (
     open_workspace_path_in_vscode,
 )
 from .window_geometry import (
+    SCREEN_HORIZONTAL_MARGIN,
+    SCREEN_VERTICAL_MARGIN,
+    absolute_window_position,
     centered_work_area_position,
     configure_main_window,
     configure_standard_window,
@@ -1503,12 +1506,13 @@ class LauncherApp:
             pass
         self.show_requests.put(request)
 
-    def show_window(self) -> None:
-        self._reveal_window(
+    def show_window(self, *, position_request: dict[str, str] | None = None) -> None:
+        if self._reveal_window(
             sync_workspace=True,
             focus_search=True,
             temporary_attention=True,
-        )
+        ):
+            self._position_for_hotkey(position_request)
 
     def _reveal_window(
         self,
@@ -1936,26 +1940,35 @@ class LauncherApp:
             self.captured_selection = value.strip() or None
         except tk.TclError:
             self.captured_selection = None
-        self.show_window()
-        self._position_for_hotkey(request)
+        self.show_window(position_request=request)
         if self.captured_selection is not None:
             self._set_workspace_text(self.captured_selection)
 
-    def _position_for_hotkey(self, request: dict[str, str]) -> None:
+    def _position_for_hotkey(self, request: dict[str, str] | None = None) -> None:
         keys = ("cursor_x", "cursor_y", "work_left", "work_top", "work_right", "work_bottom")
-        if not all(key in request for key in keys):
-            return
-        try:
-            values = [int(request[key]) for key in keys]
-        except ValueError:
+        if request is None or not all(key in request for key in keys):
+            try:
+                values = cursor_location()
+            except (AttributeError, OSError):
+                return
+        else:
+            try:
+                values = tuple(int(request[key]) for key in keys)
+            except ValueError:
+                return
+        if values[4] <= values[2] or values[5] <= values[3]:
             return
         self.root.update_idletasks()
-        width = max(self.root.winfo_width(), self.root.winfo_reqwidth())
-        height = max(self.root.winfo_height(), self.root.winfo_reqheight())
+        # Center the settled size, including a user's manual resize, rather
+        # than the larger size the child widgets might prefer.
+        width = self.root.winfo_width()
+        height = self.root.winfo_height()
         work_width = values[4] - values[2]
         work_height = values[5] - values[3]
-        fitted_width = min(width, work_width)
-        fitted_height = min(height, work_height)
+        # Keep the standard breathing room for the native frame/title bar
+        # when returning from a larger display to a smaller laptop screen.
+        fitted_width = min(width, max(1, work_width - SCREEN_HORIZONTAL_MARGIN))
+        fitted_height = min(height, max(1, work_height - SCREEN_VERTICAL_MARGIN))
         if (fitted_width, fitted_height) != (width, height):
             minimum_width, minimum_height = self.root.minsize()
             self.root.minsize(
@@ -1967,7 +1980,7 @@ class LauncherApp:
             width, height = fitted_width, fitted_height
         work_area = (values[2], values[3], values[4], values[5])
         x, y = centered_work_area_position((width, height), work_area)
-        self.root.geometry(f"{x:+d}{y:+d}")
+        self.root.geometry(absolute_window_position(x, y))
 
     def _load_actions(self) -> bool:
         try:

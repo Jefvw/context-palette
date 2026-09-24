@@ -26,6 +26,42 @@ class _MonitorInfo(ctypes.Structure):
     ]
 
 
+def cursor_location() -> tuple[int, int, int, int, int, int]:
+    """Read the cursor and its monitor using the same native types as Tk placement.
+
+    This also runs on the hotkey thread; it must not call Tk. Sharing the
+    MONITORINFO type avoids competing ctypes signatures on GetMonitorInfoW.
+    """
+    user32 = ctypes.windll.user32
+    user32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
+    user32.GetCursorPos.restype = wintypes.BOOL
+    user32.MonitorFromPoint.argtypes = [wintypes.POINT, wintypes.DWORD]
+    user32.MonitorFromPoint.restype = wintypes.HANDLE
+    user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_MonitorInfo)]
+    user32.GetMonitorInfoW.restype = wintypes.BOOL
+    point = wintypes.POINT()
+    if not user32.GetCursorPos(ctypes.byref(point)):
+        raise OSError("Windows could not read the cursor position.")
+    monitor = user32.MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST)
+    info = _MonitorInfo()
+    info.cbSize = ctypes.sizeof(_MonitorInfo)
+    if not monitor or not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+        raise OSError("Windows could not read the cursor monitor.")
+    return (
+        int(point.x), int(point.y), int(info.rcWork.left), int(info.rcWork.top),
+        int(info.rcWork.right), int(info.rcWork.bottom),
+    )
+
+
+def absolute_window_position(x: int, y: int) -> str:
+    """Encode desktop coordinates, including screens left of/above the primary.
+
+    Tk's leading '-' anchors to the right/bottom edge. A literal '+' followed
+    by a signed number keeps the left/top anchor (for example '+-1350+240').
+    """
+    return f"+{x}+{y}"
+
+
 def standard_window_size(screen_width: int, screen_height: int) -> tuple[int, int]:
     """Return the standard size, reduced only when the current screen requires it."""
     return (
@@ -173,27 +209,30 @@ def place_child_window(
         )
     else:
         x, y = centered_work_area_position((width, height), work_area)
-    window.geometry(f"{width}x{height}{x:+d}{y:+d}")
+    window.geometry(f"{width}x{height}{absolute_window_position(x, y)}")
     return width, height, x, y
 
 
 def configure_standard_window(
     window: tk.Tk | tk.Toplevel,
     owner: tk.Misc | None = None,
+    *,
+    work_area: WindowBounds | None = None,
 ) -> None:
     """Give an application screen shared, monitor-safe dimensions and placement."""
-    if owner is None:
-        window.update_idletasks()
-        work_area = window_monitor_work_area(window)
-    else:
-        work_area = window_monitor_work_area(owner.winfo_toplevel())
+    if work_area is None:
+        if owner is None:
+            window.update_idletasks()
+            work_area = window_monitor_work_area(window)
+        else:
+            work_area = window_monitor_work_area(owner.winfo_toplevel())
     left, top, right, bottom = work_area
     screen_width = right - left
     screen_height = bottom - top
     width, height = standard_window_size(screen_width, screen_height)
     if owner is None:
         x, y = centered_work_area_position((width, height), work_area)
-        window.geometry(f"{width}x{height}{x:+d}{y:+d}")
+        window.geometry(f"{width}x{height}{absolute_window_position(x, y)}")
     else:
         place_child_window(window, owner, size=(width, height))
     window.minsize(
@@ -203,5 +242,9 @@ def configure_standard_window(
 
 
 def configure_main_window(window: tk.Tk) -> None:
-    """Give the main launcher the same compact screen-aware size as other screens."""
-    configure_standard_window(window)
+    """Start the compact launcher on the cursor's monitor, when available."""
+    try:
+        work_area = cursor_location()[2:]
+    except (AttributeError, OSError):
+        work_area = None
+    configure_standard_window(window, work_area=work_area)

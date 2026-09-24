@@ -1288,7 +1288,11 @@ Native Windows hotkey and selection-copy support using `ctypes`.
 - Runs the Windows message loop on a daemon thread.
 - Queues activation back to `LauncherApp`; it does not manipulate Tk widgets from the background thread.
 - Sends a constrained `Ctrl+C` sequence before the palette takes focus.
-- Captures cursor coordinates and the nearest monitor work area in the hotkey thread, then uses the cursor as the palette's top-left anchor. The position is clamped only when needed to keep the complete window on-screen.
+- Captures cursor coordinates and the nearest monitor work area in the hotkey
+  thread, then centers the palette in that monitor's usable area after selection
+  capture. `window_geometry.py` owns the native cursor lookup and shared
+  `MONITORINFO` type; `hotkeys.py` re-exports the lookup. UI and hotkey calls must
+  not assign conflicting pointer types to the cached `GetMonitorInfoW` function.
 
 ### `contexts.py`
 
@@ -1818,8 +1822,14 @@ usable Windows work area of its own or its owner's current monitor, centers in
 that work area, and reduces only when the monitor cannot fit its requested
 size. This includes auto-sized Work Item dialogs and the larger Harvest
 window. The main window uses the same compact screen-aware `780x600` default
-and `700x480` minimum; F9 and Ctrl+Alt+P use the cursor to choose the monitor,
-then center the palette in that monitor's usable work area. Compact selection
+and `700x480` minimum. Startup and ordinary Show resolve the current cursor
+monitor; F9 and Ctrl+Alt+P use the cursor monitor captured at activation. All
+center the palette in that monitor's usable work area. Internal text-placement
+reveals retain their position and existing clipboard-free behavior.
+`absolute_window_position` encodes left/top-relative Tk coordinates with a
+literal `+` before each signed value (for example `+-1350+240`); a leading `-`
+would instead anchor to the opposite screen edge and misplace left/upper screens.
+Compact selection
 popups remain anchored to their control and move above it when needed. Native
 menus and widget tooltips also retain their control-anchored placement paths.
 

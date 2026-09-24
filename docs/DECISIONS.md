@@ -3496,3 +3496,24 @@ in Active Actions. This supersedes the 2026-07-17 direct-button interaction,
 2026-07-27 dual launcher presentations, 2026-07-30 **Unsorted** projection, and
 2026-08-03 first-available launcher execution while retaining their persisted
 data compatibility.
+
+## 2026-09-24 - Center Palette on one cursor-selected screen
+
+**Decision:** Correct negative desktop coordinates using explicit left/top Tk
+anchors. Startup and ordinary Show now choose the current cursor monitor; F9
+and Ctrl+Alt+P retain their captured monitor while selection is copied. Center
+using the actual resized window, reducing oversized windows with the existing
+standard margins on smaller displays. Child dialogs retain owner-monitor
+selection and use the corrected coordinate encoding. Internal text-placement
+reveals keep their existing behavior.
+
+**Reason:** The owner's three-screen report exposed a distinction between signed
+Windows desktop coordinates and Tk geometry's right/bottom-edge offsets. Two
+different native monitor structures also competed for the same cached ctypes
+function signature; one geometry-owned implementation removes that race.
+
+**Consequences:** Monitor information is read for each new activation rather than
+persisting a machine's topology. No new dependency or user setting is needed.
+Simulated layouts and an invisible real Tk coordinate check are automated
+evidence; physical mixed-scaling and docking UAT on the affected PC remain open.
+This extends the 2026-08-24 centering policy to startup and ordinary Show.

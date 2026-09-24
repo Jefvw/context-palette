@@ -4,6 +4,12 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Fixed window placement on multi-monitor Windows desktops, including screens
+  left of or above the primary screen. Startup and ordinary Show now center on
+  the cursor's monitor; F9 / Ctrl+Alt+P keep the monitor captured at activation.
+  Child dialogs also use correct absolute coordinates. Monitor lookup shares
+  one native definition across the UI and hotkey threads.
+
 - Extended the constrained **Save current score as PDF** Action to the supported
   Ultimate Guitar Guitar Pro tab URL shape as well as Official scores. The exact
   supported URL type must agree with the displayed document title; ordinary text

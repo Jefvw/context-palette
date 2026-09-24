@@ -47,6 +47,9 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
             (data / "cheatsheets").mkdir()
             root = tk.Tk()
             root.withdraw()
+            # Show now follows the pointer; keep disposable test windows
+            # invisible even when placement moves them back onto a monitor.
+            root.attributes("-alpha", 0)
             original_scaling = float(root.tk.call("tk", "scaling"))
             root.tk.call("tk", "scaling", scaling)
             clipboard_get = stack.enter_context(patch.object(root, "clipboard_get", return_value="Clipboard fixture"))

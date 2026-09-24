@@ -8,6 +8,42 @@ recorded on 2026-09-09. Its checklist remains available for optional follow-up.
 Keep that decision separate from per-check results, automated output and
 simulated DPI; unreported manual checks remain unverified.
 
+## Multi-monitor placement regression (2026-09-24)
+
+The owner reported Palette straddling two displays on a laptop with two external
+screens. Code review found signed desktop coordinates encoded as Tk right/bottom
+offsets. Regression coverage now checks absolute negative X/Y in a real invisible
+Windows Tk test window, synthetic left/primary/raised monitor locations, startup
+and ordinary Show, a fresh laptop-only location after undocking, captured hotkey
+location, manual resize centering, oversized-window fitting, and interleaved
+native monitor calls. The Tk window is undecorated and the monitor topology is
+synthetic; these checks do not establish physical three-monitor or mixed-DPI UAT.
+
+Full working-tree verification (including separate, pending OneNote work): all
+159 focused geometry/hotkey/launcher-interaction/enhancement UI tests passed in
+20.379 seconds. The complete `check-context-palette.bat` passed
+configuration validation, compilation and 1,591 tests with 2 skipped in 275.519
+seconds. The first sandboxed attempt could not launch the profile Python;
+the unchanged command succeeded with normal Windows access. Independent
+read-only review found no remaining blocker after the resize regression fix.
+
+Monitor-only release verification: the staged source was exported to an
+isolated temporary directory, without pending OneNote modules or personal
+runtime data, and checked using the existing Python environment. Its full
+`check-context-palette.bat` passed configuration validation, compilation and
+1,487 tests with 2 skipped in 168.500 seconds. The 11-file staged diff passed
+whitespace and independent scope/privacy/dependency review. Physical monitor
+and mixed-scaling UAT remains pending.
+
+Pending owner check on the affected PC: after installing the updated code and
+restarting Palette, move the pointer to each screen and open with F9 / Ctrl+Alt+P.
+Confirm the whole window centers on that screen, including any screen left of
+or above the primary. Repeat an ordinary launcher open and a manually resized
+window. Disconnect external displays, open again on the laptop, reconnect and
+repeat; check a child dialog on the chosen screen too. Preserve current Input /
+Output before restarting. No live application restart or personal data change
+is part of this automated check.
+
 ## Current Edge score PDF acceptance
 
 ### Guitar Pro tab extension (2026-09-15)
