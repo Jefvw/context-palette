@@ -29,9 +29,12 @@ class WebpagePdfIntegrationTests(unittest.TestCase):
         menu = Mock()
         app._save_workspace_webpage_as_pdf = Mock()
         app._populate_send_to_menu(menu)
-        menu.add_command.assert_called_once_with(
+        menu.add_command.assert_any_call(
             label="Save webpage as PDF…", command=app._save_workspace_webpage_as_pdf
         )
+        self.assertEqual(menu.add_command.call_count, 2)
+        menu.add_command.assert_any_call(label="OneNote — new text page…",
+            command=app._send_text_to_onenote, state="normal")
         app._save_workspace_webpage_as_pdf.assert_not_called()
         app.root.clipboard_get.assert_not_called()
 

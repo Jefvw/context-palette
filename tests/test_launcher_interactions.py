@@ -2129,7 +2129,7 @@ class LauncherInteractionTests(unittest.TestCase):
             message = app._run_excel_automation(
                 Action(
                     "excel-live-text",
-                    "UAT: Convert scientific-notation columns",
+                    "Convert Excel values to text",
                     "General",
                     "excel_automation",
                     "excel.convert_live_column_representation",
@@ -2633,7 +2633,7 @@ class LauncherInteractionTests(unittest.TestCase):
 
         self.assertEqual(
             menu.labels,
-            ["Paste a webpage URL or file paths first", "Save webpage as PDF…"],
+            ["OneNote — new text page…", "Paste a webpage URL or file paths first", "Save webpage as PDF…"],
         )
         self.assertEqual(
             menu.options_for(menu.labels[0])["state"],
@@ -2716,7 +2716,7 @@ class LauncherInteractionTests(unittest.TestCase):
             ):
                 app._populate_send_to_menu(menu)
 
-            self.assertEqual(menu.labels[0], "Copy 2 file paths to:")
+            self.assertEqual(menu.labels[:2], ["OneNote — new text page…", "Copy 2 file paths to:"])
             self.assertIn(
                 f"Selected Work Item — {selected_item.display_name}",
                 menu.labels,

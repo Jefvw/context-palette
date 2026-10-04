@@ -1,14 +1,121 @@
 # Changelog
 
+## Pending — Send text to OneNote (2026-09-28)
+
+This records the original flow. The 2026-10-03 single-Send improvement below
+supersedes its separate Review step; attended host acceptance remains pending.
+
+- Input / Output **Send to → OneNote — new text page…** captures complete text,
+  remembers an exact existing section separately from search, and requires
+  Review then **Send one page**. Opening or editing performs no OneNote read.
+- A send creates one plain-text page without changing Input / Output or navigating
+  OneNote. Unknown or partial outcomes stay visible, retain known page IDs in
+  session-only details, and never trigger automatic retry or deletion.
+- Host implementation and synthetic verification are separate from live UAT;
+  this new host flow still requires scoped, attended acceptance.
+
 This project has not published a versioned release. Changes are recorded under **Unreleased** until a release process and versioning policy are chosen.
 
 ## Unreleased
+
+- Reduced Drop height further: one information line, a compact history counter
+  beside Settings, and two visible button rows. Long names/messages are shortened
+  only on the summary line; Show details provides full information even before
+  the first drop. Keyboard access, retained content and exact resend remain.
+
+- Made the collapsed Drop window smaller while retaining visible history,
+  Send again, Show details, Settings and Hide. Long labels wrap; details still
+  expands. Initial placement now includes Windows title-bar and border space.
+- Renamed the shipped conversion Action to **Convert Excel values to text**
+  and replaced UAT jargon with a plain build-restriction explanation. The
+  existing startup execution restriction remains; personal Action titles are
+  not rewritten.
+
+- Made Excel conversion Review optional. Select columns and choose **Convert**:
+  background planning validates the exact selection, then the engine creates its
+  backup and converts without another review click for ready plans with no
+  precision risk. Reported precision risk uses a short acknowledgement screen.
+  Request tickets and consumed authority prevent duplicate or stale callbacks
+  from executing again. Prepared the engine-owner handover for one refreshed
+  backup; current `1.0` still refuses replacement and the UAT gate is unchanged.
+
+- Simplified the attended Excel text-conversion review: select separate columns
+  with single clicks, scan cell counts and three Before → After examples, and
+  use a conversion button that stays visible. Technical fingerprints and full
+  samples are behind **Show details**; exact targets, recovery paths, precision
+  acknowledgement and Undo guidance remain visible. Long review text wraps when
+  the window is resized. Changing columns reuses inspection but requires a fresh
+  plan. The existing Development/UAT execution restriction is unchanged.
+
+- Strengthened attended Excel text-conversion result handling: contradictory
+  clean-failure receipts are rejected, partial failures retain recovery and
+  inspection guidance even when Excel reports no unsaved changes, and stale
+  scope failures require a fresh review. Conversion reviews always warn that
+  Excel Undo history may be cleared, including when the engine sends no warning.
+  A fresh disposable Palette-to-real-Excel check passed 5 conversions, 3
+  compliant cells, all 16 true blanks, recovery and open-unsaved lifecycle.
+  Disjoint selection used a private UAT preset; the UAT label and startup gate
+  remain pending deployable engine evidence and broader acceptance.
+
+- Fixed two live scientific-notation conversion review failures: formulas now
+  reconcile as a separate preflight cell class, so a formula outside the chosen
+  columns does not prevent inspection; and recovery paths selected by the Windows
+  picker use native separators before the exact plan-response check. Formulas
+  inside the chosen scope still block conversion, and different recovery files
+  are still rejected.
+
+- Simplified **Send text to OneNote** to one **Send to OneNote** action. The window
+  now shows the locally normalized final title and complete body before that click,
+  consumes the request immediately, and retains the existing canonical-plan,
+  exact-section and five-minute authorization checks in the background. Busy-only
+  cancellation, attempt-only result details, and an acknowledgement that never
+  verifies uncertain results make the current state clearer. Host live UAT remains
+  pending explicit approval.
 
 - Fixed window placement on multi-monitor Windows desktops, including screens
   left of or above the primary screen. Startup and ordinary Show now center on
   the cursor's monitor; F9 / Ctrl+Alt+P keep the monitor captured at activation.
   Child dialogs also use correct absolute coordinates. Monitor lookup shares
   one native definition across the UI and hotkey threads.
+
+- Corrected a misleading OneNote engine-repair message after a notebook read
+  fails. The engine's known desktop-bridge error now keeps the saved engine and
+  exact notebook choice, clears old results/readiness, and asks you to check
+  that the notebook is open before explicitly retrying. It never widens scope
+  or claims to know that the notebook is closed.
+
+- OneNote now finds a neighbouring `python-onenote` engine automatically when no
+  engine is configured. Discovery uses Palette's installation location, ignores
+  the working directory and never overrides a saved engine. Missing, invalid or
+  unusable engines require repair while preserving a valid notebook preference.
+  Finding the launcher performs no engine call or OneNote read and saves no override.
+
+- Simplified OneNote setup: remember the engine and a preferred notebook on this
+  PC, then Search checks and connects automatically. Choose notebook lists open
+  notebook names only when requested. Searches stay in the chosen notebook;
+  missing notebooks stop safely and changing the engine preserves the scope.
+  Opening the picker or typing does not read OneNote. Preview and placement
+  remain explicit; private settings stay excluded from Git and backup.
+
+- Corrected the OneNote placement handoff: Replace and Append now reveal and
+  focus the main Input / Output editor without reading the clipboard. A hidden
+  main window previously encouraged a fresh F9/Show, which could replace the
+  reviewed note with the old clipboard text. Cancel keeps the current view.
+
+- Added the first attended, read-only **Find OneNote notes…** workflow
+  (2026-09-16): explicit search through
+  a separately prepared Python OneNote engine, human selection, basic-text
+  preview and Replace/Append/Cancel placement. Search includes unindexed pages
+  and shows at most 20 matches; truncated 50,000-character previews cannot be
+  applied. Requests run in the background with owned-process cleanup and stale
+  result/readiness checks; OneNote and the clipboard remain unchanged. The
+  private launcher setting is excluded from backup. Owner screenshots show live
+  search and complete preview, followed by owner-confirmed corrected placement.
+  A subsequent attended Windows check verified remembered engine/notebook reuse
+  across Palette restart, scoped search, complete preview, visible placement
+  choices and Undo. Unavailable-notebook UAT, broader coverage, performance goals
+  and space/Unicode checkout deployment remain pending. Earlier disposable engine
+  UAT is separate evidence; see the detailed evidence limits in docs/TESTING.md.
 
 - Extended the constrained **Save current score as PDF** Action to the supported
   Ultimate Guitar Guitar Pro tab URL shape as well as Official scores. The exact
@@ -165,7 +272,13 @@ This project has not published a versioned release. Changes are recorded under *
   partial mutation, and unknown process outcomes without automatic retry.
   Inventory, preflight, and planning remain available, but Execute is disabled
   unless `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1` was present when Context
-  Palette started. Real disposable mutation UAT remains pending.
+  Palette started. A bounded disposable live test on 2026-10-03 verified the
+  eligible nonblank conversions, recovery and unsaved lifecycle but exposed an
+  engine defect: selected true blanks became empty-string text. The engine
+  working tree's corrected direct COM write passed focused engine UAT on
+  2026-10-04 but is not yet committed or Git-deployable. The UAT label and
+  execution gate remain pending deployable engine evidence and the remaining
+  host acceptance matrix.
 - Made virtual **General** visible as the fixed first row in Configure →
   Contexts. Its automatic all-Action/all-Work-Item membership, name, and
   lifecycle remain locked, while **Edit shortcuts…** now provides the missing

@@ -30,6 +30,57 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
     def setUp(self) -> None:
         gc.collect()
 
+    def test_onenote_placement_reveals_hidden_workspace_without_clipboard_sync(self):
+        for placement, expected in (("replace", "Reviewed note"),
+                                    ("append", "Original fixture\n\nReviewed note")):
+            with self.subTest(placement=placement), self.launcher() as fixture:
+                app, clipboard_get, clipboard_clear, clipboard_append = fixture
+                app.workspace_component.set_text("Original fixture")
+                app._set_workspace_visible(False)
+                app.root.withdraw()
+                review = tk.Toplevel(app.root)
+                workflow = Mock(window=review)
+                with patch("context_palette.launcher.OneNoteWindow", return_value=workflow) as factory:
+                    app._find_onenote_notes()
+                apply_text = factory.call_args.kwargs["apply_text"]
+                clipboard_get.reset_mock()
+                clipboard_clear.reset_mock()
+                clipboard_append.reset_mock()
+                def choose(dialog):
+                    dialog._choose(placement)
+                    return placement
+                with patch("context_palette.workspace_panel.TextPlacementDialog.show", new=choose):
+                    self.assertTrue(apply_text("Reviewed note", lambda: True))
+                app.root.update()
+                self.assertEqual(app.root.state(), "normal")
+                self.assertTrue(app.workspace_component.text.winfo_ismapped())
+                self.assertEqual(app.workspace_component.raw_text(), expected)
+                clipboard_get.assert_not_called()
+                clipboard_clear.assert_not_called()
+                clipboard_append.assert_not_called()
+                self.assertEqual(app.root.focus_get(), app.workspace_component.text)
+                app.workspace_component.text.edit_undo()
+                self.assertEqual(app.workspace_component.raw_text(), "Original fixture")
+
+    def test_cancelled_onenote_placement_does_not_reveal_or_change_workspace(self):
+        with self.launcher() as fixture:
+            app, clipboard_get, clipboard_clear, clipboard_append = fixture
+            app.workspace_component.set_text("Keep this text")
+            app.root.withdraw()
+            review = tk.Toplevel(app.root)
+            with patch("context_palette.launcher.OneNoteWindow", return_value=Mock(window=review)) as factory:
+                app._find_onenote_notes()
+            for clipboard_mock in (clipboard_get, clipboard_clear, clipboard_append):
+                clipboard_mock.reset_mock()
+            with patch("context_palette.workspace_panel.TextPlacementDialog.show",
+                       new=lambda dialog: dialog._cancel()):
+                self.assertFalse(factory.call_args.kwargs["apply_text"]("Reviewed note", lambda: True))
+            app.root.update()
+            self.assertEqual(app.root.state(), "withdrawn")
+            self.assertEqual(app.workspace_component.raw_text(), "Keep this text")
+            for clipboard_mock in (clipboard_get, clipboard_clear, clipboard_append):
+                clipboard_mock.assert_not_called()
+
     @contextmanager
     def launcher(self, *, scaling: float = 4 / 3, size: str = "780x600"):
         with tempfile.TemporaryDirectory() as temporary_directory, ExitStack() as stack:

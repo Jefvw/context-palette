@@ -24,6 +24,7 @@ from context_palette.drop_target_window import (
     drop_result_details,
     drop_result_summary,
 )
+from context_palette.style import configure_theme
 
 
 class _Dnd:
@@ -81,7 +82,9 @@ class DropTargetWindowTests(unittest.TestCase):
             target = DropTargetWindow(self.root, dropped, on_resend=resent, on_configure=configure)
             target.set_behavior_label("On drop: Uppercase")
             target.show()
-            self.assertEqual(target._behavior_label.cget("text"), "On drop: Uppercase")
+            self.assertIn("Uppercase", target._status.cget("text"))
+            target.details_button.invoke()
+            self.assertIn("On drop: Uppercase", target._details_text.get("1.0", "end-1c"))
             target.settings_button.invoke()
             configure.assert_called_once_with()
             result = DropResult(items=(DropItem("text", "example"),))
@@ -366,6 +369,8 @@ class DropTargetWindowTests(unittest.TestCase):
                 target._history_var.get(),
                 "Drop 1 of 3 - Text: 5 characters",
             )
+            self.assertIn("Text: 5", target._status.cget("text"))
+            self.assertEqual(target._history_count_var.get(), "1 / 3")
             self.assertEqual(str(target.previous_button.cget("state")), "disabled")
 
             target.send_again_button.invoke()
@@ -401,7 +406,8 @@ class DropTargetWindowTests(unittest.TestCase):
 
             self.assertEqual(str(target.details_button.cget("state")), "normal")
             self.assertEqual(target._details_frame.winfo_manager(), "")
-            target.window.geometry("+240+260")
+            # Keep room to expand leftward; the shorter target is narrower too.
+            target.window.geometry("+500+260")
             self.root.update_idletasks()
             compact_anchor = (
                 target.window.winfo_x() + target.window.winfo_width(),
@@ -417,23 +423,21 @@ class DropTargetWindowTests(unittest.TestCase):
                 target.window.winfo_y() + target.window.winfo_height(),
             )
             self.assertEqual(expanded_anchor, compact_anchor)
-            self.assertEqual(
-                target._details_text.get("1.0", "end-1c"),
+            self.assertTrue(target._details_text.get("1.0", "end-1c").endswith(
                 "Prepared dropped content (1 item)\n\n"
                 "1. Text - 10 characters, 1 line\n"
                 "later text",
-            )
+            ))
             self.assertEqual(str(target._details_text.cget("state")), "disabled")
 
             target.previous_button.invoke()
-            self.assertEqual(
-                target._details_text.get("1.0", "end-1c"),
+            self.assertTrue(target._details_text.get("1.0", "end-1c").endswith(
                 "Prepared dropped content (1 item)\n\n"
                 "1. Path\n"
                 "C:\\Dropped\\report.xlsx\n\n"
                 "Warnings\n"
                 "- Shortcut path was kept.",
-            )
+            ))
 
             target.hide()
             self.assertTrue(target.show())
@@ -445,6 +449,137 @@ class DropTargetWindowTests(unittest.TestCase):
             target.details_button.invoke()
             self.assertEqual(target._details_frame.winfo_manager(), "")
             self.assertEqual(target.details_button.cget("text"), "Show details")
+
+    def test_compact_target_keeps_controls_and_long_content_accessible_at_two_scales(self) -> None:
+        work_area = (0, 0, 1000, 700)
+        original_scaling = float(self.root.tk.call("tk", "scaling"))
+        self.addCleanup(self.root.tk.call, "tk", "scaling", original_scaling)
+        configure_theme(self.root)
+        configure = Mock()
+        resent = Mock()
+        with patch("context_palette.drop_target_window._load_tk_dnd", return_value=_Dnd), \
+             patch("context_palette.drop_target_window.main_window_monitor_work_area", return_value=work_area), \
+             patch("context_palette.drop_target_window.window_monitor_work_area", return_value=work_area), \
+             patch.object(tk.Toplevel, "drop_target_register", create=True), \
+             patch.object(tk.Toplevel, "dnd_bind", create=True):
+            for scale, maximum_size in ((1.3333333, (350, 115)), (2.0, (420, 160))):
+                with self.subTest(scale=scale):
+                    self.root.tk.call("tk", "scaling", scale)
+                    target = DropTargetWindow(
+                        self.root, Mock(), on_resend=resent, on_configure=configure,
+                    )
+                    self.assertTrue(target.show())
+                    self.root.update_idletasks()
+                    self.assertLessEqual(target.window.winfo_width(), maximum_size[0])
+                    self.assertLessEqual(target.window.winfo_height(), maximum_size[1])
+                    compact_size = (target.window.winfo_width(), target.window.winfo_height())
+                    self._assert_drop_window_controls_fit(target, work_area)
+
+                    first = DropResult(items=(DropItem("text", "retained input"),))
+                    second = DropResult(items=(DropItem("path", "C:\\" + "long folder\\" * 20 + "report.xlsx"),))
+                    target._complete(first)
+                    target._complete(second)
+                    behavior = "On drop: " + "A descriptive configured Action name " * 3
+                    target.set_behavior_label(behavior)
+                    self.root.update_idletasks()
+                    self._assert_drop_window_controls_fit(target, work_area)
+                    self.assertEqual((target.window.winfo_width(), target.window.winfo_height()), compact_size)
+                    self.assertNotIn("\n", target._status.cget("text"))
+
+                    target.previous_button.invoke()
+                    target.send_again_button.invoke()
+                    resent.assert_called_with(first)
+                    target.next_button.invoke()
+                    target.details_button.invoke()
+                    self.root.update_idletasks()
+                    self._assert_drop_window_controls_fit(target, work_area)
+                    self.assertIn(second.items[0].value, target._details_text.get("1.0", "end-1c"))
+                    self.assertIn(behavior, target._details_text.get("1.0", "end-1c"))
+                    target.settings_button.invoke()
+                    configure.assert_called_with()
+                    target.hide_button.invoke()
+                    self.assertEqual(target.window.state(), "withdrawn")
+                    self.assertEqual(target._drop_history, [first, second])
+                    self.assertTrue(target.show())
+                    self.assertFalse(target._details_visible)
+                    self.root.update_idletasks()
+                    self._assert_drop_window_controls_fit(target, work_area)
+                    target.window.destroy()
+
+    def test_full_information_is_available_before_any_drop_without_execution(self) -> None:
+        received = Mock()
+        coordinator = Mock(spec=DropResolutionCoordinator)
+        with patch("context_palette.drop_target_window._load_tk_dnd", return_value=_Dnd), \
+             patch.object(tk.Toplevel, "drop_target_register", create=True), \
+             patch.object(tk.Toplevel, "dnd_bind", create=True):
+            target = DropTargetWindow(self.root, received, coordinator=coordinator)
+            target.show()
+            self.assertEqual(target._history_count_var.get(), "0 / 0")
+            self.assertEqual(str(target.send_again_button.cget("state")), "disabled")
+            self.assertEqual(str(target.details_button.cget("state")), "normal")
+            target.details_button.invoke()
+            details = target._details_text.get("1.0", "end-1c")
+            self.assertIn("Drop files, folders, links or text here.", details)
+            self.assertIn("On drop: Show in Context Palette", details)
+            self.assertIn("Ready to receive a drop.", details)
+            self.assertIn("No recent drops.", details)
+            self.assertEqual(str(target._details_text.cget("state")), "disabled")
+            target._send_again()
+            received.assert_not_called()
+            coordinator.start.assert_not_called()
+
+    def test_long_error_and_action_names_keep_one_line_and_complete_keyboard_details(self) -> None:
+        with patch("context_palette.drop_target_window._load_tk_dnd", return_value=_Dnd), \
+             patch.object(tk.Toplevel, "drop_target_register", create=True), \
+             patch.object(tk.Toplevel, "dnd_bind", create=True):
+            target = DropTargetWindow(self.root, Mock(), on_configure=Mock())
+            target.show()
+            self.root.update_idletasks()
+            compact_size = (target.window.winfo_width(), target.window.winfo_height())
+            behavior = "Run: " + "A very descriptive Action name " * 10
+            target.set_behavior_label(behavior)
+            self.assertIn("Run:", target._status.cget("text"))
+            self.assertTrue(target._status.cget("text").endswith("…"))
+            error = "Cannot prepare this drop.\n" + "An important complete explanation. " * 20
+            target._set_status(error)
+            self.root.update_idletasks()
+            self.assertIn("Cannot prepare", target._status.cget("text"))
+            self.assertNotIn("\n", target._status.cget("text"))
+            self.assertEqual((target.window.winfo_width(), target.window.winfo_height()), compact_size)
+
+            # Details is an ordinary Tab-reachable button even with no history.
+            target.details_button.focus_force()
+            self.root.update()
+            self.assertEqual(target.window.focus_get(), target.details_button)
+            target.details_button.event_generate("<KeyPress-space>")
+            target.details_button.event_generate("<KeyRelease-space>")
+            self.root.update()
+            self.assertTrue(target._details_visible)
+            details = target._details_text.get("1.0", "end-1c")
+            self.assertIn(behavior, details)
+            self.assertIn(error, details)
+            self.assertFalse(target._drop_history)
+            target.set_behavior_label("Action blocked — review Settings")
+            self.assertTrue(target._status.cget("text").startswith("Action blocked"))
+            self.assertNotIn("Ready", target._status.cget("text"))
+
+    def test_initial_and_updated_positions_use_absolute_coordinates_on_left_above_monitor(self) -> None:
+        work_area = (-1600, -900, -600, -200)
+        target = DropTargetWindow(self.root, Mock())
+        window = Mock()
+        window.winfo_reqwidth.return_value = 300
+        window.winfo_reqheight.return_value = 180
+        window.winfo_exists.return_value = True
+        target.window = window
+        with patch("context_palette.drop_target_window.main_window_monitor_work_area", return_value=work_area), \
+             patch("context_palette.drop_target_window.window_monitor_work_area", return_value=work_area), \
+             patch.object(target, "_window_frame_offsets", return_value=(8, 31)):
+            target._position_lower_right(window)
+            window.geometry.assert_called_with("300x180+-940+-443")
+            target._fit_window_to_monitor(origin=(-1200, -800))
+            window.geometry.assert_called_with("300x180+-1200+-800")
+            target._fit_window_to_monitor(anchor=(-650, -250))
+            window.geometry.assert_called_with("300x180+-966+-469")
 
     def test_dynamic_content_keeps_every_control_inside_monitor_work_area(self) -> None:
         received: list[DropResult] = []
@@ -521,12 +656,18 @@ class DropTargetWindowTests(unittest.TestCase):
             target.send_again_button,
             target.details_button,
             target.hide_button,
+            target.settings_button,
+            target._status,
         ):
+            if widget is None:
+                continue
             with self.subTest(widget=widget):
                 widget_left = widget.winfo_rootx()
                 widget_right = widget_left + widget.winfo_width()
                 self.assertGreaterEqual(widget_left, window_left)
                 self.assertLessEqual(widget_right, window_right)
+                self.assertGreaterEqual(widget.winfo_rooty(), window_top)
+                self.assertLessEqual(widget.winfo_rooty() + widget.winfo_height(), window_bottom)
 
     def test_history_controls_are_disabled_while_a_drop_is_preparing(self) -> None:
         received: list[DropResult] = []

@@ -1035,6 +1035,139 @@ These commands deliberately affect different kinds of data:
 All permanent Palette deletion commands confirm the exact selected entity. A
 shared Built-in change also explains its Git and multi-computer impact.
 
+## Send text to OneNote
+
+Use **Input / Output → Send to → OneNote — new text page…** to create one page in
+an existing section. Open OneNote and the intended notebook yourself first.
+
+1. Put the complete text in Input / Output and open the Send command. It captures
+   that text; opening the window and editing its title do not access OneNote.
+2. Choose **Change…** beside Destination, then select the notebook and exact section.
+   This explicitly reads notebook names and that notebook's section metadata.
+   The section is remembered on this PC, independently of your search notebook.
+3. Edit **Page title**. Palette shows the final normalized title and complete
+   body locally before sending; a shortened suggested title is labelled as a
+   suggestion, stops at a word boundary where possible, and shows its count.
+   Line endings become ordinary line breaks; tabs and blank lines remain. Limits
+   are explained and refuse the input rather than silently shortening it.
+4. Choose **Send to OneNote** once. That click is your approval of the displayed
+   title, body and destination. Palette immediately consumes the request, then
+   plans and rechecks the exact section in the background before it creates one
+   new plain-text page. It keeps Input / Output intact and does not open or
+   navigate to the new page. Read the result before another send.
+5. To send different source text, choose **Use current Input / Output**. Any title,
+   source, destination or engine change needs a new Send. The same text can be
+   sent again deliberately with another explicit Send.
+
+There is no separate Review control. Opening, typing, and local normalization do
+not launch the engine or access OneNote. **Cancel request** appears only while a
+request is busy; it cannot undo a page that may already have been created. The
+engine control is kept in the quiet **Change engine…** area. **Result details…**
+appears after a Send attempt. **I've checked OneNote** appears only for an
+uncertain or partial outcome and acknowledges that warning; it never verifies a
+page.
+
+The optional engine uses the same remembered absolute launcher as Find OneNote
+notes. Only when none is configured does Palette check the direct sibling
+`python-onenote/python-onenote.bat`. A missing or broken explicit launcher needs
+**Change engine…**; it is never silently replaced. Engine reselection preserves
+both the independent search notebook and Send destination.
+
+Limits: title 255 characters / 512 UTF-8 bytes; body 50,000 characters / 128 KiB /
+1,000 lines. Oversized input is refused, never shortened. Section lists are bounded
+and paged internally; if they are too deep or incomplete, no choice is accepted.
+Unavailable or moved destinations require explicit reselection, never name matching.
+
+**A cancelled or interrupted Send may already have created a page.** A verified
+result confirms the new title and text. Other results distinguish no creation
+reported, unknown, page created without text, and text present but unverified.
+Inspect OneNote before sending again when the result is partial or unknown.
+**Result details…** retains any known page ID in this session for deliberate
+inspection. Close or Quit waits for a running request and requires acknowledgement
+of an uncertain result. Cancelling does not undo, delete or retry a page.
+Unconfirmed process cleanup blocks further requests and closing until investigated.
+
+This creates plain-text pages only: no append, tables, attachments, existing-page
+updates, automatic startup or navigation. The engine must already be prepared;
+Palette does not install dependencies. Sent text and results are not saved as
+history. Host live UAT is still pending; see the [attended plan](ONENOTE_SEND_UAT.md).
+
+## Find OneNote notes
+
+This optional read-only workflow searches OneNote and lets you use reviewed text.
+The owner confirmed search, preview and corrected Replace; remembered-notebook
+reuse and placement have partial live Windows evidence. Broader checks still
+need acceptance; see [Testing](TESTING.md). Use the separately
+prepared Python OneNote engine with its existing local environment. Setup
+requires Windows, Python 3.11+, OneNote desktop and its OneNote 15.0 PIA.
+Context Palette does not install dependencies, change Office settings, or start
+OneNote automatically. Open OneNote yourself before searching.
+
+1. Select useful text in **Input / Output**, then choose **Find OneNote notes…**
+   from its right-click menu or **Text tools**. Only selected text seeds the
+   query; without a selection, type a query in the new window.
+2. Palette reuses your saved engine. If none is configured, it checks the
+   neighbouring `python-onenote\python-onenote.bat` beside the Palette installation,
+   regardless of where you started Palette. If neither is available, use
+   **Choose engine…** to select the local launcher. Use **Change engine…** for repairs.
+3. Choose **Choose notebook…** once, select an open notebook, then **Use notebook**.
+   This command connects and lists open notebook names (at most 100). The choice
+   is remembered across restarts and shown above the search box. **All open
+   notebooks** remains an explicit alternative and the default for older settings.
+4. Type a nonblank query and choose **Search** or press Enter. Search is explicit,
+   checks the engine and connection automatically, searches only the shown scope,
+   includes indexed and unindexed pages, and displays at most 20 matches. Limited
+   results are labelled; narrow the query to find other notes. OneNote owns query
+   syntax and coverage, so an empty result does not prove a page is absent.
+5. Select a note by its title and available notebook/section breadcrumb, then
+   choose **Preview text**. Selecting a row does not read its page automatically.
+6. Review the basic plain text, then choose **Use text… → Replace / Append /
+   Cancel**. The chooser appears even when Input / Output is empty. Replace or
+   Append places only the reviewed text; Cancel and failures leave the workspace
+   unchanged. The clipboard remains unchanged throughout this workflow.
+   After Replace or Append, Palette brings Input / Output forward and focuses
+   the placed text. No F9 step is needed: F9 remains a fresh capture from the
+   foreground application and can replace Input / Output with clipboard text.
+
+Opening this window, typing, or changing the engine does not read OneNote.
+There are no separate Check setup or Connect steps. The first explicit command
+per window checks the engine and running app; further commands reuse readiness
+while the same OneNote process session remains available. An unavailable notebook
+stops the search without broadening it automatically. If OneNote reports only a
+general read failure, Palette asks you to make sure the notebook is open and
+choose **Search** again; your engine and notebook stay saved. If reopening does
+not resolve it, use **Choose notebook…** to select the intended open notebook
+again. This read error does not mean you need to change engines.
+Changing or relocating the engine preserves your notebook choice. Nothing is
+written, navigated to, or synchronized in OneNote.
+
+A missing, invalid or unusable saved engine requires repair; Palette never
+substitutes the neighbouring engine. Finding a sibling establishes its location
+only: capability checks and the acknowledged connection probe still wait for
+Search or Choose notebook. Discovery does not save an engine override, scan your
+PC, search PATH, or install anything. Saving a notebook alone keeps discovery
+available next time. Manually selected engines remain private per-PC preferences.
+
+Preview requests at most 50,000 characters. A limited preview is labelled and
+**Use text…** is disabled; a prefix cannot silently become the complete page.
+Formatting, attachments, ink and other rich content may be absent. If Input /
+Output changes during review, the placement chooser warns you and rechecks it
+before applying text; a further change requires another explicit review.
+
+Changing the query or selected note clears obsolete results/preview. **Cancel
+request**, Close and timeout cancel only engine processes owned by this window,
+never OneNote. Wait for cleanup before another request. A OneNote exit, restart,
+additional process or relevant backend failure invalidates the connection;
+the next explicit Search checks it again. Unconfirmed cleanup blocks further
+requests rather than retrying.
+
+Queries, titles, breadcrumbs, page IDs and previews stay transient: they are not
+logged, cached, added to All items, or saved as Actions, Work Items or search
+history. Explicitly placed text becomes ordinary Input / Output session content.
+The launcher path and your chosen notebook's exact identity and display name are
+saved in ignored `data/local_onenote_settings.json`. Configuration backup excludes
+this private per-PC setting; choose the engine and notebook again on another PC.
+
 ## Input / Output workspace
 
 Input / Output is the text-transformation workspace integrated with the action
@@ -1155,16 +1288,29 @@ The bottom communication line always stays one row high. Hover over it for the c
   changes before Apply, Refresh and select it again. For partial or unknown
   results, inspect the workbook before retrying. **Return to Excel** only tries
   to return focus to the window captured when you opened the Action.
-- To review a column-to-text conversion, run **UAT: Convert
-  scientific-notation columns**. It does not read Input / Output. It begins
+- To convert columns to text, run **Convert Excel values to text**.
+  It does not read Input / Output. It begins
   with the same live-Excel workbook, worksheet, captured-F9 preference, and
   Refresh controls as the format-template Action. Choose one visible worksheet,
-  then exact physical columns;
+  then exact physical columns. Click each column to select or clear it; Ctrl is
+  not needed. Arrow keys and Space also work. Choose **Convert**;
   blank and duplicate headers remain separate because columns are identified
   by index and letter. Context Palette pages the bounded read-only preflight,
   shows eligible, already-text, blank, formula, unsupported, and precision-risk
-  counts plus bounded samples, then asks Python Excel for an exact zero-write
-  plan. A selected-scope formula blocks execution.
+  counts plus bounded samples. Convert obtains an exact zero-write plan in the
+  background, then creates the backup and converts without a separate Review
+  click when the plan is ready. A selected-scope formula blocks execution.
+- **Review changes (optional)** lets you inspect how many cells will convert,
+  how many are already text,
+  empty, blocked or at risk of lost digits, and up to three **Before → After**
+  examples. The exact workbook, worksheet, column letters and recovery path
+  stay visible. **Show details** opens full samples and technical information
+  without changing the review. **Change columns** keeps the inspected list and
+  selection, but the next review creates a fresh plan. The **Convert N cells to
+  text** button stays at the bottom; there is one current status message. Review
+  itself never converts. If a direct Convert finds precision risks, a short
+  warning asks for acknowledgement and another explicit Convert; opening the
+  full review remains optional.
 - Python Excel chooses the default sibling recovery path. Choosing another
   future sibling `.xlsx` path creates a fresh plan; Context Palette never
   creates or overwrites the recovery workbook. If Excel may already have lost
@@ -1173,17 +1319,39 @@ The bottom communication line always stays one row high. Hover over it for the c
   verifies the reviewed recovery copy before mutation. It converts selected
   eligible values to text, never saves or closes Excel, and reports the exact
   completed columns and counts.
-- This Action is a Development/UAT feature. Set
+- The current engine creates one backup but refuses to replace an existing
+  file. The owner requested a single backup refreshed on each conversion; this
+  needs the engine change in [the single-backup handover](EXCEL_SINGLE_BACKUP_ENGINE_HANDOVER.md)
+  and a later host contract update. Until then, an existing backup blocks
+  conversion. Context Palette does not delete it or select another path
+  automatically. A later conversion also requires the user to save the source
+  first: the existing engine accepts only clean workbooks and never saves it.
+- Conversion is currently restricted to testing in this build.
+  Use disposable test workbooks only. The 2026-10-03 blank-preservation defect
+  was corrected in the Python Excel working tree and passed engine UAT on
+  2026-10-04. That fix is still uncommitted at engine HEAD `08af313`; Git
+  installation on another PC does not yet include it. The `1.0` interface
+  version alone does not identify a corrected engine. The execution
+  restriction remains pending deployable engine evidence and the
+  remaining host acceptance checks documented in `docs/TESTING.md`.
+  A fresh 2026-10-04 Palette-to-Excel disposable check passed conversion,
+  true-blank preservation, recovery and unsaved lifecycle. The later compact UI
+  passed separate fake-coordinator tests and Windows checks with simulated data;
+  those checks do not establish owner acceptance of the revised live workflow.
+  Set
   `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1` before starting Context Palette
-  and restart it to enable **Execute**; any other or missing value leaves
+  and restart it to enable **Convert N cells to text**; any other or missing value leaves
   discovery, inventory, preflight, and planning available but mutation
   disabled. From PowerShell, use
   `$env:CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION='1'; .\run-context-palette.bat`
   for that one app process. Close it and start normally to return to read-only
-  review. A clean failure means no live-workbook mutation began, although a
+  review. **Excel Undo history may be cleared:** use the reviewed recovery copy
+  for recovery. A clean failure means no live-workbook mutation began, although a
   verified recovery copy may exist. A partial failure or lost/unparseable
   engine result may mean partial or unknown effects: inspect Excel and the
-  reviewed recovery location, and never retry automatically.
+  reviewed recovery location, and never retry automatically. A partial outcome
+  remains partial even when Excel reports no unsaved changes; a failed first
+  write can produce that combination.
 - A transform changes the selection, or the complete field when nothing is selected.
 - Every transform result is copied to the clipboard automatically and can be reverted with one Undo.
 - Transform groups provide case and naming styles, whitespace cleanup, literal
@@ -1444,6 +1612,14 @@ Opens this document inside Context Palette.
 **Drop into Context Palette** is a small movable intake window owned by the
 same resident process. It alone is permanently always on top. The ordinary
 palette remains non-topmost and retains its existing auto-hide behavior.
+The compact layout has one information line above two button rows. It keeps
+Previous/Next, Send again, Show details, Hide and Settings visible. The counter
+shows the selected drop and total, such as **2 / 5**. Long names and messages
+are shortened with an ellipsis on that one line. **Show details** reveals the
+complete instructions, configured behaviour, current status, history description
+and prepared content, even before the first drop. It expands the window for
+reading without changing or truncating the retained drop. Initial placement
+accounts for the Windows title bar and borders to fit the usable monitor area.
 
 Drop one or more Explorer files or folders, a desktop `.url` or `.lnk`
 shortcut, an HTTP/HTTPS or `file:` link from a browser or OneNote, or a text
@@ -1457,8 +1633,9 @@ it cannot replace or receive the dropped material. Input / Output placement is
 one Undo step. The target remembers the last ten successful non-empty drops for
 this session. **Previous** and **Next** navigate a compact description such as
 the path name, web-link host, text length, or mixed item counts. Choose **Show
-details** to expand a read-only preview of exactly what will be sent to Input /
-Output, including shortcut warnings. Very large details say when the preview is
+details** to expand full Drop information and a read-only preview of exactly what
+will be sent to Input / Output, including shortcut warnings. Very large prepared
+content previews say when the preview is
 truncated; **Send again** still uses the complete prepared result. Details
 collapse when the target is hidden or a new drop starts. Changing summaries or
 details keeps all text, navigation controls, and window buttons inside the
@@ -1777,6 +1954,8 @@ placements without changing the external target.
 - `data/local_work_item_settings.json`: ignored generic Excel template path.
 - `data/local_excel_automation_settings.json`: ignored machine-local path to
   the separately bootstrapped Python Excel engine.
+- `data/local_onenote_settings.json`: ignored private machine-local Python
+  OneNote launcher and preferred notebook, excluded from configuration backup and Git.
 - `data/local_text_action_source.txt`: ignored default source offered when
   creating a personal text-file transformation.
 - `data/cheatsheets`: reviewed cheat sheets shared through Git.

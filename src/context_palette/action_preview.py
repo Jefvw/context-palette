@@ -533,18 +533,16 @@ def build_action_preview(
             )
         if action.value == LIVE_TEXT_CONVERSION_AUTOMATION_ID:
             return ActionPreview(
-                "an already-open .xlsx workbook, exact worksheet, and physical columns you review",
+                "an already-open .xlsx workbook, exact worksheet, and physical columns you select",
                 (
-                    "plan selected scientific-notation and numeric cells, create "
-                    "and verify a reviewed recovery copy, then convert eligible "
-                    "cells to text"
+                    "create and verify a backup, then convert selected "
+                    "scientific-notation and numeric values to text; Review is optional"
                 ),
                 details,
                 (
-                    "Development/UAT workflow. Execute is disabled unless its "
-                    "startup feature flag is enabled. Excel may already have lost "
-                    "digits beyond its numeric precision; the engine never saves "
-                    "or closes Excel."
+                    "Conversion is restricted to testing in this build. Excel may "
+                    "already have lost digits beyond its numeric precision; conversion "
+                    "cannot restore them. The engine never saves or closes Excel."
                 ),
             )
         csv_limitations = (
@@ -712,7 +710,7 @@ def _configured_details(action: Action) -> tuple[tuple[str, str], ...]:
         label = {
             LIVE_FORMAT_PROFILE_AUTOMATION_ID: "Apply Excel format template",
             LIVE_TEXT_CONVERSION_AUTOMATION_ID: (
-                "UAT: Convert scientific-notation columns"
+                "Convert Excel values to text"
             ),
         }.get(action.value, "Export Excel files to CSV")
         return (("Automation", label),)

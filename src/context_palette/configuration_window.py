@@ -150,7 +150,7 @@ ACTION_TYPE_EXAMPLES = {
     "send_files_to_folder": r"Example: Send the reviewed Input / Output file list to %PROJECT_ROOT%\exports.",
     "save_edge_score_pdf": r"Example: Choose the PDF folder, such as C:\Music\Scores. Open an Official Ultimate Guitar score in Edge, select its instrument, then press F9 to run this Action. Existing PDFs are kept.",
     "launch_app": r"Example: Start C:\Tools\Example\Example.exe with reviewed arguments.",
-    "excel_automation": "Example: Export Input / Output workbooks, format an open workbook, or review selected live columns for UAT-gated conversion to text.",
+    "excel_automation": "Example: Export Input / Output workbooks, format an open workbook, or convert selected columns to text with optional Review. Conversion to text is restricted to testing in this build.",
     "sequence": "Example: Start an import Action, wait briefly, then open its results folder.",
     "paste_credential": "Example: Paste the Windows or generic credential target oracle-pc17.",
     "build_url_open": "Example: Ask for ABC 123, then copy and open its generated website address.",
@@ -4789,7 +4789,7 @@ class ActionDialog:
             self.excel_automation_choices = {
                 "Export Excel workbooks to CSV": EXCEL_AUTOMATION_ID,
                 "Apply Excel format template": LIVE_FORMAT_PROFILE_AUTOMATION_ID,
-                "UAT: Convert scientific-notation columns": (
+                "Convert Excel values to text": (
                     LIVE_TEXT_CONVERSION_AUTOMATION_ID
                 ),
             }

@@ -119,6 +119,9 @@ from .file_transfer_window import FileTransferWindow
 from .webpage_pdf import WebpagePdfError, suggested_pdf_name, validate_webpage_url
 from .webpage_pdf_window import WebpagePdfWindow
 from .edge_score_pdf_window import EdgeScorePdfWindow
+from .onenote_window import OneNoteWindow
+from .onenote_send_window import OneNoteSendWindow
+from .onenote_send import normalize_text, suggested_title, SendError
 from .resource_operations import (
     CopyFilesRequest,
     EdgeScorePdfRequest,
@@ -1153,7 +1156,8 @@ class LauncherApp:
             capture=self._capture_clipboard,
             show_inbox=self._show_inbox,
             populate_send_to_menu=self._populate_send_to_menu,
-            text_change_callback=self._update_preview,
+            text_change_callback=self._workspace_text_changed,
+            find_onenote=self._find_onenote_notes,
         )
         # Compatibility aliases keep launcher orchestration and integrations
         # independent while callers migrate to the focused component.
@@ -1173,6 +1177,71 @@ class LauncherApp:
             self.workspace_component.inbox_button,
             self.action_discovery_panel.edit_button,
         ]
+
+    def _workspace_text_changed(self) -> None:
+        self._update_preview()
+        send = getattr(self, "onenote_send_window", None)
+        if send is not None:
+            send.source_changed()
+
+    def _send_text_to_onenote(self) -> None:
+        existing = getattr(self, "onenote_send_window", None)
+        if existing is not None:
+            existing.show()
+            return
+        def source_snapshot():
+            component = self.workspace_component
+            return component.raw_text(), getattr(component, "text_revision", 0)
+        text, _revision = source_snapshot()
+        try:
+            normalize_text(suggested_title(text), text)
+        except SendError as exc:
+            self.status_var.set(str(exc))
+            return
+        self.onenote_send_window = OneNoteSendWindow(
+            self.root, settings_path=self.data_paths.onenote_settings_file,
+            destination_path=self.data_paths.onenote_send_settings_file,
+            source_reader=source_snapshot,
+        )
+
+    def _find_onenote_notes(self) -> None:
+        existing = getattr(self, "onenote_window", None)
+        if existing is not None:
+            existing.show()
+            return
+        panel = self.workspace_component
+        try:
+            query = panel.text.get(tk.SEL_FIRST, tk.SEL_LAST)
+        except tk.TclError:
+            query = ""
+        expected_text = panel.raw_text()
+
+        def apply_text(value: str, is_current: Callable[[], bool]) -> bool:
+            placed = panel.apply_reviewed_text(
+                value, expected_text=expected_text, is_current=is_current,
+                parent=self.onenote_window.window,
+            )
+            if placed is not None:
+                self.captured_selection = None
+                self.source_foreground_handle = None
+                # The picker can outlive a hidden/covered main window. Reveal
+                # the accepted text directly: normal Show/F9 imports clipboard
+                # input and would replace this deliberately clipboard-free result.
+                self._reveal_window(
+                    sync_workspace=False,
+                    focus_search=False,
+                    temporary_attention=False,
+                )
+                self._set_workspace_visible(True)
+                self.root.after_idle(panel.text.focus_set)
+                self.status_var.set("Reviewed OneNote text placed in Input / Output.")
+            return placed is not None
+
+        self.onenote_window = OneNoteWindow(
+            self.root, settings_path=self.data_paths.onenote_settings_file,
+            initial_query=query, apply_text=apply_text,
+            on_close=lambda: setattr(self, "onenote_window", None),
+        )
 
     def _tooltip(self, widget: tk.Widget, text: str | Callable[[], str]) -> None:
         self.widget_tooltips.append(WidgetTooltip(widget, text))
@@ -1749,6 +1818,14 @@ class LauncherApp:
         self.root.withdraw()
 
     def quit_app(self) -> None:
+        send = getattr(self, "onenote_send_window", None)
+        if send is not None and not send.close():
+            self.status_var.set("Review the OneNote Send result before quitting. Pending cleanup must finish first.")
+            return
+        onenote = getattr(self, "onenote_window", None)
+        if onenote is not None and not onenote.close():
+            self.status_var.set("OneNote request cleanup is pending. Choose Quit again after it finishes.")
+            return
         ocr = getattr(self, "ocr", None)
         ocr_operations = (
             ("image text extraction",)
@@ -4691,6 +4768,12 @@ class LauncherApp:
         """Offer webpage printing or the current outbound file destinations."""
 
         workspace_text = self.workspace_component.raw_text()
+        menu.add_command(
+            label="OneNote — new text page…",
+            command=self._send_text_to_onenote,
+            state=tk.NORMAL if workspace_text.strip() else tk.DISABLED,
+        )
+        menu.add_separator()
         if workspace_text.strip().lower().startswith(("http:", "https:")):
             menu.add_command(
                 label="Save webpage as PDF…",

@@ -251,7 +251,7 @@ class ActionTests(unittest.TestCase):
 
     def test_excel_live_text_conversion_is_an_allow_listed_automation(self):
         action = configured_action(
-            title="UAT: Convert scientific-notation columns",
+            title="Convert Excel values to text",
             context="General",
             action_type="excel_automation",
             value="excel.convert_live_column_representation",
@@ -280,6 +280,8 @@ class ActionTests(unittest.TestCase):
             if item.id == "excel-convert-scientific-notation"
         )
 
+        self.assertEqual(action.title, "Convert Excel values to text")
+        self.assertNotIn("uat", action.tags)
         self.assertEqual(
             action.value,
             "excel.convert_live_column_representation",

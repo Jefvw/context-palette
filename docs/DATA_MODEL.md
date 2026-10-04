@@ -243,6 +243,8 @@ not a new JSON field and does not itself change any stored format.
 | `data/local_work_item_metadata.json` | `work-item-metadata` | Personal/local | Optional | Configuration | Core configuration | 1 |
 | `data/local_work_item_settings.json` | `work-item-settings` | Machine-local | Optional | Private paths | Core configuration | 1 |
 | `data/local_excel_automation_settings.json` | `excel-automation-settings` | Machine-local | Optional | Private paths | Core configuration | 1 |
+| `data/local_onenote_settings.json` | `onenote-settings` | Machine-local | Optional | Private paths and notebook identity/name | Excluded; reselect engine and notebook per PC | 1 |
+| `data/local_onenote_send_settings.json` | `onenote-send-settings` | Machine-local | Optional | Exact notebook/group/section identities and labels | Excluded; reselect Send destination per PC | 1 |
 | `data/local_edge_score_pdf_settings.json` | `edge-score-pdf-settings` | Machine-local legacy | Optional | Private paths | Retained ignored legacy data; saved `save_edge_score_pdf` Action value is authoritative | 1 |
 | `data/inbox.json` | `inbox` | Captured content | Optional | Captured content | Complete-configuration addition; explicit privacy notice and exclusion choice required | 1 |
 | `data/local_text_action_source.txt` | `managed-text-action-source` | Captured content | Optional | Captured content | Optional managed content | None |
@@ -260,6 +262,34 @@ are not eligible payloads. The catalog does not scan or represent those
 external resources.
 
 ## Runtime projections
+
+The separate OneNote Send preference contains exactly `version: 1` and `path`,
+an ordered array of `{kind, object_id, label}` entries: notebook, zero or more
+section groups, then section. IDs remain exact and case-sensitive. Both this
+ignored local file and the search settings are excluded from configuration backup.
+Send never persists title/body, canonical plans/digests, confirmation times,
+process fingerprints, responses or created-page IDs. Known results are retained
+only in the current UI session, including while the Send window is hidden.
+
+The OneNote picker keeps its query, titles, available ancestor breadcrumbs,
+opaque page IDs, reviewed basic text, readiness capabilities and process
+fingerprint only for the attended workflow. These are sensitive external read
+results, not All-items rows or persisted Action/Work Item/Context records. They
+are not logged, cached or included in backup. After explicit Replace/Append,
+the reviewed text becomes ordinary Input / Output session content; this does
+not save a OneNote page or create a persistent external-resource entity.
+
+The separately prepared engine launcher's absolute path and an optional chosen
+notebook `{object_id, title}` are saved locally. Omitted/null notebook means all
+open notebooks; legacy launcher-only settings remain valid. Notebook IDs are
+opaque and compared exactly. Saving a replacement engine preserves the notebook;
+a missing notebook never widens search to other notebooks.
+An empty launcher permits installation-relative sibling discovery. The detected
+path is not persisted, including when the user saves only a notebook preference.
+Invalid explicit paths require repair and retain separately validated notebook
+metadata; they never grant permission to substitute the sibling engine.
+Unlike backup-eligible Excel launcher settings, OneNote settings are excluded;
+restoring configuration on another computer requires selecting its engine and notebook.
 
 The launcher builds and keeps last-known-good versions of:
 

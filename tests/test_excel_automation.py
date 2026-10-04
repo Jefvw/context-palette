@@ -1665,6 +1665,35 @@ class LiveScientificConversionProtocolTests(unittest.TestCase):
         assert isinstance(blank.result, LiveColumnPreflightResult)
         self.assertIsNone(blank.result.columns[1].header_value)
 
+    def test_preflight_reconciles_formula_cells_as_a_separate_class(self) -> None:
+        document = _live_preflight_result()
+        column = document["columns"][0]
+        column["classifications"]["numeric"] = 1
+        column["classifications"]["formula"] = 1
+        column["formulas"] = {
+            "count": 1,
+            "samples": [{"row": 4, "formula": "=1+1"}],
+            "samples_truncated": False,
+        }
+        call = parse_automation_response(
+            phase="preflight", request_id="formula-class", return_code=0,
+            stdout=_envelope("preflight_live_columns", "formula-class", document),
+        )
+        self.assertEqual(call.classification, "preflight_succeeded")
+        self.assertIsInstance(call.result, LiveColumnPreflightResult)
+        self.assertEqual(call.result.columns[0].classifications.formula, 1)
+        self.assertEqual(call.result.columns[0].formulas.samples[0].formula, "=1+1")
+
+        # Formulas are exclusive, so counting the formula's result as numeric
+        # as well must still reject the contradictory receipt.
+        column["classifications"]["numeric"] = 2
+        duplicate = parse_automation_response(
+            phase="preflight", request_id="double-count", return_code=0,
+            stdout=_envelope("preflight_live_columns", "double-count", document),
+        )
+        self.assertEqual(duplicate.classification, "preflight_failed")
+        self.assertIsNone(duplicate.result)
+
     def test_conversion_plan_ready_blocked_and_warnings_are_typed(self) -> None:
         warning = {
             "code": "live.numeric_precision_may_already_be_lost",
@@ -1746,6 +1775,40 @@ class LiveScientificConversionProtocolTests(unittest.TestCase):
                         parsed.result.failure.column_index,  # type: ignore[union-attr]
                         5,
                     )
+
+    def test_partial_failure_before_observable_edit_retains_its_receipt(self) -> None:
+        document = _live_conversion_execution_result(state="partial_failure")
+        document.update(
+            changed_cells=0, already_compliant_cells=0, blank_cells=0,
+            columns_completed=[], workbook_dirty=False,
+        )
+        parsed = parse_automation_response(
+            phase="conversion_execute", request_id="write-start-failure", return_code=0,
+            stdout=_envelope(
+                "convert_live_column_representation", "write-start-failure", document,
+            ),
+        )
+        self.assertEqual(parsed.classification, "conversion_execute_partial_failure")
+        assert isinstance(parsed.result, LiveColumnConversionResult)
+        self.assertTrue(parsed.result.mutation_started)
+        self.assertTrue(parsed.result.recovery.verified)
+        self.assertFalse(parsed.result.workbook_dirty)
+        self.assertEqual(parsed.result.columns_completed, ())
+
+    def test_failed_receipt_cannot_claim_completed_cell_effects(self) -> None:
+        document = _live_conversion_execution_result(state="failed")
+        document["failure"].update(stage="write", column_index=2)
+        document["recovery"]["verified"] = True
+        document.update(changed_cells=2, already_compliant_cells=1, columns_completed=[2])
+        parsed = parse_automation_response(
+            phase="conversion_execute", request_id="failed-with-effects", return_code=0,
+            stdout=_envelope(
+                "convert_live_column_representation", "failed-with-effects", document,
+            ),
+        )
+        self.assertEqual(parsed.classification, "conversion_execute_unknown")
+        self.assertTrue(parsed.unknown_outcome)
+        self.assertIsNone(parsed.result)
 
     def test_live_protocol_mismatch_and_lifecycle_contradictions_fail_closed(self) -> None:
         wrong_operation = parse_automation_response(

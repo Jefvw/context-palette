@@ -239,17 +239,16 @@
     },
     {
       "id": "excel-convert-scientific-notation",
-      "title": "UAT: Convert scientific-notation columns",
+      "title": "Convert Excel values to text",
       "type": "excel_automation",
       "value": "excel.convert_live_column_representation",
       "state": "Active",
       "tags": [
         "excel",
         "scientific notation",
-        "open workbook",
-        "uat"
+        "open workbook"
       ],
-      "description": "Review exact physical columns in an already-open .xlsx workbook, create a verified recovery copy, and convert eligible scientific-notation text and current numeric values to text. Execute remains UAT-gated; Excel is never saved or closed."
+      "description": "Select physical columns in an already-open .xlsx workbook, create a verified backup, and convert eligible scientific-notation text and current numeric values to text. Review is optional. Conversion is restricted to testing in this build; Excel is never saved or closed."
     },
     {
       "id": "developing-uat-sequence",

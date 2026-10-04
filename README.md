@@ -66,6 +66,20 @@ Action and its internal placements without changing its external target. See
   Configured Actions run directly, without an Input / Output placement prompt.
   Existing confirmations remain; failures retain the drop in session history
   without replacing editor text or retrying. History resend only places input.
+- Provides an optional attended **Find OneNote notes…** command from Input /
+  Output's right-click menu or Text tools. Reuse a saved Python OneNote engine,
+  otherwise detect its direct sibling installation, and remember a preferred
+  notebook per PC. Missing/broken explicit engines require manual repair. Search checks and
+  connects automatically to already-running OneNote, using the shown notebook
+  scope. Select and preview a note, then use
+  Replace/Append/Cancel. Reads are transient and leave OneNote and the clipboard
+  unchanged; limited previews cannot be applied. Host Windows acceptance and
+  representative performance remain pending; see [Help](docs/HELP.md#find-onenote-notes).
+- Offers **Send to → OneNote — new text page…** with one **Send to OneNote**
+  button approving the visible final title and complete plain text
+  in an explicitly chosen existing section. Remembers that Send destination
+  separately, retains partial/unknown results without automatic retries, and
+  preserves Input / Output. [Host live acceptance](docs/ONENOTE_SEND_UAT.md) is pending.
 - Optionally delegates reviewed closed-workbook CSV exports to a separately
   bootstrapped Python Excel installation. A direct sibling checkout is detected
   automatically, planning starts with the first workbook's folder as the
@@ -79,8 +93,9 @@ Action and its internal placements without changing its external target. See
   session, lets you choose one worksheet or all visible worksheets, and uses
   one **Apply** click as confirmation. It does not use Input / Output and never
   saves or closes Excel; AutoSave must be off.
-- Provides a Development/UAT Action for reviewed conversion of selected
-  physical columns in an already-open workbook to text. Python Excel owns the
+- Provides **Convert Excel values to text** for selected physical columns in
+  an already-open workbook, with optional Review. Conversion remains restricted
+  to testing in this build. Python Excel owns the
   paged preflight, exact plan fingerprint, verified recovery workbook, and
   mutation. Context Palette keeps execution disabled unless
   `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1` was present when it started;
@@ -331,6 +346,8 @@ Personal and runtime files are ignored by Git:
 | `data/local_command_surface.json` | Personal Quick-action menu records |
 | `data/inbox.json` | Captured material |
 | `data/palette.json` | Per-machine context-slot choices plus legacy focus/pin compatibility data |
+| `data/local_onenote_settings.json` | Private per-PC OneNote engine and preferred notebook; excluded from configuration backup |
+| `data/local_onenote_send_settings.json` | Private per-PC Send notebook/section, separate from search; excluded from configuration backup |
 | `data/context-palette.log*` | Bounded local diagnostics |
 
 Captured Inbox material can be removed without editing JSON: open **Inbox**,

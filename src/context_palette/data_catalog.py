@@ -109,6 +109,14 @@ class AppDataPaths:
         return self.data_directory / "local_edge_score_pdf_settings.json"
 
     @property
+    def onenote_settings_file(self) -> Path:
+        return self.data_directory / "local_onenote_settings.json"
+
+    @property
+    def onenote_send_settings_file(self) -> Path:
+        return self.data_directory / "local_onenote_send_settings.json"
+
+    @property
     def managed_text_action_source_file(self) -> Path:
         return self.data_directory / "local_text_action_source.txt"
 
@@ -325,6 +333,24 @@ DATA_ASSET_CATALOG: tuple[DataAssetSpec, ...] = (
         AssetSensitivity.PRIVATE_PATHS,
         BackupPolicy.CORE_CONFIGURATION,
         relative_path=PurePosixPath("data/local_excel_automation_settings.json"),
+        schema_version=1,
+    ),
+    DataAssetSpec(
+        "onenote-settings",
+        AssetOwnership.MACHINE_LOCAL,
+        AssetRequirement.OPTIONAL,
+        AssetSensitivity.PRIVATE_PATHS,
+        BackupPolicy.EXCLUDED,
+        relative_path=PurePosixPath("data/local_onenote_settings.json"),
+        schema_version=1,
+    ),
+    DataAssetSpec(
+        "onenote-send-settings",
+        AssetOwnership.MACHINE_LOCAL,
+        AssetRequirement.OPTIONAL,
+        AssetSensitivity.PRIVATE_PATHS,
+        BackupPolicy.EXCLUDED,
+        relative_path=PurePosixPath("data/local_onenote_send_settings.json"),
         schema_version=1,
     ),
     DataAssetSpec(

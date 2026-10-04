@@ -604,6 +604,20 @@ filesystem or network inspection and collapses on Hide or a new drop. Preview
 truncation never truncates the retained result. Errors and empty drops are not
 retained; process exit clears the history.
 
+The collapsed layout uses one non-wrapping, font-measured summary line and two
+control rows without hiding commands behind a menu. The summary describes the
+configured behaviour and current state or selected history item; long text is
+elided for display only. A compact history counter shares its row with Settings.
+Details is available without history, renders full instructions/behaviour/status
+and any selected prepared content, and is disabled during resolution/delivery.
+It performs no effects and never truncates the stored result. Initial lower-right
+placement measures the mapped
+window's title bar and borders and fits its outer dimensions to the work area;
+later content changes retain the existing origin/anchor and monitor clamp.
+Both placement paths reuse absolute Tk coordinates for left/above monitors.
+Full descriptions live in the scrollable read-only details view, so long messages
+and Action names do not grow the collapsed window at larger text scaling.
+
 Its small Settings entry delegates to the launcher; the target only displays
 the configured behaviour label. A delivery guard refuses nested new drops or
 history sends while a placement/Action callback is active, including Tk modal
@@ -1527,6 +1541,137 @@ ordinary Hide remains available. This keeps daemon-backed work from being
 terminated by the application's own Quit control before completion is
 delivered.
 
+### OneNote Send boundary
+
+`onenote_send.py` owns the versioned, constrained create-page adapter, separate
+from the strict read envelope. It validates the whole canonical plan, Unicode
+normalization, byte/character/line limits, digest, exact effects, capability
+metadata and mutation outcome matrix. Static creation availability remains false;
+an active read probe establishes only session read readiness, not writer qualification.
+No engine module is imported and no COM logic is duplicated in Palette.
+
+`onenote_send_window.py` locally normalizes and displays the complete final title
+and body plus the exact destination before the single **Send to OneNote** control
+is enabled. It captures that visible normalized snapshot, source revision,
+destination and engine identity with an aware UTC click time, consumes the
+submission before scheduling work, and gives the worker the complete handoff.
+The worker alone requests and validates the pure engine plan, including strict
+canonical equality with the captured snapshot, then builds authorization using the
+original click time with a fixed 300-second expiry; connection and scope checks do
+not renew consent. Editing the title/source, engine changes and destination changes
+invalidate the captured authority. Button double-click/key-repeat guards require a
+release and cooldown before another deliberate Send; no digest is idempotent.
+The same worker captures the desktop session before planning and revalidates it
+through readiness and execution. Before dispatch, a cancellable handoff asks the
+Tk thread to recheck current source text/revision, title, destination and engine.
+It releases its gate even on callback failure, while polling continues to consume
+the terminal result. Source widgets are never read by the worker.
+
+Explicit destination selection lists root notebook metadata, then section metadata
+under the exact selected notebook. Bounded automatic paging (200/page, 5,000 items,
+90-second listing deadline, depth 8) validates counts, stable totals, exact targets
+and ancestry across pages, seeding the omitted scoped anchor. Depth-truncated lists
+are rejected with guidance. Send freshly resolves the selected section within that
+notebook and its reviewed breadcrumb; missing/moved identities require reselection.
+There is no root/name fallback, section creation or change to search policy.
+
+The existing owned-process transport retains its 30-second read cap. The explicit
+write entry point accepts at most 45 seconds plus at most two seconds of cleanup.
+Errors carry possible-dispatch evidence and, when available, a complete terminal
+receipt from a naturally exited child. Input release is conservative: after the
+first possible pipe write, cancellation/lost/malformed responses mean an unknown
+write unless a validated receipt provides a more precise state. Only owned engine
+processes are terminated, never OneNote. Unconfirmed cleanup blocks further calls.
+
+Write receipts bypass stale read-generation rejection. Close/quit during a request
+cancels and waits without hiding the eventual result. Partial/unknown outcomes
+require acknowledgement before closing or another Send; acknowledgement does not
+verify a receipt. Page IDs remain in session-only **Result details…**, which appears
+only after an attempt. A hidden Send window retains receipts until application exit.
+One authoritative status banner uses the shared teal/neutral semantic colours;
+uncertain results retain priority after later edits. Nothing automatically retries,
+deletes, navigates, changes the source/clipboard, or persists sent text, plans or
+receipts. Engine choice is shared with search; `local_onenote_send_settings.json`
+independently stores only the exact destination path and labels, excluded from Git
+and configuration backups.
+
+### OneNote read-only host boundary
+
+`onenote_integration.py` owns separate Python OneNote launcher settings and strict
+version-1.0 describe/probe/inventory/search/preview requests and response validation.
+`discover_direct_sibling_python_onenote_launcher` checks only the exact direct
+`python-onenote/python-onenote.bat` sibling when no explicit launcher is configured.
+The window derives the installation root from its installed module path, with an
+injectable root for isolated tests; cwd and settings-file location do not control
+discovery. Missing/invalid/unusable explicit launchers block for repair. Invalid
+launcher errors retain an independently validated notebook preference without
+logging it. Discovery performs one file existence check, grants no readiness and
+does not persist the candidate. Notebook-only settings can retain a blank launcher.
+Manual engine reselection clears readiness/session and preserves notebook scope.
+The known engine error `internal.desktop_bridge` represents a failed desktop
+read, not launcher incompatibility. Its fixed host message reveals no raw engine
+details and does not assert a closed notebook. It invalidates readiness and
+clears results while retaining the client/settings for an explicit retry; real
+launch/protocol failures and unknown engine codes retain existing repair behavior.
+Queries and opaque case-sensitive page IDs travel only in one UTF-8 JSON stdin
+request, never shell command arguments. Search uses the remembered notebook's
+exact opaque ID/kind, or root null scope for All open notebooks, with explicit
+`include_unindexed_pages: true`, offset 0 and limit 20. Scoped results must have
+the exact notebook as their root ancestor. Preview sends the exact
+selected result ID and `max_characters: 50000`; Use requires complete plain text
+with consistent Unicode character counts. Explicit Choose notebook lists root
+notebook metadata with offset 0, limit 100 and max depth 4; bounds, root types,
+parents, identities and paging are validated. Missing notebook identities never
+fall back to root search. No indexed-only fallback or automatic pagination is added.
+
+`onenote_process.py` owns the launcher and descendants in a Windows Job Object
+before they run. Worker execution concurrently drains bounded stdout/stderr,
+enforces the 1 MiB protocol cap and strict UTF-8/single-object JSON contract, and
+checks matching request/operation identities and exit/status/result consistency.
+Describe has a 10-second hard deadline; probe/inventory/search/preview have 30 seconds.
+Cancellation, close and timeout clean up only this owned engine tree, never
+OneNote. Unconfirmed cleanup blocks subsequent requests.
+
+`onenote_session.py` lazily reads process names, session IDs and process creation
+times through standard-library Win32 bindings. Two stable process-only captures
+form a sorted current-session ONENOTE.EXE fingerprint; unavailable or unstable
+discovery fails closed. No API is loaded or process enumerated on import. The
+UI worker captures around the active probe and before/after every
+inventory/search/preview, invalidating readiness for exits, PID reuse, additions or changed
+configuration. Static describe metadata never establishes readiness.
+
+`onenote_window.py` owns one transient attended picker reached from the Input /
+Output right-click/Text tools command. Selection alone seeds the query; without
+selection the query is empty. Opening/typing/engine selection performs no external
+read. Search/Enter or Choose notebook runs description and an active probe as
+needed before its requested read in one worker job. Readiness is transient and
+reused only for the same process fingerprint. Preview text remains explicit,
+with one job in flight and cancellation checks between connection stages.
+Monotonic generations reject obsolete completions; query,
+selection, cancellation and close clear obsolete review state. The launcher uses
+the existing Replace/Append/Cancel placement chooser even for an empty workspace,
+and rechecks destination changes during confirmation. Applying uses the reviewed
+text without refetching; neither search nor placement changes the clipboard.
+Accepted placement reveals the main window through `_reveal_window` with
+`sync_workspace=False`, shows the workspace pane and focuses its editor after
+idle. It does not use the ordinary Show/F9 route, which imports fresh input.
+
+The engine owns OneNote access, identities and backend lifecycle. This read flow adds
+no COM attachment, Office startup, Graph, navigation, mutation, synchronization,
+index repair, shared Python Excel package or automatic dependency setup. The
+existing engine checkout, including its uncommitted implementation, is preserved.
+Its launcher path and explicitly chosen notebook ID/title are persisted in private machine-local
+`data/local_onenote_settings.json`, which the data catalogue excludes from backup.
+Legacy launcher-only settings retain root search. Loading a missing or invalid launcher
+preserves a valid notebook choice while disabling reads; choosing a replacement
+engine never widens scope. Query/page results/IDs/preview/process fingerprints
+are not logged or persisted. Notebook choice is the only persisted read metadata.
+Placed text follows the existing Input / Output session history boundary. Live
+owner evidence confirms the first search/preview/Replace journey. The remembered
+scope flow and placement have partial live evidence; see Testing for the later
+closed-notebook failure and correction. Broader host acceptance and representative
+performance remain unverified.
+
 ### `excel_automation.py`
 
 Provides the optional machine-local boundary to the separately installed
@@ -1600,8 +1745,23 @@ identified by ordered physical index so blank or duplicate headers remain
 distinct. All bounds, workbook tokens, column order, recovery path, and plan
 fingerprint are correlated at the result boundary.
 
+Human Review is optional. The primary Convert captures the exact selected
+invocation and schedules a fresh zero-write plan. Its callback carries that
+request's intent and opaque ticket; only the current planning callback may
+accept a response. A ready correlated plan with a recovery path and no precision
+risk immediately submits the existing execution request with the exact plan
+fingerprint. Precision risk instead opens a short confirmation; acknowledgement
+alone never executes. Optional Review plans without granting automatic execution.
+Execution consumes the plan authority before process dispatch, and its separate
+ticket rejects obsolete or duplicate receipts. Closed windows revoke tickets.
+Busy Close/Escape remains refused; this change adds no cancellation claim.
+
 The engine, not Context Palette, chooses the default sibling recovery path and
 creates/verifies the recovery workbook. An override triggers a fresh plan.
+Version `1.0` refuses an existing recovery file. The owner's single refreshed
+backup policy requires the separate engine extension described in
+`EXCEL_SINGLE_BACKUP_ENGINE_HANDOVER.md` and a later host integration; the host
+does not replace, rotate or delete files to bypass that boundary.
 Formula or unsupported values in scope remain engine-authored blockers; a
 precision-risk plan requires an explicit acknowledgement that lost digits
 cannot be reconstructed. Execution is fail-closed unless the exact environment
@@ -1611,6 +1771,33 @@ off. Success, known no-live-mutation failure, partial mutation, and unknown
 process/protocol outcomes are distinct; no outcome is retried automatically.
 Context Palette never saves or closes Excel and never persists tokens, samples,
 workbook paths, or the actual machine-local launcher path in tracked data.
+
+The conversion receipt's `result.state` is authoritative independently of the
+successful process envelope. A `failed` receipt cannot claim completed columns
+or completed cell counts. A `partial_failure` receipt may report
+`mutation_started=true` with `workbook_dirty=false`: the first COM write may
+fail before an observable edit. Preserve the verified recovery receipt and
+partial-outcome guidance in that case; a clean workbook flag does not prove
+that no mutation was attempted. The outer `conflict.live_conversion_scope_stale`
+code is a known pre-effect failure requiring a fresh review. Every review has
+an explicit Excel Undo warning outside the scrollable engine plan text.
+
+The compact review displays exact target identity, eligible/compliant/blank/
+blocked/precision-risk counts, at most three engine-authored Before → After
+examples, the full recovery path, blockers and Undo/precision guidance. Review
+labels wrap to the current canvas width. Technical fingerprints and full samples
+are retained in a collapsed Details frame; toggling it preserves the plan and
+acknowledgement without scheduling a process request. A fixed footer owns the
+effect-labelled conversion button and one current status. Tk's `MULTIPLE`
+selection lets ordinary clicks toggle disjoint physical columns. Change columns
+reuses the cached preflight and current selection, invalidates plan authority and
+acknowledgement, and requires a fresh engine plan before execution. It does not
+silently repeat inventory or inspection. Recovery changes still require replanning.
+
+The 2026-10-04 corrected engine write boundary is currently uncommitted at
+`08af313`. The operation catalogue's `1.0` version does not establish that the
+installed engine includes that fix. The UAT gate remains until the engine fix
+is deployable and the remaining acceptance matrix is complete.
 
 ### `excel_live_format_window.py`
 

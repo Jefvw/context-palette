@@ -160,6 +160,7 @@ class WorkspacePanel:
         show_inbox: Callable[[], None] | None = None,
         populate_send_to_menu: Callable[[tk.Menu], None] | None = None,
         text_change_callback: Callable[[], None] | None = None,
+        find_onenote: Callable[[], None] | None = None,
     ) -> None:
         self.clipboard_getter = clipboard_getter
         self.clipboard_setter = clipboard_setter
@@ -168,6 +169,7 @@ class WorkspacePanel:
         self.extract_text = extract_text
         self.populate_send_to_menu = populate_send_to_menu
         self.text_change_callback = text_change_callback
+        self.find_onenote = find_onenote
         self._content_history: list[str] = [""]
         self._content_history_index = 0
         self._content_history_dirty = False
@@ -374,6 +376,7 @@ class WorkspacePanel:
         self._notify_text_changed()
 
     def _notify_text_changed(self) -> None:
+        self.text_revision = getattr(self, "text_revision", 0) + 1
         self._sync_create_action_state()
         if self.text_change_callback is not None:
             self.text_change_callback()
@@ -571,6 +574,30 @@ class WorkspacePanel:
 
         return self._apply_text_placement(value, placement, current)
 
+    def apply_reviewed_text(
+        self, value: str, *, expected_text: str,
+        is_current: Callable[[], bool], parent: tk.Misc,
+    ) -> str | None:
+        """Always review placement and reject changes during the modal choice."""
+        if not is_current():
+            return None
+        current = self.raw_text()
+        changed = ("\n\nInput / Output changed since this review began."
+                   if current != expected_text else "")
+        placement = TextPlacementDialog(
+            parent,
+            "Place the OneNote text you just reviewed?" + changed +
+            "\n\nReplace discards the current Input / Output text. Append keeps "
+            "it and adds the reviewed text below. OneNote and the clipboard stay unchanged.",
+            title="Use reviewed OneNote text",
+        ).show()
+        if placement not in {"replace", "append"} or not is_current():
+            return None
+        if self.raw_text() != current:
+            self.status_setter("Input / Output changed during the choice. Nothing was placed; choose Use text again.")
+            return None
+        return self._apply_text_placement(value, placement, current)
+
     def _apply_text_placement(
         self,
         value: str,
@@ -580,7 +607,7 @@ class WorkspacePanel:
         """Apply one already-approved incoming value as one undoable edit."""
 
         self.clear_file_preview()
-        separator = "" if current.endswith(("\n", "\r")) else "\n\n"
+        separator = "" if not current or current.endswith(("\n", "\r")) else "\n\n"
         updated = value if placement == "replace" else f"{current}{separator}{value}"
         if updated == current:
             return placement
@@ -644,6 +671,11 @@ class WorkspacePanel:
                 )
             self.transform_menu.add_cascade(label=group.label, menu=group_menu)
         self.context_menu.add_cascade(label="Transform", menu=self.transform_menu)
+        if self.find_onenote is not None:
+            self.context_menu.add_separator()
+            self.context_menu.add_command(label="Find OneNote notes…", command=self.find_onenote)
+            self.transform_menu.add_separator()
+            self.transform_menu.add_command(label="Find OneNote notes…", command=self.find_onenote)
 
     def _refresh_send_to_menu(self, menu: tk.Menu) -> None:
         menu.delete(0, tk.END)

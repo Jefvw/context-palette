@@ -8,6 +8,405 @@ recorded on 2026-09-09. Its checklist remains available for optional follow-up.
 Keep that decision separate from per-check results, automated output and
 simulated DPI; unreported manual checks remain unverified.
 
+## Single-line Drop information (2026-10-04)
+
+The later height revision supersedes the separate wrapped text rows recorded
+below. It uses one non-wrapping information line and two control rows, a compact
+selected/total history counter and inline Settings. With the production theme,
+empty-history client dimensions measured **272×107 at Tk scaling 1.33** and
+**384×138 at scaling 2.0**. The prior themed 1.33 target was 328×174; the new client
+is about 39% shorter. These are isolated Tk scaling measurements, not physical
+Windows display-setting acceptance.
+
+Regressions cover fixed collapsed dimensions with long names/history/errors,
+full read-only information before the first drop, keyboard Space to open Details,
+visible Run/blocked state, selected-drop identification, exact-result resend,
+two-scale control containment and retained monitor placement. No resend or
+configured Action is performed by inspecting information. Actual dragging and
+the owner's physical multi-monitor setup remain unverified for this revision.
+
+Focused Drop and launcher checks passed **182 tests in 37.465 seconds**, using
+isolated windows/fakes without Office access. Agent-operated Windows inspection
+of the final production layout used synthetic prepared drops and mocked TkDND:
+the client remained 272×107, Previous changed the one-line summary from text to
+the selected Report.xlsx path and its counter from 2 / 2 to 1 / 2, and Hide
+withdrew the isolated window with both drops retained. An earlier empty-history
+visual check opened read-only Details with the complete instructions, configured
+behaviour and status. No real drop, configured Action or external application
+effect was exercised; the running owner Palette was not restarted.
+After the final production/test changes, `check-context-palette.bat` passed
+configuration validation, compilation and **1,674 tests in 334.654 seconds,
+with 2 skipped**. Final `git diff --check` passed and staging remained empty.
+Nothing was committed or pushed. Complete-check output is private under
+`outputs/drop-ui-review-20261004/single-line-complete-check.txt`.
+
+## Compact Drop and Excel wording (2026-10-04)
+
+This records the earlier, taller layout. Its text-row arrangement is superseded
+by the single-line revision above; its Excel release boundaries are unchanged.
+
+The collapsed Drop window retains visible Previous/Next, Send again, Show
+details, Settings and Hide. With the production theme, an empty-history target
+measured 328×174 at Tk scaling 1.33 and 380×238 at scaling 2.0. Automated
+regressions cover this footprint, complete long Action labels, history and
+resend identity, expanded details, settings, Hide/Show retention and all controls
+inside a synthetic monitor work area. Initial placement includes native frame
+dimensions; a separate regression covers absolute positioning on a synthetic
+monitor left of and above the primary screen. These scaling/monitor checks do
+not establish physical multi-monitor or Windows display-settings acceptance.
+
+Agent-operated Windows inspection used an isolated production Drop surface,
+the shared theme and synthetic prepared drops, with TkDND registration mocked.
+The populated collapsed target measured 340×174 at this PC's current scaling.
+History navigation showed the selected filename, details expanded and exposed
+the full prepared path, Send again returned that exact synthetic result, and
+Hide withdrew the test window with both drops retained. All commands remained
+visible. This was a layout/interaction check, not an actual drag from Explorer
+or a test of a configured Action; no Office, clipboard or owner data was accessed.
+
+The shipped Action/factory choice now reads Convert Excel values to text,
+with a plain build-restriction explanation. IDs, startup opt-in, precision
+acknowledgement and engine backup rules are unchanged. Personal titles are not
+migrated. Normal Excel conversion release and backup replacement remain pending.
+
+Focused checks passed **503 tests in 38.533 seconds**, covering Drop/history,
+configuration, absolute monitor positioning, Action catalogue/Preview, launcher
+routing, conversion-window gate/precision behaviour and documentation links.
+These tests use isolated windows and fakes; they do not launch Office.
+After the final production/test changes, `check-context-palette.bat` passed
+configuration validation, compilation and **1,672 tests in 352.732 seconds,
+with 2 skipped**. Final `git diff --check` passed, staging stayed empty and
+nothing was committed or pushed. Complete-check output is private under
+`outputs/drop-ui-review-20261004/complete-check.txt`.
+
+## Live Excel conversion: optional Review (2026-10-04)
+
+The owner changed the normal flow to select columns → Convert. Review is now
+an optional read-only command. Direct Convert obtains a fresh plan in the
+background and executes its exact fingerprint once for a correlated ready plan
+with no precision risk. A reported risk uses a short acknowledgement screen;
+confirming its checkbox alone never executes.
+
+Focused host checks passed **211 tests in 13.336 seconds**, using fakes without
+launching Office. Added regressions cover direct B/D/F conversion without Review,
+exact fingerprint/path/target propagation, repeated clicks, stale/duplicate plan
+callbacks and receipts, consumed authority, optional Review performing no writes,
+mandatory risk acknowledgement, disabled gate, blocked/mismatched/missing-path
+plans, closed-window revocation and preservation of an existing backup collision.
+The prior stale/partial/unknown no-retry tests remain and pass.
+
+After the final production and test changes, `check-context-palette.bat` passed
+configuration validation, compilation and **1,670 tests in 325.393 seconds,
+with 2 skipped**, using normal Windows Python access. `git diff --check` passed
+and staging remained empty. Existing unrelated work was preserved; nothing was
+committed or pushed. The complete-check output remains private under
+`outputs/excel-ui-review-20261004/optional-review-complete-check.txt`.
+
+Agent-operated Windows checks used the production Tk window and shared theme
+with a fake coordinator at the current PC scaling. Ordinary clicks selected
+B/D/F, then one Convert click proceeded through the automatic plan and one
+simulated execution to the succeeded result, without opening Review. A separate
+700×480 simulated risk plan displayed the short confirmation and full wrapped
+Unicode paths; acknowledgement enabled Convert but submitted no execution before
+the test window was closed. These checks called neither the engine nor Office.
+Fresh attended real-Excel acceptance of this direct path remains outstanding;
+the earlier real-Excel evidence below does not establish it.
+
+The requested one refreshed backup is not supported by engine `1.0`. The owner
+chose an engine-owner handover, stored in `EXCEL_SINGLE_BACKUP_ENGINE_HANDOVER.md`.
+The host still refuses to bypass a collision; automatic backup replacement and
+new live-Excel acceptance have not been performed by this change.
+
+## Live Excel conversion: compact review (2026-10-04)
+
+This records the earlier UI check. The optional-Review flow above supersedes its
+mandatory human-review step; the underlying engine verification remains separate.
+
+The later UI revision replaces the raw plan report with exact target identity,
+counts, three bounded Before → After examples, recovery path and warnings.
+Technical details are collapsed; conversion stays in the fixed footer. Separate
+columns toggle with ordinary clicks. Change columns reuses inspection but discards
+reviewed authority; another plan and any required acknowledgement are mandatory.
+The startup execution gate, process contract and no-retry policy are unchanged.
+
+Focused checks passed **22 conversion-window tests in 15.916 seconds** and
+**182 protocol, shared-target-selector and launcher tests in 3.337 seconds**.
+They use fakes and do not launch Office. New regressions cover disjoint single
+clicks, effect-first review, details preserving authority/acknowledgement without
+process calls, cached selection requiring a fresh plan, recovery replanning
+resetting acknowledgement, and complete long-path wrapping with horizontal and
+vertical conversion-button containment at the supported minimum size.
+
+After the final production changes, `check-context-palette.bat` passed
+configuration validation, compilation and **1,663 tests in 295.103 seconds,
+with 2 skipped** using normal Windows Python access. `git diff --check` passed
+and staging remained empty. The only production file changed by this UI revision
+is `src/context_palette/excel_live_text_conversion_window.py`; its focused tests
+are in `tests/test_excel_live_text_conversion_window.py`. Help, architecture,
+decisions, backlog, testing notes and changelog were updated; existing unrelated
+and earlier integration work was preserved. Nothing was committed or pushed.
+
+Agent-operated Windows UI checks used production Tk widgets and the shared theme
+with a fake coordinator. At this PC's current scaling, ordinary clicks selected
+B/D/F and generated the exact `[2, 4, 6]` plan request; acknowledgement enabled
+conversion, Details preserved it and the visible footer, and Change columns kept
+selection but required acknowledgement again on the fresh review. A second
+minimum-size 700×480 window displayed complete long Unicode workbook/recovery
+paths with wrapping; scrolling exposed the short acknowledgement and Undo warning
+while conversion stayed visible. No engine process, Excel read or Excel write
+occurred in these UI checks. The private harness remains local under `outputs/`.
+
+This verifies the revised UI separately from the earlier real-Excel check below.
+Owner acceptance of the revised live flow, other display-scaling settings and
+second-PC deployment remain pending. The engine correction is still uncommitted;
+this revision does not promote the Development/UAT Action to normal execution.
+
+## Live Excel conversion: host integration verification (2026-10-04)
+
+Focused protocol, conversion-window, shared target-selector and launcher-route
+tests passed **198 tests in 8.608 seconds**. The normal automated suite uses
+fakes and does not launch Excel. Regression tests establish that a failed receipt
+cannot claim completed effects, a clean-workbook partial failure retains recovery
+and inspection guidance, stale scope is a known pre-effect failure, and every
+review displays the Undo warning without relying on engine warning messages.
+
+The complete `check-context-palette.bat` passed configuration validation, source
+compilation and **1,657 tests in 287.663 seconds, with 2 skipped**, using normal
+Windows access after the restricted sandbox could not launch profile Python.
+No environment repair was needed. Existing machine-local configuration warnings
+remain warnings; raw personal paths are omitted.
+
+### Fresh disposable Context Palette end-to-end check
+
+Agent-operated Windows verification used a newly created `.xlsx`, its own fresh
+sibling recovery path, and isolated private Palette settings. It did not reuse
+the engine's evidence workbook, running session or recovery. The production main
+Palette's saved Action **Run** route opened the existing conversion dialog,
+shared workbook/worksheet selector and real process client. A private wrapper
+limited inventory to that sole fixture, plans to the two reviewed scopes, and
+execution to one acknowledged B/D/F request with its reviewed fingerprint. It
+did not fabricate engine responses. Global hotkey registration was disabled in
+that isolated process to preserve the owner's resident F9 registration.
+
+The bounded check passed:
+
+- Ordinary click plus Shift+Down selected B/C. A formula in C blocked the plan
+  with 4 eligible, 3 compliant, 8 blank and 1 blocked cell. Independent direct COM
+  snapshots confirmed all fixture values, formulas and formats stayed unchanged;
+  planning created no recovery file.
+- The real B/D/F plan displayed 5 eligible, 3 compliant, 16 blank, 0 blocked and
+  5 precision-risk cells, its exact recovery path, and the Undo warning. Execute
+  was disabled before acknowledgement; clicking it sent no execution request.
+- One acknowledged execution used the exact reviewed fingerprint and reported
+  `result.state="succeeded"`, 5 changed, 3 compliant, 16 blank and physical
+  columns 2/4/6 completed. No retry occurred.
+- Independent direct COM `Value2` and Excel `ISBLANK` checks confirmed all 16
+  original true blanks remained blank. Scientific text and numeric scalars became
+  the expected text; leading-zero and already-compliant text remained intact.
+  Headers, unselected values/formulas/formats and the second worksheet were
+  unchanged. The long numeric value preserved the actual value Excel exposed,
+  including precision already lost on load.
+- Independent file-based inspection confirmed recovery values, types, formulas
+  and formats matched the pre-write live Excel snapshot. Recovery is the live
+  pre-change state, which can differ from the original ZIP's numeric literal
+  after Excel precision loss. The original disk hash was unchanged; one original
+  Excel process remained and the source was open, dirty and unsaved. The isolated
+  test Palette was closed without saving or closing Excel.
+
+This is bounded agent-operated verification, not owner-observed acceptance.
+The desktop tool cannot hold Ctrl while clicking; Windows Tk's ordinary arrow
+bindings do not preserve a disjoint selection. After confirming no mutation,
+the isolated test Palette was restarted with a private F6 B/D/F selection preset
+and the real review/acknowledgement/execute controls were used. No preset was
+added to production. This earlier session did not verify ordinary disjoint
+selection; the later compact-UI checks above verify the new single-click controls
+with simulated data, separately from live Excel acceptance.
+The actual main Run route is verified; F9/Return-to-Excel, recovery opening in
+desktop Excel, Unicode live paths, duplicate workbooks/headers, pagination,
+100%/125% scaling and second-PC setup remain unverified. The displayed window was
+inspected at this PC's current scaling only. Partial/unknown/conflict/no-retry
+cases are covered with fakes, not forced failures in this live workbook.
+Private fixture paths, settings, tokens and cell matrices remain local output
+evidence, not tracked documentation. Nothing was staged, committed or pushed.
+
+The engine checkout remains read-only at HEAD `08af313`. Its uncommitted
+`selected_range.api.Value2 = output` correction is present. The `1.0` catalogue
+does not identify deployment of that correction, so a dedicated engine commit
+remains necessary for another PC. Its contract document also lists obsolete
+recovery error names and overstates `plan_stale` coverage: actual recovery
+failures use `operation.live_recovery_failed`, and later scope checks use
+`conflict.live_conversion_scope_stale`. The host uses authoritative receipt
+state and recognizes the actual outer scope-stale failure.
+
+Files changed in this focused integration: `src/context_palette/excel_automation.py`,
+`src/context_palette/excel_live_text_conversion_window.py`,
+`tests/test_excel_automation.py`, `tests/test_excel_live_text_conversion_window.py`,
+`docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/HELP.md`, `docs/MVP.md`,
+`docs/TESTING.md`, `BACKLOG.md` and `CHANGELOG.md`. Existing unrelated OneNote and
+earlier Excel work was preserved. Fresh fixture, private Launcher harness and
+direct-COM/file verification evidence remain unstaged under local `outputs/`.
+
+## Live Excel conversion: bounded test blocked (2026-10-03)
+
+This is historical evidence. The engine working tree's corrected direct COM
+write boundary passed focused engine UAT on 2026-10-04; its dedicated deployment
+commit is still outstanding. Keep that engine evidence separate from the fresh
+Context Palette end-to-end check and remaining host acceptance matrix.
+
+The owner approved one disposable `.xlsx`, one visible worksheet, a zero-write
+formula-blocking plan, one two-column conversion and one exact future sibling
+recovery file. The other workbooks were closed. This was agent-operated Windows
+verification in the production conversion window with isolated private settings,
+not owner-observed acceptance or the main launcher/F9 journey. Test-only keyboard
+presets selected the exact approved columns because the computer-use tool could
+not hold Ctrl during a click; ordinary multi-column selection is not verified.
+
+Two host defects reproduced before their fixes: preflight omitted the exclusive
+formula class from its reconciled total, and the native recovery picker returned
+forward slashes while the engine returned native separators. Focused regression
+tests failed before each fix. After both fixes, the protocol and conversion-window
+tests passed **63 tests in 10.333 seconds**. The parser still rejects double
+classification, and a different recovery filename still fails correlation.
+The complete `check-context-palette.bat` then passed configuration validation,
+source compilation and **1,653 tests in 356.002 seconds, with 2 skipped**, using
+normal Windows access. Final diff checks passed; nothing is staged or committed.
+
+Against Python Excel HEAD `08af313` with its existing uncommitted work preserved,
+the actual Windows run established:
+
+- With the UAT gate off, a ready plan remained read-only even after precision
+  acknowledgement. No execution request was sent.
+- With the gate enabled only in the isolated test process, a selected formula
+  blocked the plan with zero writes. A formula outside the selected columns did
+  not block the subsequent ready plan. The native recovery override produced a
+  fresh trusted plan and did not create the file during planning.
+- Exactly one execution reported success: 5 eligible conversions, 3 compliant
+  cells, 8 blanks and both reviewed columns completed. Independent direct COM
+  reads confirmed the nonblank text values/types, the live numeric value preserved
+  as text, and unchanged header/unselected values, formulas and formats.
+- The engine verified its recovery copy. Independent file-based inspection parsed
+  that `.xlsx` and confirmed all original fixture values, types and formulas,
+  including true blanks. The original disk hash was unchanged. One original Excel
+  process remained, with the source workbook open, dirty and unsaved. The recovery
+  was not opened in desktop Excel.
+- **Mutation UAT failed blank preservation:** all 8 selected cells that had direct
+  COM `Value2=None` became `Value2=""`, and Excel's `ISBLANK` returned false for
+  every one. The engine reported these as unchanged blanks. Display equivalence
+  does not preserve spreadsheet semantics.
+
+The engine's gateway bulk-writes a selected column through xlwings `.value`, whose
+Windows converter changes `None` to an empty string. The fake gateway tests store
+the Python payload directly, so their `None` assertion misses that conversion.
+The engine contract requires blanks to remain blank; fix the engine write boundary
+and add a regression that exercises the real conversion stage plus an attended
+direct-COM `Value2`/`ISBLANK` check. Do not reinterpret empty strings as blanks in
+Context Palette, copy workbook logic into the host, or retry this mutation.
+
+At that time, the UAT label and execution gate remained and engine code was not
+edited. Full launcher
+activation, recovery opening in Excel, stale/conflict/partial/unknown cases,
+Unicode live paths, duplicate workbooks/headers, pagination, Return to Excel,
+display-scaling coverage and the second-PC setup issue were unverified. Private
+fixture paths, launcher settings, tokens, matrices and samples are kept in local
+output evidence, not tracked documentation.
+
+## OneNote Send single-button UI (2026-10-03)
+
+The separate Review control has been replaced by a locally displayed complete
+page and one **Send to OneNote** approval. The 2026-09-28 record below remains
+historical evidence for the original host slice.
+
+Final focused verification passed **90 tests in 31.675 seconds**: 56 Send
+protocol/Tk tests, 23 owned-transport tests and 11 launcher smoke tests. After the
+last test-helper refinement, all three visual cases passed in 3.583 seconds.
+The final `check-context-palette.bat` passed configuration validation, source
+compilation and **1,651 tests in 171.594 seconds, with 2 skipped**. The sandbox
+could not launch the existing profile Python; the unchanged check used normal
+Windows access, without environment repair. Tracked and new-file diff checks
+passed and nothing is staged.
+
+The first complete run executed 1,651 tests in 165.200 seconds, with 2 skipped
+and 10 failed layout/focus assertions. The failures reproduced after the earlier
+launcher scaling tests: the Send widget heading retained a 51-pixel requested
+height at every simulated scale, while a newly created diagnostic font changed
+size correctly. Setting a deterministic baseline before widget construction and
+using a fresh interpreter/theme per scale corrected this cached-font test state.
+The tests restore display scaling, finalize earlier Tk variables, and wait for
+native mapping/geometry/focus to settle. No fit assertion was relaxed. The matrix
+also requires the actual heading height to increase at each scale, and checks
+complete long Unicode/tab/blank-line text plus scrolling.
+
+Synthetic regression coverage includes all five outcomes, strict full-plan
+comparison with the clicked snapshot, normalization redisplay, fixed click-time
+expiry during planning/readiness/final approval, and cancellation or source,
+title, destination, engine and session changes during each preflight stage.
+The final Tk handoff catches source revision changes even without a notification.
+Tests also cover fast completed double-clicks, held Ctrl+Enter across completion,
+fresh intentional equal-content sends, worker/Tk separation, Tab/Escape, retained
+uncertain receipts and IDs, acknowledgement semantics, and Close/Quit blocking.
+
+Independent read-only review identified three corrected issues: a callback
+exception could leave the preflight gate/polling stalled; metadata-read cleanup
+could fabricate a Send receipt; and a later read-cleanup failure could repeat an
+old success. Regression tests protect each correction and the visibility of an
+earlier unresolved write during a new cleanup failure.
+
+Real Tk construction checked short/long title and destination, small usable
+windows, conditional controls and shared-style preservation at simulated Windows
+100%, 125%, 150% and 200% scaling. These are synthetic checks, not physical DPI
+or multi-monitor UAT. Fresh native captures of the script-owned synthetic window
+were inspected at 100%: [ready](../outputs/onenote-send-ui-20261003/ready-100.png),
+[verified](../outputs/onenote-send-ui-20261003/verified-100.png), and
+[unknown](../outputs/onenote-send-ui-20261003/unknown-100.png). All content and
+client responses are fake. The first PrintWindow captures omitted themed widgets;
+those incomplete images were replaced by client-area captures before inspection.
+The render exposed global font defaults overriding heading weights, corrected
+with explicit shared fonts within this dialog, without global theme changes.
+
+No live OneNote read/write, Python OneNote edit, application restart, commit or
+push was performed. Existing uncommitted work and private settings were preserved.
+The [revised one-page attended UAT proposal](ONENOTE_SEND_UAT.md) still needs
+exact owner-approved scope before agent-operated live access. Relocated bootstrap,
+other clients/notebooks and interrupted real writes remain separately unverified.
+
+## Send text to OneNote host slice (2026-09-28)
+
+This is a new host implementation, independent of the removed prototype.
+Final host gate: `check-context-palette.bat` passed configuration validation,
+source compilation and **1,630 tests, 2 skipped**, in 162.785 seconds. The initial
+sandboxed attempt could not launch the existing profile Python; the unchanged
+check passed with normal Windows access. No environment repair was performed.
+Focused Send protocol/Tk verification passed 35 tests in 5.973 seconds; the owned
+transport suite passed 23 tests. Earlier menu/data-catalog expectations and one
+source-revision test assertion were corrected before this final gate. Tracked
+and new-file diff checks passed; no runtime data is staged and nothing was committed.
+
+Synthetic protocol tests use a fixed canonical golden plan and digest, all five
+write outcomes, strict types/effects/exit matching, Unicode/control/size limits,
+confirmation expiry, bounded paging/ancestry, and private destination persistence.
+The native Windows subprocess tests use disposable fake launchers and children,
+including the production `OneNoteSendClient.execute` default path and its 45-second
+allowance. No test imports the engine or accesses Office.
+
+Real Tk construction with fake clients covers inert opening/editing, complete
+review, source/engine/section invalidation, one send per review, equal-content
+intentional sends after new review, pre/post-dispatch cancellation, stale-result
+retention, partial IDs, expiry during readiness, cleanup blocking, Close/Quit,
+destination selection, keyboard use and simulated scaling. These are synthetic
+UI checks, not physical DPI or owner-observed OneNote evidence.
+
+Independent review found two corrected gaps: accepting unexpected execution
+warnings/artifacts, and risking no-effect classification for an unexpected
+exception after entering Execute. Such malformed or lost replies now remain
+unknown; validated terminal receipts can retain more precise effects. A permanent
+result label keeps uncertain outcomes visible even after editing title/source.
+
+No live host read/write, application restart or OneNote navigation was performed
+for this slice. The [exact disposable UAT proposal](ONENOTE_SEND_UAT.md) requires
+new approval after the automated gate. The engine owner's earlier 1,113-test gate
+and one verified engine-only creation are not acceptance of this host feature.
+Relocated bootstrap/live access remains separately scoped and unverified.
+
 ## Multi-monitor placement regression (2026-09-24)
 
 The owner reported Palette straddling two displays on a laptop with two external
@@ -43,6 +442,237 @@ window. Disconnect external displays, open again on the laptop, reconnect and
 repeat; check a child dialog on the chosen screen too. Preserve current Input /
 Output before restarting. No live application restart or personal data change
 is part of this automated check.
+
+## OneNote closed-notebook recovery (2026-09-19)
+
+The owner reported closing the agreed disposable notebook and restarting. Their
+screenshot showed the saved notebook still selected, no results, and a misleading
+engine-unavailable/repair message. This was a failed recovery check, not acceptance.
+
+An authorized diagnostic through Palette's owned transport used only the saved
+exact disposable notebook and previously agreed marker; it performed no root
+inventory, preview, navigation or content writes. Static describe and the active
+probe succeeded, but scoped search returned `internal.desktop_bridge`, category
+`internal_error`, exit 70. The host incorrectly mapped this known read failure to
+engine incompatibility. The engine currently does not distinguish a closed/stale
+notebook from other failures in this bridge error; no specific cause is inferred
+from the error code alone. Python OneNote was inspected but not edited.
+
+The correction recognizes that code, preserves the configured engine and exact
+notebook, clears failed results/readiness, and keeps Search / Choose notebook
+available. It makes no automatic retry or fallback. Two new regressions failed
+before the fix; all 73 focused protocol/Tk tests then passed in 16.194 seconds.
+They also cover private error-detail suppression, mismatched-exit rejection,
+clearing an existing preview and a fresh describe/probe on explicit same-scope
+retry. Independent read-only review found no blocker.
+
+The corrected production client was exercised once against the same live failure:
+it returned the new fixed recovery message, with private settings byte-for-byte
+unchanged. This is live adapter evidence, not a corrected resident-window check.
+Palette was not restarted again or its current Input / Output discarded. The
+owner still needs to restart Palette, check the revised closed-notebook message,
+then reopen the notebook and retry (reselect explicitly if its identity changed).
+The complete repository check passed configuration validation, compilation and
+1,580 tests with 2 skipped in 163.362 seconds. Tracked and new-source/test
+whitespace checks passed. No personal/runtime files are staged; nothing was
+committed or pushed.
+
+### Reopened notebook follow-up — blocker confirmed (2026-09-19)
+
+The owner supplied the corrected recovery message and confirmed the notebook was
+already open. The message fix is visible, but reopened-notebook recovery has failed;
+opening the notebook alone did not resolve the saved scope.
+
+An authorized metadata-only diagnostic found successful describe/probe followed by
+`input.unsupported_onenote_xml_element` (exit 3) from root notebook inventory.
+A temporary, process-owned observation around the unchanged engine parser emitted
+only schema element names and identity-match booleans, never raw XML, notebook
+names, IDs, paths or text. The sole notebook matched the agreed disposable title,
+but its identity differed from the saved identity. The xs2013 metadata contained
+`Notebooks`, `Notebook` and `UnfiledNotes`; the engine parser allows only the first
+two of these. Settings remained byte-for-byte unchanged. No root page search,
+preview, notebook mutation, automatic remapping or engine edit was performed.
+
+Consequently the saved reference is stale, and Choose notebook cannot repair it
+because inventory rejects the metadata. Engine work is needed to handle the known
+UnfiledNotes structure without widening scope or accepting arbitrary XML, followed
+by explicit notebook reselection and a same-scope search/preview check. Never select
+by title automatically; duplicate titles and opaque identity rules still apply.
+The owner chose an engine-owner handover rather than engine edits in this task.
+See [the prepared prompt](ONENOTE_ENGINE_RECOVERY_HANDOVER.md). Host test totals
+above remain valid; this follow-up changed no code.
+## OneNote engine discovery (2026-09-16)
+
+Automatic direct-sibling discovery is implemented. The focused host check passed
+82 tests in 28.453 seconds, using synthetic launchers/responses and real Tk.
+It covers explicit-path precedence, missing/invalid/corrupt settings and unusable
+explicit engines with a valid sibling present; absent/inaccessible siblings;
+exact sibling-only bounds; space/Unicode installation paths and a foreign cwd
+with a decoy engine; module-derived installation root independent of settings;
+no engine call/read/readiness on open or typing; notebook retention on repair;
+and notebook persistence without pinning the detected engine. The complete
+repository check passed configuration validation, compilation and 1,578 tests
+with 2 skipped in 185.107 seconds. Tracked and new-file whitespace checks passed;
+independent review found no blocker. Those checks used synthetic engines; the
+subsequent attended live check is recorded separately below.
+
+The Python OneNote owner's 2026-09-16 `docs/STATUS.md` and
+`docs/CONTEXT_PALETTE_PRODUCT_OWNER_HANDOVER.md` record 561 engine tests, Ruff,
+compileall, pip check and diff checks. Its real launcher passed static requests
+from isolated space/non-ASCII installations and a foreign cwd. This host task
+inspected that evidence without rerunning the engine gate or editing that repo.
+Neither those static checks nor the host synthetic tests establish full bootstrap
+or live OneNote access from relocated paths; those remain a separate follow-up.
+
+### Attended Windows UAT — partial evidence (2026-09-16)
+
+The owner explicitly agreed the disposable notebook, section, page and search
+marker, allowed listing open notebook names, and confirmed that no other notebook
+was open. The owner also allowed Palette restart and discarding its current
+Input / Output text. Exact local identifiers and note content are not retained
+in this record. OneNote was already running; this check used the existing saved
+engine at its original location, not automatic sibling discovery or a relocated
+engine.
+
+- The updated UI reused the saved engine without Check setup / Connect steps.
+  Choose notebook listed only the agreed notebook. Its selection survived closing
+  the picker and a full Palette quit/relaunch. Opening and typing left the UI idle;
+  no-call behavior is established by the synthetic tests, not live instrumentation.
+- Search returned three rows, all within the selected notebook, with notebook /
+  section locations visible. Only the agreed page was selected and previewed.
+  Preview reported complete basic text of 1,098 characters. The results included
+  a deleted-pages location; other returned pages were not previewed.
+- With harmless destination text, Cancel visibly retained it; Append displayed
+  that text followed by the note; Replace displayed the note alone. Ctrl+Z restored
+  the original text after both Append and Replace. These are live visual checks;
+  exact text equality and unchanged clipboard have synthetic coverage but were
+  not independently measured in this live session.
+- No OneNote content-write or navigation command was issued, and no unexpected
+  prompt was observed. Notebook immutability and background synchronization were
+  not independently instrumented. Search was first observed complete at 12 seconds
+  and preview at 8 seconds after their clicks; tool/polling delays mean these are
+  polling observations, not operation latency measurements.
+- The unavailable-notebook live check was pending owner preparation at this
+  checkpoint; see the 2026-09-19 failure and correction above. Broader coverage
+  below and full bootstrap/live reads from relocated paths remain unverified.
+  This partial session is not blanket owner acceptance.
+
+### Bounded attended UAT procedure
+
+Use an explicitly agreed disposable scope and isolate it before inventory/root
+search. The agreement above applies only to this session and its named scope;
+historical engine UAT is not blanket authorization. Preserve useful Input / Output
+text before restart and keep OneNote already running under a standard account.
+
+1. Restart Palette, open Find OneNote notes and verify the expected engine status.
+   Opening and typing must not start a request. Choose the agreed notebook, then
+   close/reopen the picker and restart Palette; the same notebook must remain shown.
+2. Choose Search with the agreed text. Review notebook/section breadcrumbs and
+   select only the agreed page. Explicitly Preview its complete basic text. Verify
+   no unexpected OneNote navigation, prompt, synchronization or content change.
+3. With disposable Input / Output text, exercise Use text → Cancel, Append and
+   Replace. Cancel retains original text; Append adds exactly the reviewed text;
+   Replace shows exactly it; Undo restores the previous value. Clipboard unchanged.
+4. Have the owner make only the agreed notebook unavailable, then search its saved
+   scope. Confirm a clear failure, no results from other notebooks and the same
+   saved scope. Reopen the notebook explicitly and reselect if its identity changed.
+5. Record only coarse timings, pass/fail observations and remaining limits. Keep
+   bootstrap/live reads at relocated engine paths outside this session unless
+   separately authorized. Stop on scope ambiguity, unexpected prompts or changes.
+
+## OneNote host first slice (2026-09-16)
+
+The attended **Find OneNote notes…** integration is implemented. On 2026-09-16,
+`check-context-palette.bat` passed configuration validation, compilation and
+**1,541 tests with 2 skipped** in 204.589 seconds after the placement correction. The 65 new tests cover strict
+protocol/settings (15), owned Windows synthetic child processes (19), injected
+session metadata (10), and real Tk with fake notes/placement/launcher wiring (21).
+Focused checks and tracked/new-file whitespace checks passed. Ordinary tests use
+fake responses and never activate or inspect OneNote, notebooks or Graph.
+
+The real local engine's static `describe_capabilities` handshake also passed
+(`can_probe=True`) through the new owned transport. This does not attach to
+OneNote or establish desktop readiness. Synthetic Tk journey/layout checks passed;
+a separate desktop screenshot inspection timed out at the tool's app-approval
+step, so visual review was not claimed at that checkpoint. The resident Palette
+had not yet been restarted.
+
+**Owner-run host UAT: search, preview and corrected Replace confirmed.** The owner supplied a
+screenshot showing two search matches and a complete basic-text preview, but
+reported that Replace did not leave the note in Input / Output. A success label
+in the picker is not evidence of successful end-to-end placement. An automated
+real-Tk regression reproduced the missing reveal of a hidden main window; a
+subsequent normal Show/F9 reloads the old clipboard. Replace and Append now reveal
+and focus the editor without clipboard access; Cancel leaves the view unchanged.
+The new regression covers both placement modes, hidden/collapsed workspace,
+exact text, unchanged clipboard, focus and Undo. The owner subsequently confirmed
+"this works" on 2026-09-16. Broader UAT and observed timings remain pending.
+
+The owner then requested a remembered engine and notebook instead of repeated
+setup/connection steps. The new flow performs setup/probe automatically only
+after explicit Search/Enter or Choose notebook. A chosen notebook is stored in
+private local settings and sent as an exact scoped identity; errors never widen
+scope. Real-Tk/fake-engine focused checks passed 59 tests covering restart reuse,
+fresh-session reprobe, cancellation between stages, missing/moved engine,
+scope persistence, chooser cancellation/close and strict inventory/scoped-result
+contracts. The complete check passed configuration validation, compilation and 1,566 tests with 2 skipped in 164.656 seconds; tracked/new-file whitespace checks also passed.
+The later partial live check of this new flow is recorded above.
+
+At this earlier first-slice checkpoint, the agent had not performed a live notebook
+read. The engine's earlier disposable
+UAT on 2026-09-13 verified its own probe/search/preview and recorded roughly one second per
+read. Its runner selected a preapproved result automatically; it did not test
+Context Palette, human result selection or this placement UI. That engine
+evidence is not host acceptance, general coverage or a performance guarantee.
+
+The owner subsequently identified the existing disposable notebook/page by
+screenshot for host UAT. An attempt to inspect the current OneNote window timed
+out at the desktop-control tool's app-approval step. No agent-operated live probe,
+search, preview or placement was performed during that attempt. The first
+screenshot established the selected test target; owner-run and subsequent
+agent-operated live evidence are recorded above. The broader matrix below
+remains only partially exercised; preserve useful Input / Output text before
+any further restart.
+
+After synthetic checks pass, the owner must explicitly agree a disposable
+scope for a separately attended host acceptance session. Root search reads all
+open notebooks: isolate the approved disposable content before authorizing
+Search/Choose notebook, rather than treating earlier engine consent as permission to
+read personal or business notebooks. Use standard-user execution and OneNote
+already running; independently observe no unexpected navigation, prompts,
+synchronization or content change.
+
+The broader host acceptance matrix is (completed parts are recorded above):
+
+- Open from selected Input / Output and from an empty typed query: neither
+  opening nor typing may read OneNote. Choose a notebook once and verify that
+  reopening remembers both engine and scope. Search/Enter must check/connect as
+  needed, then send only the selected scope with unindexed pages and limit 20.
+  Test closed/moved notebooks and an unavailable/moved engine without silent root
+  fallback. Choose notebook reads open notebook names only on explicit request.
+- Review empty/multiple/untitled/Unicode/limited results and available breadcrumbs.
+  Select a human-chosen exact result, explicitly Preview text, then test Replace,
+  Append and Cancel, including an empty destination. Verify the clipboard and
+  OneNote remain unchanged, and only the reviewed complete text is placed.
+- Confirm a preview over 50,000 characters is labelled and cannot be used. Change
+  query, selection and destination during work/review; no stale completion or
+  destination change during the chooser may overwrite working text.
+- Exercise cancellation, timeout, Close, one-request-at-a-time behavior and
+  process exit/restart/addition. Confirm host-owned descendants are gone before
+  another request, OneNote is never terminated, and readiness is re-probed when
+  invalidated. Use synthetic fixtures for unsafe/unavailable process scenarios.
+- Inspect generic errors and diagnostics for query/content/ID/raw stderr leakage;
+  confirm settings are ignored and excluded from configuration backup. Test
+  keyboard navigation, focus, responsiveness and normal Windows scaling.
+- Test representative disposable workloads and an engine checkout/launcher path
+  containing spaces and non-ASCII characters. A foreign working-directory check
+  alone does not establish checkout-path portability.
+
+Provisional latency goals are at most **5 seconds per search or preview** and
+**10 seconds for search plus preview**, excluding setup and human selection.
+These goals and broader coverage remain unverified. The 10/30-second transport
+deadlines are safety limits, not acceptable routine latency targets. Record only
+coarse timings and non-sensitive observations.
 
 ## Current Edge score PDF acceptance
 
@@ -988,14 +1618,14 @@ Perform only when relevant:
   2026-08-25. Repeat the complete matrix at 100%, 125%, and 150% display
   scaling.
 
-- Against Python Excel commit `08af313`, run **UAT: Convert
-  scientific-notation columns** first without the UAT environment variable.
+- Against Python Excel commit `08af313`, run **Convert Excel values to text**
+  first without the startup opt-in environment variable.
   Confirm capability discovery and that its initial workbook/worksheet chooser
   matches the format-template Action, including duplicate-name labels,
   captured-F9 preference, active visible worksheet, inline Refresh, and
   Return-to-Excel eligibility. Then confirm paged preflight, physical
-  column selection, and planning work, while Execute remains disabled with a
-  persistent Development/UAT explanation. Then stop the app, set
+  column selection, and planning work, while Convert remains disabled with a
+  clear build-restriction explanation. Then stop the app, set
   `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1`, and restart. Use only a
   disposable open `.xlsx`: include scientific text, ordinary text,
   leading-zero identifiers, current numeric scalars, blank and duplicate

@@ -3497,6 +3497,98 @@ in Active Actions. This supersedes the 2026-07-17 direct-button interaction,
 2026-08-03 first-available launcher execution while retaining their persisted
 data compatibility.
 
+## 2026-09-16 - Add an attended read-only OneNote host slice
+
+**Decision:** Delegate OneNote access to the separately prepared Python OneNote
+engine, preserving its existing checkout and local environment. Add one transient
+Input / Output picker with static Check setup, acknowledged active Connect,
+explicit Search/Enter across all open notebooks, human result selection,
+explicit Preview text and the existing Replace/Append/Cancel placement chooser.
+Always send `include_unindexed_pages: true`, root null scope and limit 20. Request
+50,000 preview characters and refuse Use for truncated or inconsistent text.
+Store only a private machine-local launcher setting, excluded from backup.
+
+**Reason:** The engine already owns validated read identities and backend
+lifecycle. A separate host boundary avoids duplicating OneNote COM behavior or
+coupling it to Python Excel. Explicit reads, exact opaque identities and complete
+preview review keep sensitive content and placement understandable. An indexed-only
+fallback, automatic preview or silently applied excerpt would expand the agreed
+scope and weaken that review boundary.
+
+**Consequences:** Worker requests own launcher descendants before execution,
+enforce bounded transport/deadlines and complete cleanup before reuse. Readiness
+requires the current active probe and unchanged current-session process
+fingerprints around reads; generations and destination rechecks reject stale
+results. No OneNote startup/termination, Graph, navigation, writes, synchronization,
+index repair, shared engine package or automatic setup is introduced. Query,
+results, IDs and previews are not persisted or logged; explicitly placed text
+follows existing Input / Output session behavior. Automated host verification is
+recorded separately from pending owner-scoped disposable live UAT. Earlier engine
+UAT neither authorizes personal notebook access nor establishes host acceptance,
+broad coverage, checkout-path portability or the provisional latency goals.
+
+## 2026-09-16 - Remember OneNote engine and notebook; connect on explicit commands
+
+**Decision:** Following owner confirmation that corrected placement works, remove
+the repeated Check setup/Connect steps. Reuse the private engine setting and add
+an explicitly chosen notebook ID/title. Search or Choose notebook performs the
+static description and active probe as needed in its worker job. Reuse transient
+readiness only while the captured OneNote session remains stable. Opening or
+typing performs no external read; preview and placement remain explicit.
+
+**Reason:** The owner wants routine note retrieval without setup ceremony and
+prefers a fixed notebook. Search remains an explicit request to read the displayed
+scope; separate repeated connection prompts do not improve that decision.
+
+**Consequences:** Choose notebook lists bounded open-notebook metadata. Scoped
+search sends exact opaque identity and validates result ancestry; unavailable
+notebooks never cause root fallback. Changing/moving the engine preserves the
+notebook. All open notebooks is a visible legacy/default scope and an explicit
+alternative in the chooser. Only the chosen notebook identity/name joins the
+launcher in ignored, backup-excluded local settings; query/page results stay
+transient. This supersedes the earlier launcher-only persistence and separate
+connection/root-only host recipe, without changing engine code or adding a
+resident service, dependency, background read, navigation or mutation.
+
+## 2026-09-16 - Discover only the direct sibling OneNote engine
+
+**Decision:** Match Excel's limited discovery convention without a shared engine
+framework. Prefer an explicit absolute launcher; only if none is configured check
+`<installation parent>/python-onenote/python-onenote.bat`. Derive installation
+location from the installed module, never cwd or the settings directory. Missing,
+invalid or unusable explicit launchers require repair, never a sibling fallback.
+
+**Reason:** Ordinary setup should not require browsing for an engine installed
+beside Palette. Preserving explicit choices prevents an engine change from being
+mistaken for a harmless discovery convenience.
+
+**Consequences:** Finding a path runs no process, grants no readiness and saves no
+override. Explicit Search/Choose notebook retains describe/probe/read semantics,
+acknowledgements and process ownership. Saving a notebook does not pin a discovered
+engine. Repair/reselection preserves valid notebook metadata and invalidates
+connection readiness. Python OneNote production/protocol code is unchanged;
+bootstrap and live access from relocated paths need separate verification.
+
+## 2026-09-19 - Keep OneNote read failures separate from engine repair
+
+**Decision:** Recognize the engine's known `internal.desktop_bridge` error as a
+failed desktop read. Retain the explicit engine and notebook, clear transient
+results/readiness, and ask the user to check that the notebook is open before
+choosing Search again. Do not automatically retry, change engines or widen scope.
+
+**Reason:** The owner's closed-notebook check reproduced a successful static
+handshake and active probe followed by this error on the exact scoped search.
+Palette incorrectly treated the valid failure response as engine incompatibility.
+The engine's broad wrapper does not establish that a notebook is closed, so the
+host message gives recovery guidance without asserting a specific cause.
+
+**Consequences:** Existing launcher/protocol repair, privacy, acknowledgements,
+owned processes and stale-response checks remain in place. The next explicit
+Search rechecks readiness and the same scope. No engine code or protocol change
+is made; precise stale-target classification remains an engine-owner follow-up.
+Synthetic UI recovery and live adapter evidence are distinct from the pending
+corrected resident-window and reopened-notebook UAT.
+
 ## 2026-09-24 - Center Palette on one cursor-selected screen
 
 **Decision:** Correct negative desktop coordinates using explicit left/top Tk
@@ -3517,3 +3609,148 @@ persisting a machine's topology. No new dependency or user setting is needed.
 Simulated layouts and an invisible real Tk coordinate check are automated
 evidence; physical mixed-scaling and docking UAT on the affected PC remain open.
 This extends the 2026-08-24 centering policy to startup and ordinary Show.
+
+## 2026-09-28 - Send one reviewed text page to an exact OneNote section
+
+**Decision:** Add an attended Input / Output Send destination using the existing
+versioned Python OneNote launcher. Capture source text, explicitly choose and
+remember an exact section privately, validate/display the complete pure plan,
+then consume one review for one explicit Send. Keep the search notebook separate.
+Readiness and exact scoped revalidation count toward the fixed five-minute consent.
+
+**Reason:** The owner requested a simple way to post text to an existing section.
+One new plain-text page gives a bounded, reviewable effect without shared-page
+append, tables, existing-page updates, a workflow framework or COM duplication.
+
+**Consequences:** Mutation responses need a separate parser because error envelopes
+can contain partial page identities. Cancellation after possible dispatch is not
+rollback; retain precise receipts and uncertain results across close/stale callbacks,
+require acknowledgement and never retry automatically. Writes have a bounded
+45-second transport allowance plus two-second cleanup; reads retain 30 seconds.
+No new dependencies, engine edits, commit or live OneNote access are implied.
+Engine-only UAT is evidence for its installed backend, not acceptance of this host
+feature. New exact disposable host scope approval precedes live reads or writes.
+
+## 2026-10-03 - Approve the visible OneNote page with one Send action
+
+**Decision:** Replace the separate Review and Send controls with one **Send to
+OneNote** action. Before it is enabled, display the complete locally normalized
+title/body and exact destination. At the click, capture that visible snapshot,
+source revision, destination, engine identity and aware UTC time; consume the
+control before worker scheduling. The worker alone obtains and strictly compares
+the canonical plan, then uses the original click time for the fixed 300-second
+authorization. Require a release/cooldown guard before another request.
+
+**Reason:** The extra Review click did not add useful clarity once the exact final
+page is already visible. It also made the simple attended operation look more
+technical than necessary. Moving planning behind the one approval preserves the
+existing consent boundary without allowing a plan to alter the approved content.
+
+**Consequences:** Opening/editing stays effect-free. Any title, source revision,
+destination or engine change requires another explicit Send; readiness, planning
+and section rechecks never extend authority. The Tk thread hands the final source,
+revision, title, destination and engine to the worker before execution. Result
+details appear only after an attempt; **I've checked OneNote** only acknowledges an
+uncertain/partial warning and never converts it to verified success. The quiet
+engine control, conditional cancellation, retained uncertain receipts and no-retry
+rule remain. This does not authorize live OneNote access; the revised disposable
+UAT proposal remains pending owner approval.
+
+## 2026-10-04 - Preserve authoritative Excel conversion receipts
+
+**Decision:** Continue using the existing Python Excel process client, shared
+workbook/worksheet selector and physical-column review. Treat `result.state` as
+authoritative, reject `failed` receipts that claim completed effects, and retain
+`partial_failure` receipts with `mutation_started=true` even when
+`workbook_dirty=false`. Show an explicit Excel Undo warning on every review.
+
+**Reason:** The engine marks mutation started before its first COM write. That
+write can fail before a visible change, so a clean-workbook flag cannot safely
+turn a partial outcome into a known no-effect failure. Recovery and inspection
+guidance must remain available without automatic retry.
+
+**Consequences:** No host conversion logic, duplicate client, new dependency or
+unrelated workflow redesign is introduced. The corrected engine write boundary
+is verified in its working tree at `08af313`, but remains uncommitted; interface
+version `1.0` alone cannot prove deployment of the fix. Keep the existing UAT
+label/startup execution gate pending deployable engine evidence and the remaining
+acceptance matrix. Python Excel remains read-only in this integration task.
+
+## 2026-10-04 - Make attended Excel conversion quicker to review
+
+**Decision:** Keep the existing exact-target, plan and recovery-backed operation,
+but present its human effects first. Show counts, up to three engine-authored
+Before → After examples, the exact target and recovery path, and necessary
+warnings. Keep full samples and fingerprints behind Show details. Use one current
+status and a fixed-footer conversion button. Single clicks toggle separate columns.
+
+**Reason:** The owner found the technical review convoluted and asked for quick,
+efficient execution. A raw fingerprint and full diagnostic report do not help
+the routine decision to convert the chosen cells.
+
+**Consequences:** Details does not reread Excel or reset acknowledgement. Change
+columns reuses inspected choices but discards authority; a fresh plan and any
+required precision acknowledgement remain mandatory. No conversion logic moves
+into the host, no engine change or dependency is added, and no automatic retry,
+save or close is introduced. The existing Development/UAT gate remains until the
+engine correction is deployable and the outstanding acceptance work is complete.
+
+## 2026-10-04 - Optional Excel Review and one refreshed backup
+
+**Decision:** The owner explicitly changed the human flow to select columns →
+Convert. Keep Review as an optional read-only command. Convert authorizes one
+captured selection; obtain and validate a fresh engine plan in the background,
+then execute its exact fingerprint when ready. A precision warning remains an
+explicit acknowledgement exception; it does not require the full review screen.
+
+**Reason:** The owner wants routine conversion to be quick, without a mandatory
+review step. Engine planning protects the operation independently of presenting
+that plan as a screen.
+
+**Consequences:** Per-request callback tickets reject obsolete and duplicate
+responses, execution authority is consumed before dispatch, and selection/path
+changes require new authority. The existing execution gate, source clean-state
+requirement, no-save/no-close and no-retry policies remain. The owner chose
+Replace previous for one stable backup. Version `1.0` cannot do that; prepare an
+engine-owner handover and retain the read-only engine boundary. Do not delete or
+move previous backups in the host. A versioned engine extension and later host
+integration are required before that backup policy can operate.
+
+## 2026-10-04 - Compact Drop surface and clear Excel build restriction
+
+**Decision:** Reduce the collapsed Drop footprint with tighter spacing, compact
+button widths and wrapped labels. Retain every existing command as a visible
+control, full session history and the expanded read-only details. Account for
+native Windows title-bar/border dimensions on initial placement.
+
+**Reason:** The owner wants a smaller always-on-top window without losing
+functionality. The UAT-labelled Excel Action and developer message also obscure
+what prevents normal conversion.
+
+**Consequences:** Rename the shipped Action and factory choice to Convert Excel
+values to text; explain that conversion is not enabled in this build. Keep the
+actual startup restriction: the engine's blank-preserving write and supporting
+recovery validation remain uncommitted, and the direct flow has no fresh live
+acceptance. Do not mutate personal titles, enable unverified engines, access
+Office or change backup policy. No new dependency or layout redesign is needed.
+Absolute placement reuses the existing helper for monitors left/above the
+primary. Expanded details gives long behaviour labels more wrapping space,
+retaining visible settings at larger text scaling.
+
+## 2026-10-04 - One Drop information line
+
+**Decision:** Replace the separate instruction, status and behaviour rows with
+one bounded information line. Keep a selected/total counter in the navigation
+row, move Settings alongside it and retain the footer commands. Completed-drop
+history identifies the selected resource in the summary; busy/errors and blocked
+behaviour remain distinguishable. Elide long text only in that line.
+
+**Reason:** The owner wants less height and asked to combine four text rows.
+Repeating instructions and readiness consumes the always-on-top footprint.
+
+**Consequences:** Full instructions, configured behaviour, status, history and
+prepared content stay in read-only Details, available by keyboard even without
+history. Resolution/delivery guards still disable it while busy. Navigation,
+exact-result resend, configured immediate Actions, monitor fitting, session
+retention and Hide/Show semantics remain unchanged. No dependency, automatic
+effect, persistent input log or new execution permission is added.

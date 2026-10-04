@@ -61,6 +61,7 @@ _PRE_EFFECT_CODES = frozenset(
         "conflict.live_workbook_stale",
         "conflict.live_worksheet_stale",
         "conflict.live_conversion_plan_stale",
+        "conflict.live_conversion_scope_stale",
         "conflict.live_conversion_plan_blocked",
         "conflict.recovery_output_exists",
         "request.precision_risk_acknowledgement_required",
@@ -124,10 +125,12 @@ class ExcelLiveTextConversionWindow:
         self._plan_invocation: LiveColumnConversionPlanInvocation | None = None
         self._plan_result: LiveColumnConversionPlanResult | None = None
         self._plan_correlated = False
+        self._pending_plan_ticket: object | None = None
+        self._pending_execute_ticket: object | None = None
         self.view_state = "starting"
 
         self.window = tk.Toplevel(parent)
-        self.window.title("Convert scientific-notation columns")
+        self.window.title("Convert Excel values to text")
         configure_standard_window(self.window, parent)
         self.window.protocol("WM_DELETE_WINDOW", self.close)
         self.window.bind("<Escape>", lambda _event: self.close())
@@ -137,36 +140,19 @@ class ExcelLiveTextConversionWindow:
         outer.pack(fill=tk.BOTH, expand=True)
         ttk.Label(
             outer,
-            text="Convert scientific-notation columns",
+            text="Convert Excel values to text",
             style="Title.TLabel",
         ).pack(anchor=tk.W)
         ttk.Label(
             outer,
             text=(
-                "Choose exact physical columns in an already-open workbook, "
-                "review a zero-write plan, then create a recovery copy before conversion."
+                "Choose columns, then Convert. Review is optional. "
+                "Excel stays open; you decide when to save."
             ),
             style="Muted.TLabel",
             wraplength=720,
             justify=tk.LEFT,
         ).pack(anchor=tk.W, pady=(2, 7))
-        banner_text = (
-            "Development/UAT: live text execution is enabled for this app session."
-            if self.execution_enabled
-            else (
-                "Development/UAT: execution is disabled. Planning is available, "
-                "but this build cannot change Excel."
-            )
-        )
-        self.uat_banner = ttk.Label(
-            outer,
-            text=banner_text,
-            style="Error.TLabel" if self.execution_enabled else "Muted.TLabel",
-            wraplength=720,
-            justify=tk.LEFT,
-        )
-        self.uat_banner.pack(fill=tk.X, pady=(0, 7))
-
         body = ttk.Frame(outer)
         body.pack(fill=tk.BOTH, expand=True)
         self.canvas = tk.Canvas(body, highlightthickness=0, takefocus=False)
@@ -185,12 +171,13 @@ class ExcelLiveTextConversionWindow:
 
         footer = ttk.Frame(outer)
         footer.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
+        self.footer = footer
         self.status_var = tk.StringVar()
         self.status_label = ttk.Label(
             footer,
             textvariable=self.status_var,
             style="Status.TLabel",
-            wraplength=590,
+            wraplength=300,
             justify=tk.LEFT,
         )
         self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -198,6 +185,7 @@ class ExcelLiveTextConversionWindow:
         self.close_button.pack(side=tk.RIGHT, padx=(8, 0))
 
         self.primary_button: ttk.Button | None = None
+        self.review_button: ttk.Button | None = None
         self.refresh_button: ttk.Button | None = None
         self.workbook_var = tk.StringVar()
         self.worksheet_var = tk.StringVar()
@@ -206,6 +194,10 @@ class ExcelLiveTextConversionWindow:
         self.worksheet_picker: ttk.Combobox | None = None
         self.columns_listbox: tk.Listbox | None = None
         self.result_text: tk.Text | None = None
+        self.plan_details_frame: ttk.Frame | None = None
+        self.plan_details_button: ttk.Button | None = None
+        self._responsive_review_labels: list[ttk.Label] = []
+        self.recovery_var = tk.StringVar()
         self.show()
         self.window.after_idle(self._load_settings)
 
@@ -228,6 +220,9 @@ class ExcelLiveTextConversionWindow:
             )
             return False
         self._closed = True
+        self._pending_plan_ticket = None
+        self._pending_execute_ticket = None
+        self._plan_correlated = False
         if self._poll_after_id is not None:
             try:
                 self.window.after_cancel(self._poll_after_id)
@@ -546,14 +541,18 @@ class ExcelLiveTextConversionWindow:
         self.view_state = "select_columns"
         self._clear_content()
         ttk.Label(
-            self.content, text="Choose physical columns", style="Heading.TLabel"
+            self.content, text="Choose columns to convert to text", style="Heading.TLabel"
         ).pack(anchor=tk.W)
+        if self._selected_workbook is not None:
+            self._review_label(f"{self._selected_workbook.name} · {result.worksheet}")
+            if self._selected_workbook.full_path:
+                self._review_label(self._selected_workbook.full_path, muted=True)
         ttk.Label(
             self.content,
             text=(
                 f"Worksheet: {result.worksheet} · data rows examined: "
                 f"{result.data_rows.examined} of {result.data_rows.total}. "
-                "Blank and duplicate headers remain separate because column coordinates are authoritative."
+                "Click columns to select or clear them. Arrow keys and Space also work."
             ),
             wraplength=700,
             justify=tk.LEFT,
@@ -562,7 +561,7 @@ class ExcelLiveTextConversionWindow:
         frame.pack(fill=tk.BOTH, expand=True)
         self.columns_listbox = tk.Listbox(
             frame,
-            selectmode=tk.EXTENDED,
+            selectmode=tk.MULTIPLE,
             exportselection=False,
             height=10,
             activestyle="dotbox",
@@ -595,14 +594,24 @@ class ExcelLiveTextConversionWindow:
                 text="Load more columns",
                 command=lambda: self._start_preflight(self._next_column_offset or 0),
             ).pack(anchor=tk.W)
-        self.primary_button = ttk.Button(
+        self._review_label(
+            "One backup is created beside the workbook before conversion. "
+            "Excel Undo history may be cleared. Excel stays open; you decide when to save.",
+            muted=True,
+        )
+        self.review_button = ttk.Button(
             self.content,
-            text="Review conversion plan",
+            text="Review changes (optional)",
             command=lambda: self._start_plan(None),
-            style="Accent.TButton",
             state=tk.DISABLED,
         )
-        self.primary_button.pack(anchor=tk.W, pady=(10, 0))
+        self.review_button.pack(anchor=tk.W, pady=(8, 0))
+        self.primary_button = ttk.Button(
+            self.footer, text="Convert", style="Accent.TButton",
+            command=lambda: self._start_plan(None, execute_when_ready=True),
+            state=tk.DISABLED,
+        )
+        self.primary_button.pack(side=tk.RIGHT, padx=(8, 0))
         self._refresh_inventory_button()
         self._render_warnings(result.warnings)
         self._column_selection_changed()
@@ -614,16 +623,20 @@ class ExcelLiveTextConversionWindow:
         self._selected_preflight_column_indexes = set(self._selected_columns())
         preflight_complete = self._next_column_offset is None
         self.primary_button.configure(
-            state=tk.NORMAL if selected and preflight_complete else tk.DISABLED
+            state=tk.NORMAL if selected and preflight_complete and self.execution_enabled else tk.DISABLED
         )
+        if self.review_button is not None:
+            self.review_button.configure(state=tk.NORMAL if selected and preflight_complete else tk.DISABLED)
         self._set_status(
             (
-                "Load all remaining column pages before reviewing a conversion plan."
+                "Load all remaining column pages before converting."
                 if not preflight_complete
                 else (
-                    "Review the exact conversion plan for the selected physical columns."
+                    "Choose Convert when ready. Review is optional."
+                    if selected and self.execution_enabled
+                    else "Conversion is not enabled in this build. You can review the selected columns."
                     if selected
-                    else "Select one or more exact physical columns."
+                    else "Select one or more columns."
                 )
             )
         )
@@ -640,7 +653,12 @@ class ExcelLiveTextConversionWindow:
             for index in selected
         )
 
-    def _start_plan(self, recovery_path: str | None) -> None:
+    def _start_plan(self, recovery_path: str | None, *, execute_when_ready: bool = False) -> None:
+        if self._closed or self.busy or self.coordinator.completion_pending or self.view_state == "executing":
+            return
+        if execute_when_ready and not self.execution_enabled:
+            self._set_status("Conversion is not enabled in this build. You can review the selected columns.")
+            return
         workbook = self._selected_workbook
         worksheet = self._selected_worksheet
         columns = (
@@ -666,21 +684,34 @@ class ExcelLiveTextConversionWindow:
         self._plan_invocation = invocation
         self._plan_result = None
         self._plan_correlated = False
+        ticket = object()
+        self._pending_plan_ticket = ticket
         self.view_state = "planning"
         self._clear_content()
-        self._show_working("Building an exact zero-write conversion plan…")
+        self._show_working(
+            "Checking the selected columns before backup and conversion…"
+            if execute_when_ready else "Checking the selected columns without changing Excel…"
+        )
         self._start_call(
             build_plan_live_column_conversion_request(_request_id(), invocation),
             phase="conversion_plan",
             timeout_seconds=_PLAN_TIMEOUT_SECONDS,
-            callback=lambda call: self._plan_completed(call, invocation),
+            callback=lambda call: self._plan_completed(
+                call, invocation, ticket, execute_when_ready=execute_when_ready,
+            ),
         )
 
     def _plan_completed(
         self,
         call: AutomationCallResult,
         invocation: LiveColumnConversionPlanInvocation,
+        ticket: object,
+        *,
+        execute_when_ready: bool = False,
     ) -> None:
+        if self._closed or self.view_state != "planning" or self._pending_plan_ticket is not ticket:
+            return
+        self._pending_plan_ticket = None
         if call.classification == "outer_error" and call.error is not None:
             self._show_pre_effect_error(call.error)
             return
@@ -695,6 +726,13 @@ class ExcelLiveTextConversionWindow:
         self._plan_correlated = self._plan_matches(result, invocation)
         if not self._plan_correlated:
             self._show_unknown("The plan response did not match the reviewed target.")
+            return
+        if execute_when_ready and self.execution_enabled and result.can_execute and result.recovery.path:
+            self.precision_ack_var.set(False)
+            if result.effect.precision_risk_cells == 0:
+                self._execute()
+                return
+            self._show_plan(result, precision_confirmation=True)
             return
         self._show_plan(result)
 
@@ -716,14 +754,155 @@ class ExcelLiveTextConversionWindow:
             )
         )
 
-    def _show_plan(self, result: LiveColumnConversionPlanResult) -> None:
-        self.view_state = "plan_ready" if result.can_execute else "plan_blocked"
+    def _show_plan(self, result: LiveColumnConversionPlanResult, *, precision_confirmation: bool = False) -> None:
+        self.view_state = (
+            "precision_confirmation" if precision_confirmation
+            else "plan_ready" if result.can_execute else "plan_blocked"
+        )
         self._clear_content()
+        self.precision_ack_var.set(False)
+        count = result.effect.eligible
         ttk.Label(
             self.content,
-            text="Review exact conversion plan",
+            text=("Confirm the precision warning" if precision_confirmation
+                  else f"{count:,} {'cell' if count == 1 else 'cells'} to convert to text"),
             style="Heading.TLabel",
         ).pack(anchor=tk.W)
+        letters = ", ".join(column.column_letter for column in result.columns)
+        self._review_label(
+            f"{result.target.workbook_name} · {result.target.worksheet} · "
+            f"{'Column' if len(result.columns) == 1 else 'Columns'} {letters}"
+        )
+        if result.target.full_path:
+            self._review_label(result.target.full_path, muted=True)
+        if not precision_confirmation:
+            self._review_label(
+                f"{result.effect.already_compliant:,} already text · "
+                f"{result.effect.blank:,} empty · {result.effect.blocked:,} blocked · "
+                f"{result.effect.precision_risk_cells:,} precision risks"
+            )
+            self._review_label(
+                "Existing text and empty cells keep their values. "
+                "Selected cells use Excel's Text format; the header is unchanged.",
+                muted=True,
+            )
+
+        # Show a small sample from the authoritative plan, not host-computed
+        # conversions. Full samples and diagnostics remain in Details.
+        examples = [
+            (column, sample)
+            for sample_index in range(3)
+            for column in result.columns
+            for sample in column.conversion_samples[sample_index:sample_index + 1]
+        ][:3]
+        if examples and not precision_confirmation:
+            ttk.Label(
+                self.content, text="Before → After", style="Heading.TLabel"
+            ).pack(anchor=tk.W, pady=(8, 2))
+            for column, sample in examples:
+                self._review_label(
+                    f"{column.column_letter}{sample.row}: "
+                    f"{_compact_sample(sample.input_preview)} → {_compact_sample(sample.output_text)}"
+                )
+
+        for blocker in result.blockers:
+            self._review_label(blocker.message, error=True)
+        if result.effect.precision_risk_cells:
+            self._review_label(
+                "Excel may already have rounded some values. Text preserves "
+                "Excel's current value; it cannot recover lost digits."
+            )
+        for warning in result.warnings:
+            if warning.code != "live.numeric_precision_may_already_be_lost":
+                self._review_label(warning.message)
+
+        backup = ttk.Frame(self.content)
+        backup.pack(fill=tk.X, pady=(8, 0))
+        ttk.Label(backup, text="Recovery copy", style="Heading.TLabel").pack(side=tk.LEFT)
+        ttk.Button(
+            backup, text="Change…", command=self._choose_recovery_path,
+        ).pack(side=tk.RIGHT)
+        self.recovery_var.set(result.recovery.path or "Unavailable")
+        recovery_label = ttk.Label(
+            self.content, textvariable=self.recovery_var,
+            wraplength=self._review_wraplength(), justify=tk.LEFT,
+        )
+        recovery_label.pack(anchor=tk.W, fill=tk.X, pady=(2, 0))
+        self._responsive_review_labels.append(recovery_label)
+        self._review_label(
+            "Excel Undo history may be cleared. Use this recovery copy instead. "
+            "The workbook is never saved or closed by this operation.",
+            muted=True,
+        )
+        if result.effect.precision_risk_cells and self.execution_enabled and result.can_execute:
+            ttk.Checkbutton(
+                self.content,
+                text="I accept that lost digits cannot be recovered.",
+                variable=self.precision_ack_var,
+                command=self._update_execute_state,
+            ).pack(anchor=tk.W, pady=(6, 0))
+
+        controls = ttk.Frame(self.content)
+        controls.pack(fill=tk.X, pady=(8, 0))
+        ttk.Button(
+            controls, text="Change columns", command=self._change_columns,
+        ).pack(side=tk.LEFT)
+        self.plan_details_button = ttk.Button(
+            controls, text="Review changes (optional)" if precision_confirmation else "Show details",
+            command=(lambda: self._show_plan(result)) if precision_confirmation else self._toggle_plan_details,
+        )
+        self.plan_details_button.pack(side=tk.RIGHT)
+        self.plan_details_frame = ttk.Frame(self.content)
+        self._show_text(self._plan_detail_lines(result), height=10, parent=self.plan_details_frame)
+        self._refresh_inventory_button(parent=self.plan_details_frame)
+        self._return_button()
+        self.primary_button = ttk.Button(
+            self.footer,
+            text=f"Convert {count:,} {'cell' if count == 1 else 'cells'} to text",
+            command=self._execute,
+            style="Accent.TButton",
+        )
+        self.primary_button.pack(side=tk.RIGHT, padx=(8, 0))
+        self._update_execute_state()
+
+    def _review_label(self, text: str, *, muted: bool = False, error: bool = False) -> None:
+        label = ttk.Label(
+            self.content, text=text,
+            style="Error.TLabel" if error else "Muted.TLabel" if muted else "TLabel",
+            wraplength=self._review_wraplength(), justify=tk.LEFT,
+        )
+        label.pack(anchor=tk.W, fill=tk.X, pady=(3, 0))
+        self._responsive_review_labels.append(label)
+
+    def _review_wraplength(self) -> int:
+        return max(100, self.canvas.winfo_width() - 12)
+
+    def _toggle_plan_details(self) -> None:
+        frame = self.plan_details_frame
+        button = self.plan_details_button
+        if frame is None or button is None:
+            return
+        visible = bool(frame.winfo_manager())
+        if visible:
+            frame.pack_forget()
+        else:
+            frame.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
+        button.configure(text="Show details" if visible else "Hide details")
+
+    def _change_columns(self) -> None:
+        if self._closed or self.busy or self.coordinator.completion_pending or self._preflight_result is None:
+            return
+        # Reuse inspected columns, but discard authority: the next review makes
+        # a fresh engine plan against current Excel state.
+        self._plan_result = None
+        self._plan_invocation = None
+        self._plan_correlated = False
+        self._pending_plan_ticket = None
+        self.precision_ack_var.set(False)
+        self._show_preflight_selection(self._preflight_result)
+
+    @staticmethod
+    def _plan_detail_lines(result: LiveColumnConversionPlanResult) -> list[str]:
         recovery = result.recovery.path or "Unavailable"
         lines = [
             f"Workbook: {result.target.workbook_name}",
@@ -775,47 +954,7 @@ class ExcelLiveTextConversionWindow:
         if result.warnings:
             lines.append("Warnings")
             lines.extend(f"  {item.code}: {item.message}" for item in result.warnings)
-        self._show_text(lines, height=13)
-
-        controls = ttk.Frame(self.content)
-        controls.pack(fill=tk.X, pady=(8, 0))
-        ttk.Button(
-            controls,
-            text="Choose another recovery path…",
-            command=self._choose_recovery_path,
-        ).pack(side=tk.LEFT)
-        if result.effect.precision_risk_cells:
-            self.precision_ack_var.set(False)
-            acknowledgement = ttk.Checkbutton(
-                self.content,
-                text=(
-                    "I understand Excel may already have discarded digits; conversion "
-                    "preserves only Excel's current value and cannot reconstruct lost digits. "
-                    "Python Excel will create the reviewed recovery copy first."
-                ),
-                variable=self.precision_ack_var,
-                command=self._update_execute_state,
-            )
-            acknowledgement.pack(anchor=tk.W, fill=tk.X, pady=(9, 0))
-        self.primary_button = ttk.Button(
-            self.content,
-            text="Execute reviewed text conversion",
-            command=self._execute,
-            style="Accent.TButton",
-        )
-        self.primary_button.pack(anchor=tk.W, pady=(10, 0))
-        self._refresh_inventory_button()
-        self._return_button()
-        self._update_execute_state()
-        if not self.execution_enabled:
-            self._set_status(
-                "Execution is disabled by the Development/UAT gate; the reviewed plan remains read-only.",
-                error=True,
-            )
-        elif not result.can_execute:
-            self._set_status("The engine plan is blocked. Excel has not changed.", error=True)
-        else:
-            self._set_status("Review every effect, recovery path, and warning before Execute.")
+        return lines
 
     def _choose_recovery_path(self) -> None:
         result = self._plan_result
@@ -832,7 +971,9 @@ class ExcelLiveTextConversionWindow:
             confirmoverwrite=False,
         )
         if selected:
-            self._start_plan(selected)
+            # Tk's Windows picker returns forward slashes; the engine returns
+            # native separators. Normalize before the exact receipt comparison.
+            self._start_plan(str(Path(selected)))
 
     def _update_execute_state(self) -> None:
         button = self.primary_button
@@ -851,8 +992,19 @@ class ExcelLiveTextConversionWindow:
             and recovery_ok
         )
         button.configure(state=tk.NORMAL if allowed else tk.DISABLED)
+        if not self.execution_enabled:
+            self._set_status("Conversion is not enabled in this build. You can review the selected columns.")
+        elif not result.can_execute:
+            self._set_status("Resolve the issue above before converting. Excel has not changed.", error=True)
+        elif not precision_ok:
+            self._set_status("Confirm the precision warning to enable conversion.")
+        else:
+            self._set_status("Ready to convert. A recovery copy will be created first.")
 
     def _execute(self) -> None:
+        if (self._closed or self.busy or self.coordinator.completion_pending
+                or self.view_state not in {"planning", "plan_ready", "precision_confirmation"}):
+            return
         result = self._plan_result
         invocation = self._plan_invocation
         if result is None or invocation is None or not self._plan_correlated:
@@ -879,6 +1031,11 @@ class ExcelLiveTextConversionWindow:
         except ExcelAutomationInputError as exc:
             self._set_status(str(exc), error=True)
             return
+        # Consume this plan's authority before dispatch; duplicate callbacks or
+        # clicks cannot start another conversion, including after an outcome.
+        self._plan_correlated = False
+        ticket = object()
+        self._pending_execute_ticket = ticket
         self.view_state = "executing"
         self._clear_content()
         self._show_working(
@@ -890,14 +1047,18 @@ class ExcelLiveTextConversionWindow:
             ),
             phase="conversion_execute",
             timeout_seconds=_EXECUTE_TIMEOUT_SECONDS,
-            callback=lambda call: self._execute_completed(call, execute_invocation),
+            callback=lambda call: self._execute_completed(call, execute_invocation, ticket),
         )
 
     def _execute_completed(
         self,
         call: AutomationCallResult,
         invocation: LiveColumnConversionInvocation,
+        ticket: object,
     ) -> None:
+        if self._closed or self.view_state != "executing" or self._pending_execute_ticket is not ticket:
+            return
+        self._pending_execute_ticket = None
         if call.classification == "outer_error" and call.error is not None:
             if call.error.code in _PRE_EFFECT_CODES:
                 self._show_pre_effect_error(call.error)
@@ -957,7 +1118,8 @@ class ExcelLiveTextConversionWindow:
             + (", ".join(str(value) for value in result.columns_completed) or "None"),
             f"Recovery: {result.recovery.path}",
             f"Recovery verified: {'Yes' if result.recovery.verified else 'No'}",
-            f"Workbook remains open and unsaved: {'Yes' if result.workbook_dirty else 'No mutation'}",
+            "Workbook remains open; this operation did not save it.",
+            f"Unsaved changes reported by Excel: {'Yes' if result.workbook_dirty else 'No'}",
         ]
         if result.failure is not None:
             lines.append(f"Failure: {result.failure.code} — {result.failure.message}")
@@ -1091,9 +1253,11 @@ class ExcelLiveTextConversionWindow:
         )
         self.primary_button.pack(anchor=tk.W, pady=(8, 0))
 
-    def _refresh_inventory_button(self, *, accent: bool = False) -> None:
+    def _refresh_inventory_button(
+        self, *, accent: bool = False, parent: tk.Misc | None = None,
+    ) -> None:
         self.refresh_button = ttk.Button(
-            self.content,
+            parent if parent is not None else self.content,
             text="Refresh open workbooks",
             command=self._start_inventory,
             style="Accent.TButton" if accent else "TButton",
@@ -1144,8 +1308,8 @@ class ExcelLiveTextConversionWindow:
                 justify=tk.LEFT,
             ).pack(anchor=tk.W, pady=(8, 0))
 
-    def _show_text(self, lines: list[str], *, height: int) -> None:
-        frame = ttk.Frame(self.content)
+    def _show_text(self, lines: list[str], *, height: int, parent: tk.Misc | None = None) -> None:
+        frame = ttk.Frame(parent if parent is not None else self.content)
         frame.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
         text = tk.Text(frame, height=height, wrap=tk.WORD, takefocus=True, padx=6, pady=6)
         scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=text.yview)
@@ -1208,12 +1372,18 @@ class ExcelLiveTextConversionWindow:
 
     def _clear_content(self) -> None:
         self._stop_progress()
+        self._responsive_review_labels.clear()
+        if self.primary_button is not None:
+            self.primary_button.destroy()
         for child in self.content.winfo_children():
             child.destroy()
         self.target_selector = None
         self.primary_button = None
+        self.review_button = None
         self.refresh_button = None
         self.result_text = None
+        self.plan_details_frame = None
+        self.plan_details_button = None
         self.canvas.yview_moveto(0)
 
     def _stop_progress(self) -> None:
@@ -1236,6 +1406,8 @@ class ExcelLiveTextConversionWindow:
         self._plan_invocation = None
         self._plan_result = None
         self._plan_correlated = False
+        self._pending_plan_ticket = None
+        self._pending_execute_ticket = None
 
     def _set_status(self, message: str, *, error: bool = False) -> None:
         self.status_var.set(message)
@@ -1247,6 +1419,8 @@ class ExcelLiveTextConversionWindow:
 
     def _canvas_configured(self, event: tk.Event) -> None:
         self.canvas.itemconfigure(self._content_window_id, width=event.width)
+        for label in self._responsive_review_labels:
+            label.configure(wraplength=max(100, event.width - 12))
 
 
 def _column_label(column: object) -> str:
@@ -1260,6 +1434,12 @@ def _header_text(value: object) -> str:
     if value is None or value == "":
         return "(blank header)"
     return str(value)
+
+
+def _compact_sample(value: object) -> str:
+    """Keep sample rows short; Details preserves the complete engine preview."""
+    text = str(value).replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
+    return text if len(text) <= 72 else text[:71] + "…"
 
 
 def _capability_issue(operation: str, capability: ExcelCapability | None) -> str:

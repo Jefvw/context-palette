@@ -6,6 +6,7 @@ from collections import Counter
 import logging
 import ntpath
 import tkinter as tk
+from tkinter import font as tkfont
 from tkinter import ttk
 from typing import Callable
 from urllib.parse import urlparse
@@ -16,6 +17,7 @@ from .drop_adapter import (
     decode_drop_values,
 )
 from .window_geometry import (
+    absolute_window_position,
     fit_window_size,
     main_window_monitor_work_area,
     window_monitor_work_area,
@@ -132,12 +134,14 @@ class DropTargetWindow:
         self._on_resend = on_resend or on_drop
         self._on_configure = on_configure
         self._behavior_text = "On drop: Show in Context Palette"
-        self._behavior_label: ttk.Label | None = None
         self.settings_button: ttk.Button | None = None
         self._coordinator = coordinator or DropResolutionCoordinator()
         self.window: tk.Toplevel | None = None
         self._status: ttk.Label | None = None
+        self._status_text = "Ready to receive a drop."
+        self._summary_font: tkfont.Font | None = None
         self._history_var: tk.StringVar | None = None
+        self._history_count_var: tk.StringVar | None = None
         self.previous_button: ttk.Button | None = None
         self.history_label: ttk.Label | None = None
         self.next_button: ttk.Button | None = None
@@ -216,7 +220,9 @@ class DropTargetWindow:
         finally:
             self.window = None
             self._status = None
+            self._summary_font = None
             self._history_var = None
+            self._history_count_var = None
             self.previous_button = None
             self.history_label = None
             self.next_button = None
@@ -224,7 +230,6 @@ class DropTargetWindow:
             self.details_button = None
             self.hide_button = None
             self.settings_button = None
-            self._behavior_label = None
             self._details_frame = None
             self._details_text = None
             self._details_visible = False
@@ -237,42 +242,54 @@ class DropTargetWindow:
         window.attributes("-topmost", True)
         window.resizable(False, False)
         window.protocol("WM_DELETE_WINDOW", self.hide)
-        frame = ttk.Frame(window, padding=12)
+        frame = ttk.Frame(window, padding=8)
         frame.grid(sticky="nsew")
-        ttk.Label(frame, text="Drop files, folders, links, or text here", wraplength=280).grid(sticky="w")
-        self._status = ttk.Label(frame, text="Ready to receive a drop.", wraplength=280)
-        self._status.grid(row=1, pady=(8, 8), sticky="w")
+        self._status = ttk.Label(frame, width=32, anchor=tk.W)
+        self._status.grid(row=0, pady=(0, 4), sticky="ew")
+        self._summary_font = tkfont.Font(
+            root=window,
+            font=self._status.cget("font") or ttk.Style(window).lookup("TLabel", "font") or "TkDefaultFont",
+        )
+        self._status.configure(font=self._summary_font)
 
         history = ttk.Frame(frame)
-        history.grid(row=2, sticky="ew", pady=(0, 8))
-        history.columnconfigure(1, weight=1, minsize=230)
+        history.grid(row=1, sticky="ew", pady=(0, 4))
+        history.columnconfigure(1, weight=1)
         self.previous_button = ttk.Button(
             history,
             text="Previous",
+            width=8,
             command=lambda: self._move_history(-1),
         )
         self.previous_button.grid(row=0, column=0)
         self._history_var = tk.StringVar(master=window)
+        self._history_count_var = tk.StringVar(master=window)
         self.history_label = ttk.Label(
             history,
-            textvariable=self._history_var,
+            textvariable=self._history_count_var,
             anchor=tk.CENTER,
             justify=tk.CENTER,
-            wraplength=230,
+            width=6,
         )
-        self.history_label.grid(row=0, column=1, padx=8, sticky="ew")
+        self.history_label.grid(row=0, column=1, padx=4, sticky="ew")
         self.next_button = ttk.Button(
             history,
             text="Next",
+            width=5,
             command=lambda: self._move_history(1),
         )
         self.next_button.grid(row=0, column=2)
+        if self._on_configure is not None:
+            self.settings_button = ttk.Button(
+                history, text="Settings…", width=9, command=self._on_configure,
+            )
+            self.settings_button.grid(row=0, column=3, padx=(4, 0))
 
         self._details_frame = ttk.Frame(frame)
-        self._details_frame.grid(row=3, sticky="nsew", pady=(0, 8))
+        self._details_frame.grid(row=2, sticky="nsew", pady=(0, 4))
         self._details_frame.columnconfigure(0, weight=1)
         self._details_frame.rowconfigure(1, weight=1)
-        ttk.Label(self._details_frame, text="Prepared content details").grid(
+        ttk.Label(self._details_frame, text="Drop information and prepared content").grid(
             row=0,
             column=0,
             columnspan=2,
@@ -299,50 +316,45 @@ class DropTargetWindow:
         self._details_frame.grid_remove()
 
         footer = ttk.Frame(frame)
-        footer.grid(row=4, sticky="ew")
+        footer.grid(row=3, sticky="ew")
         self.send_again_button = ttk.Button(
             footer,
             text="Send again",
+            width=9,
             command=self._send_again,
         )
         self.send_again_button.pack(side=tk.LEFT)
         self.details_button = ttk.Button(
             footer,
             text="Show details",
+            width=11,
             command=self._toggle_details,
         )
-        self.details_button.pack(side=tk.LEFT, padx=(8, 0))
-        self.hide_button = ttk.Button(footer, text="Hide", command=self.hide)
+        self.details_button.pack(side=tk.LEFT, padx=(4, 0))
+        self.hide_button = ttk.Button(footer, text="Hide", width=5, command=self.hide)
         self.hide_button.pack(side=tk.RIGHT)
-        if self._on_configure is not None:
-            behavior = ttk.Frame(frame)
-            behavior.grid(row=5, sticky="ew", pady=(8, 0))
-            self._behavior_label = ttk.Label(
-                behavior, text=self._behavior_text, wraplength=280,
-            )
-            self._behavior_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
-            self.settings_button = ttk.Button(
-                behavior, text="Settings…", command=self._on_configure,
-            )
-            self.settings_button.pack(side=tk.RIGHT, padx=(8, 0))
         self._sync_history_controls()
         window.drop_target_register("DND_Files", "DND_Text")
         window.dnd_bind("<<Drop:DND_Files>>", self._handle_files_drop)
         window.dnd_bind("<<Drop:DND_Text>>", self._handle_text_drop)
+        window.deiconify()
         window.update_idletasks()
         self._position_lower_right(window)
-        window.deiconify()
 
     def _position_lower_right(self, window: tk.Toplevel) -> None:
         work_area = main_window_monitor_work_area(self.root)
-        width, height = fit_window_size(
-            (window.winfo_reqwidth(), window.winfo_reqheight()),
+        side_frame, top_frame = self._window_frame_offsets()
+        outer_width, outer_height = fit_window_size(
+            (window.winfo_reqwidth() + 2 * side_frame,
+             window.winfo_reqheight() + top_frame + side_frame),
             work_area,
         )
+        width = max(1, outer_width - 2 * side_frame)
+        height = max(1, outer_height - top_frame - side_frame)
         left, top, right, bottom = work_area
-        x = max(left, min(right - width - 24, right - width))
-        y = max(top, min(bottom - height - 24, bottom - height))
-        window.geometry(f"{width}x{height}{x:+d}{y:+d}")
+        x = max(left, right - outer_width - 24)
+        y = max(top, bottom - outer_height - 24)
+        window.geometry(f"{width}x{height}{absolute_window_position(x, y)}")
 
     def _bottom_right_anchor(self) -> tuple[int, int] | None:
         if (
@@ -406,7 +418,7 @@ class DropTargetWindow:
             requested_x, requested_y = origin
         x = max(left, min(requested_x, right - outer_width))
         y = max(top, min(requested_y, bottom - outer_height))
-        self.window.geometry(f"{width}x{height}{x:+d}{y:+d}")
+        self.window.geometry(f"{width}x{height}{absolute_window_position(x, y)}")
 
     def _handle_files_drop(self, event: object) -> str:
         return self._handle_drop(event, "DND_Files")
@@ -491,12 +503,11 @@ class DropTargetWindow:
             return
         self._behavior_text = text
         origin = self._window_origin()
-        if self._behavior_label is not None:
-            self._behavior_label.configure(text=text)
+        self._refresh_summary()
         self._fit_window_to_monitor(origin=origin)
 
     def _toggle_details(self) -> None:
-        if self._polling or self._delivering or not 0 <= self._history_index < len(self._drop_history):
+        if self._polling or self._delivering:
             return
         self._set_details_visible(not self._details_visible)
 
@@ -518,9 +529,16 @@ class DropTargetWindow:
     def _update_details(self) -> None:
         if self._details_text is None:
             return
-        content = ""
+        content = (
+            "Drop files, folders, links or text here.\n"
+            f"On drop: {self._behavior_text.removeprefix('On drop: ')}\n"
+            f"Status: {self._status_text}\n\n"
+        )
         if 0 <= self._history_index < len(self._drop_history):
-            content = drop_result_details(self._drop_history[self._history_index])
+            content += self._history_var.get() + "\n\n" if self._history_var is not None else ""
+            content += drop_result_details(self._drop_history[self._history_index])
+        else:
+            content += "No recent drops."
         self._details_text.configure(state=tk.NORMAL)
         self._details_text.delete("1.0", tk.END)
         self._details_text.insert("1.0", content)
@@ -539,8 +557,9 @@ class DropTargetWindow:
                 )
             else:
                 self._history_var.set("No recent drops")
-        if self._details_visible:
-            self._update_details()
+        if self._history_count_var is not None:
+            self._history_count_var.set(f"{self._history_index + 1} / {count}" if count else "0 / 0")
+        self._refresh_summary()
 
         busy = self._polling or self._delivering
         if self.previous_button is not None:
@@ -565,12 +584,44 @@ class DropTargetWindow:
             )
         if self.details_button is not None:
             self.details_button.configure(
-                state=(tk.NORMAL if not busy and count else tk.DISABLED)
+                state=(tk.NORMAL if not busy else tk.DISABLED)
             )
         self._fit_window_to_monitor(origin=origin)
 
     def _set_status(self, text: str) -> None:
         origin = self._window_origin()
-        if self._status is not None:
-            self._status.configure(text=text)
+        self._status_text = text
+        self._refresh_summary()
         self._fit_window_to_monitor(origin=origin)
+
+    def _refresh_summary(self) -> None:
+        if self._status is None or self._summary_font is None:
+            return
+        behavior = self._behavior_text.removeprefix("On drop: ")
+        display_behavior = "Show in Palette" if behavior == "Show in Context Palette" else behavior
+        if self._status_text == "Ready to receive a drop.":
+            status = "Drop here"
+        elif self._status_text.startswith("Ready:"):
+            status = (
+                drop_result_summary(self._drop_history[self._history_index])
+                if 0 <= self._history_index < len(self._drop_history) else "Ready"
+            )
+        else:
+            status = self._status_text
+        summary = " · ".join((status, display_behavior))
+        if behavior.startswith("Action blocked") or self._status_text.startswith("Ready:"):
+            summary = display_behavior + " · " + status
+        summary = " ".join(summary.split())
+        limit = self._summary_font.measure("0") * 32
+        if self._summary_font.measure(summary) > limit:
+            low, high = 0, len(summary)
+            while low < high:
+                middle = (low + high + 1) // 2
+                if self._summary_font.measure(summary[:middle] + "…") <= limit:
+                    low = middle
+                else:
+                    high = middle - 1
+            summary = summary[:low].rstrip() + "…"
+        self._status.configure(text=summary)
+        if self._details_visible:
+            self._update_details()

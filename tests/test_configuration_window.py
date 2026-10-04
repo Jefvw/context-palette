@@ -3202,12 +3202,12 @@ class ConfigurationDialogTests(unittest.TestCase):
         dialog.excel_automation_choices = {
             "Export Excel workbooks to CSV": "excel.export_workbooks_to_csv",
             "Apply Excel format template": "excel.apply_live_format_profile",
-            "UAT: Convert scientific-notation columns": (
+            "Convert Excel values to text": (
                 "excel.convert_live_column_representation"
             ),
         }
         dialog.excel_automation_var = FakeVariable(
-            "UAT: Convert scientific-notation columns"
+            "Convert Excel values to text"
         )
         dialog.window = FakeWindow()
         saved: list[Action] = []

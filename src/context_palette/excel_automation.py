@@ -1629,6 +1629,7 @@ def _parse_live_preflight_column(
             classifications.date_time,
             classifications.error,
             classifications.unsupported,
+            classifications.formula,
         )
     ):
         raise _ProtocolError("The live preflight classifications do not reconcile.")
@@ -1999,14 +2000,20 @@ def _parse_live_conversion_result(
         (state == "succeeded" and (failure is not None or not mutation_started))
         or (
             state == "failed"
-            and (failure is None or mutation_started)
+            and (
+                failure is None or mutation_started or completed
+                or changed or compliant or blank
+            )
         )
         or (
             state == "partial_failure"
             and (failure is None or not mutation_started)
         )
         or (mutation_started and not recovery.verified)
-        or (mutation_started and not dirty)
+        # The engine marks mutation_started before the first COM assignment.
+        # That assignment can fail while Excel still reports a clean workbook.
+        # Retain the conservative partial-failure receipt and recovery guidance.
+        or (state == "succeeded" and not dirty)
         or (state == "succeeded" and completed != target.physical_columns)
     ):
         raise _ProtocolError("The live conversion state contradicts its effects.")

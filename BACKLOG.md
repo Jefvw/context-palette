@@ -16,6 +16,49 @@ broader unreported UAT remains optional. See [Testing](docs/TESTING.md).
 
 ## Now
 
+- Implement the engine-owned [single refreshed Excel backup](docs/EXCEL_SINGLE_BACKUP_ENGINE_HANDOVER.md)
+  requested on 2026-10-04, then integrate its advertised replacement contract in
+  Context Palette. Human Review is now optional; Convert plans and executes a
+  ready exact selection, with a precision-warning exception. Existing `1.0`
+  refuses backup collisions, and Context Palette preserves that boundary.
+  Keep Python Excel edits and deployment with its owner; no host file rotation.
+
+- Complete separately authorized **Send text to OneNote** host acceptance using
+  [the exact disposable UAT proposal](docs/ONENOTE_SEND_UAT.md). Implementation
+  now uses one Send button and a single status banner; test the current flow.
+  Synthetic checks do not establish live host integration. Keep relocated
+  bootstrap/live writes, other notebooks, and failure-path live experiments separate.
+
+- Recheck OneNote notebook reselection after the engine owner's reported bounded
+  `UnfiledNotes` correction. The [prepared handover](docs/ONENOTE_ENGINE_RECOVERY_HANDOVER.md)
+  records the original problem. The 2026-09-19 reopened
+  disposable notebook had a different ID; inventory also rejected OneNote's
+  `UnfiledNotes` metadata. Handle that specific structure with bounded parser
+  tests, then explicitly reselect the notebook and recheck Search / Preview.
+  Do not repair by title matching or by falling back to all notebooks. See the
+  [observed blocker](docs/TESTING.md#reopened-notebook-follow-up--blocker-confirmed-2026-09-19).
+
+- Complete the remaining attended **Find OneNote notes…** host UAT using an
+  owner-confirmed disposable scope. The 2026-09-16 agent-operated live check
+  verified saved engine/notebook reuse across Palette restart, scoped search,
+  complete preview, visible Cancel/Append/Replace placement and Undo. Earlier
+  owner evidence separately confirms corrected Replace. Missing/moved engine,
+  reopened-notebook recovery and OneNote restart recovery still need live checks.
+  The owner's 2026-09-19 closed-notebook test exposed a misleading engine-repair
+  message. The host correction passed synthetic tests and the same live scoped
+  client failure; the corrected resident-window journey still needs a restart
+  and recheck. The engine reports a broad bridge error for this case; precise
+  unavailable-target classification remains an engine-owner follow-up.
+  Sibling discovery and precedence are implemented and synthetically tested;
+  use the [bounded discovery UAT plan](docs/TESTING.md#onenote-engine-discovery-2026-09-16)
+  with the exact disposable notebook/page and metadata scope agreed for the session.
+  Continue checking human selection, explicit preview, Replace/Append/Cancel, stale destination
+  handling, privacy, cancellation cleanup and readiness after process changes.
+  Test representative disposable workloads and space/Unicode engine checkout
+  paths; provisional 5-second per-read / 10-second combined latency goals remain
+  unverified. Earlier Python OneNote engine UAT does not accept the host UI.
+  See [Testing](docs/TESTING.md#onenote-host-first-slice-2026-09-16).
+
 - Optional score-PDF follow-up: complete Save As manually and inspect the PDF's
   score, instrument and page count. The Guitar Pro Action reached a two-page
   preview and Save As without a Palette popup in the 2026-09-15 live check.
@@ -105,8 +148,20 @@ broader unreported UAT remains optional. See [Testing](docs/TESTING.md).
   then complete the remaining setup/missing-engine, all-visible, AutoSave rejection,
   added-filter, hidden-sheet, stale, partial/unknown, no-retry, Return-to-Excel,
   no-save/no-close, and 100%/125%/150% display-scaling matrix.
-- Complete disposable real-Excel UAT for **UAT: Convert scientific-notation
-  columns** against Python Excel `08af313` before removing its execution gate.
+- Complete disposable real-Excel UAT for **Convert Excel values to text**
+  before removing its execution gate. The 2026-10-03 blank-preservation
+  defect is corrected in the Python Excel working tree at `08af313`, with
+  focused engine UAT on 2026-10-04. Obtain a dedicated deployable engine commit;
+  the unchanged `1.0` catalogue cannot prove that another PC has the correction.
+  Keep independent host UAT separate from that engine evidence and preserve
+  direct COM `Value2`/`ISBLANK` assertions. Do not mask blanks in Context Palette.
+  A fresh 2026-10-04 main-Run host check passed formula blocking, exact planning,
+  precision gating, 5 conversions/3 compliant/16 true blanks, recovery and
+  open-dirty-unsaved lifecycle. Disjoint columns used a private test preset;
+  the later compact UI uses single-click toggles and has separate synthetic
+  Windows verification. Owner acceptance of the revised live flow remains
+  pending. See the
+  bounded evidence and remaining matrix in `docs/TESTING.md`.
   Confirm the same shared workbook/worksheet chooser behavior first.
   With `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1` set before startup, cover
   scientific text, numeric scalars, leading-zero and ordinary text, formulas
