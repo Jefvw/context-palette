@@ -109,7 +109,6 @@ from .drop_action import DropActionSettings, resolve_drop_action
 from .drop_configuration_window import DropConfigurationWindow
 from .excel_automation import (
     ExcelAutomationInputError,
-    live_text_conversion_uat_enabled,
     workbook_paths_from_workspace,
 )
 from .excel_automation_window import ExcelAutomationWindow
@@ -394,9 +393,6 @@ class LauncherApp:
             self.data_paths.excel_automation_settings_file
         )
         self.edge_score_pdf_settings_path = self.data_paths.edge_score_pdf_settings_file
-        self.live_text_conversion_execution_enabled = (
-            live_text_conversion_uat_enabled()
-        )
         self.work_item_sources: tuple[WorkItemSource, ...] = ()
         self.work_item_metadata: dict[str, WorkItemMetadata] = {}
         self.work_item_index = WorkItemIndex()
@@ -4115,11 +4111,6 @@ class LauncherApp:
                 source_window_handle=source_window_handle,
                 source_process_id=source_process_id,
                 source_window_title=source_title,
-                execution_enabled=getattr(
-                    self,
-                    "live_text_conversion_execution_enabled",
-                    False,
-                ),
                 file_opener=self._open_excel_recovery_file,
                 folder_opener=self._open_excel_output_folder,
                 on_close=self._excel_automation_closed,

@@ -540,7 +540,7 @@ def build_action_preview(
                 ),
                 details,
                 (
-                    "Conversion is restricted to testing in this build. Excel may "
+                    "Excel may "
                     "already have lost digits beyond its numeric precision; conversion "
                     "cannot restore them. The engine never saves or closes Excel."
                 ),

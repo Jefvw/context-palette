@@ -3,6 +3,12 @@
 Prepared: 2026-10-04. Status: requested engine work, not implemented or enabled
 by this document.
 
+Update 2026-10-05: the blank-preserving write and recovery-package validation
+are now published in Python Excel `c081510` (write fix in `be4f67f`). Preserve
+that committed baseline. References below to uncommitted work describe the
+original handover snapshot; verify current state before making the still-pending
+backup replacement extension. Palette's startup testing gate is now retired.
+
 The Context Palette product owner chose **Replace previous** for the live
 scientific-notation/text conversion workflow: select the open workbook,
 worksheet and physical columns, click **Convert**, and retain one stable

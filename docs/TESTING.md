@@ -8,6 +8,44 @@ recorded on 2026-09-09. Its checklist remains available for optional follow-up.
 Keep that decision separate from per-check results, automated output and
 simulated DPI; unreported manual checks remain unverified.
 
+## Normal-startup Excel conversion (2026-10-05)
+
+The temporary live-text conversion startup gate is retired. Normal startup,
+including a missing or obsolete `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION`
+value of `0` or `1`, uses the same attended workflow. No environment value
+grants or denies execution. Current Help, Architecture and MVP supersede
+earlier records of a disabled build or an uncommitted engine correction.
+
+Python Excel remote `main` was checked at **c081510**; its ancestor **be4f67f**
+contains the direct COM `Value2` write and shared recovery-package validation.
+This is Git/source evidence, not a new engine run or a live Excel check.
+The owner reports the published engine works on another PC, separately from
+the remaining host-button issue. No engine file was edited.
+
+Focused host checks passed **488 tests in 21.011 seconds**. Isolated Tk windows
+and fake process responses cover normal startup without opt-in, inert legacy
+flag values, no plan/execution merely from selecting columns, one explicit
+Convert, optional read-only Review, complete pagination, missing/incompatible
+capabilities, precision consent, exact plan correlation, recovery collisions,
+stale callbacks and partial/unknown no-retry behavior. No live Excel was used.
+
+The first complete-check attempt hit the documented sandbox restriction while
+starting the user-profile Python interpreter. It was retried with normal Windows
+access without repairing the environment. The final `check-context-palette.bat`
+passed configuration validation, compilation and **1,674 tests in 202.408
+seconds, with 2 skipped**. Final `git diff --check` passed. Nothing is staged,
+committed or pushed for this change. Private complete-check output is under
+`outputs/excel-startup-release-20261005/complete-check.txt`.
+
+Fresh live host acceptance remains unperformed. After updating and restarting
+Palette normally, the owner can check one saved disposable `.xlsx` with AutoSave
+off and a free sibling backup path: select a worksheet/columns, confirm Convert
+becomes available, invoke it once (acknowledge precision risk if shown), then
+inspect converted text, true blanks and the recovery copy. Excel must remain
+open and unsaved. Existing backups still block conversion; replacement remains
+an engine-owner follow-up. Earlier scoped live permissions are not blanket
+authorization for a new agent-operated Office session.
+
 ## Single-line Drop information (2026-10-04)
 
 The later height revision supersedes the separate wrapped text rows recorded
@@ -1618,16 +1656,17 @@ Perform only when relevant:
   2026-08-25. Repeat the complete matrix at 100%, 125%, and 150% display
   scaling.
 
-- Against Python Excel commit `08af313`, run **Convert Excel values to text**
-  first without the startup opt-in environment variable.
+- Against published Python Excel `c081510` or a later revision retaining the
+  blank-preserving fix, run **Convert Excel values to text** from normal startup.
   Confirm capability discovery and that its initial workbook/worksheet chooser
   matches the format-template Action, including duplicate-name labels,
   captured-F9 preference, active visible worksheet, inline Refresh, and
   Return-to-Excel eligibility. Then confirm paged preflight, physical
-  column selection, and planning work, while Convert remains disabled with a
-  clear build-restriction explanation. Then stop the app, set
-  `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1`, and restart. Use only a
-  disposable open `.xlsx`: include scientific text, ordinary text,
+  column selection, and planning work. Convert must remain disabled with no
+  selected columns or incomplete column pages, then enable after complete
+  selection. No startup opt-in is needed; optional Review must not execute.
+  Old flag values must not change availability. Use only a disposable open
+  `.xlsx`: include scientific text, ordinary text,
   leading-zero identifiers, current numeric scalars, blank and duplicate
   headers, and formulas outside the selected columns. Verify selected eligible
   cells become text; ordinary/leading-zero text content is unchanged; only

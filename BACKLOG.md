@@ -149,9 +149,10 @@ broader unreported UAT remains optional. See [Testing](docs/TESTING.md).
   added-filter, hidden-sheet, stale, partial/unknown, no-retry, Return-to-Excel,
   no-save/no-close, and 100%/125%/150% display-scaling matrix.
 - Complete disposable real-Excel UAT for **Convert Excel values to text**
-  before removing its execution gate. The 2026-10-03 blank-preservation
-  defect is corrected in the Python Excel working tree at `08af313`, with
-  focused engine UAT on 2026-10-04. Obtain a dedicated deployable engine commit;
+  after retirement of the startup gate on 2026-10-05. The blank-preserving
+  write and recovery validation are now published in Python Excel `c081510`
+  (write fix in `be4f67f`), with focused engine UAT on 2026-10-04. The owner
+  reports the engine works on another PC;
   the unchanged `1.0` catalogue cannot prove that another PC has the correction.
   Keep independent host UAT separate from that engine evidence and preserve
   direct COM `Value2`/`ISBLANK` assertions. Do not mask blanks in Context Palette.
@@ -163,7 +164,7 @@ broader unreported UAT remains optional. See [Testing](docs/TESTING.md).
   pending. See the
   bounded evidence and remaining matrix in `docs/TESTING.md`.
   Confirm the same shared workbook/worksheet chooser behavior first.
-  With `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1` set before startup, cover
+  From normal startup with the published engine, cover
   scientific text, numeric scalars, leading-zero and ordinary text, formulas
   outside the selected scope, a formula-in-scope blocked plan, blank and
   duplicate headers, duplicate workbook names across Excel processes,
@@ -171,7 +172,8 @@ broader unreported UAT remains optional. See [Testing](docs/TESTING.md).
   sibling recovery paths, stale/recovery conflicts, verified recovery content,
   partial/unknown no-retry guidance, dirty-unsaved/open Excel lifecycle, no
   extra Excel process, Return to Excel, and 100%/125%/150% scaling. Keep the
-  Action UAT-labelled and Execute fail-closed until that matrix passes.
+  remaining manual matrix distinct from automated acceptance; preserve engine
+  blockers and exact execution checks without a separate startup permission gate.
 - Manually validate the first Python Excel CSV automation vertical slice on a
   second standard-user PC. Cover missing/invalid local engine setup,
   Input/Output and Drop-into exact `.xlsx` intake, the 100-workbook limit,

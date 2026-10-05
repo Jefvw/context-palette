@@ -130,7 +130,7 @@ class ActionPreviewTests(unittest.TestCase):
         self.assertIn("verify a backup", preview.effect_text)
         self.assertIn("Review is optional", preview.effect_text)
         self.assertIn("text", preview.effect_text)
-        self.assertIn("restricted to testing in this build", preview.limitations)
+        self.assertNotIn("restricted to testing", preview.limitations)
         self.assertNotIn("UAT", preview.limitations)
         self.assertNotIn("feature flag", preview.limitations)
         self.assertIn("lost digits", preview.limitations)

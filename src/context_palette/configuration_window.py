@@ -150,7 +150,7 @@ ACTION_TYPE_EXAMPLES = {
     "send_files_to_folder": r"Example: Send the reviewed Input / Output file list to %PROJECT_ROOT%\exports.",
     "save_edge_score_pdf": r"Example: Choose the PDF folder, such as C:\Music\Scores. Open an Official Ultimate Guitar score in Edge, select its instrument, then press F9 to run this Action. Existing PDFs are kept.",
     "launch_app": r"Example: Start C:\Tools\Example\Example.exe with reviewed arguments.",
-    "excel_automation": "Example: Export Input / Output workbooks, format an open workbook, or convert selected columns to text with optional Review. Conversion to text is restricted to testing in this build.",
+    "excel_automation": "Example: Export Input / Output workbooks, format an open workbook, or convert selected columns to text with optional Review.",
     "sequence": "Example: Start an import Action, wait briefly, then open its results folder.",
     "paste_credential": "Example: Paste the Windows or generic credential target oracle-pc17.",
     "build_url_open": "Example: Ask for ABC 123, then copy and open its generated website address.",
@@ -4811,7 +4811,7 @@ class ActionDialog:
                     "CSV export reads exact .xlsx paths from Input / Output. "
                     "Apply Excel format template inventories open Excel, then "
                     "formats one chosen worksheet or all visible worksheets directly. "
-                    "The UAT conversion reviews exact physical columns and an "
+                    "Conversion checks exact physical columns and an "
                     "engine-created recovery copy before changing eligible cells to text."
                 ),
             )

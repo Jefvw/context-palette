@@ -3754,3 +3754,28 @@ history. Resolution/delivery guards still disable it while busy. Navigation,
 exact-result resend, configured immediate Actions, monitor fitting, session
 retention and Hide/Show semantics remain unchanged. No dependency, automatic
 effect, persistent input log or new execution permission is added.
+
+## 2026-10-05 - Retire the live Excel conversion startup gate
+
+**Decision:** Make Convert Excel values to text available during normal startup
+with the compatible Python Excel engine. Remove the temporary environment flag
+and the host/window permission booleans, rather than change their default.
+Keep exact capability discovery, complete physical-column selection, fresh
+zero-write planning, correlated fingerprints/recovery paths, precision consent
+and consumed execution authority. Human Review remains optional.
+
+**Reason:** The owner reports the corrected engine is pushed and works on
+another PC, but Palette still greys out Convert. Remote main was independently
+checked at c081510; its ancestor be4f67f contains the direct COM Value2 write
+and recovery-package validation. The remaining startup flag is an obsolete host
+restriction that prevents the requested select-columns-then-convert workflow.
+
+**Consequences:** Old flag values are ignored. No Office operation runs merely
+because permission was removed; Convert still authorizes one exact selection.
+The engine remains a separate deployment with per-PC optional Excel packages;
+its unchanged 1.0 catalogue cannot identify an old implementation. No backup
+replacement, automatic retry, save, close or engine edit is introduced. Engine
+UAT, owner reports, synthetic host checks and fresh host live acceptance remain
+separate evidence. The broader manual matrix remains outstanding, without a
+hidden startup gate. This change does not authorize a new agent-operated live
+Office session or commit/push.

@@ -2102,13 +2102,12 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertIs(app.excel_automation_window, workflow)
         self.assertIn("live Excel format", message)
 
-    def test_live_text_conversion_uses_open_workbooks_and_startup_uat_gate(self):
+    def test_live_text_conversion_uses_open_workbooks_without_startup_opt_in(self):
         app = LauncherApp.__new__(LauncherApp)
         app.root = Mock()
         app.status_var = FakeVariable()
         app.excel_automation_settings_path = Path("C:/settings.json")
         app.excel_automation_window = None
-        app.live_text_conversion_execution_enabled = True
         app._workspace_text = Mock(return_value="not workbook input")
         app._excel_automation_closed = Mock()
         app._open_excel_recovery_file = Mock()
@@ -2144,7 +2143,7 @@ class LauncherInteractionTests(unittest.TestCase):
             window.call_args.kwargs["source_window_title"],
             "Budget.xlsx - Excel",
         )
-        self.assertTrue(window.call_args.kwargs["execution_enabled"])
+        self.assertNotIn("execution_enabled", window.call_args.kwargs)
         self.assertIs(
             window.call_args.kwargs["file_opener"],
             app._open_excel_recovery_file,

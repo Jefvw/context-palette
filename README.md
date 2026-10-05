@@ -94,12 +94,11 @@ Action and its internal placements without changing its external target. See
   one **Apply** click as confirmation. It does not use Input / Output and never
   saves or closes Excel; AutoSave must be off.
 - Provides **Convert Excel values to text** for selected physical columns in
-  an already-open workbook, with optional Review. Conversion remains restricted
-  to testing in this build. Python Excel owns the
+  an already-open workbook, with optional Review during normal startup. Python Excel owns the
   paged preflight, exact plan fingerprint, verified recovery workbook, and
-  mutation. Context Palette keeps execution disabled unless
-  `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1` was present when it started;
-  inventory, preflight, and planning remain available for safe review.
+  mutation. Use the corrected Python Excel engine at `c081510` or later and
+  install its optional Excel dependencies on each PC. No special startup flag
+  is needed; precision warnings and workbook/backup checks still apply.
 - Turns one clear website or absolute file, folder, or application path in
   Input / Output into a prefilled, review-before-save Action without probing a
   mapped drive or changing the general Action type chooser.

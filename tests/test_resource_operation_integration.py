@@ -179,30 +179,28 @@ class ResourceOperationIntegrationTests(unittest.TestCase):
         old.show.assert_called_once_with()
         old.close.assert_not_called()
 
-    def test_live_excel_keeps_captured_metadata_and_host_uat_gate(self):
+    def test_live_excel_keeps_captured_metadata_without_startup_opt_in(self):
         for operation, window_name in (
             (LIVE_FORMAT_PROFILE_AUTOMATION_ID, "ExcelLiveFormatWindow"),
             (LIVE_TEXT_CONVERSION_AUTOMATION_ID, "ExcelLiveTextConversionWindow"),
         ):
-            for enabled in (False, True):
-                with self.subTest(operation=operation, enabled=enabled):
-                    app = self.app()
-                    app.live_text_conversion_execution_enabled = enabled
-                    selected = Action("live", "Live Excel", "General", "excel_automation", operation)
-                    with (
-                        patch("context_palette.launcher." + window_name) as factory,
-                        patch("context_palette.launcher.window_process_id", return_value=7),
-                        patch("context_palette.launcher.window_title", return_value="Book.xlsx - Excel"),
-                    ):
-                        app._run_excel_automation(selected, source_window_handle=123)
-                    kwargs = factory.call_args.kwargs
-                    self.assertEqual(kwargs["source_window_handle"], 123)
-                    self.assertEqual(kwargs["source_process_id"], 7)
-                    self.assertEqual(kwargs["source_window_title"], "Book.xlsx - Excel")
-                    if operation == LIVE_TEXT_CONVERSION_AUTOMATION_ID:
-                        self.assertIs(kwargs["execution_enabled"], enabled)
-                        self.assertEqual(kwargs["file_opener"], app._open_excel_recovery_file)
-                    app._workspace_text.assert_not_called()
+            with self.subTest(operation=operation), patch.dict("os.environ", {}, clear=True):
+                app = self.app()
+                selected = Action("live", "Live Excel", "General", "excel_automation", operation)
+                with (
+                    patch("context_palette.launcher." + window_name) as factory,
+                    patch("context_palette.launcher.window_process_id", return_value=7),
+                    patch("context_palette.launcher.window_title", return_value="Book.xlsx - Excel"),
+                ):
+                    app._run_excel_automation(selected, source_window_handle=123)
+                kwargs = factory.call_args.kwargs
+                self.assertEqual(kwargs["source_window_handle"], 123)
+                self.assertEqual(kwargs["source_process_id"], 7)
+                self.assertEqual(kwargs["source_window_title"], "Book.xlsx - Excel")
+                self.assertNotIn("execution_enabled", kwargs)
+                if operation == LIVE_TEXT_CONVERSION_AUTOMATION_ID:
+                    self.assertEqual(kwargs["file_opener"], app._open_excel_recovery_file)
+                app._workspace_text.assert_not_called()
 
     def test_live_excel_drop_request_cannot_start_a_workflow(self):
         app = self.app()

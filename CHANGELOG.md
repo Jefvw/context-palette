@@ -18,6 +18,11 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Enabled **Convert Excel values to text** during normal startup with a compatible
+  Python Excel engine. Removed the temporary UAT environment switch and its
+  testing-only wording now that the corrected engine is published. Exact column,
+  plan, backup, precision and workbook checks remain; Review is still optional.
+
 - Reduced Drop height further: one information line, a compact history counter
   beside Settings, and two visible button rows. Long names/messages are shortened
   only on the summary line; Show details provides full information even before

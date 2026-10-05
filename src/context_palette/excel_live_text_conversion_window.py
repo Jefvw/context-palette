@@ -81,7 +81,6 @@ class ExcelLiveTextConversionWindow:
         source_window_handle: int | None = None,
         source_process_id: int | None = None,
         source_window_title: str = "",
-        execution_enabled: bool = False,
         coordinator: ExcelAutomationCoordinator | None = None,
         client: PythonExcelProcessClient | None = None,
         file_opener: Callable[[Path], None] | None = None,
@@ -101,7 +100,6 @@ class ExcelLiveTextConversionWindow:
             source_process_id,
             self.source_window_title,
         )
-        self.execution_enabled = bool(execution_enabled)
         self.coordinator = coordinator or ExcelAutomationCoordinator(client)
         self.file_opener = file_opener or (lambda _path: None)
         self.folder_opener = folder_opener or (lambda _path: None)
@@ -623,7 +621,7 @@ class ExcelLiveTextConversionWindow:
         self._selected_preflight_column_indexes = set(self._selected_columns())
         preflight_complete = self._next_column_offset is None
         self.primary_button.configure(
-            state=tk.NORMAL if selected and preflight_complete and self.execution_enabled else tk.DISABLED
+            state=tk.NORMAL if selected and preflight_complete else tk.DISABLED
         )
         if self.review_button is not None:
             self.review_button.configure(state=tk.NORMAL if selected and preflight_complete else tk.DISABLED)
@@ -633,8 +631,6 @@ class ExcelLiveTextConversionWindow:
                 if not preflight_complete
                 else (
                     "Choose Convert when ready. Review is optional."
-                    if selected and self.execution_enabled
-                    else "Conversion is not enabled in this build. You can review the selected columns."
                     if selected
                     else "Select one or more columns."
                 )
@@ -655,9 +651,6 @@ class ExcelLiveTextConversionWindow:
 
     def _start_plan(self, recovery_path: str | None, *, execute_when_ready: bool = False) -> None:
         if self._closed or self.busy or self.coordinator.completion_pending or self.view_state == "executing":
-            return
-        if execute_when_ready and not self.execution_enabled:
-            self._set_status("Conversion is not enabled in this build. You can review the selected columns.")
             return
         workbook = self._selected_workbook
         worksheet = self._selected_worksheet
@@ -727,7 +720,7 @@ class ExcelLiveTextConversionWindow:
         if not self._plan_correlated:
             self._show_unknown("The plan response did not match the reviewed target.")
             return
-        if execute_when_ready and self.execution_enabled and result.can_execute and result.recovery.path:
+        if execute_when_ready and result.can_execute and result.recovery.path:
             self.precision_ack_var.set(False)
             if result.effect.precision_risk_cells == 0:
                 self._execute()
@@ -834,7 +827,7 @@ class ExcelLiveTextConversionWindow:
             "The workbook is never saved or closed by this operation.",
             muted=True,
         )
-        if result.effect.precision_risk_cells and self.execution_enabled and result.can_execute:
+        if result.effect.precision_risk_cells and result.can_execute:
             ttk.Checkbutton(
                 self.content,
                 text="I accept that lost digits cannot be recovered.",
@@ -985,16 +978,13 @@ class ExcelLiveTextConversionWindow:
         )
         recovery_ok = bool(result.recovery.path)
         allowed = (
-            self.execution_enabled
-            and result.can_execute
+            result.can_execute
             and self._plan_correlated
             and precision_ok
             and recovery_ok
         )
         button.configure(state=tk.NORMAL if allowed else tk.DISABLED)
-        if not self.execution_enabled:
-            self._set_status("Conversion is not enabled in this build. You can review the selected columns.")
-        elif not result.can_execute:
+        if not result.can_execute:
             self._set_status("Resolve the issue above before converting. Excel has not changed.", error=True)
         elif not precision_ok:
             self._set_status("Confirm the precision warning to enable conversion.")
@@ -1010,7 +1000,7 @@ class ExcelLiveTextConversionWindow:
         if result is None or invocation is None or not self._plan_correlated:
             self._show_unknown("The reviewed plan is no longer available.")
             return
-        if not self.execution_enabled or not result.can_execute or not result.recovery.path:
+        if not result.can_execute or not result.recovery.path:
             self._set_status("This reviewed plan cannot be executed.", error=True)
             return
         acknowledgement = bool(

@@ -53,7 +53,6 @@ from context_palette.excel_automation import (
     csv_invocation,
     discover_direct_sibling_python_excel_launcher,
     load_excel_automation_settings,
-    live_text_conversion_uat_enabled,
     parse_automation_response,
     save_excel_automation_settings,
     workbook_paths_from_workspace,
@@ -897,20 +896,6 @@ class ExcelAutomationRequestTests(unittest.TestCase):
             with self.subTest(invocation=invocation):
                 with self.assertRaises(ExcelAutomationInputError):
                     invocation()
-
-    def test_live_text_conversion_uat_gate_requires_exact_one(self) -> None:
-        self.assertTrue(
-            live_text_conversion_uat_enabled(
-                {"CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION": "1"}
-            )
-        )
-        for value in ("", "true", "01", " 1", "1 ", "TRUE"):
-            with self.subTest(value=value):
-                self.assertFalse(
-                    live_text_conversion_uat_enabled(
-                        {"CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION": value}
-                    )
-                )
 
 
 class ExcelAutomationResponseTests(unittest.TestCase):

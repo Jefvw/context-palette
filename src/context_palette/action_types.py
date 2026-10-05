@@ -174,7 +174,7 @@ ACTION_TYPES = {
             "Run one reviewed Python Excel automation through its versioned host protocol.",
             "CSV export reads exact .xlsx paths from Input / Output; live workflows inventory already-open Excel workbooks.",
             "CSV export plans reviewed outputs. Live workflows can apply Standard data formatting or convert selected physical columns to text, with optional Review.",
-            "The Action is portable; each computer needs a machine-local Python Excel setup. Live workflows change an open workbook, may clear Excel Undo, and never save or close Excel. Conversion to text is restricted to testing in this build and requires an engine-created verified backup.",
+            "The Action is portable; each computer needs a machine-local Python Excel setup. Live workflows change an open workbook, may clear Excel Undo, and never save or close Excel. Conversion to text requires an engine-created verified backup.",
         ),
         _definition(
             "sequence",

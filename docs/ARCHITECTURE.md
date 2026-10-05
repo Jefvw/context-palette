@@ -1735,8 +1735,9 @@ authoritative plan block unsafe mutation.
 
 ### `excel_live_text_conversion_window.py`
 
-Owns the centered attended Development/UAT workflow for Python Excel commit
-`08af313` and retains the partial-effect result boundary introduced by
+Owns the centered attended workflow for Python Excel operation version `1.0`.
+The supported engine baseline is `c081510`, including the blank-preserving write
+in `be4f67f`. It retains the partial-effect result boundary introduced by
 `54f1ab8`. It reuses the one bounded process client/coordinator, machine-local
 launcher setting, and shared live-Excel target selector. Its sequence is exact
 capability discovery, already-open workbook inventory, one visible worksheet, bounded paged physical-column
@@ -1764,10 +1765,11 @@ backup policy requires the separate engine extension described in
 does not replace, rotate or delete files to bypass that boundary.
 Formula or unsupported values in scope remain engine-authored blockers; a
 precision-risk plan requires an explicit acknowledgement that lost digits
-cannot be reconstructed. Execution is fail-closed unless the exact environment
-value `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1` was present at process
-startup. Inventory, preflight, and planning remain read-only when the gate is
-off. Success, known no-live-mutation failure, partial mutation, and unknown
+cannot be reconstructed. Normal startup permits conversion after exact
+capability, complete preflight, target, plan, recovery and acknowledgement checks.
+There is no environment or build-permission gate. Inventory, preflight and
+optional Review remain read-only; only an explicit Convert authorizes mutation.
+Success, known no-live-mutation failure, partial mutation, and unknown
 process/protocol outcomes are distinct; no outcome is retried automatically.
 Context Palette never saves or closes Excel and never persists tokens, samples,
 workbook paths, or the actual machine-local launcher path in tracked data.
@@ -1794,10 +1796,13 @@ reuses the cached preflight and current selection, invalidates plan authority an
 acknowledgement, and requires a fresh engine plan before execution. It does not
 silently repeat inventory or inspection. Recovery changes still require replanning.
 
-The 2026-10-04 corrected engine write boundary is currently uncommitted at
-`08af313`. The operation catalogue's `1.0` version does not establish that the
-installed engine includes that fix. The UAT gate remains until the engine fix
-is deployable and the remaining acceptance matrix is complete.
+The corrected engine write boundary and recovery validator are published in
+Python Excel `c081510` (fix in `be4f67f`). The operation catalogue's unchanged
+`1.0` version does not establish which implementation is installed: deployment
+must update that separate engine checkout and its own optional Excel dependencies.
+The former UAT startup flag is no longer read. The owner reports the published
+engine works on another PC; that is separate from live acceptance of this host
+startup change. Remaining broader manual checks are documented in Testing.
 
 ### `excel_live_format_window.py`
 
@@ -2148,7 +2153,7 @@ Input / Output workspace <---- Paste / manual edit
         +-- URL builder -> prompt or consume workspace -> copy + open URL
         +-- Excel CSV automation -> describe -> plan -> attended review -> execute
         +-- Live Excel format -> inventory -> one attended Apply
-        +-- UAT live text conversion -> capability -> inventory -> preflight -> plan -> execute
+        +-- Live text conversion -> capability -> inventory -> preflight -> plan -> execute
         `-- saved-text action -> clipboard -> fresh captured destination, or manual-paste fallback
 
 Windows Credential Manager -- exact target --> protected clipboard --> captured destination

@@ -515,6 +515,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
 
     def test_capability_version_mismatch_and_unavailable_stop_before_inventory(self) -> None:
         for result in (
+            capabilities_result(missing="convert_live_column_representation"),
             capabilities_result(mismatch="preflight_live_columns"),
             capabilities_result(unavailable="convert_live_column_representation"),
         ):
@@ -589,10 +590,10 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         self.assertEqual(window.columns_listbox.get(0, tk.END)[1:], ("2 · B · ID", "3 · C · ID"))
         self.assertEqual(window._selected_columns(), (2,))
         self.assertFalse(window.review_button.instate(["disabled"]))
-        self.assertTrue(window.primary_button.instate(["disabled"]))
+        self.assertFalse(window.primary_button.instate(["disabled"]))
 
     def test_blocked_plan_disables_execute_and_renders_blocker(self) -> None:
-        window = self._window(execution_enabled=True)
+        window = self._window()
         self._plan(window, can_execute=False)
 
         self.assertEqual(window.view_state, "plan_blocked")
@@ -600,8 +601,34 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         self.assertIn("formulas", window.result_text.get("1.0", "end-1c"))
         self.assertNotIn("retry", window.primary_button.cget("text").casefold())
 
+    def test_normal_startup_ignores_retired_flag_and_waits_for_explicit_convert(self) -> None:
+        for value in (None, "0", "1"):
+            environment = (
+                {} if value is None
+                else {"CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION": value}
+            )
+            with self.subTest(value=value), patch.dict("os.environ", environment, clear=True):
+                window = self._window()
+                self._preflight(window, preflight_column(1, "A", "ID"))
+                self.assertTrue(window.primary_button.instate(["disabled"]))
+                window.primary_button.invoke()
+                self.assertEqual(
+                    [call["phase"] for call in self.coordinator.calls],
+                    ["capabilities", "inventory", "preflight"],
+                )
+                window.columns_listbox.selection_set(0)
+                window._column_selection_changed()
+                self.assertFalse(window.primary_button.instate(["disabled"]))
+                self.assertEqual(self.coordinator.calls[-1]["phase"], "preflight")
+                window.primary_button.invoke()
+                self.assertEqual(self.coordinator.calls[-1]["phase"], "conversion_plan")
+                self._complete(window, plan_result())
+                self.assertEqual(self.coordinator.calls[-1]["phase"], "conversion_execute")
+                self._close(window)
+                self.coordinator = FakeCoordinator()
+
     def test_direct_convert_plans_then_executes_exact_selection_once_without_review(self) -> None:
-        window = self._window(execution_enabled=True)
+        window = self._window()
         self._preflight(window, preflight_column(2, "B", "ID"), preflight_column(4, "D", "ID"), preflight_column(6, "F", "ID"))
         window.columns_listbox.selection_set(0, 2)
         window._column_selection_changed()
@@ -645,7 +672,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         self.assertEqual([call["phase"] for call in self.coordinator.calls].count("conversion_execute"), 1)
 
     def test_optional_review_does_not_authorize_execution(self) -> None:
-        window = self._window(execution_enabled=True)
+        window = self._window()
         self._plan(window)
         self.assertEqual(window.view_state, "plan_ready")
         self.assertNotIn("conversion_execute", [call["phase"] for call in self.coordinator.calls])
@@ -655,7 +682,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         self.assertEqual(self.coordinator.calls[-1]["phase"], "conversion_execute")
 
     def test_direct_precision_warning_is_short_and_requires_a_new_explicit_convert(self) -> None:
-        window = self._window(execution_enabled=True)
+        window = self._window()
         self._preflight(window, preflight_column(1, "A", "ID"))
         window.columns_listbox.selection_set(0)
         window._column_selection_changed()
@@ -674,23 +701,14 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         window.primary_button.invoke()
         self.assertIs(self.coordinator.calls[-1]["request"]["arguments"]["acknowledge_irreversible_precision_risk"], True)
 
-    def test_direct_convert_respects_gate_blocked_plan_and_mismatched_response(self) -> None:
-        for kind in ("disabled", "disabled_during_plan", "blocked", "mismatch", "no_recovery"):
+    def test_direct_convert_respects_blocked_plan_and_mismatched_response(self) -> None:
+        for kind in ("blocked", "mismatch", "no_recovery"):
             with self.subTest(kind=kind):
-                window = self._window(execution_enabled=kind != "disabled")
+                window = self._window()
                 self._preflight(window, preflight_column(1, "A", "ID"))
                 window.columns_listbox.selection_set(0)
                 window._column_selection_changed()
-                call_count = len(self.coordinator.calls)
-                if kind == "disabled":
-                    window._start_plan(None, execute_when_ready=True)
-                    self.assertEqual(len(self.coordinator.calls), call_count)
-                    self.assertFalse(window.review_button.instate(["disabled"]))
-                    window.review_button.invoke()
-                else:
-                    window.primary_button.invoke()
-                if kind == "disabled_during_plan":
-                    window.execution_enabled = False
+                window.primary_button.invoke()
                 call = plan_result(can_execute=kind != "blocked")
                 if kind == "mismatch":
                     call = replace(call, result=replace(call.result, target=replace(call.result.target, workbook_token="different")))
@@ -703,7 +721,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
                 self.coordinator = FakeCoordinator()
 
     def test_obsolete_plan_callback_cannot_replace_current_conversion_intent(self) -> None:
-        window = self._window(execution_enabled=True)
+        window = self._window()
         self._preflight(window, preflight_column(1, "A", "ID"), preflight_column(2, "B", "ID"))
         window.columns_listbox.selection_set(0)
         window._column_selection_changed()
@@ -723,7 +741,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         self.assertEqual([call["phase"] for call in self.coordinator.calls].count("conversion_execute"), 1)
 
     def test_closed_window_revokes_pending_direct_conversion(self) -> None:
-        window = self._window(execution_enabled=True)
+        window = self._window()
         self._preflight(window, preflight_column(1, "A", "ID"))
         window.columns_listbox.selection_set(0)
         window._column_selection_changed()
@@ -737,7 +755,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
     def test_existing_backup_blocks_direct_conversion_without_host_replacement(self) -> None:
         backup = Path(self.temp.name) / "Budget.python-excel-recovery.xlsx"
         backup.write_bytes(b"existing recovery evidence")
-        window = self._window(execution_enabled=True)
+        window = self._window()
         self._preflight(window, preflight_column(1, "A", "ID"))
         window.columns_listbox.selection_set(0)
         window._column_selection_changed()
@@ -754,7 +772,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         self.assertEqual([item["phase"] for item in self.coordinator.calls].count("conversion_plan"), 1)
 
     def test_default_recovery_is_reviewed_and_override_replans_without_creating(self) -> None:
-        window = self._window(execution_enabled=True)
+        window = self._window()
         self._plan(window)
         first_request = self.coordinator.calls[-1]["request"]
         self.assertIsNone(first_request["arguments"]["recovery_path"])
@@ -772,7 +790,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         self.assertFalse(Path(alternate).exists())
 
     def test_recovery_picker_normalizes_separators_without_accepting_a_different_file(self) -> None:
-        window = self._window(execution_enabled=True)
+        window = self._window()
         self._plan(window)
         alternate = Path(self.temp.name) / "Données recovery copy.xlsx"
 
@@ -799,7 +817,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         self.assertIsNone(window.primary_button)
 
     def test_plan_always_displays_undo_warning_without_engine_warnings(self) -> None:
-        window = self._window(execution_enabled=True)
+        window = self._window()
         self._plan(window)
         self.assertFalse(window._plan_result.warnings)
         self.assertIn("Excel Undo history may be cleared", self._texts(window.content))
@@ -825,7 +843,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         self.assertEqual(self.coordinator.calls[-1]["request"]["arguments"]["columns"], [2, 6])
 
     def test_compact_review_shows_human_effects_and_hides_technical_details(self) -> None:
-        window = self._window(execution_enabled=True)
+        window = self._window()
         self._plan(window, precision=1)
         call = plan_result(precision=1)
         result = replace(
@@ -850,7 +868,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         self.assertIs(window.primary_button.master, window.footer)
 
     def test_details_disclosure_keeps_acknowledgement_and_sends_no_engine_request(self) -> None:
-        window = self._window(execution_enabled=True)
+        window = self._window()
         self._plan(window, precision=1)
         window.precision_ack_var.set(True)
         window._update_execute_state()
@@ -869,7 +887,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         )
 
     def test_change_columns_reuses_inspection_and_requires_a_fresh_plan(self) -> None:
-        window = self._window(execution_enabled=True)
+        window = self._window()
         self._preflight(window, preflight_column(1, "A", "ID"), preflight_column(2, "B", "ID"))
         window.columns_listbox.selection_set(0)
         window._column_selection_changed()
@@ -895,7 +913,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         self.assertTrue(window.primary_button.instate(["disabled"]))
 
     def test_conversion_button_stays_visible_with_details_and_recovery_replanning_resets_ack(self) -> None:
-        window = self._window(execution_enabled=True)
+        window = self._window()
         self._plan(window, precision=1)
         window.precision_ack_var.set(True)
         window._update_execute_state()
@@ -931,7 +949,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
 
     def test_long_exact_paths_wrap_at_minimum_width_with_shared_theme(self) -> None:
         configure_theme(self.root)
-        window = self._window(execution_enabled=True)
+        window = self._window()
         self._plan(window, precision=1)
         long_path = "D:\\" + "Données avec un nom long\\" * 7 + "Budget.xlsx"
         result = replace(
@@ -956,18 +974,8 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
                 window.window.winfo_rootx() + window.window.winfo_width(),
             )
 
-    def test_precision_ack_and_uat_flag_jointly_gate_exact_execution(self) -> None:
-        disabled = self._window(execution_enabled=False)
-        self._plan(disabled, precision=1)
-        disabled.precision_ack_var.set(True)
-        disabled._update_execute_state()
-        self.assertTrue(disabled.primary_button.instate(["disabled"]))
-        self.assertIn("Conversion is not enabled in this build", disabled.status_var.get())
-        self.assertNotIn("UAT", disabled.status_var.get())
-        self._close(disabled)
-        self.coordinator = FakeCoordinator()
-
-        window = self._window(execution_enabled=True)
+    def test_precision_ack_gates_exact_execution(self) -> None:
+        window = self._window()
         self._plan(window, precision=1)
         self.assertTrue(window.primary_button.instate(["disabled"]))
         window.precision_ack_var.set(True)
@@ -986,7 +994,6 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
 
     def test_success_is_verified_and_offers_recovery_and_return_to_excel(self) -> None:
         window = self._window(
-            execution_enabled=True,
             source_window_handle=4321,
             source_process_id=42,
         )
@@ -1010,7 +1017,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
             ("partial_failure", "Possible partial modification"),
         ):
             with self.subTest(state=state):
-                window = self._window(execution_enabled=True)
+                window = self._window()
                 self._plan(window)
                 window.primary_button.invoke()
                 self._complete(window, execution_result(state))
@@ -1022,7 +1029,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
                 self.coordinator = FakeCoordinator()
 
     def test_partial_failure_with_clean_workbook_never_claims_no_mutation(self) -> None:
-        window = self._window(execution_enabled=True)
+        window = self._window()
         self._plan(window)
         window.primary_button.invoke()
         call = execution_result("partial_failure")
@@ -1049,7 +1056,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
             "conflict.recovery_output_exists",
         ):
             with self.subTest(code=code):
-                window = self._window(execution_enabled=True)
+                window = self._window()
                 self._plan(window)
                 window.primary_button.invoke()
                 self._complete(
@@ -1088,7 +1095,7 @@ class ExcelLiveTextConversionWindowTests(unittest.TestCase):
         )
         for result in cases:
             with self.subTest(result=result):
-                window = self._window(execution_enabled=True)
+                window = self._window()
                 self._plan(window)
                 window.primary_button.invoke()
                 self._complete(window, result)

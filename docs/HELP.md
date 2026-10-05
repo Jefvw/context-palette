@@ -1326,26 +1326,21 @@ The bottom communication line always stays one row high. Hover over it for the c
   conversion. Context Palette does not delete it or select another path
   automatically. A later conversion also requires the user to save the source
   first: the existing engine accepts only clean workbooks and never saves it.
-- Conversion is currently restricted to testing in this build.
-  Use disposable test workbooks only. The 2026-10-03 blank-preservation defect
-  was corrected in the Python Excel working tree and passed engine UAT on
-  2026-10-04. That fix is still uncommitted at engine HEAD `08af313`; Git
-  installation on another PC does not yet include it. The `1.0` interface
-  version alone does not identify a corrected engine. The execution
-  restriction remains pending deployable engine evidence and the
-  remaining host acceptance checks documented in `docs/TESTING.md`.
-  A fresh 2026-10-04 Palette-to-Excel disposable check passed conversion,
-  true-blank preservation, recovery and unsaved lifecycle. The later compact UI
-  passed separate fake-coordinator tests and Windows checks with simulated data;
-  those checks do not establish owner acceptance of the revised live workflow.
-  Set
-  `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION=1` before starting Context Palette
-  and restart it to enable **Convert N cells to text**; any other or missing value leaves
-  discovery, inventory, preflight, and planning available but mutation
-  disabled. From PowerShell, use
-  `$env:CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION='1'; .\run-context-palette.bat`
-  for that one app process. Close it and start normally to return to read-only
-  review. **Excel Undo history may be cleared:** use the reviewed recovery copy
+- Conversion works during normal startup; no special environment variable is
+  required. Update the separate Python Excel engine to `c081510` or a later
+  revision retaining its corrected blank-preserving write (`be4f67f`). Install
+  its optional Excel dependencies in that checkout's own environment on each
+  PC; copying or updating Context Palette alone does not install them.
+  The unchanged `1.0` interface version cannot prove which engine code is
+  installed. The former `CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION` flag is
+  ignored, including an old value of `0`.
+- Convert stays disabled until you select columns and finish loading the column
+  list. Missing/incompatible engine capabilities stop the workflow. Formula,
+  workbook, recovery-path or precision issues must still be resolved before
+  execution; read the current status message. Review remains optional.
+  The owner reports the corrected engine works on another PC; live acceptance
+  of this Palette startup change and the broader matrix remain separate.
+  **Excel Undo history may be cleared:** use the reviewed recovery copy
   for recovery. A clean failure means no live-workbook mutation began, although a
   verified recovery copy may exist. A partial failure or lost/unparseable
   engine result may mean partial or unknown effects: inspect Excel and the

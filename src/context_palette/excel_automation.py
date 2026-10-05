@@ -43,7 +43,6 @@ DEFAULT_MAX_STDERR_BYTES = 256 * 1024
 PYTHON_EXCEL_SIBLING_DIRECTORY = "python-excel"
 PYTHON_EXCEL_LAUNCHER_NAME = "python-excel.bat"
 LIVE_TEXT_CONVERSION_AUTOMATION_ID = "excel.convert_live_column_representation"
-LIVE_TEXT_CONVERSION_UAT_ENV = "CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION"
 LIVE_HEADER_ROW = 1
 LIVE_MAXIMUM_COLUMNS = 100
 LIVE_MAXIMUM_DATA_ROWS = 10_000
@@ -359,15 +358,6 @@ class LiveExcelInventoryLimits:
         )
 
 
-def live_text_conversion_uat_enabled(
-    environment: Mapping[str, str] | None = None,
-) -> bool:
-    """Return true only for the exact opt-in value accepted by the UAT gate."""
-
-    selected = os.environ if environment is None else environment
-    return selected.get(LIVE_TEXT_CONVERSION_UAT_ENV) == "1"
-
-
 @dataclass(frozen=True, slots=True)
 class LiveColumnPreflightInvocation:
     """One bounded, read-only physical-column inspection."""
@@ -418,7 +408,7 @@ class LiveColumnConversionPlanInvocation:
 
 @dataclass(frozen=True, slots=True)
 class LiveColumnConversionInvocation:
-    """One reviewed, UAT-gated live text mutation request."""
+    """One reviewed, recovery-backed live text mutation request."""
 
     workbook_token: str
     worksheet: str

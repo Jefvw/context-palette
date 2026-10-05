@@ -248,7 +248,7 @@
         "scientific notation",
         "open workbook"
       ],
-      "description": "Select physical columns in an already-open .xlsx workbook, create a verified backup, and convert eligible scientific-notation text and current numeric values to text. Review is optional. Conversion is restricted to testing in this build; Excel is never saved or closed."
+      "description": "Select physical columns in an already-open .xlsx workbook, create a verified backup, and convert eligible scientific-notation text and current numeric values to text. Review is optional. Excel is never saved or closed."
     },
     {
       "id": "developing-uat-sequence",
