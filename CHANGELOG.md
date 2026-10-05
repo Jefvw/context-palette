@@ -18,6 +18,11 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Clarified documentation navigation, current verification checklists and
+  per-PC Excel/OneNote setup. Labelled older UI sketches as historical and
+  removed shared links to private evidence files; decision and verification
+  history remains available.
+
 - Stopped Find's help popup from automatically covering results when Palette
   opens, reopens or focuses Find. Hover help remains available, typing dismisses
   it, and F1 Help plus other controls' keyboard explanations are unchanged.

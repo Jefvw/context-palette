@@ -22,7 +22,7 @@ No open-source license has been selected yet. Keep the repository private, or ch
 
    ```powershell
    git status --short
-   git check-ignore data\inbox.json data\local_actions.json data\local_contexts.json data\local_command_surface.json data\local_work_item_sources.json data\local_work_item_metadata.json data\local_work_item_settings.json data\local_excel_automation_settings.json data\local_text_action_source.txt data\palette.json data\context-palette.log
+   git check-ignore data\inbox.json data\local_actions.json data\local_contexts.json data\local_command_surface.json data\local_work_item_sources.json data\local_work_item_metadata.json data\local_work_item_settings.json data\local_excel_automation_settings.json data\local_onenote_settings.json data\local_onenote_send_settings.json data\local_text_action_source.txt data\palette.json data\context-palette.log
    ```
 
 3. Review the complete history for previously committed private data before pushing.
@@ -72,6 +72,12 @@ The **Export Excel files to CSV** Action has a second, independent local
 component: Python Excel. Context Palette does not install, bundle, or update
 that repository. On each PC, separately clone or otherwise transfer the exact
 Python Excel implementation and bootstrap it according to its own instructions.
+From that engine checkout, the base CSV setup command is:
+
+```powershell
+.\bootstrap-python-excel.bat
+```
+
 When it is the exact direct sibling `python-excel\python-excel.bat`, Context
 Palette detects it without persisting the path. Any explicit override is kept
 in ignored `data/local_excel_automation_settings.json`; do not commit, copy, or
@@ -85,6 +91,96 @@ how to finish its local setup. Verify the vertical slice on each PC with
 disposable closed `.xlsx` files: plan asynchronously, review exact CSV
 effects, execute once, and inspect any partial or unknown result before trying
 another batch. Administrator rights and desktop Excel are not required.
+
+### Optional live Excel formatting and text conversion
+
+**Apply Excel format template** and **Convert Excel values to text** reuse the
+same Python Excel checkout and per-PC launcher setting as CSV export. On each
+PC, install the optional live backend in that engine's own environment:
+
+```powershell
+.\bootstrap-python-excel.bat
+.\.venv\Scripts\python.exe -m pip install -e ".[excel]"
+```
+
+Run these commands from the Python Excel checkout, not Context Palette.
+Desktop Excel must be installed and the workbook already open; Palette does
+not start, save or close Excel. Formatting requires AutoSave off and can clear
+Undo; it has no recovery backup. Conversion requires a clean saved workbook,
+AutoSave off and an available recovery path. The engine creates and verifies
+the recovery copy before converting; existing backup paths still block it.
+The requested single refreshed backup remains pending with the engine owner;
+Palette does not replace, rotate or delete backups to bypass that boundary.
+
+Use Python Excel `c081510` or a later revision retaining the corrected
+blank-preserving write from `be4f67f`. The unchanged operation version `1.0`
+does not prove that a PC has this correction. Conversion is available at normal
+Palette startup: no special environment variable is required, and the retired
+`CONTEXT_PALETTE_UAT_LIVE_TEXT_CONVERSION` flag is ignored. Use a disposable
+workbook for each PC's acceptance; owner-reported engine success on another PC
+does not complete host acceptance. See [Help](HELP.md#input--output-workspace) and
+[Testing](TESTING.md#normal-startup-excel-conversion-2026-10-05) for the attended
+flow and remaining checks. Inspect partial or unknown outcomes before another run.
+
+### Optional OneNote Search, Preview and Send
+
+Separately clone or transfer Python OneNote source to each PC and, from that
+checkout, run:
+
+```powershell
+.\bootstrap-python-onenote.bat
+```
+
+This creates that checkout's `.venv` and installs its package. `--dev` adds
+developer tools; there is no `--desktop` bootstrap option. The production
+adapter requires Windows, Python 3.11+, OneNote desktop and its installed
+OneNote 15.0 PIA. It uses Windows PowerShell and requires no Python desktop
+extra or pywin32 installation. Open OneNote and the intended notebook yourself.
+Palette does not install the engine, change Office settings or start OneNote.
+
+**Find OneNote notes…** checks and connects when you explicitly choose Search
+or Choose notebook; select a result, request Preview text, then review
+**Use text… → Replace / Append / Cancel** for placement into Input / Output.
+**Send to → OneNote — new text page…** separately selects an existing notebook
+and section. Its one **Send to OneNote** click approves the displayed title,
+complete body and destination to create one new plain-text page. Send preserves
+Input / Output and cannot append to or update an existing OneNote page. Inspect
+a partial or unknown Send result in OneNote before another attempt.
+
+### Optional engine location, updates and private settings
+
+With no explicit launcher configured, Palette checks only the exact direct
+siblings of its installation folder: `..\python-excel\python-excel.bat` and
+`..\python-onenote\python-onenote.bat`. For example, a Palette checkout at
+`D:\dev\context-palette` detects those launchers under `D:\dev`. Discovery
+does not search PATH or other folders, install anything or persist the path.
+An explicit launcher takes precedence; a missing, invalid or unusable saved
+engine needs explicit repair even when a sibling exists. Select its current
+launcher with **Change Python Excel launcher…** (or **Browse for Python Excel
+launcher…** during setup), or OneNote's **Change engine…**.
+
+Update each source checkout separately through its own Git workflow, then rerun
+its bootstrap; live Excel also needs the `.[excel]` install above. Pulling
+Context Palette does not update engine source or packages. Every repository
+owns its own `.venv` and dependency declarations; never copy or share those
+environments between repositories or PCs. Package-source access and compatible
+Python must be available for each bootstrap on the target PC.
+
+After updating Palette source, finish any running operation, use **Quit** to
+close the resident app and run `run-context-palette.bat` again; merely launching
+again can reuse the old process. Restart after engine changes too so open
+workflows recheck the updated capabilities. Re-select moved engines and
+unavailable notebooks/sections on that PC. OneNote engine reselection preserves
+the separate search and Send
+preferences; it does not broaden a missing notebook's scope.
+
+Do not copy or commit `data/local_excel_automation_settings.json`,
+`data/local_onenote_settings.json` or `data/local_onenote_send_settings.json`.
+They contain private per-PC launcher/notebook/section choices; the two OneNote
+settings files are also excluded from configuration backup. Choose these again
+on another PC. See [OneNote Help](HELP.md#find-onenote-notes) and
+[Send Help](HELP.md#send-text-to-onenote); broader host/live deployment checks
+remain separate from source and automated verification.
 
 ## Python environments and dependencies across computers
 
@@ -221,6 +317,9 @@ previous contents in the ignored adjacent `.bak` file.
 - `data/local_actions.json`: personal or machine-specific actions.
 - `data/local_contexts.json`: personal or work-specific contexts.
 - `data/local_command_surface.json`: personal or machine-specific quick-action groups.
+- `data/local_excel_automation_settings.json`: private per-PC Python Excel launcher.
+- `data/local_onenote_settings.json`: private per-PC Python OneNote launcher and search notebook.
+- `data/local_onenote_send_settings.json`: independent private OneNote Send destination.
 - `data/palette.json`: per-PC Context slots plus legacy focus and pin fields
   retained for compatible round-trip. The transient launcher Context filter is
   not synchronized or restored from this file.

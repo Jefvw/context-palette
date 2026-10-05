@@ -3795,3 +3795,20 @@ help and constructs it after key handlers so typing dismissal is not overwritten
 the launcher registers it once. No geometry redesign, new dependency, Action
 execution or user-data change is introduced. No resident-app restart was
 performed for verification; restarting after deployment loads the fix.
+
+## 2026-10-05 - Keep current documentation portable and separate from history
+
+**Decision:** Correct active instructions and navigation while preserving dated
+acceptance, decisions, designs and verification records. Label superseded UI
+sketches, link current integration/setup guidance from the index, and prevent
+shared Markdown links from depending on private outputs.
+
+**Reason:** Reusable checklists still described retired shortcut and Excel gate
+behavior. Shared evidence links could pass on the development PC while failing
+on a checkout without its private screenshots. A focused maintenance pass has
+more value than rewriting the complete document collection.
+
+**Consequences:** Private evidence remains local and is referenced as plain
+text, never copied into Git. A regression rejects output-folder links. Per-PC
+engine setup remains separate from Palette setup, and documented acceptance
+limits remain explicit. No app, engine, data model or live UAT behavior changes.

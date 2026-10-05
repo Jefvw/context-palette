@@ -2,6 +2,19 @@
 
 This directory separates current behavior, durable direction, historical rationale, and future work. When documents disagree, use the priority below.
 
+## Start here
+
+- Using the app: [Help](HELP.md) and [keyboard shortcuts](SHORTCUTS.md).
+- Setting up another PC: [Multi-PC setup](MULTI_PC_DEVELOPMENT.md), including
+  the optional Excel, OneNote and OCR components.
+- Changing the app: [Change guide](CHANGE_GUIDE.md) and [Architecture](ARCHITECTURE.md).
+- Checking a change: [Complete check](TESTING.md#complete-automated-check)
+  and [manual Windows smoke test](TESTING.md#manual-windows-smoke-test).
+- Checking scope or an earlier choice: [MVP](MVP.md), [Backlog](../BACKLOG.md)
+  and [dated decisions](DECISIONS.md).
+
+## Source priority
+
 | Priority | Source | Purpose |
 | --- | --- | --- |
 | 1 | Code and automated tests | Executable behavior |
@@ -64,6 +77,23 @@ This directory separates current behavior, durable direction, historical rationa
 - [Changelog](../CHANGELOG.md) — user-visible history.
 - [Technical review](TECHNICAL_REVIEW.md) and [performance audit](PERFORMANCE_AUDIT.md) — dated audits, including completed findings.
 
+### Integration status and handovers
+
+- [OneNote search and preview](HELP.md#find-onenote-notes) and
+  [Send text to OneNote](HELP.md#send-text-to-onenote) — current user flows.
+- [OneNote Send UAT](ONENOTE_SEND_UAT.md) — proposed attended acceptance;
+  it requires its own exact-scope approval before live access.
+- [OneNote Send UI design record](ONENOTE_SEND_UI_IMPLEMENTATION_HANDOVER.md) —
+  implemented; retain as rationale, not a request to repeat the work.
+- [OneNote recovery investigation](ONENOTE_ENGINE_RECOVERY_HANDOVER.md) —
+  earlier engine-owner handover; inspect current engine and host status before reuse.
+- [Single refreshed Excel backup](EXCEL_SINGLE_BACKUP_ENGINE_HANDOVER.md) —
+  pending engine-contract work; current conversion still refuses existing backups.
+
+Use current guides for operation and setup. Dated audits, design sketches,
+decisions and verification records explain earlier states; they do not override
+current behavior. A handover does not itself authorize implementation or live UAT.
+
 ## Maintenance rules
 
 - Describe current behavior in present tense and proposals with **Proposed** or **Deferred**.
@@ -73,3 +103,5 @@ This directory separates current behavior, durable direction, historical rationa
 - Update `ARCHITECTURE.md` when module boundaries, data flow, persistence, threading, or security changes.
 - `ACTION_TYPES.md` is generated from `src/context_palette/action_types.py`; update the catalogue and its tests instead of editing the Markdown by hand.
 - Use repository-relative Markdown links so documentation works locally and on Git hosts.
+- Shared documentation must not link to private `outputs/` files. Record their
+  names or local locations as plain text; keep the evidence private.

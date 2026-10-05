@@ -82,6 +82,21 @@ def has_exact_repository_case(path: Path) -> bool:
 
 
 class DocumentationLinkTests(unittest.TestCase):
+    def test_shared_documentation_does_not_link_to_machine_local_outputs(self):
+        local_evidence: list[str] = []
+        for source in documentation_files():
+            for line_number, target in markdown_links(source):
+                destination = local_link_target(source, target)
+                if destination is not None and destination.is_relative_to(ROOT / "outputs"):
+                    local_evidence.append(
+                        f"{source.relative_to(ROOT)}:{line_number}: {target}"
+                    )
+        self.assertEqual(
+            local_evidence, [],
+            "Shared documentation cannot require private output files:\n"
+            + "\n".join(local_evidence),
+        )
+
     def test_internal_markdown_links_resolve_with_exact_case(self):
         broken: list[str] = []
         for source in documentation_files():

@@ -2,6 +2,26 @@
 
 Context Palette combines automated domain/UI-construction tests with manual Windows checks for behavior that cannot be proven reliably in a headless test.
 
+## Find the right check
+
+- [Complete automated check](#complete-automated-check) — required repository gate.
+- [Targeted tests](#targeted-tests) — focused commands while changing the app.
+- [Manual Windows smoke test](#manual-windows-smoke-test) — current attended checklist.
+- [Platform-effect checks](#platform-effect-checks) — relevant external-app checks.
+- [Current batch acceptance](UAT_CURRENT_BATCH.md) — September owner decision
+  and optional follow-up, with later guidance clearly separated.
+
+The dated verification records below preserve what was observed at each
+checkpoint. Use the current commands and checklists linked above for a new run;
+later changes may supersede old flags, layouts or workflows. Private evidence
+under `outputs/` is not part of a Git checkout and is referenced as plain text.
+Documentation maintenance, 2026-10-05: **17 focused checks** passed locally
+and in a disposable copy of Git-tracked files with no local outputs or `.venv`.
+The existing repository interpreter ran those checks. The complete check passed
+configuration validation,
+compilation and **1,677 tests in 180.431 seconds, with 2 skipped**. Whitespace
+checks passed. No app/engine code, personal data or live UAT state was changed.
+
 The current Input / Output, Preview, Drop and Send-files batch has
 [owner acceptance for now with partial coverage](UAT_CURRENT_BATCH.md),
 recorded on 2026-09-09. Its checklist remains available for optional follow-up.
@@ -417,9 +437,9 @@ Real Tk construction checked short/long title and destination, small usable
 windows, conditional controls and shared-style preservation at simulated Windows
 100%, 125%, 150% and 200% scaling. These are synthetic checks, not physical DPI
 or multi-monitor UAT. Fresh native captures of the script-owned synthetic window
-were inspected at 100%: [ready](../outputs/onenote-send-ui-20261003/ready-100.png),
-[verified](../outputs/onenote-send-ui-20261003/verified-100.png), and
-[unknown](../outputs/onenote-send-ui-20261003/unknown-100.png). All content and
+were inspected at 100%: private screenshots `ready-100.png`, `verified-100.png`
+and `unknown-100.png`, retained locally under `outputs/onenote-send-ui-20261003/`.
+These files are not shared through Git. All content and
 client responses are fake. The first PrintWindow captures omitted themed widgets;
 those incomplete images were replaced by client-area captures before inspection.
 The render exposed global font defaults overriding heading weights, corrected
@@ -1591,7 +1611,9 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
     `Alt+A`, `Alt+T`, `Alt+C`, `Alt+Q`, `Alt+W`, `Alt+B`, and `Alt+D` directly select their
     corresponding sections—including **Quick actions** for `Alt+Q`—without closing Configure. With the main palette focused,
     verify `Ctrl+2` and `Ctrl+3` neither close/hide it nor execute action slots;
-    plain `2` and `3` must retain their existing slot behavior.
+    plain `2` and `3` must enter Find text without executing a slot.
+    Only Shift plus physical top-row `6`–`0`, with Find focused, executes
+    the selected Context's slots; All contexts uses General's bank.
 
 ## Platform-effect checks
 

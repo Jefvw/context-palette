@@ -18,6 +18,12 @@ decision.
 
 ## Checklist retained for optional follow-up
 
+Current guidance, updated 2026-10-05: the separate Excel conversion startup
+gate has since been retired. That does not alter the dated acceptance record
+above. Use [current Excel instructions](HELP.md#input--output-workspace) and
+[the current manual checklist](TESTING.md#platform-effect-checks) for a new
+Excel check; this short follow-up does not require live Excel testing.
+
 UAT means user acceptance testing: check that the application behaves as you
 expect during real Windows use. Engineering owns automated tests, diagnosis,
 and fixes. Your part is to try the short flows below and report Pass, Fail,
@@ -135,7 +141,8 @@ there too; otherwise report that part as Not tested and we can do it together.
 - If Python Excel CSV export is configured, use a disposable closed workbook.
   An approved Drop must open the normal CSV review without writing before
   confirmation; another drop must not replace that open review. Otherwise
-  report this as Not tested. Keep live Excel conversion's UAT gate unchanged.
+  report this as Not tested. Live formatting and conversion are separate flows;
+  follow their current instructions only when separately in scope.
 - Broader Excel, backup/restore, menu-maintenance and second-PC matrices remain
   in the backlog. They are not all expected from this short owner pass.
 

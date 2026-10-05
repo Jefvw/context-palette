@@ -129,7 +129,10 @@ searchable but do not automatically become personal tags.
 
 ## Main-window layout
 
-The main window keeps its current dimensions and Input / Output area.
+This sketch records an earlier layout, including the side rail and grouped
+results. It is not a current screen reference. The implemented main window
+uses All items / Actions / Work Items scopes, a flat result list and the
+optional Input / Output pane; see [current discovery](HELP.md#find-and-open-palette-items).
 
 ```text
 ┌──────────────────────────────────────┬───────────────────────────────┐
@@ -153,10 +156,10 @@ The main window keeps its current dimensions and Input / Output area.
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-Implemented behavior:
+Current behavior (the sketch above is historical):
 
-- A compact **Work items** control activates the source without enlarging the
-  main window.
+- The **Work Items** item scope narrows results to discovered resources;
+  **All items** shows available Actions and Work Items together.
 - Empty and non-empty Find show one flat matching list. Visual marker folders
   never appear as headings or rows.
 - The existing Tags filter applies personal tags.
@@ -180,7 +183,11 @@ Default: Open workbook
 
 ## Configuration layout
 
-The implemented **Work Items** tab in Configure follows this layout:
+The following sketches record an earlier design, including the old horizontal
+tab strip and **Buttons** label. They are historical illustrations, not the
+current screen. Configure now uses a left-hand task navigator, a Start page and
+**Quick actions**. See [current Configure behavior](HELP.md#configure) and
+[Architecture](ARCHITECTURE.md) for implemented navigation and controls.
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
