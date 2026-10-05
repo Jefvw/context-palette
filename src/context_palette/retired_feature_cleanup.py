@@ -77,20 +77,7 @@ def cleanup_retired_local_configuration(root: Path) -> RetirementCleanupReport:
             atomic_write_json(actions_path, actions_data)
             files_changed += 1
 
-    inbox_path = data / "inbox.json"
-    inbox_data = _read_optional_object(inbox_path)
-    if inbox_data is not None:
-        items = inbox_data.get("items")
-        if not isinstance(items, list):
-            raise RetirementCleanupError("Inbox file must contain an 'items' list.")
-        inbox_changed = False
-        for item in items:
-            if isinstance(item, dict) and item.get("state") == "Draft":
-                item["state"] = "Converted"
-                inbox_changed = True
-        if inbox_changed:
-            atomic_write_json(inbox_path, inbox_data)
-            files_changed += 1
+    # Capture Inbox is retired; preserve legacy records byte-for-byte.
 
     for path, cleaner in (
         (data / "local_contexts.json", _clean_context_references),

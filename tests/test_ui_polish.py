@@ -56,8 +56,7 @@ class UiPolishTests(unittest.TestCase):
                     app.root.update()
                     controls = (
                         panel.send_to_button, panel.content_back_button,
-                        panel.content_forward_button, panel.capture_button,
-                        panel.inbox_button, panel.create_action_button,
+                        panel.content_forward_button, panel.create_action_button,
                         panel.ocr_button, panel.text_tools_button,
                         app.preview_button, discovery.new_action_button, discovery.edit_button,
                         discovery.work_item_folder_button,

@@ -16,6 +16,15 @@ broader unreported UAT remains optional. See [Testing](docs/TESTING.md).
 
 ## Now
 
+- Deliver the owner-requested **append to an existing OneNote page**, preserving
+  existing content. The current engine only creates new pages; use the
+  [engine-owner handover](docs/ONENOTE_APPEND_ENGINE_HANDOVER.md) before host
+  integration. No unsupported append button or generic workflow workaround.
+- Focus the next product iteration on **Action maintenance and management**:
+  editability, bulk updates/deletion, Context membership and Quick-action
+  organization. Capture Inbox, Inbox AI proposals and Harvest are retired;
+  preserve existing data and Actions without reviving those tools.
+
 - Implement the engine-owned [single refreshed Excel backup](docs/EXCEL_SINGLE_BACKUP_ENGINE_HANDOVER.md)
   requested on 2026-10-04, then integrate its advertised replacement contract in
   Context Palette. Human Review is now optional; Convert plans and executes a
@@ -292,9 +301,6 @@ broader unreported UAT remains optional. See [Testing](docs/TESTING.md).
   physical 100%/125% DPI plus cross-monitor icon/control rendering. Owner
   acceptance is closed for now; no unreported check is counted as a pass.
 
-- Consider direct source drag-and-drop and folder selection inside Harvest
-  after its explicit multi-file workflow has real-use feedback. The implemented
-  general intake drop target intentionally does not add Harvest sources.
 - Evaluate OneNote, PDF, HTML, and email harvesting only with format-specific
   safety, provenance, and bounded-extraction designs; do not add recursive or
   remote crawling implicitly.

@@ -156,8 +156,6 @@ class WorkspacePanel:
         tooltip_adder: Callable[[tk.Widget, str], None],
         create_action: Callable[[str], None] | None = None,
         extract_text: Callable[[str], None] | None = None,
-        capture: Callable[[], None] | None = None,
-        show_inbox: Callable[[], None] | None = None,
         populate_send_to_menu: Callable[[tk.Menu], None] | None = None,
         text_change_callback: Callable[[], None] | None = None,
         find_onenote: Callable[[], None] | None = None,
@@ -231,22 +229,6 @@ class WorkspacePanel:
             style="ToolbarIcon.TButton",
         )
         self.create_action_button.pack(side=tk.RIGHT, padx=(0, 4))
-        self.inbox_button = ttk.Button(
-            header,
-            image=self.ui_icons["inbox"],
-            command=show_inbox,
-            state=tk.NORMAL if show_inbox is not None else tk.DISABLED,
-            style="ToolbarIcon.TButton",
-        )
-        self.inbox_button.pack(side=tk.RIGHT, padx=(0, 4))
-        self.capture_button = ttk.Button(
-            header,
-            image=self.ui_icons["capture"],
-            command=capture,
-            state=tk.NORMAL if capture is not None else tk.DISABLED,
-            style="ToolbarIcon.TButton",
-        )
-        self.capture_button.pack(side=tk.RIGHT, padx=(0, 4))
         self.send_to_button = ttk.Menubutton(
             header,
             text="Send to…",
@@ -347,14 +329,6 @@ class WorkspacePanel:
                 "Create from Input — Prefill a reviewed Action from one clear website, file, folder, "
                 "or application in Input / Output."
             ),
-        )
-        tooltip_adder(
-            self.capture_button,
-            "Capture — Save current clipboard text to Inbox after asking for a title.",
-        )
-        tooltip_adder(
-            self.inbox_button,
-            "Inbox — Review captures and convert them into permanent Actions.",
         )
         tooltip_adder(
             self.send_to_button,

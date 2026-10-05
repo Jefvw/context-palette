@@ -525,6 +525,55 @@ class ExcelAutomationWindowTests(unittest.TestCase):
         self.assertIn(f"Creates: {self.output / 'book-Data(1).csv'}", visible)
         self.assertEqual(window.primary_button.cget("text"), "Create 1 CSV file")
 
+    def test_large_ready_review_reserves_footer_and_keeps_replacement_warning_visible(self) -> None:
+        sources = tuple(self.output / f"book-{index}.xlsx" for index in range(1, 31))
+        for source in sources:
+            source.write_bytes(b"test workbook placeholder")
+        window = self._window(workbooks=sources)
+        window.allow_overwrite = True
+        self._complete(window, describe_success())
+        self._complete(
+            window,
+            ready_plan(
+                sources,
+                self.output,
+                dispositions=("replace",) + ("create",) * 29,
+                allow_overwrite=True,
+            ),
+        )
+        window.window.geometry("700x480")
+        self.root.update()
+
+        self.assertEqual(window.view_state, "ready")
+        self.assertLess(window.review_text.yview()[1], 1.0)
+        review = window.review_text.get("1.0", "end-1c")
+        self.assertIn(f"Source: {sources[-1]}", review)
+        self.assertIn(f"Creates: {self.output / 'book-30-Data.csv'}", review)
+        warnings = [
+            widget
+            for widget in self._descendants(window.content)
+            if isinstance(widget, ttk.Label)
+            and "no recovery backup" in str(widget.cget("text"))
+        ]
+        self.assertEqual(len(warnings), 1)
+        warning = warnings[0]
+        self.assertTrue(warning.winfo_ismapped())
+        self.assertLessEqual(warning.winfo_reqheight(), warning.winfo_height())
+        for button in (window.primary_button, window.secondary_button, window.close_button):
+            self.assertTrue(button.winfo_ismapped())
+            self.assertGreaterEqual(button.winfo_rooty(), window.footer.winfo_rooty())
+            self.assertLessEqual(
+                button.winfo_rooty() + button.winfo_height(),
+                window.window.winfo_rooty() + window.window.winfo_height(),
+            )
+        self.assertIs(window.primary_button.master, window.review_actions)
+        self.assertIs(window.secondary_button.master, window.review_actions)
+        self.assertLessEqual(
+            window.content.winfo_rooty() + window.content.winfo_height(),
+            window.footer.winfo_rooty(),
+        )
+        self.assertFalse(any(call["phase"] == "execute" for call in self.coordinator.calls))
+
     def test_allow_overwrite_toggle_invalidates_review_and_replans(self) -> None:
         window = self._window()
         self._through_ready(window)
@@ -536,6 +585,7 @@ class ExcelAutomationWindowTests(unittest.TestCase):
         request = self.coordinator.calls[-1]["request"]
         self.assertTrue(request["arguments"]["parameters"]["allow_overwrite"])
         self.assertNotIn("expected_plan_fingerprint", request["arguments"])
+        self.assertEqual(window.review_actions.winfo_children(), [])
 
     def test_mixed_create_replace_review_executes_and_lists_exact_results(self) -> None:
         replacement = self.output / "book-Data.csv"

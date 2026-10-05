@@ -133,7 +133,7 @@ The representative page uses:
 
 - one `New Action...` primary action;
 - a `More Action tasks` menu for bulk create/update/removal, the type catalogue, and
-  Harvest, including distinct `Export personal Actions for update...` and
+  the supported workbook routes, including distinct `Export personal Actions for update...` and
   `Review updated Actions workbook...` routes plus `Delete multiple personal
   Actions...` for the centered one-effect review;
 - one Action table with readable type, ownership, and explicit **Legacy

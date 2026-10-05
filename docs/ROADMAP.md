@@ -2,7 +2,11 @@
 
 The roadmap describes ordered product outcomes, not commitments or implemented behavior. Current behavior is defined by [MVP](MVP.md) and [Architecture](ARCHITECTURE.md); concrete tasks live in the root [Backlog](../BACKLOG.md).
 
-## Now — make repeated actions effortless
+## Now — simplify use and improve Action maintenance
+
+- Prioritize Action editing, bulk updates/deletion, Context membership and Quick
+  actions. Deliver existing-page OneNote append only after its engine contract
+  is published; the owner chose append with existing content preserved.
 
 - Address real-use findings in the current UI enhancement, accepted by the
   owner on 2026-09-09 with partial UAT coverage. Further checks are deferred
@@ -32,7 +36,7 @@ The roadmap describes ordered product outcomes, not commitments or implemented b
 - Extend the implemented launch-sequence Action with paste or constrained key
   steps only after clipboard and focus recovery are complete; retain no loops,
   conditions, or arbitrary commands.
-- Expand AI-proposable action types only where type-specific validation and review are adequate.
+- Improve Action maintenance and management using existing manual and Excel bulk routes; Capture Inbox and Harvest stay retired.
 
 ## Later — richer actions
 

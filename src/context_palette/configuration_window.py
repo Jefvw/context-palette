@@ -106,7 +106,6 @@ from .context_deletion import (
     rename_context_and_references,
 )
 from .diagnostics import render_safe_diagnostics, summarize_diagnostics
-from .harvest_window import HarvestWindow
 from .palette_state import (
     CONTEXT_SLOT_NUMBERS,
     MAX_CONTEXT_SLOT_ACTIONS,
@@ -1255,10 +1254,6 @@ class ConfigurationWindow:
             label="Get blank Actions workbook…",
             command=self._save_bulk_action_template,
         )
-        self.other_action_creation_menu.add_command(
-            label="Harvest website links…",
-            command=self._show_harvest,
-        )
         self.other_action_creation_menu.add_separator()
         self.other_action_creation_menu.add_command(
             label="Export personal Actions for update…",
@@ -1428,18 +1423,6 @@ class ConfigurationWindow:
         self.button_detail_title_label.configure(wraplength=text_width)
         self.button_preview_label.configure(wraplength=text_width)
 
-    def _show_harvest(self) -> None:
-        HarvestWindow(
-            self.window,
-            actions=self.actions,
-            context_names=[context.name for context in self.local_contexts],
-            focus_context=self._authoring_context(),
-            actions_path=self.local_actions_path,
-            shared_contexts_path=self.contexts_path,
-            local_contexts_path=self.local_contexts_path,
-            on_change=self._harvest_changed,
-        )
-
     def _show_bulk_action_import(self) -> None:
         ActionBulkWindow(
             self.window,
@@ -1556,9 +1539,6 @@ class ConfigurationWindow:
 
     def _bulk_actions_removed(self) -> None:
         self._created_actions_changed("bulk-removed")
-
-    def _harvest_changed(self) -> None:
-        self._created_actions_changed("harvested")
 
     def _created_actions_changed(self, source: str) -> None:
         try:
@@ -5819,11 +5799,42 @@ class ContextDialog:
         form = self.form_view.content
         self.name = tk.StringVar(value=context.name if context else "")
         self.description = tk.StringVar(value=context.description if context else "")
-        name_entry = _entry(form, "Context name", self.name)
-        _entry(form, "Description", self.description)
-        self.destination_var = tk.StringVar(value=LOCAL_DESTINATION)
+        name_row = self._compact_row(form, "Name")
+        self.name_entry = ttk.Entry(name_row, textvariable=self.name)
+        self.name_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        description_row = self._compact_row(form, "Description")
+        self.description_entry = ttk.Entry(
+            description_row,
+            textvariable=self.description,
+        )
+        self.description_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.destination_var = tk.StringVar(
+            value=PROJECT_DESTINATION if shared else LOCAL_DESTINATION,
+        )
+        storage_row = self._compact_row(form, "Storage")
         if choose_destination:
-            _destination_field(form, self.destination_var)
+            self.destination_field = ttk.Combobox(
+                storage_row,
+                textvariable=self.destination_var,
+                values=(LOCAL_DESTINATION, PROJECT_DESTINATION),
+                state="readonly",
+            )
+        else:
+            self.destination_field = ttk.Label(
+                storage_row,
+                textvariable=self.destination_var,
+            )
+        self.destination_field.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.storage_note_var = tk.StringVar()
+        self.storage_note = ttk.Label(
+            form,
+            textvariable=self.storage_note_var,
+            style="Muted.TLabel",
+            wraplength=610,
+        )
+        self.storage_note.pack(fill=tk.X, pady=(2, 0))
+        self.destination_var.trace_add("write", self._update_storage_note)
+        self._update_storage_note()
         preferred = context.preferred_action_ids if context else ()
         self.action_choices = _action_choices(actions)
         self.action_picker_options = _action_picker_options(
@@ -5969,13 +5980,26 @@ class ContextDialog:
                 label = self._item_label(preferred_items[index])
             self.slots.append(tk.StringVar(value=label))
         self.slot_choices: list[ActionPickerField] = []
+        shortcuts_header = ttk.Frame(form)
+        shortcuts_header.pack(fill=tk.X, pady=(9, 0))
+        self.shortcuts_expanded = False
+        self.shortcuts_toggle_button = ttk.Button(
+            shortcuts_header,
+            text="Show shortcuts 6–0",
+            command=self._toggle_shortcuts,
+            style="Compact.TButton",
+        )
+        self.shortcuts_toggle_button.pack(side=tk.LEFT)
+        self.shortcuts_summary_var = tk.StringVar()
+        self.shortcuts_summary_label = ttk.Label(
+            shortcuts_header,
+            textvariable=self.shortcuts_summary_var,
+            style="Muted.TLabel",
+        )
+        self.shortcuts_summary_label.pack(side=tk.LEFT, padx=(8, 0))
+        self.shortcuts_body = ttk.Frame(form)
         ttk.Label(
-            form,
-            text="Context shortcuts 6–0 (optional)",
-            style="Heading.TLabel",
-        ).pack(anchor=tk.W, pady=(9, 0))
-        ttk.Label(
-            form,
+            self.shortcuts_body,
             text=(
                 "Choose up to five Context members for the numbered shortcuts "
                 "shown when this Context filter is selected."
@@ -5985,7 +6009,7 @@ class ContextDialog:
         ).pack(anchor=tk.W, pady=(2, 2))
         for slot, variable in zip(CONTEXT_SLOT_NUMBERS, self.slots):
             slot_label = slot_display_number(slot)
-            row = ttk.Frame(form)
+            row = ttk.Frame(self.shortcuts_body)
             row.pack(fill=tk.X, pady=2)
             ttk.Label(row, text=f"Slot {slot_label}", width=8).pack(side=tk.LEFT)
             chooser = ActionPickerField(
@@ -5998,10 +6022,81 @@ class ContextDialog:
             )
             chooser.pack(side=tk.LEFT, fill=tk.X, expand=True)
             self.slot_choices.append(chooser)
+        self.slot_traces = [
+            variable.trace_add("write", self._update_shortcuts_summary)
+            for variable in self.slots
+        ]
+        self.shortcuts_tooltip = WidgetTooltip(
+            self.shortcuts_toggle_button,
+            self._shortcut_details,
+        )
+        self._update_shortcuts_summary()
         self._refresh_member_actions()
         self.window.transient(parent)
         self.window.grab_set()
-        _focus_entry(self.window, name_entry)
+        _focus_entry(self.window, self.name_entry)
+
+    def _compact_row(self, parent: ttk.Frame, label: str) -> ttk.Frame:
+        row = ttk.Frame(parent)
+        row.pack(fill=tk.X, pady=(5, 0))
+        ttk.Label(row, text=label, width=ACTION_DIALOG_LABEL_WIDTH).pack(
+            side=tk.LEFT,
+            padx=(0, 8),
+        )
+        return row
+
+    def _update_storage_note(self, *_args: str) -> None:
+        self.storage_note_var.set(
+            "Built-in changes are tracked by Git and affect other computers "
+            "after commit, push, and pull."
+            if self.destination_var.get() == PROJECT_DESTINATION
+            else "My configuration stays on this PC."
+        )
+
+    def _update_shortcuts_summary(self, *_args: str) -> None:
+        assigned = sum(variable.get() != EMPTY_PIN_LABEL for variable in self.slots)
+        self.shortcuts_summary_var.set(
+            f"{assigned} of {MAX_CONTEXT_SLOT_ACTIONS} assigned"
+        )
+
+    def _shortcut_details(self) -> str:
+        return "\n".join(
+            f"Slot {slot_display_number(slot)}: {variable.get()}"
+            for slot, variable in zip(CONTEXT_SLOT_NUMBERS, self.slots)
+        )
+
+    def _toggle_shortcuts(self) -> None:
+        self._set_shortcuts_expanded(not self.shortcuts_expanded)
+
+    def _set_shortcuts_expanded(self, expanded: bool) -> None:
+        self.shortcuts_expanded = expanded
+        if expanded:
+            self.shortcuts_body.pack(fill=tk.X, pady=(3, 0))
+        else:
+            focused = self.window.focus_get()
+            if focused is not None and str(focused).startswith(
+                f"{self.shortcuts_body}."
+            ):
+                self.shortcuts_toggle_button.focus_set()
+            self.shortcuts_body.pack_forget()
+        self.shortcuts_toggle_button.configure(
+            text="Hide shortcuts 6–0" if expanded else "Show shortcuts 6–0",
+        )
+        self.window.update_idletasks()
+        self.form_view._update_scrollregion()
+
+    def _focus_invalid_field(
+        self,
+        widget: ttk.Entry | ttk.Combobox | None,
+        *,
+        shortcuts: bool = False,
+    ) -> None:
+        if widget is None:
+            return
+        if shortcuts:
+            self._set_shortcuts_expanded(True)
+        self.form_view.ensure_visible(widget)
+        _focus_entry(self.window, widget)
 
     def _add_member_action(self) -> None:
         action_id = self.action_choices.get(self.member_choice_var.get())
@@ -6067,11 +6162,18 @@ class ContextDialog:
         )
         for chooser in self.slot_choices:
             chooser.set_options(options, empty_label=EMPTY_PIN_LABEL)
+        self.item_choices.update(
+            {
+                self._item_label(reference): reference
+                for reference in self.member_targets
+            }
+        )
 
     def _save(self) -> None:
         name = self.name.get().strip()
         if not name:
             messagebox.showerror("Context Palette", "Context name cannot be empty.", parent=self.window)
+            self._focus_invalid_field(getattr(self, "name_entry", None))
             return
         if name.casefold() == GENERAL_CONTEXT_NAME.casefold():
             messagebox.showerror(
@@ -6080,6 +6182,7 @@ class ContextDialog:
                 "Configure > Contexts and use Edit shortcuts to change slots 6–0.",
                 parent=self.window,
             )
+            self._focus_invalid_field(getattr(self, "name_entry", None))
             return
         member_targets = tuple(
             dict.fromkeys(
@@ -6101,6 +6204,23 @@ class ContextDialog:
                 for label, action_id in self.action_choices.items()
             },
         )
+        for index, variable in enumerate(self.slots):
+            label = variable.get()
+            if label == EMPTY_PIN_LABEL:
+                continue
+            if label not in item_choices or item_choices[label] not in member_targets:
+                messagebox.showerror(
+                    "Choose a Context member",
+                    "Each shortcut must use an item in this Context. Choose a "
+                    "member or clear the shortcut, then save again.",
+                    parent=self.window,
+                )
+                choices = getattr(self, "slot_choices", ())
+                self._focus_invalid_field(
+                    choices[index].entry if index < len(choices) else None,
+                    shortcuts=True,
+                )
+                return
         preferred_items = tuple(
             dict.fromkeys(
                 item_choices[item.get()]

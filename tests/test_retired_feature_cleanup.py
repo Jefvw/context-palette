@@ -39,7 +39,7 @@ class RetiredFeatureCleanupTests(unittest.TestCase):
                 cleanup_retired_local_configuration(root)
             self.assertEqual(actions.read_bytes(), before)
 
-    def test_migrates_legacy_action_and_inbox_states_idempotently(self):
+    def test_migrates_legacy_actions_but_preserves_retired_inbox_bytes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             data = root / "data"
@@ -68,6 +68,7 @@ class RetiredFeatureCleanupTests(unittest.TestCase):
                 },
             )
 
+            legacy_before = (data / "inbox.json").read_bytes()
             report = cleanup_retired_local_configuration(root)
             second_report = cleanup_retired_local_configuration(root)
 
@@ -97,11 +98,23 @@ class RetiredFeatureCleanupTests(unittest.TestCase):
                 action_types,
                 ["copy_text", "copy_text", "copy_text", "build_url_open"],
             )
-            self.assertEqual(inbox_states, ["Converted", "Inbox"])
-            self.assertEqual(report.files_changed, 2)
+            self.assertEqual(inbox_states, ["Draft", "Inbox"])
+            self.assertEqual((data / "inbox.json").read_bytes(), legacy_before)
+            self.assertEqual(report.files_changed, 1)
             self.assertEqual(report.actions_migrated, 1)
             self.assertEqual(second_report.files_changed, 0)
             self.assertEqual(second_report.actions_migrated, 0)
+
+    def test_startup_cleanup_does_not_read_invalid_retired_capture_data(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            inbox = root / "data" / "inbox.json"
+            inbox.parent.mkdir()
+            original = b"\xfflegacy capture data is not current configuration"
+            inbox.write_bytes(original)
+            report = cleanup_retired_local_configuration(root)
+            self.assertEqual(report.files_changed, 0)
+            self.assertEqual(inbox.read_bytes(), original)
 
     def test_removes_retired_actions_and_every_local_reference_atomically(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -5,8 +5,8 @@ organizing reusable Actions and Work Items around the work Context that matters
 now. It is built with Python and Tkinter, runs without administrator rights,
 and keeps configuration in inspectable local files.
 
-The application is under active development. Captured, harvested, configured,
-and AI-proposed actions become permanent Active actions as soon as the user
+The application is under active development. Configured, imported,
+and manually created actions become permanent Active actions as soon as the user
 confirms creation. Configure can directly review and permanently delete an
 Action and its internal placements without changing its external target. See
 [MVP](docs/MVP.md) for the exact implementation boundary.
@@ -31,7 +31,7 @@ Action and its internal placements without changing its external target. See
 - Provides compact, fully configurable Quick-action groups and ordered menus.
 - Configures My configuration or Built-in actions, contexts, groups, and menu
   items through a guided window without exposing technical IDs.
-- Captures clipboard material into an Inbox and converts it into permanent actions.
+- Creates and maintains Actions manually, from Input / Output, or through Excel bulk workbooks. Capture Inbox and Harvest are retired; existing records remain preserved.
 - Generates and imports a versioned standard Excel workbook for attended bulk
   creation of personal Active Actions. Import is local, formula-free, bounded,
   and uses the same validation as the ordinary Action editor without starting
@@ -105,7 +105,7 @@ Action and its internal placements without changing its external target. See
 - Transforms Input / Output through reusable operations for filtering,
   delimiters, naming styles, JSON, URL encoding, SQL escaping, file URIs, and
   path separators; every result is copied automatically.
-- Supports attended, schema-validated AI proposals for selected action types.
+- Reuses saved prompt Actions and Excel bulk authoring; the Inbox AI-proposal workflow is retired.
 - Searches cheat sheets and promotes entries to permanent actions.
 - Loads stored AI prompt templates into Input / Output from a compact quick-action menu.
 - Finds configured local Work Item folders, filters them by text, project code,
@@ -199,7 +199,7 @@ archive without opening the application:
 .\python-context-palette.bat -m context_palette.backup_cli C:\Backups\context-palette.zip
 ```
 
-Inbox content is included by default and can be excluded with
+Legacy Capture Inbox content is included by default and can be excluded with
 `--exclude-inbox`. The optional managed text source is excluded by default and
 can be included with `--include-managed-content`. Replacing an existing archive
 requires `--overwrite`.
@@ -272,7 +272,7 @@ After the application starts:
 5. Choose **Configure**, or press `Ctrl+,`, to add personal actions, contexts,
    or Quick actions. For a direct route to Context configuration, open the
    unified Filter menu and choose **Manage contexts…**.
-6. Use **Capture** when material should enter the Inbox before becoming an action.
+6. Use Create from Input or Excel bulk creation for reusable content; Capture Inbox is retired.
 
 Configure supports adding, editing, deleting, and ordering actions, contexts,
 Quick-action groups, and menu items. Normal user records default to **My
@@ -343,17 +343,13 @@ Personal and runtime files are ignored by Git:
 | `data/local_actions.json` | Personal or machine-specific actions |
 | `data/local_contexts.json` | Personal contexts |
 | `data/local_command_surface.json` | Personal Quick-action menu records |
-| `data/inbox.json` | Captured material |
+| `data/inbox.json` | Retained legacy Capture Inbox material; private and not deleted automatically |
 | `data/palette.json` | Per-machine context-slot choices plus legacy focus/pin compatibility data |
 | `data/local_onenote_settings.json` | Private per-PC OneNote engine and preferred notebook; excluded from configuration backup |
 | `data/local_onenote_send_settings.json` | Private per-PC Send notebook/section, separate from search; excluded from configuration backup |
 | `data/context-palette.log*` | Bounded local diagnostics |
 
-Captured Inbox material can be removed without editing JSON: open **Inbox**,
-select the capture, and choose **Delete capture…**. This deletes only the local
-captured copy; an Action already created from it remains. A Work Item workbook's
-Excel **Inbox** sheet is separate and is still edited in Excel.
-
+Capture Inbox and Harvest have been retired. Existing captured data and Actions remain; Work Item Excel Inbox destinations are unchanged.
 Removal is deliberately entity-specific: reviewed Action deletion permanently
 removes the saved record and internal placements; Contexts and configured Quick menus delete only their Palette
 organization; Work Item **Forget Palette organization…** clears saved tags,

@@ -30,6 +30,26 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
     def setUp(self) -> None:
         gc.collect()
 
+    def test_capture_and_harvest_retirement_preserves_legacy_data_and_active_tools(self):
+        with self.launcher() as (app, *_):
+            legacy_path = app.data_paths.inbox_file
+            legacy = b'{"items": [{"id": "legacy", "title": "Synthetic capture", "content": "Keep", "source": "clipboard", "created_at": "2026-01-01"}]}'
+            legacy_path.write_bytes(legacy)
+            for name in ("_capture_clipboard", "_show_inbox", "_show_harvest"):
+                self.assertFalse(hasattr(app, name))
+            for panel in (app.workspace_component, app.action_discovery_panel):
+                self.assertFalse(hasattr(panel, "capture_button"))
+                self.assertFalse(hasattr(panel, "inbox_button"))
+            self.assertEqual(app.root.bind("<Control-i>"), "")
+            app.show_window()
+            app.root.update()
+            self.assertEqual(legacy_path.read_bytes(), legacy)
+            self.assertEqual([action.id for action in app.actions], ["sample"])
+            self.assertTrue(app.create_action_button.winfo_exists())
+            self.assertTrue(app.new_action_button.winfo_exists())
+            self.assertTrue(app.send_to_button.winfo_exists())
+            self.assertTrue(app.send_work_item_inbox_button.winfo_exists())
+
     def test_find_focus_and_reopening_do_not_cover_results_with_help(self):
         with self.launcher() as (app, *_):
             tooltip = next(

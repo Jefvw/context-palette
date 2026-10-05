@@ -123,8 +123,12 @@ class OneNoteWindowTests(unittest.TestCase):
         self.view.search()
         self.wait(lambda: not self.view.busy)
         self.assertEqual(self.client.calls[:2], [("describe",), ("probe",)])
+        self.assertEqual(self.view.status_var.get(), "Choose a note, then Preview text.")
+        self.assertEqual(self.view.preview_var.get(), "")
         self.view.results.selection_set("0")
         self.root.update()
+        self.assertEqual(self.view.status_var.get(), "Choose Preview text to read the selected note.")
+        self.assertTrue(self.view.basic_text_warning.winfo_ismapped())
         self.assertEqual(self.client.calls[-1], ("search", "new exact query "))
         self.assertIsNone(self.view._preview)
         self.assertEqual(self.view.results.item("0", "values"), ("Notebook / Section",))
@@ -132,8 +136,36 @@ class OneNoteWindowTests(unittest.TestCase):
         self.wait(lambda: not self.view.busy)
         self.assertEqual(self.client.calls[-1], ("preview", "CaSe-秘密"))
         self.assertEqual(self.applied, [])
+        self.assertIn("Complete basic text", self.view.preview_var.get())
+        self.assertIn("Replace or Append", self.view.status_var.get())
+        self.assertTrue(self.view.basic_text_warning.winfo_ismapped())
         self.view.use_text()
         self.assertEqual(self.applied, ["Reviewed 😀 text"])
+        self.assertIn("placed in Input / Output", self.view.status_var.get())
+        self.view.query_var.set("next query")
+        self.root.update()
+        self.assertEqual(self.view.preview_var.get(), "")
+        self.assertFalse(self.view.basic_text_warning.winfo_ismapped())
+        self.assertIn("Search", self.view.status_var.get())
+
+    def test_compact_initial_guidance_keeps_repair_visible_and_find_inline(self):
+        self.root.update()
+        self.assertEqual(self.view.find_label.master, self.view.query_entry.master)
+        label_center = self.view.find_label.winfo_rooty() + self.view.find_label.winfo_height() / 2
+        entry_center = self.view.query_entry.winfo_rooty() + self.view.query_entry.winfo_height() / 2
+        self.assertLessEqual(abs(label_center - entry_center), 2)
+        self.assertIn("No sibling engine found", self.view.status_var.get())
+        self.assertFalse(self.view.cancel_button.winfo_ismapped())
+        self.assertFalse(self.view.basic_text_warning.winfo_ismapped())
+        self.assertEqual(self.view.results_var.get(), "Notes")
+        self.assertEqual(self.view.preview_var.get(), "")
+        self.assertEqual(self.client.calls, [])
+        with patch("context_palette.onenote_window.filedialog.askopenfilename", return_value=str(self.launcher)):
+            self.view.choose_engine()
+        self.root.update()
+        self.assertFalse(self.view.search_button.instate(("disabled",)))
+        self.assertIn("Choose Search", self.view.status_var.get())
+        self.assertEqual(self.client.calls, [])
 
     def test_preview_is_inert_and_truncation_blocks_use(self):
         self.search_select()
@@ -145,6 +177,8 @@ class OneNoteWindowTests(unittest.TestCase):
         self.view.use_text()
         self.assertEqual(self.applied, [])
         self.assertIn("50,000", self.view.status_var.get())
+        self.assertIn("24 of 60,000", self.view.preview_var.get())
+        self.assertTrue(self.view.basic_text_warning.winfo_ismapped())
 
     def test_query_change_invalidates_delayed_search_and_readiness(self):
         self.connect()
@@ -258,6 +292,7 @@ class OneNoteWindowTests(unittest.TestCase):
         self.view.search()
         self.wait(lambda: not self.view.busy)
         self.assertIn("2 of 100", self.view.results_var.get())
+        self.assertIn("narrow the query", self.view.status_var.get())
         self.assertEqual(sum(c[0] == "search" for c in self.client.calls), 1)
 
     def test_repeated_search_reuses_checks_but_never_searches_while_typing(self):
@@ -283,9 +318,17 @@ class OneNoteWindowTests(unittest.TestCase):
         self.client.probe_hook = lambda _: release.wait(2)
         self.view.search()
         self.wait(lambda: ("probe",) in self.client.calls)
+        self.assertTrue(self.view.cancel_button.winfo_ismapped())
+        self.assertFalse(self.view.cancel_button.instate(("disabled",)))
+        self.assertIn("Connecting", self.view.status_var.get())
         self.view.cancel()
+        self.root.update()
+        self.assertTrue(self.view.cancel_button.winfo_ismapped())
+        self.assertIn("Cancelling", self.view.status_var.get())
         release.set()
         self.wait(lambda: not self.view.busy)
+        self.assertFalse(self.view.cancel_button.winfo_ismapped())
+        self.assertIn("Choose Search", self.view.status_var.get())
         self.assertEqual(self.client.calls, [("describe",), ("probe",)])
         self.assertFalse(self.view._ready)
 
@@ -501,6 +544,10 @@ class OneNoteWindowTests(unittest.TestCase):
         self.assertEqual(self.view._settings, settings)
         self.assertTrue(self.view.search_button.instate(("disabled",)))
         self.assertIn("unavailable", self.view.setup_var.get())
+        self.assertEqual(self.view.status_var.get(), self.view.setup_var.get())
+        self.view.query_var.set("repair still needed")
+        self.root.update()
+        self.assertEqual(self.view.status_var.get(), self.view.setup_var.get())
 
     def test_invalid_explicit_engine_blocks_sibling_and_preserves_notebook_on_repair(self):
         self.sibling_launcher()
@@ -527,6 +574,8 @@ class OneNoteWindowTests(unittest.TestCase):
         discovery.assert_not_called()
         factory.assert_not_called()
         self.assertIn("repair", self.view.setup_var.get())
+        self.assertIn("Change engine", self.view.status_var.get())
+        self.assertFalse(self.view.choose_button.instate(("disabled",)))
 
     def test_absent_sibling_keeps_manual_choice_and_reads_disabled(self):
         factory = self.reopen_for_discovery()

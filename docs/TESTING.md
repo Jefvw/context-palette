@@ -28,6 +28,33 @@ recorded on 2026-09-09. Its checklist remains available for optional follow-up.
 Keep that decision separate from per-check results, automated output and
 simulated DPI; unreported manual checks remain unverified.
 
+## Compact secondary UI and Capture/Harvest retirement (2026-10-05)
+
+OneNote Search, CSV review, bulk Action creation and Context editing use compact
+current-state guidance, reserved effect controls and optional details. Capture
+Inbox, its creator/AI flow, and Harvest entrypoints and implementations are
+removed. Existing Actions and legacy capture data remain; Work Item workbook
+Inbox is retained. Startup no longer reads or migrates old capture records.
+
+Focused evidence: 44 OneNote UI tests; 39 CSV/bulk tests; 178 Context/configuration
+checks; then 436 integrated host checks, 70 documentation/data/backup checks and
+44 startup-preservation/backup/documentation checks passed. These use real Tk
+with fakes and disposable data; none operate live Office or the resident app.
+Final check-context-palette.bat passed configuration validation, compilation and
+**1,631 tests in 187.958 seconds, with 2 skipped**. git diff --check passed.
+Private complete-check output is under outputs/compact-ui-retirement-20261005/.
+Nothing is staged, committed or pushed for this batch.
+
+Remaining attended checks: compact controls and readable exact values at
+physical 100/125/150% scaling; OneNote Search/Preview/Use with its existing
+scoped permission; CSV overwrite/no-backup warning and fixed controls; bulk
+All fields; Context shortcut disclosure/validation and unchanged unavailable
+references. Confirm retirement removes Capture/Inbox/Harvest routes while
+manual/Excel Action management and Work Item Inbox remain. No unperformed case
+is marked passed. Existing-page OneNote append is not implemented: the current
+engine has no append operation. The owner chose append/content preservation;
+ONENOTE_APPEND_ENGINE_HANDOVER.md records the required engine extension.
+
 ## Find tooltip on opening (2026-10-05)
 
 The original-code regression reproduced the owner's overlay: automatic Find
@@ -1248,7 +1275,10 @@ This is an operating-system protocol handoff, not a file-copy test.
    window. Confirm **Open with:** visually separates the opener from copy
    destinations and **Open folder in VS Code** remains readable and reachable.
 
-## Harvest website links manual check
+## Historical Harvest verification — retired
+
+Harvest was retired on 2026-10-05. The dated observations and procedure below
+are historical evidence, not commands for the current app. No re-run is required.
 
 Last completed: **Passed on Windows on 2026-07-21.** The attended check used
 representative Markdown, text, Word, and Excel files, including cross-format
@@ -1592,13 +1622,9 @@ Run this when launcher behavior, styling, hotkeys, clipboard handling, or config
     during the wait. Verify the in-app step progress; Explorer may reuse one
     window. Confirm no script runs and no file or clipboard changes.
 13. Trigger a validation error and confirm the message identifies the field without losing the form contents.
-14. Capture an Inbox item, confirm conversion, and verify the resulting Active
-    action is immediately editable and persists after restart. Return to Inbox,
-    select that capture, and cancel **Delete capture…** once; confirm it remains.
-    Delete it after confirmation and verify only the captured copy disappears
-    while the created Action remains. Confirm **Other ways to create** still
-    exposes Ask AI and Harvest website links. Do not use this check to delete a Work
-    Item workbook Inbox row; those remain Excel-managed.
+14. Verify Capture/Inbox and Harvest commands are absent. Existing Actions remain
+    editable; old data/inbox.json bytes must not be read/migrated on startup.
+    Work Item workbook Inbox is separate and remains available.
 15. Open Help, verify in-document search, resize it, maximize it, restore it,
     and confirm responsive tables remain readable.
 16. Open Configure → Diagnostics. Verify configuration counts are current,

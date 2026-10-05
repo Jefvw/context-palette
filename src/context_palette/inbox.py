@@ -1,3 +1,9 @@
+"""Legacy Capture Inbox storage retained for backup/restore compatibility.
+
+The active capture, browsing and Action-creation workflow is retired.
+Existing private records are neither migrated nor deleted automatically.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -99,8 +99,6 @@ class ActionDiscoveryPanel:
         select_project_filter: Callable[[str | None], None],
         select_context_filter: Callable[[str | None], None],
         manage_contexts: Callable[[], None],
-        capture: Callable[[], None],
-        show_inbox: Callable[[], None],
         edit_item: Callable[[], None],
         configure: Callable[[], None],
         show_help: Callable[[], None],
@@ -349,29 +347,6 @@ class ActionDiscoveryPanel:
             self.new_action_button,
             "Create Action — Choose an Action type, then complete the validated Action form.",
         )
-        self.capture_button = ttk.Button(
-            self.tool_rail,
-            text="⇩",
-            command=capture,
-            style="RailIcon.TButton",
-        )
-        self.capture_button.grid(row=2, column=0, sticky=tk.EW, padx=(0, 2), pady=(0, 2))
-        tooltip_adder(
-            self.capture_button,
-            "Capture — Save current clipboard text to Inbox after asking for a title.",
-        )
-        self.inbox_button = ttk.Button(
-            self.tool_rail,
-            text="▣",
-            command=show_inbox,
-            style="RailIcon.TButton",
-        )
-        self.inbox_button.grid(row=2, column=1, sticky=tk.EW, padx=(2, 0), pady=(0, 2))
-        tooltip_adder(
-            self.inbox_button,
-            "Inbox — Review captures and convert them into permanent Actions.",
-        )
-
         self.edit_button = ttk.Button(
             self.tool_rail,
             image=self.ui_icons["edit"],

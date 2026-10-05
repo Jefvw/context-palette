@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 
 from context_palette.action_bulk import BulkActionCandidate, BulkActionPlan
 from context_palette.action_bulk_window import ActionBulkWindow
+from context_palette.action_types import ACTION_TYPES
 from context_palette.action_workbook import ActionWorkbook, ActionWorkbookRow
 from context_palette.actions import Action
 
@@ -194,6 +195,75 @@ class ActionBulkWindowTests(unittest.TestCase):
         self.window.tree.selection_set("row-3")
         self.window._show_detail()
         self.assertIn("Folders > Reports", self.window.detail.get("1.0", "end-1c"))
+
+    def test_initial_state_has_one_workbook_setup_explanation(self) -> None:
+        explanations = [
+            str(widget.cget("text"))
+            for widget in descendants(self.window.window)
+            if isinstance(widget, ttk.Label)
+            and "Choose an Actions workbook" in str(widget.cget("text"))
+        ]
+        self.assertEqual(len(explanations), 1)
+        self.assertIn("Ready rows are selected automatically", explanations[0])
+        self.assertIn("Nothing runs during import", explanations[0])
+        self.assertEqual(self.window.source_var.get(), "")
+        self.assertEqual(self.window.status_var.get(), "")
+        self.assertEqual(self.window.detail.get("1.0", "end-1c"), "")
+        self.assertTrue(self.window.create_button.instate(["disabled"]))
+
+    def test_compact_detail_keeps_effects_and_messages_before_optional_metadata(self) -> None:
+        self._load()
+        detail = self.window.detail.get("1.0", "end-1c")
+        self.assertIn(f"Action type: {ACTION_TYPES['launch_app'].label}", detail)
+        self.assertNotIn("(launch_app)", detail)
+        self.assertIn(r"D:\tools\report.exe", detail)
+        self.assertIn("Contexts: Finance", detail)
+        self.assertLess(detail.index("Contexts:"), detail.index("Messages:"))
+        self.assertLess(detail.index("Messages:"), detail.index("Description:"))
+        self.assertNotIn("Quick menu:", detail)
+
+        self.window.tree.selection_set("row-4")
+        self.window._show_detail()
+        detail = self.window.detail.get("1.0", "end-1c")
+        for absent_field in ("Description:", "Quick menu:", "Arguments:", "Working folder:"):
+            self.assertNotIn(absent_field, detail)
+        self.assertIn("Warning message", detail)
+
+    def test_all_fields_toggle_preserves_review_and_selection_without_effects(self) -> None:
+        self._load()
+        initial_detail = self.window.detail.get("1.0", "end-1c")
+        selected = self.window.selected_row_numbers.copy()
+        with patch("context_palette.action_bulk_window.read_action_import_workbook") as read, patch(
+            "context_palette.action_bulk_window.plan_bulk_action_create"
+        ) as make_plan, patch(
+            "context_palette.action_bulk_window.commit_bulk_action_create"
+        ) as commit:
+            self.window.all_fields_button.invoke()
+            detail = self.window.detail.get("1.0", "end-1c")
+            self.assertIn("(launch_app)", detail)
+            self.assertIn("Quick menu:\n(none)", detail)
+            self.assertIn("--profile\nmonthly", detail)
+            self.window.all_fields_button.invoke()
+        self.assertEqual(self.window.detail.get("1.0", "end-1c"), initial_detail)
+        self.assertIs(self.window.plan, self.plan)
+        self.assertIs(self.window.workbook, self.workbook)
+        self.assertEqual(self.window.source_path, self.source)
+        self.assertEqual(self.window.selected_row_numbers, selected)
+        self.assertEqual(self.window.create_button.cget("text"), "Create 1 Action")
+        read.assert_not_called()
+        make_plan.assert_not_called()
+        commit.assert_not_called()
+        self.on_change.assert_not_called()
+
+    def test_create_footer_remains_visible_at_minimum_size(self) -> None:
+        self._load()
+        self.window.window.geometry("760x540")
+        self.root.update()
+        self.assertTrue(self.window.create_button.winfo_ismapped())
+        self.assertLessEqual(
+            self.window.create_button.winfo_rooty() + self.window.create_button.winfo_height(),
+            self.window.window.winfo_rooty() + self.window.window.winfo_height(),
+        )
 
     def test_invalid_new_workbook_clears_the_previous_executable_plan(self) -> None:
         self._load()

@@ -3812,3 +3812,24 @@ more value than rewriting the complete document collection.
 text, never copied into Git. A regression rejects output-folder links. Per-PC
 engine setup remains separate from Palette setup, and documented acceptance
 limits remain explicit. No app, engine, data model or live UAT behavior changes.
+## 2026-10-05 - Simplify secondary UI and retire Capture Inbox and Harvest
+
+**Decision:** Compact OneNote Search, CSV export review, bulk Action creation
+and Context editing while preserving execution/identity safeguards. Retire
+standalone Capture Inbox, Create Action from Inbox, its AI proposal workflow,
+and website-link Harvest. Remove their UI/runtime entrypoints and obsolete
+implementation/tests. Keep the main layout apart from those scoped removals.
+
+**Reason:** The owner considers these capture/harvest tools redundant and unused,
+and wants to concentrate on Action maintenance and management. Economical text
+and optional details recovered space in Drop and should apply to busy dialogs.
+
+**Consequences:** Existing Actions and private data are not deleted or migrated.
+Legacy inbox storage/backup validation remains; Work Item workbook Inbox is a
+separate retained feature. Manual creation, Create from Input, prompt reuse and
+Excel bulk management remain. Context shortcuts keep all identities, including
+unavailable references on an unchanged save. The owner chose appending at the
+end of an existing OneNote page, preserving content. The current engine has no
+such public operation; prepare the engine-owner contract handover and do not
+expose unsupported execution. Engine edits/live UAT need separately scoped
+work. No generic workflow or lifecycle gates are introduced.

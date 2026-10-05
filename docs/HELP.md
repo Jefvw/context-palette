@@ -169,49 +169,14 @@ an Action and never deletes or changes its target file, folder, website,
 workbook, application, credential, or Inbox item. Built-in Actions retain their
 ordinary direct-delete review because their changes travel through Git.
 
-## Harvest website links from documents
+## Retired creation tools
 
-For the primary route, press `Ctrl+,`, then open **Actions** and choose **More
-Action tasks → Harvest website links…**. You can also choose **Harvest website
-links...** in Inbox. The workflow extracts possible website actions from
-several documents at once. Supported files are Markdown (`.md`), text (`.txt`),
-Word (`.docx`), and Excel (`.xlsx`). Context Palette reads these files locally;
-it does not start Office, evaluate formulas, run macros, fetch links, or execute
-discovered content.
-
-The review window shows each source and every candidate URL with its label and
-location. Search or filter the list, inspect provenance, edit one candidate,
-select or deselect candidates, and add or remove Context memberships and tags in
-bulk. A specific active Context filter is proposed as membership; **General**
-remains implicit. Source filenames and folders are not converted into tags.
-
-The workflow is keyboard-operable. Use `Ctrl+O` to add documents, `Ctrl+F` to
-focus candidate search, and `F5` to rescan. In Sources, `Delete` removes the
-highlighted source. In Candidates, `Space` changes inclusion and `Enter` edits
-one highlighted candidate. Focus moves to the candidate results when a scan
-finishes, or to Sources when the scan has no candidates. The action preview has
-an explicit Close button and closes with `Esc`.
-
-Only HTTP and HTTPS targets can become actions. Existing Active URLs
-and repeats across the selected documents are identified before creation. Word
-hyperlinks, Excel hyperlinks, plain URL cells, and literal `HYPERLINK` formulas
-are readable; formulas are never calculated. Unsupported targets stay visible
-but cannot be selected.
-
-Choose **Preview selected actions**, then **Create selected actions**. All selected
-actions are validated again and written to the personal action file together;
-their Context memberships are synchronized to My configuration Context
-definitions, with rollback if either write fails. They are permanent Active
-actions. Cancelling the scan or closing the review window creates nothing.
-Per-file failures do not discard successful results from other files, and
-size, compression, worksheet, cell, occurrence, and candidate limits keep
-scans bounded.
-
-Folder scanning or source drag-and-drop inside website Harvest, OneNote document
-extraction, PDF/HTML/email parsing, recursive crawling, remote fetching, and
-automatic trust are not part of this version. The separate general drop target
-can place dropped paths, links, or text in Input / Output; it does not add a
-Harvest source automatically.
+Capture Inbox, Create Action from Inbox, the Inbox AI-proposal flow and Harvest
+website links are retired. Use manual Action creation, Create from Input, or
+Excel bulk creation/update/deletion instead. Existing Actions created by those
+tools remain valid and editable. Legacy captured records are preserved locally
+and remain supported by backup/restore; no data is deleted automatically.
+Work Item workbook Inbox destinations are separate and remain available.
 
 ## Open and close the palette
 
@@ -227,7 +192,7 @@ Harvest source automatically.
   screen. Each new opening checks the monitor again, so returning to laptop-only
   use does not reuse an old external-screen location. Hotkeys keep the monitor
   chosen when pressed, even if the pointer moves during selection capture.
-- Configuration, Help, action editors, pickers, Sheets, AI, Inbox, Harvest, and
+- Configuration, Help, action editors, pickers, Sheets, and
   Work Item windows open in the middle of the usable area of their owner's
   current monitor. Moving an owning window to another monitor before opening
   its next screen moves that placement policy with it. Compact filter pickers,
@@ -240,7 +205,7 @@ Harvest source automatically.
 - Find's explanation appears on pointer hover, not automatically when Palette
   opens or Find takes focus. Typing dismisses it so results stay visible.
   Keyboard users can still press `F1` for Help.
-- Press `Ctrl+I` to capture clipboard text, `Ctrl+,` to open Configure, or `F1` to open Help.
+- Press `Ctrl+,` to open Configure or `F1` to open Help.
 - Press `Ctrl+Shift+D` to open Configure directly on the safe Diagnostics tab.
 - Open **More → Show drop target** to restore a hidden drop target, or
   **More → Keyboard shortcuts** for the authoritative shortcut page.
@@ -771,6 +736,8 @@ launcher; no launcher silently runs a default Action.
 
 ## Configure
 
+To maintain saved Actions, press `Ctrl+,`, then open **Actions**.
+
 Choose **Configure**, or use the shortcut (`Ctrl+,`), for the complete guided
 configuration workspace. The left navigator replaces the crowded row of tabs
 and keeps every section in one stable place. Frequent destinations are grouped
@@ -784,7 +751,7 @@ under **Set up** and backup or troubleshooting destinations under **Support**:
   opens the existing editor; it does not create a second configuration window.
 - **Actions:** choose **New Action…** for the normal creation flow. **More Action
   tasks** contains bulk Excel creation/template and update commands,
-  website-link Harvest, and the educational Action-type catalogue. Find,
+  the educational Action-type catalogue, and bulk deletion. Find,
   direct deletion, and selection commands surround one
   Actions table; Contexts and tags for the selection appear below it. Use
   **Delete Action…** to review and permanently remove the selected record plus
@@ -858,7 +825,7 @@ under **Set up** and backup or troubleshooting destinations under **Support**:
   pasted text, credentials, action values, paths, and window titles are not
   included.
 - **Backup and restore:** create a complete-configuration ZIP or inspect one
-  before restoring it. Backups include Inbox by default; clear that option to
+  before restoring it. Backups include legacy Capture Inbox data by default; clear that option to
   omit captured content. Optional managed text remains excluded unless you
   select it. Configured Action targets, Work Item source paths, template paths,
   working directories, and arguments remain in the backed-up configuration.
@@ -869,7 +836,7 @@ under **Set up** and backup or troubleshooting destinations under **Support**:
   **Create backup…** asks where to save the ZIP and asks again before
   replacing an existing file. Its result lists the archive location, included
   file count, warnings, and excluded categories. Treat a backup as sensitive:
-  it can contain personal configuration, captured Inbox content, and configured
+  it can contain personal configuration, legacy Capture Inbox content, and configured
   machine paths even though external files and credential secrets are absent.
 
   **Choose backup to inspect…** first inspects the archive without changing live
@@ -973,7 +940,7 @@ Press Enter on a selected result to edit it.
 
 Creating or editing an Action immediately refreshes the Actions table, Context
 summaries, Quick-action summaries, and diagnostics. Actions
-created from Inbox, Harvest, or Cheat Sheets also refresh an already-open
+created from Cheat Sheets also refresh an already-open
 Configure workspace.
 
 For a Folder, Password, or AI-prompt Action, the normal create/edit form's
@@ -1033,7 +1000,6 @@ These commands deliberately affect different kinds of data:
 | Quick menu | A configured custom menu or item can use **Delete**. **Standard** is fixed and cannot be moved or deleted; automatic Passwords/Folders/Prompts structure is changed through its owning Actions. | Assigned Actions, Work Items, and external targets. |
 | Work Item organization | Open **Configure**, choose **Work Items**, then choose **Organize** and **Forget Palette organization…**. This transactionally removes personal tags, Context membership and preferred placement, context slots, and personal Quick-menu references for that Work Item. | The source, folder, workbook, files, and workbook Inbox. |
 | Work Item source | **Manage sources → Remove** disconnects discovery on this PC and retains saved organization for reconnection by the same source ID and folder names. | Every external folder/file and all saved Palette organization. |
-| Capture Inbox item | **Inbox → Delete capture…** removes only the selected local capture. | Any Action already created from it. Work Item workbook Inbox rows remain Excel-managed. |
 
 All permanent Palette deletion commands confirm the exact selected entity. A
 shared Built-in change also explains its Git and multi-computer impact.
@@ -1094,6 +1060,13 @@ This creates plain-text pages only: no append, tables, attachments, existing-pag
 updates, automatic startup or navigation. The engine must already be prepared;
 Palette does not install dependencies. Sent text and results are not saved as
 history. Host live UAT is still pending; see the [attended plan](ONENOTE_SEND_UAT.md).
+
+
+Preferred future destination: append to an explicitly chosen existing OneNote
+page, preserving its current content. This is not implemented: the current
+Python OneNote process contract only creates new pages. See the
+[engine-owner handover](ONENOTE_APPEND_ENGINE_HANDOVER.md). No existing page is
+changed by the current Send action.
 
 ## Find OneNote notes
 
@@ -1189,7 +1162,7 @@ neither side can be accidentally collapsed. A fresh
 application start leaves the workspace empty. Reopening the resident palette
 can show the current clipboard or captured selection. Actions can read or
   replace it. Its compact heading includes Back and Forward, the literal
-  **Send to…** destination menu, and bitmap controls for Capture, Inbox,
+  **Send to…** destination menu, and bitmap controls for
   **Create from Input**, **Extract text**, and **Text tools**.
 
 Use the single **Input / Output** checkbox beside the application controls to
@@ -1378,6 +1351,15 @@ the three comma-list choices produce:
 - `'alpha', 42, 'O''Brien'`
 - `"alpha", 42, "O'Brien"`
 
+
+Secondary review screens use shorter current-state guidance. In bulk Action
+creation, **All fields** reveals absent optional fields and internal type names;
+exact values, Contexts and validation messages remain in the summary. CSV review
+keeps its execution controls outside the growing mappings and shows replacement
+backup limits beside overwrite. Context editing uses **Show shortcuts 6–0**;
+the summary shows existing assignment count, and slot validation opens the
+section automatically. All existing save and execution confirmations remain.
+
 ## Task-oriented controls
 
 Controls stay beside the thing they affect. The three item views remain
@@ -1389,7 +1371,7 @@ invalid selection commands are disabled
 instead of failing after a click. Work Item-specific New, Inbox, Copy file, and
 project commands live in the filter/tools menu.
 
-The Input / Output header contains Back, Forward, Capture, Inbox, Create from
+The Input / Output header contains Back, Forward, Create from
 Input, Extract text, and Text tools. Configure, Help, and More sit below Quick
 actions. These icon-only controls use portable Tk bitmaps rather than font
 characters. Hover over or keyboard-focus any icon to see its complete name and
@@ -1512,67 +1494,12 @@ cancelled, or encountered a Windows dispatch error. These events contain only
 the paste category and outcome reason; they do not contain pasted text,
 credential targets, usernames, passwords, or destination window titles.
 
-### Capture
+### Retired Capture Inbox
 
-Copies current clipboard text into the Inbox after asking for a title. Captures are stored locally in `data/inbox.json`.
-
-### Inbox
-
-Shows captured items. An item can be converted into a permanent structured action
-with contexts, tags, short name, optional searchable description, and a guided
-action type.
-
-Select an unused capture and choose **Delete capture…** to permanently remove
-only that local Inbox copy. Context Palette confirms the selected title first.
-An Action already created from the capture remains unchanged because conversion
-copies the reviewed data into the Action; it does not retain an Inbox reference.
-**Other ways to create** contains the attended Ask AI and website-link Harvest
-routes so the normal **Create action** path remains primary.
-
-This Capture Inbox and `data/inbox.json` are separate from the **Inbox** sheet
-inside a Work Item Excel workbook. Context Palette appends to that workbook
-sheet but does not delete its rows; remove those in Excel.
-
-Select an Inbox item and click **Ask AI** for an attended AI-guidance workflow:
-
-1. Choose one saved-text proposal, up to three saved-text proposals, or one fixed website action.
-2. Review the generated request, including the captured material, before sharing it.
-3. Click **Copy AI request** and paste it into the AI of your choice.
-4. Paste the AI's JSON response into Context Palette.
-5. Click **Review proposals**, inspect the validated actions, and select which ones to create.
-
-To test the workflow without sending captured material anywhere, click **Insert test response** and then **Review proposals**. Context Palette creates that example locally from the selected capture. If a multi-proposal AI response contains both valid and invalid proposals, valid proposals remain selectable and each rejected proposal is reported separately.
-
-The response must be plain JSON in the displayed format. Context Palette also
-accepts exactly one complete `json` Markdown fence because many AI tools add it
-automatically; surrounding commentary, multiple fences, and malformed
-envelopes remain invalid. Context Palette does not send data to an AI
-automatically, store an API key, or accept shell commands. Selected proposals
-become permanent local actions only after confirmation.
-
-AI responses larger than 1,000,000 characters are rejected before parsing or
-replacing the current response field. This protects the resident application
-from accidentally or maliciously oversized untrusted responses.
-
-The standard action catalogue and current AI eligibility are documented in
-`docs/ACTION_TYPES.md`. The first AI-enabled types are `copy_text` and
-`open_url`. Website proposals require a complete HTTP or HTTPS address and are
-validated again before permanent creation.
-
-For a URL built from selected or copied text, choose **Build URL — selection,
-copy, and open** and use a template such as:
-
-```text
-https://domain-product.atlassian.net/browse/{id_url}
-```
-
-If the Inbox item already contains only the stable base URL, such as
-`https://domain-product.atlassian.net/browse/`, the creator appends `{id_url}`
-for you when you pick that action type. `{id_url}` is replaced with URL-encoded
-text from Input / Output, the captured selection, or the clipboard. Choose
-**Build URL — prompt, copy, and open** when the action should ask for the value
-instead. Both variants copy the completed URL and open it. The creator displays
-a live example before saving.
+The standalone Capture/Inbox commands and Ctrl+I shortcut are retired. F9
+selection capture, Drop, Input / Output, reusable prompt Actions and Work Item
+Inbox sends are unchanged. Existing data/inbox.json records remain private and
+are retained for backup compatibility. There is no active Inbox creation UI.
 
 ### Sheets
 
@@ -1929,7 +1856,7 @@ The `Company Reference Prefixes` sheet documents known Archive and ServiceNow pr
 
 ## Action records and deletion
 
-- Inbox: captured but not yet structured.
+- Legacy Capture Inbox: retained data from the retired workflow; no current capture stage.
 - Active: permanent, editable, and visible in normal action discovery.
 - Legacy inactive: an old `Archived` record retained for compatibility, hidden
   from the launcher and assignment pickers, and available only for deletion.
@@ -1942,7 +1869,7 @@ placements without changing the external target.
 
 - `data/actions.json`: reviewed actions shared through Git.
 - `data/local_actions.json`: ignored personal and machine-specific actions.
-- `data/inbox.json`: ignored captures.
+- `data/inbox.json`: ignored legacy Capture Inbox records, retained for backup compatibility.
 - `data/palette.json`: ignored per-Context slot overrides plus preserved legacy
   focus and pin compatibility data that no longer selects launcher Context state.
 - `data/local_contexts.json`: ignored personal context definitions.

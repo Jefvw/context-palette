@@ -16,7 +16,6 @@ Open it from **More → Keyboard shortcuts** in the main palette.
 | Shortcut | Result |
 | --- | --- |
 | `Ctrl+L` or `Ctrl+K` | Move focus to Find. |
-| `Ctrl+I` | Capture clipboard text into Inbox. |
 | `Ctrl+N` | Start a new Action by choosing its type. |
 | `Ctrl+,` | Open Configure. |
 | `Ctrl+Shift+D` | Open Configure on Diagnostics. |
@@ -89,7 +88,7 @@ For a personal Music setup, assign **Save current score as PDF** to Music slot
 | `Alt+Left` in document viewer | Open the previous document in history. |
 | `Alt+Right` in document viewer | Open the next document in history. |
 | `Alt+Home` in document viewer | Return to the Help, Shortcuts, or action document that opened the viewer. |
-| `Esc` | Close Help, Sheets, Inbox, and editing windows. |
+| `Esc` | Close Help, Sheets, and editing windows. |
 
 ### Bulk Actions workbook
 
@@ -99,18 +98,6 @@ For a personal Music setup, assign **Save current score as PDF** to Music slot
 | `F5` | Reload and revalidate the selected workbook. |
 | `Space` in the review table | Include or exclude an eligible highlighted row. |
 | `Esc` | Close the bulk-create window. |
-
-### Harvest website links
-
-| Shortcut | Result |
-| --- | --- |
-| `Ctrl+O` | Add one or more documents. |
-| `Ctrl+F` | Focus and select the candidate search text. |
-| `F5` | Scan or rescan the selected documents. |
-| `Delete` in Sources | Remove the selected source from the transient batch. |
-| `Space` in Candidates | Select or deselect the highlighted candidates for permanent creation. |
-| `Enter` in Candidates | Edit the single highlighted candidate. |
-| `Esc` | Close the Harvest or action-preview window. An active scan is cancelled safely. |
 
 ## Scope
 

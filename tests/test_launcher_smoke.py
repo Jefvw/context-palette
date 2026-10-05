@@ -2045,7 +2045,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     }
                     for button, name in zip(
                         app.footer_action_buttons,
-                        ("Capture", "Inbox", "Edit item", "Pin"),
+                        ("Edit item",),
                     ):
                         self.assertTrue(tooltips[button].startswith(f"{name} —"))
                     self.assertTrue(tooltips[app.more_button].startswith("More —"))
@@ -2488,12 +2488,11 @@ class LauncherSmokeTests(unittest.TestCase):
                                 index,
                                 "label",
                             )
-                            for index in (0, 1, 2, 4, 5, 6, 8)
+                            for index in (0, 1, 3, 4, 5, 7)
                         ],
                         [
                             "Create Actions from Excel…",
                             "Get blank Actions workbook…",
-                            "Harvest website links…",
                             "Export personal Actions for update…",
                             "Review updated Actions workbook…",
                             "Delete multiple personal Actions…",

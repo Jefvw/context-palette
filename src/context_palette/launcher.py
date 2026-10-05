@@ -95,7 +95,6 @@ from .hotkeys import (
     window_title,
 )
 from .help_window import HelpWindow
-from .harvest_window import HarvestWindow
 from .contexts import (
     ContextDefinition,
     ContextError,
@@ -132,8 +131,6 @@ from .resource_operations import (
     WebpagePdfRequest,
     dispatch_resource_operation,
 )
-from .inbox import InboxError, append_inbox_item, create_clipboard_item, load_inbox_items
-from .inbox_window import ActionCreator, InboxWindow, suggest_url_template
 from .ocr import (
     OcrCoordinator,
     OcrError,
@@ -380,7 +377,7 @@ class LauncherApp:
         self.local_command_surface_path = local_command_surface_path
         self.command_groups: list[CommandGroup] = []
         self.palette_path = palette_path
-        self.inbox_path = inbox_path
+        # inbox_path remains a constructor compatibility argument; capture UI is retired.
         self.cheatsheets_dir = cheatsheets_dir
         self.data_paths = data_paths or AppDataPaths.from_data_directory(
             actions_path.parent
@@ -867,8 +864,6 @@ class LauncherApp:
             select_project_filter=self._select_work_project_filter,
             select_context_filter=self._select_item_context_filter,
             manage_contexts=self._show_focus_configuration,
-            capture=self._capture_clipboard,
-            show_inbox=self._show_inbox,
             edit_item=self._edit_selected,
             configure=self._show_configuration,
             show_help=self._show_help,
@@ -922,8 +917,6 @@ class LauncherApp:
         self.configure_button = discovery.configure_button
         self.global_help_button = discovery.help_button
         self.footer_action_buttons = [
-            discovery.capture_button,
-            discovery.inbox_button,
             discovery.edit_button,
         ]
         self.more_menu = discovery.more_menu
@@ -1072,7 +1065,6 @@ class LauncherApp:
         self.root.bind("<Escape>", self._hide_on_plain_escape)
         self.root.bind("<Control-l>", lambda _event: self.focus_search())
         self.root.bind("<Control-k>", lambda _event: self.focus_search())
-        self.root.bind("<Control-i>", lambda _event: self._capture_clipboard())
         self.root.bind("<Control-n>", lambda _event: self._show_action_creation())
         self.root.bind("<Control-comma>", lambda _event: self._show_configuration())
         self.root.bind(
@@ -1150,8 +1142,6 @@ class LauncherApp:
             tooltip_adder=self._tooltip,
             create_action=self._create_action_from_workspace,
             extract_text=self._extract_text_from_image,
-            capture=self._capture_clipboard,
-            show_inbox=self._show_inbox,
             populate_send_to_menu=self._populate_send_to_menu,
             text_change_callback=self._workspace_text_changed,
             find_onenote=self._find_onenote_notes,
@@ -1166,12 +1156,8 @@ class LauncherApp:
         self.text_tools_button = self.workspace_component.text_tools_button
         self.create_action_button = self.workspace_component.create_action_button
         self.ocr_button = self.workspace_component.ocr_button
-        self.capture_button = self.workspace_component.capture_button
-        self.inbox_button = self.workspace_component.inbox_button
         self.send_to_button = self.workspace_component.send_to_button
         self.footer_action_buttons = [
-            self.workspace_component.capture_button,
-            self.workspace_component.inbox_button,
             self.action_discovery_panel.edit_button,
         ]
 
@@ -5492,63 +5478,6 @@ class LauncherApp:
 
     def _ask_for_action_input(self, prompt: str) -> str | None:
         return simpledialog.askstring("Build URL", prompt, parent=self.root)
-
-    def _capture_clipboard(self) -> None:
-        try:
-            content = self.root.clipboard_get()
-        except tk.TclError:
-            messagebox.showerror("Context Palette", "The clipboard does not contain text.")
-            return
-
-        title = simpledialog.askstring(
-            "Capture Clipboard",
-            "Title for this capture:",
-            parent=self.root,
-        )
-        if title is None:
-            self.status_var.set("Capture cancelled")
-            return
-
-        try:
-            item = create_clipboard_item(title=title, content=content)
-            append_inbox_item(self.inbox_path, item)
-            self.status_var.set(f"Captured to Inbox: {item.title}")
-        except InboxError as exc:
-            self.status_var.set("Capture failed")
-            messagebox.showerror("Context Palette", str(exc))
-
-    def _show_inbox(self) -> None:
-        try:
-            items = load_inbox_items(self.inbox_path)
-        except InboxError as exc:
-            messagebox.showerror("Context Palette", str(exc))
-            return
-
-        InboxWindow(
-            self.root,
-            items,
-            self.actions,
-            self._active_authoring_context(),
-            list(self.local_context_names.values()),
-            self.local_actions_path,
-            self.inbox_path,
-            self._reload_after_external_action_change,
-            self._show_harvest,
-            shared_contexts_path=self.contexts_path,
-            local_contexts_path=self.local_contexts_path,
-        )
-
-    def _show_harvest(self) -> None:
-        HarvestWindow(
-            self.root,
-            actions=self.actions,
-            context_names=list(self.local_context_names.values()),
-            focus_context=self._active_authoring_context(),
-            actions_path=self.local_actions_path,
-            shared_contexts_path=self.contexts_path,
-            local_contexts_path=self.local_contexts_path,
-            on_change=self._reload_after_external_action_change,
-        )
 
     def _show_help(self) -> None:
         HelpWindow(

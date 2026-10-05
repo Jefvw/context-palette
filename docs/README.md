@@ -79,6 +79,7 @@ This directory separates current behavior, durable direction, historical rationa
 
 ### Integration status and handovers
 
+- [Append to an existing OneNote page](ONENOTE_APPEND_ENGINE_HANDOVER.md) — pending engine contract; the owner chose append and content preservation.
 - [OneNote search and preview](HELP.md#find-onenote-notes) and
   [Send text to OneNote](HELP.md#send-text-to-onenote) — current user flows.
 - [OneNote Send UAT](ONENOTE_SEND_UAT.md) — proposed attended acceptance;

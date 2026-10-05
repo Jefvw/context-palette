@@ -79,8 +79,9 @@ class ActionBulkWindow:
         ttk.Label(
             outer,
             text=(
-                "Use one standard Actions workbook to review and create personal Active Actions "
-                "in a single write. Nothing runs during import."
+                "Choose an Actions workbook or save a blank template to fill in. "
+                "Ready rows are selected automatically; warnings need an explicit choice. "
+                "Creation saves personal Active Actions. Nothing runs during import."
             ),
             style="Muted.TLabel",
             wraplength=850,
@@ -104,7 +105,7 @@ class ActionBulkWindow:
         )
         self.reload_button.pack(side=tk.LEFT, padx=(6, 0))
 
-        self.source_var = tk.StringVar(value="No workbook selected.")
+        self.source_var = tk.StringVar()
         ttk.Label(
             outer,
             textvariable=self.source_var,
@@ -112,6 +113,26 @@ class ActionBulkWindow:
             wraplength=850,
             justify=tk.LEFT,
         ).pack(fill=tk.X, pady=(6, 8))
+
+        self.status_var = tk.StringVar()
+        ttk.Label(
+            outer,
+            textvariable=self.status_var,
+            style="Status.TLabel",
+            wraplength=850,
+            justify=tk.LEFT,
+        ).pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
+        footer = ttk.Frame(outer)
+        footer.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
+        self.create_button = ttk.Button(
+            footer,
+            text="Create 0 Actions",
+            command=self.create_actions,
+            state=tk.DISABLED,
+            style="Accent.TButton",
+        )
+        self.create_button.pack(side=tk.LEFT)
+        ttk.Button(footer, text="Close", command=self.close).pack(side=tk.RIGHT)
 
         review = ttk.Panedwindow(outer, orient=tk.HORIZONTAL)
         review.pack(fill=tk.BOTH, expand=True)
@@ -150,9 +171,19 @@ class ActionBulkWindow:
 
         detail_frame = ttk.Frame(review, padding=(10, 0, 0, 0))
         review.add(detail_frame, weight=2)
-        ttk.Label(detail_frame, text="Selected row", style="Heading.TLabel").pack(
-            anchor=tk.W
+        detail_heading = ttk.Frame(detail_frame)
+        detail_heading.pack(fill=tk.X)
+        ttk.Label(detail_heading, text="Selected row", style="Heading.TLabel").pack(
+            side=tk.LEFT
         )
+        self.all_fields_var = tk.BooleanVar(value=False)
+        self.all_fields_button = ttk.Checkbutton(
+            detail_heading,
+            text="All fields",
+            variable=self.all_fields_var,
+            command=self._show_detail,
+        )
+        self.all_fields_button.pack(side=tk.RIGHT)
         detail_scrollbar = ttk.Scrollbar(detail_frame, orient=tk.VERTICAL)
         self.detail = tk.Text(
             detail_frame,
@@ -167,32 +198,6 @@ class ActionBulkWindow:
         detail_scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=(4, 0))
         self.detail.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=(4, 0))
         self.detail.configure(state=tk.DISABLED)
-        self._set_detail(
-            "Choose an Actions workbook. Ready rows are selected automatically; "
-            "warnings require an explicit choice."
-        )
-
-        self.status_var = tk.StringVar(
-            value="Choose an existing .xlsx workbook or save a blank template first."
-        )
-        ttk.Label(
-            outer,
-            textvariable=self.status_var,
-            style="Status.TLabel",
-            wraplength=850,
-            justify=tk.LEFT,
-        ).pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
-        footer = ttk.Frame(outer)
-        footer.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
-        self.create_button = ttk.Button(
-            footer,
-            text="Create 0 Actions",
-            command=self.create_actions,
-            state=tk.DISABLED,
-            style="Accent.TButton",
-        )
-        self.create_button.pack(side=tk.LEFT)
-        ttk.Button(footer, text="Close", command=self.close).pack(side=tk.RIGHT)
 
         self.window.transient(parent)
         place_child_window(self.window, parent, size=(900, 650))
@@ -365,7 +370,7 @@ class ActionBulkWindow:
         self.tree.delete(*self.tree.get_children())
         if self.plan is None:
             self._update_create_state()
-            self._set_detail("Choose an Actions workbook to review its rows.")
+            self._set_detail("")
             return
 
         for candidate in self.plan.candidates:
@@ -436,7 +441,7 @@ class ActionBulkWindow:
         selected = self.tree.selection()
         candidate = self._candidate_for_iid(selected[0]) if selected else None
         if candidate is None:
-            self._set_detail("Select a workbook row to inspect it.")
+            self._set_detail("Select a workbook row to inspect it." if self.plan else "")
             return
         action = candidate.action
         row = self._row_data(candidate.row_number)
@@ -467,39 +472,33 @@ class ActionBulkWindow:
             if action is not None
             else (row.working_folder if row else "")
         )
+        show_all_fields = self.all_fields_var.get()
+        displayed_type = (
+            f"{type_label} ({action_type})"
+            if show_all_fields and action_type
+            else type_label or "(none)"
+        )
         lines = [
-            f"Excel row: {candidate.row_number}",
-            f"Status: {candidate.status}",
-            "",
-            "Name:",
-            name or "(none)",
-            "",
-            "Action type:",
-            f"{type_label} ({action_type})" if action_type else "(none)",
+            f"Excel row {candidate.row_number} · {candidate.status}",
+            f"Name: {name or '(none)'}",
+            f"Action type: {displayed_type}",
             "",
             "Value:",
             value or "(none)",
             "",
-            "Description:",
-            description or "(none)",
-            "",
-            "Contexts:",
-            ", ".join(contexts) or "General only",
-            "",
-            "Tags:",
-            ", ".join(tags) or "(none)",
-            "",
-            "Quick menu:",
-            " > ".join(quick_menu) or "(none)",
-            "",
-            "Arguments:",
-            "\n".join(arguments) or "(none)",
-            "",
-            "Working folder:",
-            working_folder or "(none)",
+            f"Contexts: {', '.join(contexts) or 'General only'}",
         ]
         if candidate.messages:
             lines.extend(("", "Messages:", *candidate.messages))
+        for label, field_value in (
+            ("Description", description),
+            ("Tags", ", ".join(tags)),
+            ("Quick menu", " > ".join(quick_menu)),
+            ("Arguments", "\n".join(arguments)),
+            ("Working folder", working_folder),
+        ):
+            if field_value or show_all_fields:
+                lines.extend(("", f"{label}:", field_value or "(none)"))
         self._set_detail("\n".join(lines))
 
     def _set_detail(self, text: str) -> None:

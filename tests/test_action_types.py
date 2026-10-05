@@ -101,12 +101,10 @@ class ActionTypeCatalogueTests(unittest.TestCase):
                 self.assertTrue(definition.output_description)
                 self.assertTrue(definition.portability)
 
-    def test_first_ai_enabled_types_are_copy_text_and_open_url(self):
+    def test_retired_inbox_ai_workflow_has_no_enabled_types(self):
         enabled = {item.id for item in ACTION_TYPES.values() if item.ai_proposable}
 
-        self.assertEqual(enabled, {"copy_text", "open_url"})
-        self.assertIn("HTTP", ACTION_TYPES["open_url"].ai_guidance)
-        self.assertIn("untrusted", ACTION_TYPES["copy_text"].ai_guidance)
+        self.assertEqual(enabled, set())
 
     def test_documented_overview_matches_the_catalogue(self):
         documented = (ROOT / "docs" / "ACTION_TYPES.md").read_text(encoding="utf-8")

@@ -11,7 +11,7 @@ in [Backup and restore plan](BACKUP_RESTORE_PLAN.md).
 The application works with three kinds of data:
 
 1. **Persisted application data** — actions, contexts, Quick actions, palette
-   choices, captured Inbox items, Work Item configuration, and cheat sheets.
+   choices, legacy Capture Inbox items, Work Item configuration, and cheat sheets.
 2. **Runtime projections** — combined Built-in/My configuration lists, resolved
    Context slot banks, the mixed All-items discovery view, generated Quick-action
    menus, and the discovered Work Item index. These can be rebuilt from
@@ -187,12 +187,13 @@ path.
 Unavailable sources or Work Items are soft failures. Stable references and
 metadata remain configured so they can recover when the source returns.
 
-### Inbox
+### Legacy Capture Inbox
 
 `InboxItem.id` identifies captured local text. An item stores title, content,
 source, creation timestamp, state, and a suggested context. Inbox content is
-potentially sensitive. Conversion creates a separate permanent Action and
-changes Inbox state, but no persistent Action-to-Inbox provenance link exists.
+potentially sensitive. Its capture/conversion UI is retired and startup does not
+read or migrate it. Old Actions remain independent; backup/restore retains this
+legacy structure without adding a persistent Action-to-Inbox link.
 
 ### Cheat sheets
 

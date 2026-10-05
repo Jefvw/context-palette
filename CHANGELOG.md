@@ -18,6 +18,14 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Simplified OneNote Search, Excel CSV/bulk Action review and Context editing:
+  compact instructions, fixed effect controls, optional full fields/shortcuts,
+  and unchanged execution checks. Unavailable Context preferences survive an
+  unchanged save.
+- Retired Capture Inbox, its Action-creation/AI proposal UI, and Harvest. Existing
+  Actions and legacy private data remain; Work Item workbook Inbox is retained.
+  Existing-page OneNote append is requested but awaits the engine contract.
+
 - Clarified documentation navigation, current verification checklists and
   per-PC Excel/OneNote setup. Labelled older UI sketches as historical and
   removed shared links to private evidence files; decision and verification

@@ -681,36 +681,6 @@ class LauncherInteractionTests(unittest.TestCase):
             showwarning.call_args.args[1],
         )
 
-    def test_inbox_is_loaded_from_storage_each_time_it_is_opened(self):
-        app = LauncherApp.__new__(LauncherApp)
-        app.root = Mock()
-        app.inbox_path = Path("inbox.json")
-        app.actions = []
-        app.palette_state = PaletteState()
-        app.available_context_names = []
-        app.local_context_names = {}
-        app.local_actions_path = Path("local_actions.json")
-        app.contexts_path = Path("contexts.json")
-        app.local_contexts_path = Path("local_contexts.json")
-        app._reload_after_external_action_change = Mock()
-        app._show_harvest = Mock()
-
-        first = (Mock(),)
-        restored = (Mock(), Mock())
-        with (
-            patch(
-                "context_palette.launcher.load_inbox_items",
-                side_effect=[first, restored],
-            ) as load,
-            patch("context_palette.launcher.InboxWindow") as window,
-        ):
-            app._show_inbox()
-            app._show_inbox()
-
-        self.assertEqual(load.call_count, 2)
-        self.assertIs(window.call_args_list[0].args[1], first)
-        self.assertIs(window.call_args_list[1].args[1], restored)
-
     def test_personal_context_is_the_only_non_general_authoring_default(self):
         app = LauncherApp.__new__(LauncherApp)
         app.local_context_names = {"review": "Review"}

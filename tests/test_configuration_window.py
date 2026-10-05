@@ -144,8 +144,8 @@ class FakeNotebook:
         return value
 
 
-class HarvestRefreshTests(unittest.TestCase):
-    def test_harvest_refresh_reloads_actions_in_open_configuration_window(self):
+class BulkActionRefreshTests(unittest.TestCase):
+    def test_bulk_refresh_reloads_actions_in_open_configuration_window(self):
         configuration = ConfigurationWindow.__new__(ConfigurationWindow)
         configuration.shared_actions_path = Path("shared.json")
         configuration.local_actions_path = Path("local.json")
@@ -153,9 +153,9 @@ class HarvestRefreshTests(unittest.TestCase):
         configuration.local_action_ids = set()
         configuration._reload = Mock()
         configuration.on_change = Mock()
-        harvested = Action(
-            "harvested",
-            "Harvested",
+        created = Action(
+            "bulk-created",
+            "Created from workbook",
             "General",
             "open_url",
             "https://example.test",
@@ -164,12 +164,12 @@ class HarvestRefreshTests(unittest.TestCase):
 
         with patch(
             "context_palette.configuration_window.load_combined_actions",
-            return_value=([harvested], {harvested.id}),
+            return_value=([created], {created.id}),
         ):
-            configuration._harvest_changed()
+            configuration._bulk_actions_changed()
 
-        self.assertEqual(configuration.actions, [harvested])
-        self.assertEqual(configuration.local_action_ids, {harvested.id})
+        self.assertEqual(configuration.actions, [created])
+        self.assertEqual(configuration.local_action_ids, {created.id})
         configuration._reload.assert_called_once_with()
         configuration.on_change.assert_called_once_with()
 
@@ -600,6 +600,50 @@ class FakeSelectedConfigTree(FakeSelectedActionTree):
 
 
 class ConfigurationDialogTests(unittest.TestCase):
+    def test_action_tasks_keep_workbooks_and_manual_creation_after_harvest_retirement(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        configuration = ConfigurationWindow.__new__(ConfigurationWindow)
+        configuration.action_filter_var = tk.StringVar()
+        configuration.action_filter_count_var = tk.StringVar()
+        routes = (
+            "_show_bulk_action_import",
+            "_save_bulk_action_template",
+            "_save_bulk_action_update_workbook",
+            "_show_bulk_action_update",
+            "_show_bulk_action_lifecycle",
+            "_start_action_creation",
+        )
+        for route in routes:
+            setattr(configuration, route, Mock())
+        try:
+            notebook = ttk.Notebook(root)
+            configuration._build_actions_tab(notebook)
+            menu = configuration.other_action_creation_menu
+            labels = [
+                menu.entrycget(index, "label")
+                for index in range(menu.index(tk.END) + 1)
+                if menu.type(index) == "command"
+            ]
+            self.assertEqual(
+                labels,
+                [
+                    "Create Actions from Excel…",
+                    "Get blank Actions workbook…",
+                    "Export personal Actions for update…",
+                    "Review updated Actions workbook…",
+                    "Delete multiple personal Actions…",
+                    "Browse Action types…",
+                ],
+            )
+            for index in (0, 1, 3, 4, 5):
+                menu.invoke(index)
+            configuration.new_action_button.invoke()
+            for route in routes:
+                getattr(configuration, route).assert_called_once_with()
+        finally:
+            root.destroy()
+
     def test_selection_title_is_single_line_and_bounded(self) -> None:
         title = "  A long\nAction title  " * 20
 
@@ -4054,6 +4098,179 @@ class ConfigurationDialogTests(unittest.TestCase):
 
         self.assertEqual(dialog.window.destroy_calls, 0)
 
+    def test_context_dialog_compacts_fields_and_preserves_hidden_shortcuts(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        saved: list[ContextDefinition] = []
+        actions = [
+            Action("first", "Same name", "General", "copy_text", "one"),
+            Action("second", "Same name", "General", "copy_text", "two"),
+            Action("third", "Third", "General", "copy_text", "three"),
+            Action("fourth", "Fourth", "General", "copy_text", "four"),
+            Action("fifth", "Fifth", "General", "copy_text", "five"),
+        ]
+        context = ContextDefinition(
+            "My work",
+            description="Daily work",
+            action_ids=tuple(action.id for action in actions),
+            preferred_action_ids=tuple(action.id for action in actions),
+        )
+        try:
+            dialog = ContextDialog(
+                root,
+                context,
+                actions,
+                lambda edited, _original: saved.append(edited) or True,
+            )
+            root.update_idletasks()
+
+            for entry in (dialog.name_entry, dialog.description_entry):
+                label = entry.master.winfo_children()[0]
+                self.assertLessEqual(
+                    abs(
+                        label.winfo_rooty() + label.winfo_height() / 2
+                        - entry.winfo_rooty() - entry.winfo_height() / 2
+                    ),
+                    1,
+                )
+                self.assertLess(label.winfo_rootx(), entry.winfo_rootx())
+            self.assertEqual(dialog.destination_var.get(), LOCAL_DESTINATION)
+            self.assertFalse(dialog.shortcuts_expanded)
+            self.assertEqual(dialog.shortcuts_body.winfo_manager(), "")
+            self.assertEqual(len(dialog.slot_choices), 5)
+            self.assertEqual(dialog.shortcuts_summary_var.get(), "5 of 5 assigned")
+            self.assertEqual(
+                len({dialog.slots[0].get(), dialog.slots[1].get()}),
+                2,
+            )
+            self.assertIn("Slot 0:", dialog._shortcut_details())
+
+            dialog.shortcuts_toggle_button.invoke()
+            self.assertTrue(dialog.shortcuts_expanded)
+            self.assertEqual(dialog.shortcuts_body.winfo_manager(), "pack")
+            dialog.shortcuts_toggle_button.invoke()
+            dialog._save()
+
+            self.assertEqual(saved, [context])
+            self.assertFalse(dialog.window.winfo_exists())
+        finally:
+            root.destroy()
+
+    def test_context_shortcut_summary_tracks_member_removal_while_collapsed(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        saved = Mock(return_value=False)
+        action = Action("one", "One", "General", "copy_text", "one")
+        try:
+            dialog = ContextDialog(
+                root,
+                ContextDefinition(
+                    "Work",
+                    action_ids=("one",),
+                    preferred_action_ids=("one",),
+                ),
+                [action],
+                saved,
+            )
+            self.assertEqual(dialog.shortcuts_summary_var.get(), "1 of 5 assigned")
+            dialog.member_list.selection_set(0)
+            dialog._remove_member_item()
+
+            self.assertEqual(dialog.shortcuts_summary_var.get(), "0 of 5 assigned")
+            self.assertFalse(dialog.shortcuts_expanded)
+            self.assertEqual(dialog.slots[0].get(), EMPTY_PIN_LABEL)
+            dialog._save()
+            self.assertEqual(saved.call_args.args[0].action_ids, ())
+            self.assertEqual(saved.call_args.args[0].preferred_items, ())
+            self.assertTrue(dialog.window.winfo_exists())
+        finally:
+            root.destroy()
+
+    def test_context_validation_reveals_and_focuses_affected_shortcut(self) -> None:
+        root = tk.Tk()
+        root.geometry("780x600+0+0")
+        saved = Mock(return_value=True)
+        try:
+            dialog = ContextDialog(root, ContextDefinition("Work"), [], saved)
+            root.update()
+            dialog.slots[-1].set("Unavailable choice")
+
+            with (
+                patch("context_palette.configuration_window.messagebox.showerror") as error,
+                patch("context_palette.configuration_window._focus_entry") as focus,
+            ):
+                dialog._save()
+
+            saved.assert_not_called()
+            self.assertEqual(error.call_args.args[0], "Choose a Context member")
+            self.assertTrue(dialog.shortcuts_expanded)
+            self.assertTrue(dialog.slot_choices[-1].entry.winfo_ismapped())
+            focus.assert_called_once_with(dialog.window, dialog.slot_choices[-1].entry)
+            self.assertLessEqual(
+                dialog.slot_choices[-1].entry.winfo_rooty()
+                + dialog.slot_choices[-1].entry.winfo_height(),
+                dialog.form_view.canvas.winfo_rooty()
+                + dialog.form_view.canvas.winfo_height() + 1,
+            )
+            self.assertTrue(dialog.window.winfo_exists())
+        finally:
+            root.destroy()
+
+    def test_context_name_validation_focuses_visible_name_field(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        saved = Mock(return_value=True)
+        try:
+            dialog = ContextDialog(root, None, [], saved, choose_destination=True)
+            for name in (" ", "gEnErAl"):
+                with self.subTest(name=name):
+                    dialog.name.set(name)
+                    with (
+                        patch("context_palette.configuration_window.messagebox.showerror"),
+                        patch("context_palette.configuration_window._focus_entry") as focus,
+                    ):
+                        dialog._save()
+                    focus.assert_called_once_with(dialog.window, dialog.name_entry)
+                    self.assertFalse(dialog.shortcuts_expanded)
+            saved.assert_not_called()
+        finally:
+            root.destroy()
+
+    def test_context_dialog_preserves_unavailable_action_and_work_item_shortcuts(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        saved: list[ContextDefinition] = []
+        work_item_reference = WorkItemReference("disconnected", "ISS-ABC-example")
+        preferred = (
+            CommandTarget(action_id="missing-action"),
+            CommandTarget(work_item_ref=work_item_reference),
+        )
+        context = ContextDefinition(
+            "My work",
+            action_ids=("missing-action",),
+            preferred_action_ids=("missing-action",),
+            work_item_refs=(work_item_reference,),
+            preferred_item_refs=preferred,
+        )
+        try:
+            dialog = ContextDialog(
+                root,
+                context,
+                [],
+                lambda edited, _original: saved.append(edited) or True,
+            )
+            self.assertEqual(dialog.shortcuts_summary_var.get(), "2 of 5 assigned")
+            self.assertFalse(dialog.shortcuts_expanded)
+            self.assertEqual(
+                [dialog.item_choices[variable.get()] for variable in dialog.slots[:2]],
+                list(preferred),
+            )
+            dialog._save()
+
+            self.assertEqual(saved, [context])
+        finally:
+            root.destroy()
+
     def test_context_dialog_rejects_reserved_general_name(self) -> None:
         dialog = ContextDialog.__new__(ContextDialog)
         dialog.name = FakeVariable("  gEnErAl  ")
@@ -4307,6 +4524,10 @@ class ConfigurationDialogTests(unittest.TestCase):
             root.update_idletasks()
 
             self.assertIn("Built-in actions only", dialog.member_choice.scope_note)
+            self.assertEqual(dialog.destination_var.get(), PROJECT_DESTINATION)
+            self.assertTrue(dialog.name_entry.instate(("!disabled", "!readonly")))
+            self.assertIn("Git", dialog.storage_note_var.get())
+            self.assertIn("commit, push, and pull", dialog.storage_note_var.get())
         finally:
             for child in root.winfo_children():
                 child.destroy()
@@ -4465,6 +4686,10 @@ class ConfigurationDialogTests(unittest.TestCase):
                 choose_destination=True,
             )
             self.assertEqual(context_dialog.window.title(), "New context")
+            self.assertEqual(context_dialog.destination_var.get(), LOCAL_DESTINATION)
+            context_dialog.destination_var.set(PROJECT_DESTINATION)
+            self.assertIn("Git", context_dialog.storage_note_var.get())
+            context_dialog.shortcuts_toggle_button.invoke()
             self._assert_scrollable_dialog_target_visible(
                 root,
                 context_dialog,

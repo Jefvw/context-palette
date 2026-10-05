@@ -353,7 +353,7 @@ If an application is installed differently on each computer, keep that action in
 
 ## Making an action Built-in intentionally
 
-New Inbox and cheat-sheet promotion actions are written to
+New confirmed Actions and cheat-sheet promotions are written to
 `data/local_actions.json` by default.
 
 To share one across computers:

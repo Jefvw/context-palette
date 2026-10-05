@@ -44,7 +44,7 @@ pythonw.exe -> context_palette.main
         |
         `-- create Tk root and LauncherApp
                 |
-                +-- load actions, contexts, command surface, palette state, Inbox, and cheat sheets
+                +-- load actions, contexts, command surface, palette state and cheat sheets
                 +-- start localhost single-instance listener
                 +-- register F9 and Ctrl+Alt+P on a background message thread
                 +-- register one non-transient topmost drop-target Toplevel
@@ -174,7 +174,7 @@ Presentation and application orchestration.
   and the fixed action-bound Passwords, Folders, and Prompts hierarchies.
 - Composes a bounded horizontal main split: the command console occupies about
   40% initially and the full-height Input / Output workspace about 60%.
-- Owns the communication line, systematic widget tooltips, Inbox, sheets, Help,
+- Owns the communication line, systematic widget tooltips, sheets, Help,
   and action editors; `WorkspacePanel` owns the Input / Output presentation.
 - Owns the safe drop-result handoff: it clears stale captured-selection and
   source-window state, reveals the ordinary palette without clipboard
@@ -210,9 +210,7 @@ Presentation and application orchestration.
 Discovery and Quick actions form the left command console; Input / Output and
 the one-line status display form the right workspace. A result toolbar owns
 selection commands, the workspace header owns text/input commands, and a small
-application toolbar follows Quick actions. Secondary
-Inbox and Inbox-action-creation presentation lives in `inbox_window.py`;
-`launcher.py` retains only the capture command and window orchestration.
+application toolbar follows Quick actions.
 
 The launcher does not implement action transformations or window matching directly. Those responsibilities live in specialized modules.
 
@@ -303,23 +301,13 @@ removal, Action execution, and external target mutation are outside this
 workflow. Configure exposes it as **More Action tasks → Delete multiple
 personal Actions…**.
 
-### `harvest.py` and `harvest_window.py`
+### Retired Capture Inbox and Harvest
 
-`harvest.py` is the platform-independent bulk document-harvesting boundary. It
-defines transient source, occurrence, candidate, and batch models; bounded
-local extractors for `.md`, `.txt`, `.docx`, and `.xlsx`; conservative URL
-normalization and semantic deduplication; Active-action conversion; and the background
-scan coordinator. OOXML packages are inspected as ZIP/XML without starting
-Office or evaluating formulas.
-
-`harvest_window.py` owns the attended review workflow: multi-file selection,
-progress and cancellation, source and candidate filters, provenance, individual
-and bulk edits, preview, and one atomic append to the personal action store.
-The visible route is **Harvest website links…** because every candidate is an
-HTTP/HTTPS `open_url` Action. The launcher exposes the window from Inbox, while
-the Actions configuration section is the primary route. No harvested candidate
-enters persistent data before the final confirmation. This URL-specific model
-is deliberately separate from structured bulk Action workbooks.
+The Capture Inbox UI, Inbox Action creator, AI proposal UI/domain, and Harvest
+UI/domain have been removed. Their launcher/configuration/workspace routes and
+Ctrl+I capture binding are absent. Existing Actions are not migrated or deleted.
+inbox.py remains only as legacy storage/backup compatibility, alongside its
+private data-catalogue entry. Work Item workbook Inbox is unrelated and retained.
 
 ### Discovery scopes, Context, and secondary filters
 
@@ -537,7 +525,7 @@ Pure transformation algorithms and validation remain in `actions.py`.
 ### `workspace_panel.py`
 
 Owns the complete Input / Output UI component: text widget, edit menu, visible
-Back, Forward, literal **Send to…**, Capture, Inbox, **Create from Input**,
+Back, Forward, literal **Send to…**, **Create from Input**,
 **Extract text**, and **Text tools** controls; selection-first source choice and replacement;
 undo boundaries; prompting;
 clipboard copy and replacement, transformation feedback, and file-transform
@@ -737,8 +725,7 @@ or concurrently deleted Action leaves Configure usable and opens no editor.
 
 ### `context_membership_field.py`
 
-Provides reusable comma-separated picker fields used by Configure, Inbox
-conversion, and action editing. Context membership combines an editable field
+Provides reusable comma-separated picker fields used by Configure and Action editing. Context membership combines an editable field
 with a checklist of canonical defined contexts. Tag selection uses a shared
 searchable multi-select picker for existing normalized tags but continues to
 allow new free-form values. The discovery Filter menu separately reuses
@@ -960,7 +947,7 @@ Owns narrow, idempotent migrations for deliberately removed local features.
 Setup and application startup remove retired action records and their references
 from ignored local actions, contexts, quick buttons, and palette state. It also
 normalizes legacy Draft/Trusted actions to Active, converts old copy-only URL
-builders to prompted copy-and-open actions, and changes converted Inbox items
+builders to prompted copy-and-open actions, and historically changed converted Inbox items
 to Converted. Every
 changed file is written through `persistence.py`, preserving its previous
 contents as an ignored `.bak`. The migration stores and logs aggregate counts
@@ -1007,7 +994,7 @@ cancel. Action creation and editing refresh every Configure view derived from ac
 including Context and Quick-action summaries and diagnostics. Action
 creation routes owned by other launcher windows reload an already-open
 Configure workspace from storage without raising or replacing that window.
-Configure, Inbox conversion, document harvesting, and cheat-sheet promotion
+Configure, workbook creation, and cheat-sheet promotion
 all persist action context choices through `context_membership.py`.
 All action-type editors use one compact vertically scrollable canvas body with
 a fixed save/cancel footer. Ordinary labels sit beside their fields, action
@@ -1037,7 +1024,7 @@ visible final columns and consistent vertical scrolling at the supported
 minimum window size.
 
 The Actions page keeps its single primary **New Action** command in the page
-header and moves the bulk create/update Excel routes, website-link Harvest,
+header and moves the bulk create/update Excel routes,
 and type catalogue behind **More Action tasks**. Global pin configuration is
 retired. Selection titles are display-bounded so arbitrary
 names cannot displace Action commands at minimum width. Tags remain searchable
@@ -1291,14 +1278,6 @@ Non-Markdown file actions retain the platform opener.
 Owns the searchable Cheat Sheet secondary window, including selection, preview,
 and promotion to a permanent local Active action. `launcher.py` retains loading and
 orchestration responsibility.
-
-### `inbox_window.py`
-
-Owns the captured-item Inbox window and the form that turns one Inbox item into
-a permanent personal action. It coordinates the existing Inbox and action
-domain helpers, context/tag pickers, and attended AI guidance without depending
-on `LauncherApp`. The launcher opens this window and retains compatibility
-imports for existing callers.
 
 ### `hotkeys.py`
 
@@ -1810,6 +1789,25 @@ The former UAT startup flag is no longer read. The owner reports the published
 engine works on another PC; that is separate from live acceptance of this host
 startup change. Remaining broader manual checks are documented in Testing.
 
+
+#### Compact secondary review surfaces (2026-10-05)
+
+OneNote Search uses inline Find, result/preview metadata and one current
+next-step/error line, with Cancel visible only during pending work. Basic-text
+and truncation limits remain explicit; Search/Preview/Use authority is unchanged.
+CSV ready review combines effect/warning totals and the overwrite policy, keeps
+no-backup replacement guidance visible, and reserves effect controls outside
+the expanding mappings. Bulk creation shows exact values, contexts and messages
+first; All fields only discloses optional absence/internal type metadata and
+never replans or commits. Context editing uses inline basic fields and optional
+shortcuts 6–0 with assignment summary; validation expands/focuses an invalid
+slot. An unchanged save retains unavailable member/preferred identities.
+
+These changes alter presentation only. Engine contracts and persistence remain
+owned by their existing boundaries. Existing-page OneNote append is a pending
+engine extension, described in ONENOTE_APPEND_ENGINE_HANDOVER.md; current Send
+still creates a new page and never updates an existing one.
+
 ### `excel_live_format_window.py`
 
 Owns the centered attended **Apply Excel format template** workflow against
@@ -1866,48 +1864,12 @@ cannot run an action by ID. Any future unattended execution API requires its
 own authorization policy, confirmation rules, structured results, and separate
 security tests.
 
-### `inbox.py`
+### inbox.py — legacy storage compatibility
 
-Capture Inbox domain model and persistence.
-
-- Creates clipboard captures.
-- Loads and validates Inbox JSON.
-- Updates maturity state.
-- Permanently removes one explicitly selected capture through the same atomic
-  JSON write boundary.
-- Keeps captured material separate from actions until conversion.
-
-The Inbox creation UI supports guided permanent `copy_text` and URL-builder
-actions. It also exposes a confirmed **Delete capture…** command. Deletion
-removes only the Capture Inbox record; a converted Action contains copied,
-independent data and is never deleted with its source capture. Ask AI and
-Harvest remain available under **Other ways to create**. Work Item workbook
-Inbox rows are a separate Excel-owned surface and are not deleted here.
-URL templates are validated through the same domain function used at
-execution, and the dialog keeps its action footer outside the expandable form
-so buttons remain visible at smaller window sizes.
-
-### `ai_guidance.py` and `ai_guidance_window.py`
-
-`ai_guidance.py` builds a user-previewable request from an Inbox capture, a
-constrained prompt variation, and catalogue-owned type guidance. It parses
-plain versioned JSON or exactly one complete JSON Markdown fence without
-surrounding commentary. It accepts only the variation's catalogue-enabled
-action types, rejects unknown fields, and creates actions through type-specific
-validated Active-action constructors. Envelope errors reject the response;
-proposal errors are reported individually so valid siblings remain reviewable.
-A local example response supports evaluation without contacting an AI.
-
-Untrusted AI response text has a 1,000,000-character ceiling enforced before
-JSON parsing. The clipboard handoff applies the same limit before replacing the
-response widget, avoiding unnecessary UI and parser memory amplification.
-
-`ai_guidance_window.py` owns the attended clipboard handoff: choose guidance,
-review and copy the request, paste an AI response, validate and select
-proposals, and explicitly create permanent local Active actions. It also
-exposes the local test-response path and per-proposal validation status.
-Selected proposals are batch-validated before the local action file is written.
-The window does not contact an AI provider or store credentials.
+Retains the captured-record model and JSON validation for old private inbox
+data and backup/restore. No active capture, Inbox browsing, AI proposal or
+Harvest creation entry point exists. Complete backups can still include this
+legacy data; retirement neither reads it for normal use nor removes it.
 
 ### `cheatsheets.py`
 
@@ -2018,8 +1980,8 @@ Secondary application screens share a `780x600` default and `700x480` minimum
 through `window_geometry.py`. Every ordinary application window resolves the
 usable Windows work area of its own or its owner's current monitor, centers in
 that work area, and reduces only when the monitor cannot fit its requested
-size. This includes auto-sized Work Item dialogs and the larger Harvest
-window. The main window uses the same compact screen-aware `780x600` default
+size. This includes auto-sized Work Item dialogs and the larger bulk-review
+windows. The main window uses the same compact screen-aware `780x600` default
 and `700x480` minimum. Startup and ordinary Show resolve the current cursor
 monitor; F9 and Ctrl+Alt+P use the cursor monitor captured at activation. All
 center the palette in that monitor's usable work area. Internal text-placement
@@ -2060,8 +2022,7 @@ use two columns at the standard and supported minimum widths, falling back to
 one only when the console is narrower. Its canvas height follows the rendered
 row height instead of expanding; discovery owns the remaining vertical space
 and its result list grows with it. Input / Output consumes nearly the full
-right-pane height; its existing communication line sits at the bottom. Capture,
-Inbox, Create from Input, and Text tools use bitmap-icon controls in the
+right-pane height; its existing communication line sits at the bottom. Create from Input and Text tools use bitmap-icon controls in the
 workspace header. Configure, Help, and More follow Quick actions. Discovery
 scopes, Work Items, and Run/Open retain text because their state must remain
 immediately readable. Search text can be combined with one shared Context/tag
@@ -2096,7 +2057,7 @@ to stable target/branch mapping: left-clicking an Action executes that exact
 entry; right-clicking it dismisses the native menu and schedules exact guided
 editing. Work Item entries use the same live-reference opener and route their
 right-click to the selected Work Item in Configure.
-Empty search, Inbox, cheat-sheet, and command-surface states contain recovery
+Empty search, cheat-sheet, and command-surface states contain recovery
 guidance rather than blank widgets. Reloads use a short busy cursor/status
 state; local loading is intentionally not animated.
 
@@ -2338,7 +2299,7 @@ actions by stable ID.
 
 ### `data/local_actions.json`
 
-Ignored personal and machine-specific actions. New Inbox conversions and
+Ignored personal and machine-specific actions. New confirmed creations and
 cheat-sheet promotions are written here by default.
 
 ### `data/inbox.json`
@@ -2468,7 +2429,7 @@ Tests use `unittest` and focus on pure or callback-injected behavior.
 
 - Action parsing, search, execution dispatch, transformations, and URL building.
 - Searchable action-picker filtering and Tk selection behavior.
-- Inbox and cheat-sheet persistence.
+- Legacy Capture Inbox and cheat-sheet persistence.
 - Slot calculation and palette-state persistence.
 - Hotkey constants and single-instance behavior.
 

@@ -746,10 +746,6 @@ class ConfigureMockup(MockupView):
             label="Get blank Actions workbook...",
             command=lambda: self._mock_status("Mockup: a versioned blank Actions workbook would be saved."),
         )
-        other_menu.add_command(
-            label="Harvest website links...",
-            command=lambda: self._mock_status("Mockup: attended website-link harvesting would open."),
-        )
         other_menu.add_separator()
         other_menu.add_command(
             label="Export personal Actions for update...",
@@ -1421,8 +1417,6 @@ class MainPaletteMockup(MockupView):
         )
         self.workspace_buttons.append(self.send_to_button)
         tool_specs = (
-            ("capture", "Capture clipboard text to Inbox", "Mockup only: clipboard was not read."),
-            ("inbox", "Open Inbox", "Mockup: Inbox would open."),
             ("ocr", "Extract image text", "Mockup only: no image or clipboard was read."),
             (
                 "create_from_input",

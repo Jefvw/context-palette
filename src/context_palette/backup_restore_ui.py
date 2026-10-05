@@ -247,7 +247,7 @@ class BackupRestorePanel(ttk.Frame):
         backup.pack(fill=tk.X, pady=(0, 8))
         ttk.Checkbutton(
             backup,
-            text="Include captured Inbox content",
+            text="Include legacy Capture Inbox data",
             variable=self.include_inbox_var,
         ).pack(anchor=tk.W)
         ttk.Checkbutton(

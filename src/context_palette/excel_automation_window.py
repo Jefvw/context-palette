@@ -106,8 +106,6 @@ class ExcelAutomationWindow:
             justify=tk.LEFT,
         ).pack(anchor=tk.W, pady=(2, 10))
 
-        self.content = ttk.Frame(outer)
-        self.content.pack(fill=tk.BOTH, expand=True)
         self.status_var = tk.StringVar()
         self.status_label = ttk.Label(
             outer,
@@ -117,10 +115,14 @@ class ExcelAutomationWindow:
             justify=tk.LEFT,
         )
         self.status_label.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
-        footer = ttk.Frame(outer)
-        footer.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
-        self.close_button = ttk.Button(footer, text="Close", command=self.close)
+        self.footer = ttk.Frame(outer)
+        self.footer.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
+        self.close_button = ttk.Button(self.footer, text="Close", command=self.close)
         self.close_button.pack(side=tk.RIGHT)
+        self.review_actions = ttk.Frame(self.footer)
+        self.review_actions.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
+        self.content = ttk.Frame(outer)
+        self.content.pack(fill=tk.BOTH, expand=True)
 
         self.primary_button: ttk.Button | None = None
         self.secondary_button: ttk.Button | None = None
@@ -543,7 +545,7 @@ class ExcelAutomationWindow:
         )
         self._add_overwrite_checkbox(self.content, pady=(0, 8))
         self.primary_button = ttk.Button(
-            self.content,
+            self.review_actions,
             text="Choose another output folder…",
             command=self._browse_output_directory,
             style="Accent.TButton",
@@ -583,53 +585,45 @@ class ExcelAutomationWindow:
         self.view_state = "ready"
         self._clear_content()
         ttk.Label(self.content, text="Review before export", style="Heading.TLabel").pack(anchor=tk.W)
-        self._add_overwrite_checkbox(self.content, pady=(5, 2))
+        create_count = len(self._predicted_creates)
+        replace_count = len(self._predicted_replacements)
+        warning_count = len(plan.warnings)
         ttk.Label(
             self.content,
             text=(
-                "OVERWRITE ALLOWED · Only the exact reviewed existing CSV files will be replaced · "
-                "Sources unchanged"
-                if invocation.allow_overwrite
-                else "COLLISION SAFE · Existing names receive (1), (2), ... suffixes · Sources unchanged"
+                f"{_effect_summary(create_count, replace_count)} · "
+                f"Warnings: {warning_count if warning_count else 'none'}"
             ),
-            style="Success.TLabel",
+            style="Heading.TLabel",
             wraplength=700,
             justify=tk.LEFT,
-        ).pack(anchor=tk.W, pady=(2, 5))
-        if invocation.allow_overwrite:
-            ttk.Label(
-                self.content,
-                text=(
-                    "Replaced CSV files receive no recovery backup or rollback copy."
-                ),
-                style="Muted.TLabel",
-                wraplength=700,
-                justify=tk.LEFT,
-            ).pack(anchor=tk.W, pady=(0, 5))
-        create_count = len(self._predicted_creates)
-        replace_count = len(self._predicted_replacements)
-        effect_summary = _effect_summary(create_count, replace_count)
-        ttk.Label(
-            self.content,
-            text=effect_summary,
-            style="Heading.TLabel",
         ).pack(anchor=tk.W, pady=(0, 5))
+        policy_row = ttk.Frame(self.content)
+        policy_row.pack(fill=tk.X, pady=(0, 5))
+        self._add_overwrite_checkbox(policy_row, pady=(0, 0))
+        self.overwrite_checkbutton.pack_configure(side=tk.LEFT, padx=(0, 8))
+        policy_label = ttk.Label(
+            policy_row,
+            text=(
+                "Replaced CSV files receive no recovery backup or rollback copy."
+                if invocation.allow_overwrite
+                else "COLLISION SAFE · Existing names receive (1), (2), ... suffixes."
+            ),
+            style="Error.TLabel" if invocation.allow_overwrite else "Muted.TLabel",
+            wraplength=500,
+            justify=tk.LEFT,
+        )
+        policy_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        policy_label.bind(
+            "<Configure>",
+            lambda event: policy_label.configure(wraplength=max(1, event.width)),
+        )
         ttk.Label(
             self.content,
             text=_csv_format_summary(invocation),
             style="Muted.TLabel",
             wraplength=700,
             justify=tk.LEFT,
-        ).pack(anchor=tk.W, pady=(0, 5))
-        warning_count = len(plan.warnings)
-        ttk.Label(
-            self.content,
-            text=(
-                f"Warnings: {warning_count}"
-                if warning_count
-                else "Warnings: none"
-            ),
-            style="Heading.TLabel" if warning_count else "Muted.TLabel",
         ).pack(anchor=tk.W, pady=(0, 5))
         lines: list[str] = []
         for item in plan.inputs:
@@ -658,17 +652,15 @@ class ExcelAutomationWindow:
             pady=(0, 0),
         )
         self._reviewed_warning_count = warning_count
-        button_row = ttk.Frame(self.content)
-        button_row.pack(fill=tk.X, pady=(10, 0))
         self.primary_button = ttk.Button(
-            button_row,
+            self.review_actions,
             text=_execute_button_label(create_count, replace_count),
             command=self._execute_reviewed,
             style="Accent.TButton",
         )
         self.primary_button.pack(side=tk.LEFT)
         self.secondary_button = ttk.Button(
-            button_row,
+            self.review_actions,
             text="Choose another output folder…",
             command=self._browse_output_directory,
         )
@@ -1162,6 +1154,8 @@ class ExcelAutomationWindow:
     def _clear_content(self) -> None:
         self._stop_progress()
         for child in self.content.winfo_children():
+            child.destroy()
+        for child in self.review_actions.winfo_children():
             child.destroy()
         self.primary_button = None
         self.secondary_button = None

@@ -14,6 +14,7 @@ from .onenote_integration import (
     save_onenote_settings,
 )
 from .onenote_session import SessionError, capture_session
+from .tooltips import WidgetTooltip
 from .window_geometry import configure_standard_window, place_child_window
 
 
@@ -115,16 +116,12 @@ class OneNoteWindow:
         # Reserve footer space before the growing result and preview regions.
         bottom = ttk.Frame(outer)
         bottom.pack(side=tk.BOTTOM, fill=tk.X)
-        ttk.Label(outer, text="Find OneNote notes", style="Title.TLabel").pack(anchor=tk.W)
-        ttk.Label(outer, text="Search open notebooks, choose a note, then review its text. OneNote stays unchanged.",
-                  wraplength=740).pack(anchor=tk.W, pady=(3, 10))
-        setup = ttk.Frame(outer)
-        setup.pack(fill=tk.X)
-        self.choose_button = ttk.Button(setup, text="Choose engine…", command=self.choose_engine)
-        self.choose_button.pack(side=tk.LEFT)
+        heading = ttk.Frame(outer)
+        heading.pack(fill=tk.X)
+        ttk.Label(heading, text="Find OneNote notes", style="Title.TLabel").pack(side=tk.LEFT)
+        self.choose_button = ttk.Button(heading, text="Choose engine…", command=self.choose_engine)
+        self.choose_button.pack(side=tk.RIGHT)
         self.setup_var = tk.StringVar(value="No sibling engine found. Choose python-onenote.bat on this PC.")
-        ttk.Label(setup, textvariable=self.setup_var, wraplength=550,
-                  style="Muted.TLabel").pack(side=tk.LEFT, padx=8)
         scope_row = ttk.Frame(outer)
         scope_row.pack(fill=tk.X, pady=(8, 10))
         ttk.Label(scope_row, text="Notebook:").pack(side=tk.LEFT)
@@ -132,18 +129,17 @@ class OneNoteWindow:
         ttk.Label(scope_row, textvariable=self.notebook_var, wraplength=450).pack(side=tk.LEFT, padx=6)
         self.notebook_button = ttk.Button(scope_row, text="Choose notebook…", command=self.choose_notebook)
         self.notebook_button.pack(side=tk.RIGHT)
-        ttk.Label(outer, text="Find text in the chosen notebook").pack(anchor=tk.W)
         query_row = ttk.Frame(outer)
         query_row.pack(fill=tk.X, pady=(4, 4))
+        self.find_label = ttk.Label(query_row, text="Find:")
+        self.find_label.pack(side=tk.LEFT, padx=(0, 6))
         self.query_var = tk.StringVar(value=initial_query)
         self.query_entry = ttk.Entry(query_row, textvariable=self.query_var)
         self.query_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.query_entry.bind("<Return>", lambda _event: self.search())
         self.search_button = ttk.Button(query_row, text="Search", command=self.search)
         self.search_button.pack(side=tk.RIGHT, padx=(6, 0))
-        ttk.Label(outer, text="Search connects to the open OneNote app and reads titles and locations in the chosen scope. Choose notebook lists the open notebook names. Nothing runs until you choose a command.",
-                  wraplength=740, style="Muted.TLabel").pack(anchor=tk.W, pady=(0, 8))
-        self.results_var = tk.StringVar(value="No search yet.")
+        self.results_var = tk.StringVar(value="Notes")
         ttk.Label(outer, textvariable=self.results_var).pack(anchor=tk.W)
         result_frame = ttk.Frame(outer)
         result_frame.pack(fill=tk.BOTH, expand=True, pady=(4, 6))
@@ -162,7 +158,7 @@ class OneNoteWindow:
         preview_controls.pack(fill=tk.X)
         self.preview_button = ttk.Button(preview_controls, text="Preview text", command=self.preview)
         self.preview_button.pack(side=tk.LEFT)
-        self.preview_var = tk.StringVar(value="Choose a note, then Preview text.")
+        self.preview_var = tk.StringVar()
         ttk.Label(preview_controls, textvariable=self.preview_var).pack(side=tk.LEFT, padx=8)
         preview_frame = ttk.Frame(outer)
         preview_frame.pack(fill=tk.BOTH, expand=True, pady=(6, 4))
@@ -172,8 +168,9 @@ class OneNoteWindow:
         preview_scroll = ttk.Scrollbar(preview_frame, command=self.preview_text.yview)
         preview_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.preview_text.configure(yscrollcommand=preview_scroll.set)
-        ttk.Label(bottom, text="Basic text only; formatting, attachments and ink may be absent. Use text lets you choose Replace or Append.",
-                  wraplength=740, style="Muted.TLabel").pack(anchor=tk.W)
+        self.basic_text_warning = ttk.Label(bottom,
+            text="Basic text only; formatting, attachments and ink may be absent.",
+            wraplength=740, style="Muted.TLabel")
         footer = ttk.Frame(bottom)
         footer.pack(fill=tk.X, pady=(10, 0))
         self.use_button = ttk.Button(footer, text="Use text…", command=self.use_text)
@@ -181,10 +178,17 @@ class OneNoteWindow:
         self.close_button = ttk.Button(footer, text="Close", command=self.close)
         self.close_button.pack(side=tk.RIGHT)
         self.cancel_button = ttk.Button(footer, text="Cancel request", command=self.cancel)
-        self.cancel_button.pack(side=tk.RIGHT, padx=6)
-        self.status_var = tk.StringVar(value="Open OneNote, then enter a query and choose Search.")
-        ttk.Label(bottom, textvariable=self.status_var, wraplength=740,
-                  style="Status.TLabel").pack(fill=tk.X, pady=(8, 0))
+        self.status_var = tk.StringVar(value="Enter a query and choose Search.")
+        self.status_label = ttk.Label(bottom, textvariable=self.status_var, wraplength=740,
+                                      style="Status.TLabel")
+        self.status_label.pack(fill=tk.X, pady=(8, 0))
+        self._tooltips = (
+            WidgetTooltip(self.search_button,
+                "Search connects to the open OneNote app and reads titles and locations in the shown notebook. OneNote stays unchanged. Nothing runs while you type."),
+            WidgetTooltip(self.notebook_button,
+                "List open notebook names and remember an exact search scope on this PC. This reads notebook names only when requested."),
+            WidgetTooltip(self.choose_button, lambda: self.setup_var.get()),
+        )
         self.query_var.trace_add("write", self._query_changed)
         try:
             self._settings = load_onenote_settings(settings_path)
@@ -196,7 +200,7 @@ class OneNoteWindow:
                     self._client = client_factory(launcher)
                     self.setup_var.set("Engine remembered on this PC. Search connects automatically.")
                 else:
-                    self.setup_var.set("Saved engine unavailable. Choose its new location; your notebook is remembered.")
+                    self.setup_var.set("Saved engine unavailable. Choose Change engine…; your notebook is remembered.")
             else:
                 launcher = discover_direct_sibling_python_onenote_launcher(self.application_root)
                 if launcher is not None:
@@ -207,9 +211,11 @@ class OneNoteWindow:
             self._settings = OneNoteSettings(notebook=exc.notebook)
             self._show_scope()
             self.choose_button.configure(text="Change engine…")
-            self.setup_var.set("Saved engine settings need repair. Choose the launcher again.")
+            self.setup_var.set("Saved engine settings need repair. Choose Change engine….")
         except (OneNoteError, OSError, ValueError):
             self.setup_var.set("Engine unavailable. Choose the launcher again.")
+        if self._client is None:
+            self.status_var.set(self.setup_var.get())
         self._sync()
         self.show()
 
@@ -234,19 +240,27 @@ class OneNoteWindow:
             (self.cancel_button, self._job is not None and not self._closing),
         ):
             button.configure(state=tk.NORMAL if enabled else tk.DISABLED)
+        if self._job is not None and not self._closing:
+            self.cancel_button.pack(side=tk.RIGHT, padx=6)
+        else:
+            self.cancel_button.pack_forget()
+        if self._selected_id is not None:
+            self.basic_text_warning.pack(anchor=tk.W, before=self.use_button.master)
+        else:
+            self.basic_text_warning.pack_forget()
 
     def _clear_preview(self):
         self._preview = None
         self.preview_text.configure(state=tk.NORMAL)
         self.preview_text.delete("1.0", tk.END)
         self.preview_text.configure(state=tk.DISABLED)
-        self.preview_var.set("Choose a note, then Preview text.")
+        self.preview_var.set("")
 
     def _clear_results(self):
         self._selected_id = None
         self._pages = ()
         self.results.delete(*self.results.get_children())
-        self.results_var.set("No current results.")
+        self.results_var.set("Notes")
         self._clear_preview()
 
     def _invalidate(self):
@@ -261,7 +275,9 @@ class OneNoteWindow:
     def _query_changed(self, *_args):
         self._invalidate()
         self._clear_results()
-        self.status_var.set("Query changed. Choose Search when ready." if not self.busy else "Cancelling the previous request…")
+        self.status_var.set("Cancelling the previous request…" if self.busy else
+                            self.setup_var.get() if self._client is None else
+                            "Choose Search when ready.")
         self._sync()
 
     def _selection_changed(self, _event=None):
@@ -272,6 +288,9 @@ class OneNoteWindow:
         self._invalidate()
         self._selected_id = page_id
         self._clear_preview()
+        self.status_var.set("Cancelling the previous request…" if self.busy else
+                            "Choose Preview text to read the selected note." if page_id is not None else
+                            "Choose a note, then Preview text.")
         self._sync()
 
     def choose_engine(self):
@@ -300,7 +319,7 @@ class OneNoteWindow:
         else:
             self.choose_button.configure(text="Change engine…")
             self.setup_var.set("Engine remembered on this PC. Search connects automatically.")
-            self.status_var.set("Engine saved. Your notebook choice is unchanged; choose Search when ready.")
+            self.status_var.set("Engine saved. Choose Search when ready.")
         self._sync()
 
     def _show_scope(self):
@@ -429,7 +448,7 @@ class OneNoteWindow:
             self._finish_close()
             return
         if generation != self._generation:
-            self.status_var.set("Previous request cancelled. Choose an action when ready.")
+            self.status_var.set("Previous request cancelled. Choose Search when ready.")
             self._sync()
             return
         if error is not None:
@@ -448,6 +467,7 @@ class OneNoteWindow:
                 # a different installation. Preserve scope and require repair.
                 self._client = None
                 self.setup_var.set("Engine unavailable or incompatible. Choose Change engine to repair setup.")
+                self.status_var.set(self.setup_var.get())
         elif kind in {"notebooks", "search"}:
             result, self._ready, self._session = result
             self._described = True
@@ -479,9 +499,11 @@ class OneNoteWindow:
                 self.results.insert("", tk.END, iid=str(index), text=page.title,
                                     values=(" / ".join(page.breadcrumb),))
             count = len(result.pages)
-            self.results_var.set(f"Showing {count} of {result.total} matches — narrow your query to see other notes."
+            self.results_var.set(f"Showing {count} of {result.total} matches"
                                  if result.truncated else f"{count} matches returned.")
-            self.status_var.set("Choose a note, then Preview text." if count else
+            self.status_var.set("Choose a note and Preview text, or narrow the query for other matches."
+                                if count and result.truncated else
+                                "Choose a note, then Preview text." if count else
                                 "This response is limited. Narrow the query and search again." if result.truncated else
                                 "No matches returned for this query. Search coverage depends on OneNote.")
         elif kind == "preview" and result.object_id == self._selected_id:
@@ -492,7 +514,7 @@ class OneNoteWindow:
             self.preview_var.set(f"Limited preview: {result.returned_characters:,} of {result.source_characters:,} characters."
                                  if result.truncated else f"Complete basic text · {result.returned_characters:,} characters")
             self.status_var.set("This note exceeds the 50,000-character limit. Use text is disabled."
-                                if result.truncated else "Review the text, then choose Use text…")
+                                if result.truncated else "Review the text, then choose Use text… for Replace or Append.")
         self._sync()
 
     def use_text(self):
