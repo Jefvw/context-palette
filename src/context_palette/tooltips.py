@@ -35,14 +35,20 @@ def widget_tooltip_position(
 class WidgetTooltip:
     """Delayed hover help for an ordinary Tk widget."""
 
-    def __init__(self, widget: tk.Widget, text: str | Callable[[], str]) -> None:
+    def __init__(
+        self, widget: tk.Widget, text: str | Callable[[], str],
+        *, show_on_focus: bool = True,
+    ) -> None:
         self.widget = widget
         self.text = text
         self.window: tk.Toplevel | None = None
         self.after_id: str | None = None
         widget.bind("<Enter>", self._schedule, add="+")
         widget.bind("<Leave>", self.hide, add="+")
-        widget.bind("<FocusIn>", self._schedule, add="+")
+        if show_on_focus:
+            widget.bind("<FocusIn>", self._schedule, add="+")
+        else:
+            widget.bind("<KeyPress>", self.hide, add="+")
         widget.bind("<FocusOut>", self.hide, add="+")
         widget.bind("<ButtonPress>", self.hide, add="+")
         widget.bind("<Destroy>", self.hide, add="+")

@@ -1220,6 +1220,12 @@ but never select or execute a default.
 
 Owns delayed tooltip behaviour for ordinary widgets and individual listbox rows. Keeping these presentation helpers outside `launcher.py` prevents the main application orchestrator from also owning reusable hover-window mechanics.
 
+`WidgetTooltip` defaults to pointer-hover and keyboard-focus help. Its
+`show_on_focus=False` option preserves hover/dismissal and adds typing dismissal
+without scheduling help on focus. Discovery owns Find's hover-only tooltip and
+creates it after the input key handlers; the launcher registers it in its
+widget-tooltip registry. This avoids changing the injected tooltip-adder interface.
+
 ### `style.py`
 
 Owns the shared native ttk theme, Segoe UI font policy, grey/teal/aqua palette, and hover/focus state maps. Classic Tk widget defaults are applied through the root option database. The module changes presentation only; widget construction, layout, geometry, and action behaviour remain in their existing owners.
@@ -2094,7 +2100,10 @@ Empty search, Inbox, cheat-sheet, and command-surface states contain recovery
 guidance rather than blank widgets. Reloads use a short busy cursor/status
 state; local loading is intentionally not animated.
 
-Ordinary widget tooltips respond to both pointer hover and keyboard focus. This
+Ordinary widget tooltips respond to both pointer hover and keyboard focus,
+except Find: its automatic startup/reopen focus must not cover the results.
+Find retains delayed hover help and dismisses it when typing; `F1` opens Help.
+The default focus behaviour on other controls is unchanged. This
 keeps the full names and explanations of compact symbol controls available
 without expanding the fixed-size main-window layout. They prefer the space
 below a control, move above it near the bottom edge, and remain inside the

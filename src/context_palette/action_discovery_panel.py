@@ -7,7 +7,7 @@ from typing import Callable
 from .action_types import ACTION_TYPES
 from .searchable_selection import SearchableSelectionPopup
 from .style import COLORS, configure_result_row_tags
-from .tooltips import ListboxItemTooltip, TreeviewItemTooltip
+from .tooltips import ListboxItemTooltip, TreeviewItemTooltip, WidgetTooltip
 from .ui_icons import load_ui_icons
 
 
@@ -164,7 +164,6 @@ class ActionDiscoveryPanel:
             width=1,
         )
         self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
-        tooltip_adder(self.search_entry, lambda: self.find_help_text)
         self.search_entry.focus_set()
         self.search_entry.bind("<KeyPress>", keypress_handler)
         self.search_entry.bind(
@@ -172,6 +171,11 @@ class ActionDiscoveryPanel:
             lambda _event: execute_selected(open_folder=True),
         )
         self.search_entry.bind("<Return>", lambda _event: execute_selected())
+        # Automatic Find focus must not cover results. Attach after key handlers
+        # so ordinary typing also dismisses its hover help.
+        self.search_tooltip = WidgetTooltip(
+            self.search_entry, lambda: self.find_help_text, show_on_focus=False,
+        )
 
         self.scope_buttons: dict[str, ttk.Button] = {}
         for column, (scope, label) in enumerate(

@@ -30,6 +30,40 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
     def setUp(self) -> None:
         gc.collect()
 
+    def test_find_focus_and_reopening_do_not_cover_results_with_help(self):
+        with self.launcher() as (app, *_):
+            tooltip = next(
+                tooltip for tooltip in app.widget_tooltips
+                if tooltip.widget is app.search_entry
+            )
+            for reopen in (False, True):
+                with self.subTest(reopen=reopen):
+                    if reopen:
+                        app.root.withdraw()
+                        app.show_window()
+                    app.root.focus_force()
+                    app.focus_search()
+                    app.search_entry.event_generate("<FocusIn>")
+                    app.root.update()
+                    self.assertIsNone(tooltip.after_id)
+                    self.assertIsNone(tooltip.window)
+                    self.assertEqual(app.root.focus_get(), app.search_entry)
+
+            app.search_entry.event_generate("<Enter>")
+            self.assertIsNotNone(tooltip.after_id)
+            ready = tk.BooleanVar(master=app.root)
+            app.root.after(650, lambda: ready.set(True))
+            app.root.wait_variable(ready)
+            self.assertIn(
+                "Find Actions or Work Items",
+                tooltip.window.winfo_children()[0].cget("text"),
+            )
+            app.search_entry.event_generate("<KeyPress-a>")
+            app.root.update()
+            self.assertIsNone(tooltip.after_id)
+            self.assertIsNone(tooltip.window)
+            self.assertEqual(app.search_var.get(), "a")
+
     def test_onenote_placement_reveals_hidden_workspace_without_clipboard_sync(self):
         for placement, expected in (("replace", "Reviewed note"),
                                     ("append", "Original fixture\n\nReviewed note")):

@@ -8,6 +8,30 @@ recorded on 2026-09-09. Its checklist remains available for optional follow-up.
 Keep that decision separate from per-check results, automated output and
 simulated DPI; unreported manual checks remain unverified.
 
+## Find tooltip on opening (2026-10-05)
+
+The original-code regression reproduced the owner's overlay: automatic Find
+focus and reopening scheduled its help popup; query typing did not dismiss
+the displayed help. Find alone now opts out of focus-triggered help. Delayed
+hover remains available, typing dismisses it, and the default focus explanations
+on other controls plus F1 Help are unchanged.
+
+Focused tooltip/launcher checks passed **141 tests in 11.331 seconds**. The
+new launcher regression uses isolated production Tk widgets, synthetic focus,
+pointer and key events, and the real hover timer. It covers initial focus,
+reopening, the registered tooltip, hover text, dismissal and continued query
+typing. External execution, clipboard and resident-app integrations use fakes.
+This is automated Windows Tk verification, not owner-observed pointer UAT.
+
+No owner application was restarted, no Action ran and no personal settings were
+changed. The complete `check-context-palette.bat` passed configuration validation,
+compilation and **1,676 tests in 180.916 seconds, with 2 skipped**. Final
+`git diff --check` passed; nothing is staged, committed or pushed for this fix.
+Private output is under `outputs/find-tooltip-fix-20261005/complete-check.txt`.
+After updating and restarting the resident app, the owner should verify normal
+opening/F9 keeps the first result visible, hover still explains Find, typing
+clears that help, and F1 remains usable. Those attended checks are unperformed.
+
 ## Normal-startup Excel conversion (2026-10-05)
 
 The temporary live-text conversion startup gate is retired. Normal startup,

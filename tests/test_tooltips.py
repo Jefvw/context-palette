@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import Mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +16,13 @@ class FakeWidget:
 
     def bind(self, sequence, callback, add=None):
         self.bindings[sequence] = (callback, add)
+
+    def after(self, delay, callback):
+        self.scheduled = (delay, callback)
+        return "pending-tooltip"
+
+    def after_cancel(self, after_id):
+        self.cancelled = after_id
 
 
 class WidgetTooltipTests(unittest.TestCase):
@@ -68,6 +76,23 @@ class WidgetTooltipTests(unittest.TestCase):
         self.assertEqual(widget.bindings["<FocusIn>"][0].__name__, "_schedule")
         self.assertIs(widget.bindings["<FocusOut>"][0].__self__, tooltip)
         self.assertEqual(widget.bindings["<FocusOut>"][0].__name__, "hide")
+        self.assertTrue(all(add == "+" for _, add in widget.bindings.values()))
+
+    def test_hover_only_help_does_not_follow_focus_and_typing_cancels_it(self):
+        widget = FakeWidget()
+        tooltip = WidgetTooltip(widget, "Find help", show_on_focus=False)
+        self.assertNotIn("<FocusIn>", widget.bindings)
+        self.assertIsNone(tooltip.after_id)
+        widget.bindings["<Enter>"][0]()
+        self.assertEqual(widget.scheduled, (500, tooltip.show))
+        self.assertEqual(tooltip.after_id, "pending-tooltip")
+        visible = Mock()
+        tooltip.window = visible
+        widget.bindings["<KeyPress>"][0]()
+        self.assertEqual(widget.cancelled, "pending-tooltip")
+        visible.destroy.assert_called_once_with()
+        self.assertIsNone(tooltip.after_id)
+        self.assertIsNone(tooltip.window)
         self.assertTrue(all(add == "+" for _, add in widget.bindings.values()))
 
 

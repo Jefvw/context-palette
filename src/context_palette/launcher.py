@@ -882,6 +882,7 @@ class LauncherApp:
         )
         discovery = self.action_discovery_panel
         self.search_entry = discovery.search_entry
+        self.widget_tooltips.append(discovery.search_tooltip)
         self.actions_tool_rail = discovery.tool_rail
         self.passwords_button = discovery.passwords_button
         self.all_items_button = discovery.all_items_button

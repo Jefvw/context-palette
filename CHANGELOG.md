@@ -18,6 +18,10 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Stopped Find's help popup from automatically covering results when Palette
+  opens, reopens or focuses Find. Hover help remains available, typing dismisses
+  it, and F1 Help plus other controls' keyboard explanations are unchanged.
+
 - Enabled **Convert Excel values to text** during normal startup with a compatible
   Python Excel engine. Removed the temporary UAT environment switch and its
   testing-only wording now that the corrected engine is published. Exact column,

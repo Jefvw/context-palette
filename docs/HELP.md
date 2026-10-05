@@ -237,6 +237,9 @@ Harvest source automatically.
   when the main palette hides. It remains movable near the lower-right instead
   of being centered; its own **Hide** command hides only that target.
 - Press `Ctrl+L` or `Ctrl+K` to return keyboard focus to Find.
+- Find's explanation appears on pointer hover, not automatically when Palette
+  opens or Find takes focus. Typing dismisses it so results stay visible.
+  Keyboard users can still press `F1` for Help.
 - Press `Ctrl+I` to capture clipboard text, `Ctrl+,` to open Configure, or `F1` to open Help.
 - Press `Ctrl+Shift+D` to open Configure directly on the safe Diagnostics tab.
 - Open **More → Show drop target** to restore a hidden drop target, or

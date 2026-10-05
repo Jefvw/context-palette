@@ -3779,3 +3779,19 @@ UAT, owner reports, synthetic host checks and fresh host live acceptance remain
 separate evidence. The broader manual matrix remains outstanding, without a
 hidden startup gate. This change does not authorize a new agent-operated live
 Office session or commit/push.
+## 2026-10-05 - Keep automatic Find focus free of help overlays
+
+**Decision:** Disable focus-triggered tooltips only for the discovery Find
+field. Keep delayed pointer-hover help and dismiss it on ordinary typing.
+Retain F1 Help and default keyboard-focus explanations on other controls.
+
+**Reason:** Find receives focus on startup, reopening and keyboard refocus;
+its delayed help was covering the first results every time the owner opened
+Palette. Changing initial focus or all tooltips would disrupt other behavior.
+
+**Consequences:** Add an opt-out to the existing WidgetTooltip, with its
+current default preserved. Discovery owns Find's tooltip like its result
+help and constructs it after key handlers so typing dismissal is not overwritten;
+the launcher registers it once. No geometry redesign, new dependency, Action
+execution or user-data change is introduced. No resident-app restart was
+performed for verification; restarting after deployment loads the fix.
