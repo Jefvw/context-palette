@@ -17,6 +17,11 @@ conversion. Refresh that same recovery workbook on the next explicitly
 authorized conversion. Detailed human **Review** is optional; zero-write
 engine planning and exact fingerprint validation remain required.
 
+Update 2026-10-06: the owner waived backup only for the newly requested native
+[Text to Columns mode](EXCEL_TEXT_TO_COLUMNS_ENGINE_HANDOVER.md). The existing
+checked converter remains unchanged; this recovery-replacement brief applies
+to that older workflow, not the new no-backup operation.
+
 ## Implementation brief for the Python Excel owner
 
 Implement the smallest public engine-contract extension that supports this

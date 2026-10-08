@@ -117,6 +117,10 @@ class AppDataPaths:
         return self.data_directory / "local_onenote_send_settings.json"
 
     @property
+    def chatgpt_connection_file(self) -> Path:
+        return self.data_directory / "local_chatgpt_connection.json"
+
+    @property
     def managed_text_action_source_file(self) -> Path:
         return self.data_directory / "local_text_action_source.txt"
 
@@ -351,6 +355,15 @@ DATA_ASSET_CATALOG: tuple[DataAssetSpec, ...] = (
         AssetSensitivity.PRIVATE_PATHS,
         BackupPolicy.EXCLUDED,
         relative_path=PurePosixPath("data/local_onenote_send_settings.json"),
+        schema_version=1,
+    ),
+    DataAssetSpec(
+        "chatgpt-connection",
+        AssetOwnership.MACHINE_LOCAL,
+        AssetRequirement.OPTIONAL,
+        AssetSensitivity.PRIVATE_RUNTIME_DATA,
+        BackupPolicy.EXCLUDED,
+        relative_path=PurePosixPath("data/local_chatgpt_connection.json"),
         schema_version=1,
     ),
     DataAssetSpec(

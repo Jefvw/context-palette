@@ -292,6 +292,7 @@ class CommandSurfaceTests(unittest.TestCase):
                 "general-open-python-docs",
                 "excel-export-workbooks-to-csv",
                 "excel-apply-format-template",
+                "excel-native-text-to-columns",
                 "excel-convert-scientific-notation",
             ),
         )

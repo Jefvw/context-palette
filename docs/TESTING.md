@@ -28,6 +28,161 @@ recorded on 2026-09-09. Its checklist remains available for optional follow-up.
 Keep that decision separate from per-check results, automated output and
 simulated DPI; unreported manual checks remain unverified.
 
+## Native Excel Text to Columns integration (2026-10-07)
+
+Synthetic checks cover exact version/availability offering, static-only
+metadata discovery, explicit-path precedence and stale catalogue rejection,
+shared workbook/sheet and extracted physical-column selectors, ordered one-batch
+requests, header-only/no-mutation selection, all-empty success, skipped receipts,
+formula/preflight failure, partial/unknown results, malformed/missing/mismatched
+responses, native no-kill timeout/no-retry behavior and false lifecycle flags.
+The native tests forbid process startup and use fake coordinators/results; no
+Excel app, COM, real workbook or engine process is read or changed. Existing
+checked-converter/Action/preview/configuration checks remain intact. Simulated
+100/125/150% scaling covers native controls; physical Windows UAT is separate.
+
+The focused integration batch passed **574 tests in 26.027 seconds**; after
+correcting shared-menu placement and the restore-callback smoke expectation,
+the final menu/launcher/availability batch passed **56 tests in 9.418 seconds**.
+The complete repository check passed configuration validation, compilation and
+**1,802 tests in 194.771 seconds, with 2 skipped**. Independent static review
+and whitespace checks passed. Private output is under
+outputs/native-excel-host-integration-20261007/complete-check.txt; the first
+complete attempt and final routing checks are retained beside it. The first
+attempt's two failures were corrected before the successful full rerun.
+
+Read-only engine provenance: HEAD c0815104079e8db48a2fc2b98c96f89149746c85, with
+23 modified tracked files and 5 untracked native files. Recorded engine-only UAT
+passed C/E/G over 20,050 rows in 361.578 ms on Excel 16.0 build 20430, preserving
+blanks and rejecting formulas before mutation; no host UAT is inferred. Its
+reference used Excel's native method, not the human ribbon wizard.
+
+Remaining: separately approve a new host disposable workbook and exact ranges,
+then exercise actual F9 discovery → selection → Convert → receipts → Return.
+See [the bounded proposal, evidence and limits](EXCEL_NATIVE_TEXT_TO_COLUMNS.md#remaining-host-uat).
+No live test, engine edit, commit, push or publication is authorized by this
+implementation task. Current chat and other uncommitted work are retained.
+
+## Prompt menu in ChatGPT (2026-10-07)
+
+The message heading now contains the same live Prompts hierarchy as the main
+window, including root leaves, icons and nested paths. Selection rechecks the
+current Active prompt, expands normal template variables and inserts at the
+cursor without replacing draft or selected text. Insertion is undoable and never
+sends, executes the normal Action, changes clipboard/Input / Output, or resets
+history. Explicit clipboard placeholders are the only insertion-time clipboard
+read; opening the menu or choosing a plain prompt reads none.
+
+Real Tk/fake tests cover hierarchy/order/icons, active-only membership, empty
+menus/prompts, current values and stale/deleted IDs, submenu cleanup/configuration
+refresh, selection/draft preservation, Undo, busy/closing guards and keyboard
+focus. Shared normal Action/menu tests remain intact; simulated 100/125/150%
+checks include the new control. No model request or live credential read occurs.
+The 178 focused UI, shared menu/Action and documentation checks passed.
+The complete repository check passed configuration validation, compilation and
+**1,750 tests in 185.491 seconds, with 2 skipped**. Independent read-only review
+and whitespace checks passed; private complete-check output is under
+outputs/chatgpt-trial-20261007/prompts-menu-complete-check.txt.
+
+Owner UAT: reopen Palette, open ChatGPT and check the Prompts hierarchy matches
+the main menu. Insert one prompt before/after draft text, edit and Undo it; verify
+Input / Output and clipboard are unchanged. A clipboard-bearing template should
+read only its explicitly configured clipboard source. Confirm selection does not
+Send and remains unavailable during a request; edit a prompt/path in Configure
+and reopen the chat menu to see the change. Physical scaling and actual attended
+selection still need owner observation; fake tests do not mark them accepted.
+
+## ChatGPT text-chat trial (2026-10-07)
+
+Focused synthetic checks cover callback state/client/identity/scopes, refresh
+rotation and uncertain outcomes, protected storage, restricted HTTP, model/SSE
+validation, exact follow-ups, no requests on open/type, completed-only placement,
+Stop/Close, stale worker results and sign-in recovery. Actual Windows-native
+checks use synthetic data for DPAPI round-trip and RSA signature verification.
+Real Tk checks with fake accounts include 100/125/150% simulated scaling. None
+sign in, use real credentials or send a model request. The 94 ChatGPT checks plus
+17 focused documentation checks passed. An initial full run caught one old menu
+count and four layout failures caused by a new test leaking Tk scaling; restoring
+its original scale and updating menu expectations passed all 29 affected checks.
+The final check-context-palette.bat passed configuration validation, compilation
+and **1,725 tests in 203.028 seconds, with 2 skipped**. Independent static review
+and git diff --check passed. Private outputs are under
+outputs/chatgpt-trial-20261007/; no source/test evidence is a live account check.
+
+### Model discovery follow-up (2026-10-07)
+
+The owner screenshot showed remembered sign-in with a model-list error. A
+bounded metadata-only GET using Palette's own protected connection confirmed a
+valid `models` catalogue of 362,156 bytes (7 entries, 4 visible). The initial
+256 KiB host bound rejected it before parsing. The corrected 2 MiB bound keeps
+count, timeout, identity, visibility and field validation; extra metadata,
+including model instructions, is discarded rather than applied.
+
+A fresh GET through the corrected production client returned 4 visible choices.
+Only success/count were exposed; no credential/account data or raw response was
+saved. These checks sent no inference and read no existing ChatGPT conversations.
+The 51 focused client/window tests passed, including 3 new synthetic size/count
+regressions; independent read-only review found no blocker. The complete check passed
+configuration validation, compilation and **1,728 tests in 287.492 seconds, with
+2 skipped**. Whitespace checks passed. Private complete-check output is under
+outputs/chatgpt-trial-20261007/model-discovery-complete-check.txt.
+
+Owner-observed sign-in and live client model discovery are established for this
+account/PC. The later screenshot confirms GUI model selection and streamed text;
+the stream-completion follow-up below qualifies the production client. Updated
+GUI Copy/Use placement and other accounts/PCs still need attended checks.
+
+### Stream completion follow-up (2026-10-07)
+
+The owner received reply text followed by `invalid_stream`. One disposable
+`Say exactly: Palette connected.` request reproduced the problem. A shape-only
+trace showed the normal added/delta/text-done/item-done lifecycle followed by a
+matching `response.completed` with completed status, no error/incomplete details,
+and `output=[]`. The parser expected output to be repeated in that final event.
+
+The corrected client retains indexed finalized item snapshots for this specific
+empty-summary case. It still requires terminal completion, exact ID/delta-text
+agreement and completed assistant status, rejects missing/duplicate/sparse or
+contradictory items, and never accepts text-done/item-done/EOF alone. Unrelated
+snapshot metadata cannot change instructions. Twelve new fake lifecycle/failure
+regressions and the existing client/window checks passed: **63 focused tests**.
+Independent read-only review found no blocker.
+
+Two separately planned disposable requests through the corrected production
+client passed with GPT-6-Astra: the initial phrase, then `Repeat the exact phrase
+from your previous reply.` Both were completed and exactly `Palette connected.`
+There were no automatic retries. These requests used the existing protected
+Palette connection and supplied no private content or existing ChatGPT history.
+Diagnostics exposed only structural/validation flags; no tokens/account data,
+raw event body, reasoning text or cipher content was saved. This is live client
+inference/context evidence, distinct from synthetic checks or GUI acceptance.
+
+The complete repository check passed configuration validation, compilation and
+**1,740 tests in 237.684 seconds, with 2 skipped**. Whitespace checks passed;
+private complete-check output is under
+outputs/chatgpt-trial-20261007/stream-completion-complete-check.txt. Owner GUI follow-up and Copy/Use → Cancel/Append/Replace/Undo remain
+attended checks; other models, accounts and PCs are not qualified by this test.
+
+Attended acceptance still required on this PC:
+
+1. Put disposable text in Input / Output and choose Send to → ChatGPT. Check
+   selection/full-field staging and no request before a command.
+2. Choose Continue with ChatGPT and complete sign-in yourself. Check account,
+   permission and model availability. A declined/ineligible account must give
+   clear guidance, with no API-key or paid-service fallback.
+3. Send a short disposable question, then one follow-up. Check readable output,
+   complete-answer controls and preserved context; do not assume existing
+   ChatGPT conversations or memory are present.
+4. Exercise Use answer → Cancel, Append and Replace; verify workspace Undo and
+   unchanged clipboard. Check a workspace edit while the chat remains open.
+5. Close/reopen, explicitly Load models and confirm remembered sign-in with
+   empty chat history. Stop a request and check no automatic replay or answer
+   placement. Forget sign-in is local-only; manage grants in ChatGPT settings.
+
+Remote processing/allowance may continue after local Stop. Broader account,
+network/proxy, physical DPI and another-PC checks remain separate. No live
+result is marked passed without actual observation.
+
 ## Compact secondary UI and Capture/Harvest retirement (2026-10-05)
 
 OneNote Search, CSV review, bulk Action creation and Context editing use compact

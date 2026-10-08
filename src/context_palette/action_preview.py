@@ -8,6 +8,7 @@ from .actions import (
     ActionError,
     LIVE_FORMAT_PROFILE_AUTOMATION_ID,
     LIVE_TEXT_CONVERSION_AUTOMATION_ID,
+    LIVE_NATIVE_TEXT_AUTOMATION_ID,
     action_uses_clipboard_template,
     build_url,
     expanded_action,
@@ -303,9 +304,13 @@ def build_execution_preview(
             if not destination_available:
                 notices.append("Open the score in Edge and press F9 before running this Action.")
         elif action.type == "excel_automation":
-            if action.value not in {LIVE_FORMAT_PROFILE_AUTOMATION_ID, LIVE_TEXT_CONVERSION_AUTOMATION_ID}:
+            if action.value not in {LIVE_FORMAT_PROFILE_AUTOMATION_ID, LIVE_TEXT_CONVERSION_AUTOMATION_ID, LIVE_NATIVE_TEXT_AUTOMATION_ID}:
                 source, input_value = "Input / Output (exact workbook paths)", workspace_text
-            notices.append("Preview does not start the Excel engine or inspect workbooks. Run provides the exact workbook/output review and existing confirmations.")
+            if action.value == LIVE_NATIVE_TEXT_AUTOMATION_ID:
+                recovery = "No backup is created; Excel Undo may be affected. Inspect partial or unknown results before any manual retry."
+                notices.append("Preview does not start the engine or inspect Excel. Run lets you choose the workbook, worksheet and columns, then one Convert click applies the native operation.")
+            else:
+                notices.append("Preview does not start the Excel engine or inspect workbooks. Run provides the exact workbook/output review and existing confirmations.")
         elif action.type == "transform_file_text":
             target = action.value
             recovery = "Run prepares a reviewable result without changing the source. Source replacement is a separate explicit operation."
@@ -520,6 +525,13 @@ def build_action_preview(
             "Uses the site's PRINT layout and Save as PDF. Existing PDFs are kept; Input / Output and clipboard stay unchanged.",
         )
     if action.type == "excel_automation":
+        if action.value == LIVE_NATIVE_TEXT_AUTOMATION_ID:
+            return ActionPreview(
+                "an already-open workbook, exact worksheet and ordered physical columns you choose",
+                "change storage to text using native Text to Columns; displayed scientific notation may remain unchanged",
+                details,
+                "No backup is created; Excel Undo may be affected. Excel remains open and is not saved. Inspect partial or unknown outcomes before any manual retry.",
+            )
         if action.value == LIVE_FORMAT_PROFILE_AUTOMATION_ID:
             return ActionPreview(
                 "open Excel workbooks, then one worksheet or all visible worksheets you choose",
@@ -708,6 +720,7 @@ def _configured_details(action: Action) -> tuple[tuple[str, str], ...]:
         label = "Configured application"
     elif action.type == "excel_automation":
         label = {
+            LIVE_NATIVE_TEXT_AUTOMATION_ID: "Text to Columns → Text (fast)",
             LIVE_FORMAT_PROFILE_AUTOMATION_ID: "Apply Excel format template",
             LIVE_TEXT_CONVERSION_AUTOMATION_ID: (
                 "Convert Excel values to text"

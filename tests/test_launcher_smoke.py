@@ -2469,7 +2469,7 @@ class LauncherSmokeTests(unittest.TestCase):
                     )
                     self.assertEqual(
                         app.configuration_window._launcher_restore_complete,
-                        app._reload,
+                        app._configuration_restored,
                     )
                     action_page = notebook.nametowidget(notebook.tabs()[1])
                     action_labels = {

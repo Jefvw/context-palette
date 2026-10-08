@@ -35,6 +35,7 @@ DESCRIBE_CAPABILITIES_OPERATION = "describe_capabilities"
 LIVE_PREFLIGHT_OPERATION = "preflight_live_columns"
 LIVE_CONVERSION_PLAN_OPERATION = "plan_live_column_conversion"
 LIVE_CONVERSION_EXECUTE_OPERATION = "convert_live_column_representation"
+LIVE_NATIVE_TEXT_OPERATION = "apply_live_text_to_columns_as_text"
 OPERATION_VERSION = "1.0"
 MAX_WORKBOOKS = 100
 MAX_REQUEST_BYTES = 1024 * 1024
@@ -43,12 +44,26 @@ DEFAULT_MAX_STDERR_BYTES = 256 * 1024
 PYTHON_EXCEL_SIBLING_DIRECTORY = "python-excel"
 PYTHON_EXCEL_LAUNCHER_NAME = "python-excel.bat"
 LIVE_TEXT_CONVERSION_AUTOMATION_ID = "excel.convert_live_column_representation"
+LIVE_NATIVE_TEXT_AUTOMATION_ID = "excel.apply_live_text_to_columns_as_text"
 LIVE_HEADER_ROW = 1
 LIVE_MAXIMUM_COLUMNS = 100
 LIVE_MAXIMUM_DATA_ROWS = 10_000
 LIVE_MAXIMUM_SAMPLES_PER_COLUMN = 10
 LIVE_TEXT_LIMIT = 200
 LIVE_MAXIMUM_EXCEL_COLUMN = 16_384
+LIVE_NATIVE_MAXIMUM_COLUMNS = 256
+LIVE_MAXIMUM_EXCEL_ROW = 1_048_576
+# These engine 1.0 codes are raised during request/target preparation, before
+# entering its native execution loop. Unknown outer errors prove no such fact.
+_NATIVE_TEXT_PRE_EFFECT_ERRORS = {
+    "request.invalid_live_text_to_columns": ("invalid_request", 2),
+    "request.invalid_workbook_token": ("invalid_request", 2),
+    "input.live_excel_backend_unavailable": ("unsupported_input", 3),
+    "conflict.live_workbook_stale": ("conflict", 4),
+    "conflict.live_worksheet_stale": ("conflict", 4),
+    "conflict.live_excel_busy": ("conflict", 4),
+    "operation.live_text_to_columns_prepare_failed": ("operation_failed", 5),
+}
 
 AutomationPhase = Literal[
     "describe",
@@ -60,6 +75,7 @@ AutomationPhase = Literal[
     "preflight",
     "conversion_plan",
     "conversion_execute",
+    "native_text",
 ]
 CallClassification = Literal[
     "start_failed",
@@ -91,6 +107,10 @@ CallClassification = Literal[
     "conversion_execute_failed",
     "conversion_execute_partial_failure",
     "conversion_execute_unknown",
+    "native_text_succeeded",
+    "native_text_failed",
+    "native_text_partial_failure",
+    "native_text_unknown",
 ]
 
 
@@ -366,9 +386,12 @@ class LiveColumnPreflightInvocation:
     worksheet: str
     columns: tuple[int, ...] | None = None
     column_offset: int = 0
+    headers_only: bool = False
 
     def __post_init__(self) -> None:
         _validate_live_target(self.workbook_token, self.worksheet)
+        if not isinstance(self.headers_only, bool):
+            raise ExcelAutomationInputError("headers_only must be boolean.")
         if (
             isinstance(self.column_offset, bool)
             or not isinstance(self.column_offset, int)
@@ -383,6 +406,25 @@ class LiveColumnPreflightInvocation:
                 raise ExcelAutomationInputError(
                     "An explicit live column selection must use offset zero."
                 )
+
+
+@dataclass(frozen=True, slots=True)
+class LiveTextToColumnsInvocation:
+    """One attended native mutation; the engine owns all Excel behavior."""
+
+    workbook_token: str
+    worksheet: str
+    columns: tuple[int, ...]
+    header_row: int = 1
+
+    def __post_init__(self) -> None:
+        _validate_live_target(self.workbook_token, self.worksheet)
+        _validate_live_columns(self.columns, maximum=LIVE_NATIVE_MAXIMUM_COLUMNS)
+        _live_limit(
+            self.header_row,
+            maximum=LIVE_MAXIMUM_EXCEL_ROW - 1,
+            label="header_row",
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -504,21 +546,41 @@ def build_preflight_live_columns_request(
 ) -> dict[str, object]:
     """Build the fixed-bound read-only preflight request."""
 
+    arguments: dict[str, object] = {
+        "workbook_token": invocation.workbook_token,
+        "worksheet": invocation.worksheet,
+        "columns": None if invocation.columns is None else list(invocation.columns),
+        "header_row": LIVE_HEADER_ROW,
+        "column_offset": invocation.column_offset,
+        "maximum_columns": LIVE_MAXIMUM_COLUMNS,
+    }
+    if invocation.headers_only:
+        arguments["headers_only"] = True
+    else:
+        arguments.update(
+            {
+                "maximum_data_rows": LIVE_MAXIMUM_DATA_ROWS,
+                "maximum_samples_per_column": LIVE_MAXIMUM_SAMPLES_PER_COLUMN,
+                "text_limit": LIVE_TEXT_LIMIT,
+            }
+        )
+    return _request(request_id, LIVE_PREFLIGHT_OPERATION, arguments)
+
+
+def build_apply_live_text_to_columns_as_text_request(
+    request_id: str,
+    invocation: LiveTextToColumnsInvocation,
+) -> dict[str, object]:
+    """Build the separate direct native operation without planner fields."""
+
     return _request(
         request_id,
-        LIVE_PREFLIGHT_OPERATION,
+        LIVE_NATIVE_TEXT_OPERATION,
         {
             "workbook_token": invocation.workbook_token,
             "worksheet": invocation.worksheet,
-            "columns": (
-                None if invocation.columns is None else list(invocation.columns)
-            ),
-            "header_row": LIVE_HEADER_ROW,
-            "column_offset": invocation.column_offset,
-            "maximum_columns": LIVE_MAXIMUM_COLUMNS,
-            "maximum_data_rows": LIVE_MAXIMUM_DATA_ROWS,
-            "maximum_samples_per_column": LIVE_MAXIMUM_SAMPLES_PER_COLUMN,
-            "text_limit": LIVE_TEXT_LIMIT,
+            "columns": list(invocation.columns),
+            "header_row": invocation.header_row,
         },
     )
 
@@ -911,6 +973,10 @@ class DescribeCapabilitiesResult:
     def live_text_conversion(self) -> ExcelCapability | None:
         return self.find(LIVE_CONVERSION_EXECUTE_OPERATION)
 
+    @property
+    def live_native_text(self) -> ExcelCapability | None:
+        return self.find(LIVE_NATIVE_TEXT_OPERATION)
+
 
 LiveScalar = str | int | float | bool | None
 
@@ -1007,6 +1073,7 @@ class LiveColumnPreflightResult:
     next_column_offset: int | None
     columns: tuple[LiveColumnPreflightColumn, ...]
     warnings: tuple[LiveExcelWarning, ...]
+    headers_only: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -1151,6 +1218,74 @@ class LiveColumnConversionResult:
 
 
 @dataclass(frozen=True, slots=True)
+class LiveTextToColumnsTarget:
+    process_id: int
+    workbook_token: str
+    workbook_name: str
+    full_path: str | None
+    worksheet: str
+    header_row: int
+    physical_columns: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LiveTextToColumnsColumnScope:
+    column_index: int
+    column_letter: str
+    data_first_row: int | None
+    data_last_row: int | None
+    data_range: str | None
+    empty: bool
+
+
+@dataclass(frozen=True, slots=True)
+class LiveTextToColumnsColumnReceipt:
+    column_index: int
+    column_letter: str
+    data_range: str | None
+    state: Literal["completed", "skipped_empty"]
+    mutation_started: bool
+
+
+@dataclass(frozen=True, slots=True)
+class LiveTextToColumnsFailure:
+    code: str
+    message: str
+    stage: Literal["preflight", "revalidate", "text_to_columns"]
+    retryable: bool
+    mutation_started: bool
+    outcome_uncertain: bool
+    column_index: int | None
+    data_range: str | None
+    exception_type: str | None
+    com_hresult: int | None
+    com_scode: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class LiveTextToColumnsResult:
+    state: Literal["succeeded", "failed", "partial_failure", "unknown"]
+    target: LiveTextToColumnsTarget
+    column_scopes: tuple[LiveTextToColumnsColumnScope, ...]
+    column_receipts: tuple[LiveTextToColumnsColumnReceipt, ...]
+    columns_completed: tuple[int, ...]
+    columns_skipped_empty: tuple[int, ...]
+    current_column: int | None
+    current_range: str | None
+    pending_columns: tuple[int, ...]
+    mutation_started: bool
+    workbook_dirty_before: bool
+    workbook_dirty: bool | None
+    recovery_created: bool
+    save_invoked: bool
+    workbook_saved: bool
+    workbook_closed: bool
+    application_closed: bool
+    failure: LiveTextToColumnsFailure | None
+    warnings: tuple[LiveExcelWarning, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class LiveFormatFailure:
     worksheet: str
     code: str
@@ -1185,6 +1320,7 @@ AutomationResult = (
     | LiveColumnPreflightResult
     | LiveColumnConversionPlanResult
     | LiveColumnConversionResult
+    | LiveTextToColumnsResult
     | LiveFormatProfileResult
 )
 
@@ -1206,6 +1342,7 @@ class AutomationCallResult:
             "execute_unknown",
             "apply_unknown",
             "conversion_execute_unknown",
+            "native_text_unknown",
         }
 
 
@@ -1243,6 +1380,7 @@ def parse_automation_response(
             "preflight",
             "conversion_plan",
             "conversion_execute",
+            "native_text",
         } and (
             set(paths) != {"input", "output", "backup"}
             or any(value is not None for value in paths.values())
@@ -1256,9 +1394,17 @@ def parse_automation_response(
             if return_code == 0 or document.get("result") is not None:
                 raise _ProtocolError("The error response contradicted its process status.")
             error = _parse_outer_error(document.get("error"))
+            classification: CallClassification = "outer_error"
+            if phase == "native_text":
+                classification = (
+                    "native_text_failed"
+                    if _NATIVE_TEXT_PRE_EFFECT_ERRORS.get(error.code)
+                    == (error.category, return_code)
+                    else "native_text_unknown"
+                )
             return AutomationCallResult(
                 phase,
-                "outer_error",
+                classification,
                 True,
                 return_code,
                 error=error,
@@ -1349,6 +1495,14 @@ def _parse_success_result(
             "succeeded": "conversion_execute_succeeded",
             "failed": "conversion_execute_failed",
             "partial_failure": "conversion_execute_partial_failure",
+        }[result.state]
+    if phase == "native_text":
+        result = _parse_live_native_text_result(document, envelope_warnings)
+        return result, {
+            "succeeded": "native_text_succeeded",
+            "failed": "native_text_failed",
+            "partial_failure": "native_text_partial_failure",
+            "unknown": "native_text_unknown",
         }[result.state]
     if phase == "apply":
         result = _parse_live_format_profile_result(document, envelope_warnings)
@@ -1556,17 +1710,30 @@ def _parse_live_preflight_result(
         or len({item.column_index for item in columns}) != len(columns)
     ):
         raise _ProtocolError("The live preflight column counts are inconsistent.")
+    headers_only = _boolean(document.get("headers_only", False), "headers_only")
+    data_rows = _parse_data_rows(document.get("data_rows"))
+    if headers_only and (
+        data_rows.examined
+        or any(
+            column.cells_examined or column.formulas.count or column.formulas.samples
+            or column.formulas.samples_truncated or column.precision_risks.cells
+            or column.precision_risks.samples or column.precision_risks.samples_truncated
+            for column in columns
+        )
+    ):
+        raise _ProtocolError("The headers-only preflight reported data diagnostics.")
     return LiveColumnPreflightResult(
         workbook,
         _text(document.get("worksheet"), "worksheet"),
         _positive_int(document.get("header_row"), "header_row"),
         _parse_used_range(document.get("used_range")),
-        _parse_data_rows(document.get("data_rows")),
+        data_rows,
         total,
         truncated,
         next_offset,
         columns,
         _parse_live_warnings(warnings),
+        headers_only,
     )
 
 
@@ -1940,6 +2107,300 @@ def _parse_live_conversion_blocker(
         _text(item.get("message"), "blocker.message"),
         MappingProxyType(dict(details)),
     )
+
+
+def _parse_live_native_text_result(
+    document: dict[str, object],
+    warnings: list[object],
+) -> LiveTextToColumnsResult:
+    required = {
+        "state", "target", "column_scopes", "column_receipts", "columns_completed",
+        "columns_skipped_empty", "current_column", "current_range", "pending_columns",
+        "mutation_started", "workbook_dirty_before", "workbook_dirty",
+        "recovery_created", "save_invoked", "workbook_saved", "workbook_closed",
+        "application_closed", "failure",
+    }
+    _require_native_fields(document, required, "result")
+    state = _text(document.get("state"), "result.state")
+    if state not in {"succeeded", "failed", "partial_failure", "unknown"}:
+        raise _ProtocolError("The native text result state is unsupported.")
+    target_document = _object(document.get("target"), "result.target")
+    _require_native_fields(
+        target_document,
+        {
+            "process_id", "workbook_token", "workbook_name", "full_path", "worksheet",
+            "header_row", "physical_columns",
+        },
+        "target",
+    )
+    columns = _positive_int_tuple(
+        target_document.get("physical_columns"), "target.physical_columns"
+    )
+    _validate_live_columns(columns, maximum=LIVE_NATIVE_MAXIMUM_COLUMNS)
+    token = _text(target_document.get("workbook_token"), "target.workbook_token")
+    worksheet = _text(target_document.get("worksheet"), "target.worksheet")
+    _validate_live_target(token, worksheet)
+    header = _positive_int(target_document.get("header_row"), "target.header_row")
+    if header >= LIVE_MAXIMUM_EXCEL_ROW:
+        raise _ProtocolError("The native text header row is unsupported.")
+    target = LiveTextToColumnsTarget(
+        _positive_int(target_document.get("process_id"), "target.process_id"),
+        token,
+        _text(target_document.get("workbook_name"), "target.workbook_name"),
+        _optional_text(target_document.get("full_path"), "target.full_path"),
+        worksheet,
+        header,
+        columns,
+    )
+    scopes = tuple(
+        _parse_live_native_text_scope(raw, header)
+        for raw in _array(document.get("column_scopes"), "column_scopes")
+    )
+    if tuple(item.column_index for item in scopes) != columns[:len(scopes)]:
+        raise _ProtocolError("The native text scopes contradict target order.")
+    receipts = tuple(
+        _parse_live_native_text_receipt(raw)
+        for raw in _array(document.get("column_receipts"), "column_receipts")
+    )
+    if tuple(item.column_index for item in receipts) != columns[:len(receipts)]:
+        raise _ProtocolError("The native text receipts contradict target order.")
+    scope_by_column = {item.column_index: item for item in scopes}
+    for receipt in receipts:
+        scope = scope_by_column.get(receipt.column_index)
+        if (
+            scope is None
+            or receipt.data_range != scope.data_range
+            or (receipt.state == "skipped_empty") != scope.empty
+        ):
+            raise _ProtocolError("The native text receipt contradicts its scope.")
+    completed = _positive_int_tuple_or_empty(
+        document.get("columns_completed"), "columns_completed"
+    )
+    skipped = _positive_int_tuple_or_empty(
+        document.get("columns_skipped_empty"), "columns_skipped_empty"
+    )
+    if (
+        completed != tuple(r.column_index for r in receipts if r.state == "completed")
+        or skipped != tuple(r.column_index for r in receipts if r.state == "skipped_empty")
+    ):
+        raise _ProtocolError("The native text receipt totals do not reconcile.")
+    current = _optional_positive_int(document.get("current_column"), "current_column")
+    current_range = _optional_text(document.get("current_range"), "current_range")
+    pending = _positive_int_tuple_or_empty(
+        document.get("pending_columns"), "pending_columns"
+    )
+    receipted = {r.column_index for r in receipts}
+    if (
+        (current is not None and (current not in columns or current in receipted))
+        or (current is None and current_range is not None)
+        or pending != tuple(c for c in columns if c not in receipted and c != current)
+    ):
+        raise _ProtocolError("The native text column partition is inconsistent.")
+    if current is not None and current_range is not None:
+        _validate_live_native_range(current_range, current, header)
+    mutation = _boolean(document.get("mutation_started"), "mutation_started")
+    dirty_before = _boolean(
+        document.get("workbook_dirty_before"), "workbook_dirty_before"
+    )
+    dirty = _optional_boolean(document.get("workbook_dirty"), "workbook_dirty")
+    lifecycle = tuple(
+        _boolean(document.get(field), field)
+        for field in (
+            "recovery_created", "save_invoked", "workbook_saved", "workbook_closed",
+            "application_closed",
+        )
+    )
+    if any(lifecycle):
+        raise _ProtocolError("The native text lifecycle is contradictory.")
+    failure = (
+        None if document.get("failure") is None
+        else _parse_live_native_text_failure(document.get("failure"))
+    )
+    if mutation != bool(completed or state == "unknown"):
+        raise _ProtocolError("The native text mutation flag contradicts its receipts.")
+    if state == "succeeded":
+        if (
+            failure is not None or current is not None or pending
+            or len(receipts) != len(columns)
+        ):
+            raise _ProtocolError("The native text success receipt is incomplete.")
+    else:
+        if (
+            failure is None
+            or failure.column_index != current
+            or failure.data_range != current_range
+            or (state == "failed" and completed)
+            or (state == "partial_failure" and not completed)
+            or (state == "unknown") != failure.outcome_uncertain
+        ):
+            raise _ProtocolError("The native text failure state is contradictory.")
+        assert failure is not None
+        if failure.stage == "preflight":
+            current_scope = scope_by_column.get(current)
+            if (
+                state != "failed" or receipts
+                or (current is None and scopes)
+                or (current_scope is not None and current_scope.empty)
+                or current_range != (
+                    None if current_scope is None else current_scope.data_range
+                )
+                or (
+                    current is not None
+                    and len(scopes) not in {
+                        columns.index(current), columns.index(current) + 1
+                    }
+                )
+            ):
+                raise _ProtocolError("The native text preflight reported effects.")
+        else:
+            current_scope = scope_by_column.get(current)
+            if (
+                len(scopes) != len(columns)
+                or current is None
+                or current_scope is None or current_scope.empty
+                or len(receipts) >= len(columns)
+                or current != columns[len(receipts)]
+            ):
+                raise _ProtocolError("The native text current column is inconsistent.")
+        if state == "unknown":
+            scope = scope_by_column.get(current)
+            if scope is None or scope.empty or current_range != scope.data_range:
+                raise _ProtocolError("The native text unknown range contradicts its scope.")
+    if state == "succeeded" and len(scopes) != len(columns):
+        raise _ProtocolError("The native text success scopes are incomplete.")
+    return LiveTextToColumnsResult(
+        state=state,  # type: ignore[arg-type]
+        target=target,
+        column_scopes=scopes,
+        column_receipts=receipts,
+        columns_completed=completed,
+        columns_skipped_empty=skipped,
+        current_column=current,
+        current_range=current_range,
+        pending_columns=pending,
+        mutation_started=mutation,
+        workbook_dirty_before=dirty_before,
+        workbook_dirty=dirty,
+        recovery_created=lifecycle[0],
+        save_invoked=lifecycle[1],
+        workbook_saved=lifecycle[2],
+        workbook_closed=lifecycle[3],
+        application_closed=lifecycle[4],
+        failure=failure,
+        warnings=_parse_live_warnings(warnings),
+    )
+
+
+def _require_native_fields(
+    document: dict[str, object], fields: set[str], label: str
+) -> None:
+    if not fields.issubset(document):
+        raise _ProtocolError(f"The native text {label} is missing required fields.")
+
+
+def _parse_live_native_text_scope(
+    value: object, header: int
+) -> LiveTextToColumnsColumnScope:
+    item = _object(value, "column_scope")
+    _require_native_fields(
+        item,
+        {
+            "column_index", "column_letter", "data_first_row", "data_last_row",
+            "data_range", "empty",
+        },
+        "column scope",
+    )
+    column = _positive_int(item.get("column_index"), "scope.column_index")
+    letter = _text(item.get("column_letter"), "scope.column_letter")
+    first = _optional_positive_int(item.get("data_first_row"), "scope.data_first_row")
+    last = _optional_positive_int(item.get("data_last_row"), "scope.data_last_row")
+    data_range = _optional_text(item.get("data_range"), "scope.data_range")
+    empty = _boolean(item.get("empty"), "scope.empty")
+    if column > LIVE_MAXIMUM_EXCEL_COLUMN or letter != _column_letter(column):
+        raise _ProtocolError("The native text scope physical column is inconsistent.")
+    if empty:
+        if first is not None or last is not None or data_range is not None:
+            raise _ProtocolError("The empty native text scope reported a range.")
+    elif (
+        first != header + 1 or last is None or last < first
+        or last > LIVE_MAXIMUM_EXCEL_ROW
+        or data_range != f"${letter}${first}:${letter}${last}"
+    ):
+        raise _ProtocolError("The native text scope range is inconsistent.")
+    return LiveTextToColumnsColumnScope(column, letter, first, last, data_range, empty)
+
+
+def _parse_live_native_text_receipt(
+    value: object,
+) -> LiveTextToColumnsColumnReceipt:
+    item = _object(value, "column_receipt")
+    _require_native_fields(
+        item,
+        {"column_index", "column_letter", "data_range", "state", "mutation_started"},
+        "column receipt",
+    )
+    column = _positive_int(item.get("column_index"), "receipt.column_index")
+    letter = _text(item.get("column_letter"), "receipt.column_letter")
+    state = _text(item.get("state"), "receipt.state")
+    mutation = _boolean(item.get("mutation_started"), "receipt.mutation_started")
+    if (
+        column > LIVE_MAXIMUM_EXCEL_COLUMN or letter != _column_letter(column)
+        or state not in {"completed", "skipped_empty"}
+        or mutation != (state == "completed")
+    ):
+        raise _ProtocolError("The native text column receipt is inconsistent.")
+    return LiveTextToColumnsColumnReceipt(
+        column, letter, _optional_text(item.get("data_range"), "receipt.data_range"),
+        state, mutation,  # type: ignore[arg-type]
+    )
+
+
+def _parse_live_native_text_failure(value: object) -> LiveTextToColumnsFailure:
+    item = _object(value, "result.failure")
+    _require_native_fields(
+        item,
+        {
+            "code", "message", "stage", "retryable", "mutation_started",
+            "outcome_uncertain", "column_index", "data_range", "exception_type",
+            "com_hresult", "com_scode",
+        },
+        "failure",
+    )
+    stage = _text(item.get("stage"), "failure.stage")
+    retryable = _boolean(item.get("retryable"), "failure.retryable")
+    mutation = _boolean(item.get("mutation_started"), "failure.mutation_started")
+    uncertain = _boolean(item.get("outcome_uncertain"), "failure.outcome_uncertain")
+    if (
+        stage not in {"preflight", "revalidate", "text_to_columns"}
+        or mutation != (stage == "text_to_columns") or uncertain != mutation
+        or (uncertain and retryable)
+    ):
+        raise _ProtocolError("The native text failure stage is contradictory.")
+    return LiveTextToColumnsFailure(
+        _text(item.get("code"), "failure.code"),
+        _text(item.get("message"), "failure.message"),
+        stage, retryable, mutation, uncertain,  # type: ignore[arg-type]
+        _optional_positive_int(item.get("column_index"), "failure.column_index"),
+        _optional_text(item.get("data_range"), "failure.data_range"),
+        _optional_text(item.get("exception_type"), "failure.exception_type"),
+        _optional_int(item.get("com_hresult"), "failure.com_hresult"),
+        _optional_int(item.get("com_scode"), "failure.com_scode"),
+    )
+
+
+def _validate_live_native_range(value: str, column: int, header: int) -> None:
+    prefix = f"${_column_letter(column)}$"
+    parts = value.split(":")
+    if len(parts) != 2 or any(not part.startswith(prefix) for part in parts):
+        raise _ProtocolError("The native text current range is inconsistent.")
+    rows = tuple(part[len(prefix):] for part in parts)
+    if (
+        any(not row.isascii() or not row.isdecimal() for row in rows)
+        or rows[0] != str(header + 1)
+        or not header < int(rows[1]) <= LIVE_MAXIMUM_EXCEL_ROW
+        or rows[1] != str(int(rows[1]))
+    ):
+        raise _ProtocolError("The native text current range is inconsistent.")
 
 
 def _parse_live_conversion_result(
@@ -2658,6 +3119,7 @@ def _operation_for_phase(phase: AutomationPhase) -> str:
         "preflight": LIVE_PREFLIGHT_OPERATION,
         "conversion_plan": LIVE_CONVERSION_PLAN_OPERATION,
         "conversion_execute": LIVE_CONVERSION_EXECUTE_OPERATION,
+        "native_text": LIVE_NATIVE_TEXT_OPERATION,
     }[phase]
 
 
@@ -2852,11 +3314,13 @@ def _validate_live_target(workbook_token: object, worksheet: object) -> None:
         )
 
 
-def _validate_live_columns(columns: object) -> None:
+def _validate_live_columns(
+    columns: object, *, maximum: int = LIVE_MAXIMUM_COLUMNS
+) -> None:
     if (
         not isinstance(columns, tuple)
         or not columns
-        or len(columns) > LIVE_MAXIMUM_COLUMNS
+        or len(columns) > maximum
         or any(
             isinstance(column, bool)
             or not isinstance(column, int)
@@ -2866,7 +3330,7 @@ def _validate_live_columns(columns: object) -> None:
         or len(set(columns)) != len(columns)
     ):
         raise ExcelAutomationInputError(
-            "Choose 1 through 100 unique physical Excel columns."
+            f"Choose 1 through {maximum} unique physical Excel columns."
         )
 
 
@@ -2994,6 +3458,20 @@ class PythonExcelProcessClient:
         try:
             return_code = process.wait(timeout=timeout_seconds)
         except subprocess.TimeoutExpired:
+            if phase == "native_text":
+                # A native COM call may still be mutating Excel. Return an
+                # unknown outcome without killing its owner; bounded readers
+                # keep draining and release their handles after it finishes.
+                threading.Thread(
+                    target=_finish_native_process_readers,
+                    args=(process, threads),
+                    daemon=True,
+                    name="python-excel-native-cleanup",
+                ).start()
+                return _process_failure(
+                    phase, None, bool(stderr_buffer.content) or stderr_buffer.exceeded,
+                    "timed out; the native Excel call may still be running",
+                )
             timed_out = True
             self._terminate_process(process)
             try:
@@ -3028,13 +3506,48 @@ class PythonExcelProcessClient:
                 phase, return_code, diagnostic_present, "exceeded a bounded output limit"
             )
         assert return_code is not None
-        return parse_automation_response(
+        result = parse_automation_response(
             phase=phase,
             request_id=request_id,
             return_code=return_code,
             stdout=bytes(stdout_buffer.content),
             stderr=bytes(stderr_buffer.content),
         )
+        arguments = request.get("arguments")
+        if isinstance(result.result, LiveTextToColumnsResult):
+            target = result.result.target
+            if not isinstance(arguments, dict) or (
+                target.workbook_token != arguments.get("workbook_token")
+                or target.worksheet != arguments.get("worksheet")
+                or list(target.physical_columns) != arguments.get("columns")
+                or target.header_row != arguments.get("header_row")
+            ):
+                return _failed_protocol_result(
+                    phase, return_code, diagnostic_present,
+                    "The native text response target did not match its request.",
+                )
+        if isinstance(result.result, LiveColumnPreflightResult) and (
+            not isinstance(arguments, dict)
+            or result.result.headers_only != arguments.get("headers_only", False)
+        ):
+            return _failed_protocol_result(
+                phase, return_code, diagnostic_present,
+                "The preflight headers-only mode did not match its request.",
+            )
+        return result
+
+
+def _finish_native_process_readers(
+    process: subprocess.Popen[bytes], threads: tuple[threading.Thread, ...]
+) -> None:
+    try:
+        process.wait()
+    except (OSError, subprocess.SubprocessError):
+        return
+    for thread in threads:
+        thread.join()
+    _close_process_stream(process.stdout)
+    _close_process_stream(process.stderr)
 
 
 def _write_request(
@@ -3136,6 +3649,7 @@ def _failure_classification(phase: AutomationPhase) -> CallClassification:
         "preflight": "preflight_failed",
         "conversion_plan": "conversion_plan_failed",
         "conversion_execute": "conversion_execute_unknown",
+        "native_text": "native_text_unknown",
     }[phase]
 
 

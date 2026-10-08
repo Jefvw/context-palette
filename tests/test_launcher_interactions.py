@@ -2602,7 +2602,7 @@ class LauncherInteractionTests(unittest.TestCase):
 
         self.assertEqual(
             menu.labels,
-            ["OneNote — new text page…", "Paste a webpage URL or file paths first", "Save webpage as PDF…"],
+            ["OneNote — new text page…", "ChatGPT…", "Paste a webpage URL or file paths first", "Save webpage as PDF…"],
         )
         self.assertEqual(
             menu.options_for(menu.labels[0])["state"],
@@ -2685,7 +2685,7 @@ class LauncherInteractionTests(unittest.TestCase):
             ):
                 app._populate_send_to_menu(menu)
 
-            self.assertEqual(menu.labels[:2], ["OneNote — new text page…", "Copy 2 file paths to:"])
+            self.assertEqual(menu.labels[:3], ["OneNote — new text page…", "ChatGPT…", "Copy 2 file paths to:"])
             self.assertIn(
                 f"Selected Work Item — {selected_item.display_name}",
                 menu.labels,

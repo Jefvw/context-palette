@@ -1144,6 +1144,36 @@ The launcher path and your chosen notebook's exact identity and display name are
 saved in ignored `data/local_onenote_settings.json`. Configuration backup excludes
 this private per-PC setting; choose the engine and notebook again on another PC.
 
+### Native Text to Columns → Text (fast)
+
+Use this separate Action to change selected columns to text using Excel's native
+Text to Columns operation. **Displayed scientific notation may remain unchanged.**
+Literal text `1.23E+5` stays `1.23E+5`; numeric `123000` becomes text `123000`, and
+leading-zero text `00042` stays `00042`. Use **Convert Excel values to text** when
+you want the checked `1.23E+5` → `123000` conversion and its recovery copy.
+
+The fast Action appears only when the installed Python Excel engine advertises
+its exact available 1.0 capability. Production startup checks static metadata
+in the background; F9 uses that cache. If absent, update/setup the engine and
+restart Palette. Explicit launcher errors require repair. Engine choice changes
+and configuration restoration refresh capability availability.
+
+Choose an already-open workbook, exact worksheet, and one or more physical
+columns in the order to convert them. Header-only selection reads no data values;
+Load more columns is optional if you need later columns. Check the short effect
+and **No backup is created; Excel Undo may be affected**, then choose **Convert**.
+There is no additional planner, recovery-path chooser, precision checkbox or
+Review screen. Row 1 is preserved; the engine checks the exact target again.
+
+Completed and skipped-empty columns are shown separately. Excel stays open and
+Palette never saves or closes it. If a current column is uncertain, inspect it
+before any manual retry. If a receipt is lost or invalid, inspect every requested
+column; Excel's Saved/dirty flag proves no rollback. Nothing retries automatically.
+**Return to Excel** is available for a captured inventoried Excel window.
+
+Host live acceptance requires a fresh disposable workbook/range approval.
+See [integration evidence and limits](EXCEL_NATIVE_TEXT_TO_COLUMNS.md).
+
 ## Input / Output workspace
 
 Input / Output is the text-transformation workspace integrated with the action
@@ -1507,6 +1537,51 @@ Open **Help**, then choose **Cheat sheets**, to open the searchable local
 reference sheets. Sheets remain structured Git-tracked JSON under
 `data/cheatsheets`, and an individual entry can still be promoted to a
 permanent Active action. They no longer occupy a primary Quick-action position.
+
+### Chat with ChatGPT
+
+Choose **Input / Output → Send to… → ChatGPT…**. Selected text, or the full field,
+is placed in an editable message; nothing is sent when the window opens. You can
+also open it with empty Input / Output and type a question. Reopening keeps the
+current chat and unsent message; it does not replace them with new workspace content.
+
+Use **Prompts** beside Your message to choose from the same saved prompt Actions
+and submenus as the main window. A prompt is inserted at the cursor with
+separators where needed; the rest of your draft and any selected text are kept.
+You can edit it or use Ctrl+Z to undo the insertion, then choose Send explicitly.
+Opening this menu does not send a request, read the clipboard or change Input /
+Output. On selection, template variables expand as in normal prompt Actions;
+clipboard text is read only if that prompt uses a clipboard placeholder. The
+clipboard is never changed by insertion. Edit/manage prompts once in Configure;
+the chat menu refreshes on its next opening. Prompts is disabled during a request.
+
+Choose **Continue with ChatGPT**, complete the browser sign-in/permission screen,
+then return to Palette. Eligible Plus/Pro accounts can authorize ChatGPT plan
+usage; access, models and limits depend on the account. On a later opening,
+**Load models** explicitly checks the remembered connection. Select a model,
+check the message and choose **Send** (or Ctrl+Enter). Follow-ups include the
+completed messages shown in this Palette chat. Answers are brief by default.
+
+**Copy answer** copies only the completed answer. **Use answer…** offers
+Replace/Append/Cancel for Input / Output as one undoable edit; placement never
+changes the clipboard. Failed, incomplete or stopped answers are unavailable to
+these controls. Stop ends local waiting; the server may already have processed
+the request and used allowance. Nothing retries or sends automatically.
+
+**New chat** clears conversation/answer history and keeps any unsent message.
+Closing the chat discards its history. These chats are separate from existing
+ChatGPT conversations and account context. Sign-in is protected for this Windows
+user/PC and excluded from Git and configuration backups; sign in on each PC.
+**Forget sign-in** removes local tokens and clears the chat, but does not revoke
+remaining app access in ChatGPT settings. This first trial remembers one account
+and supports text only. No file/voice/tool access or API-key fallback is included.
+
+The trial accepts up to 40 messages per request, 32,768 characters per message,
+and 65,536 characters of total history/output; oversized input asks for a shorter
+message or New chat. Sign-in and client model discovery worked on the tested PC;
+a disposable client reply/follow-up also passed. Updated GUI reply and placement
+acceptance remain pending.
+See the [attended check](TESTING.md#chatgpt-text-chat-trial-2026-10-07).
 
 ### AI prompts
 

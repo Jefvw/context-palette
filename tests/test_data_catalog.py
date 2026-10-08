@@ -135,6 +135,14 @@ EXPECTED_ASSETS = {
         BackupPolicy.EXCLUDED,
         1,
     ),
+    "chatgpt-connection": (
+        "data/local_chatgpt_connection.json",
+        AssetOwnership.MACHINE_LOCAL,
+        AssetRequirement.OPTIONAL,
+        AssetSensitivity.PRIVATE_RUNTIME_DATA,
+        BackupPolicy.EXCLUDED,
+        1,
+    ),
     "edge-score-pdf-settings": (
         "data/local_edge_score_pdf_settings.json",
         AssetOwnership.MACHINE_LOCAL,
@@ -393,6 +401,7 @@ class DataAssetCatalogTests(unittest.TestCase):
             "data/cheatsheets/win11.json",
         )
         excluded_or_external = (
+            "data/local_chatgpt_connection.json",
             "data/local_onenote_settings.json",
             "data/local_onenote_send_settings.json",
             "data/context-palette.log",

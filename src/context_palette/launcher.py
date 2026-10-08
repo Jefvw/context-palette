@@ -19,6 +19,7 @@ from .actions import (
     EXCEL_AUTOMATION_ID,
     LIVE_FORMAT_PROFILE_AUTOMATION_ID,
     LIVE_TEXT_CONVERSION_AUTOMATION_ID,
+    LIVE_NATIVE_TEXT_AUTOMATION_ID,
     action_uses_clipboard_template,
     action_search_rank,
     expanded_action,
@@ -113,11 +114,14 @@ from .excel_automation import (
 from .excel_automation_window import ExcelAutomationWindow
 from .excel_live_format_window import ExcelLiveFormatWindow
 from .excel_live_text_conversion_window import ExcelLiveTextConversionWindow
+from .excel_live_text_to_columns_window import ExcelLiveTextToColumnsWindow
+from .excel_native_availability import NativeExcelAvailability
 from .file_transfer_window import FileTransferWindow
 from .webpage_pdf import WebpagePdfError, suggested_pdf_name, validate_webpage_url
 from .webpage_pdf_window import WebpagePdfWindow
 from .edge_score_pdf_window import EdgeScorePdfWindow
 from .onenote_window import OneNoteWindow
+from .chatgpt_window import ChatGPTWindow
 from .onenote_send_window import OneNoteSendWindow
 from .onenote_send import normalize_text, suggested_title, SendError
 from .resource_operations import (
@@ -363,8 +367,11 @@ class LauncherApp:
         initial_request: dict[str, str] | None = None,
         *,
         data_paths: AppDataPaths | None = None,
+        start_native_catalogue: bool = False,
     ) -> None:
         self.root = root
+        self.native_excel_availability = None
+        self._native_catalogue_poll_id = None
         self.actions_path = actions_path
         self.local_actions_path = local_actions_path
         self.local_action_ids: set[str] = set()
@@ -518,6 +525,51 @@ class LauncherApp:
         self._poll_work_item_inbox()
         self._start_work_item_refresh()
         self._audit_tooltips()
+        if start_native_catalogue:
+            self.native_excel_availability = NativeExcelAvailability(
+                self.excel_automation_settings_path, Path(__file__).resolve().parents[2],
+                on_changed=self._native_catalogue_changed,
+            )
+            self.root.after_idle(self._refresh_native_catalogue)
+
+    def _native_catalogue_changed(self) -> None:
+        self._refresh_results()
+        self._render_command_surface()
+
+    def _configuration_restored(self) -> None:
+        self._reload()
+        self._refresh_native_catalogue()
+
+    def _refresh_native_catalogue(self) -> None:
+        probe = getattr(self, "native_excel_availability", None)
+        if probe is not None:
+            pending = getattr(self, "_native_catalogue_poll_id", None)
+            if pending is not None:
+                try:
+                    self.root.after_cancel(pending)
+                except tk.TclError:
+                    pass
+                self._native_catalogue_poll_id = None
+            probe.refresh()
+            self._poll_native_catalogue()
+
+    def _poll_native_catalogue(self) -> None:
+        self._native_catalogue_poll_id = None
+        probe = getattr(self, "native_excel_availability", None)
+        if probe is not None:
+            probe.drain()
+            if probe.busy:
+                self._native_catalogue_poll_id = self.root.after(50, self._poll_native_catalogue)
+
+    def _native_text_available(self) -> bool:
+        probe = getattr(self, "native_excel_availability", None)
+        return probe is not None and probe.available
+
+    def _action_is_offered(self, action: Action) -> bool:
+        return action.type != "excel_automation" or action.value != LIVE_NATIVE_TEXT_AUTOMATION_ID or self._native_text_available()
+
+    def _offered_actions(self) -> list[Action]:
+        return [action for action in self.actions if self._action_is_offered(action)]
 
     def _migrate_context_memberships(self) -> None:
         try:
@@ -1226,6 +1278,44 @@ class LauncherApp:
             on_close=lambda: setattr(self, "onenote_window", None),
         )
 
+    def _chat_with_chatgpt(self) -> None:
+        existing = getattr(self, "chatgpt_window", None)
+        if existing is not None:
+            existing.show()
+            return
+        panel = self.workspace_component
+        expected_text = panel.raw_text()
+
+        def apply_text(value: str, is_current: Callable[[], bool], expected: str) -> bool:
+            placed = panel.apply_reviewed_text(
+                value, expected_text=expected, is_current=is_current,
+                parent=self.chatgpt_window.window, source_label="ChatGPT",
+            )
+            if placed is not None:
+                self.captured_selection = None
+                self.source_foreground_handle = None
+                self._reveal_window(sync_workspace=False, focus_search=False, temporary_attention=False)
+                self._set_workspace_visible(True)
+                self.root.after_idle(panel.text.focus_set)
+                self.status_var.set("ChatGPT answer placed in Input / Output.")
+            return placed is not None
+
+        self.chatgpt_window = ChatGPTWindow(
+            self.root, settings_path=self.data_paths.chatgpt_connection_file,
+            initial_text=panel.selected_or_full_text(), expected_workspace=expected_text,
+            apply_text=apply_text, copy_text=self._set_clipboard,
+            prompt_actions=lambda: self.actions, prompt_reader=self._read_chat_prompt,
+            on_close=lambda: setattr(self, "chatgpt_window", None),
+        )
+
+    def _read_chat_prompt(self, action_id: str) -> tuple[str, str]:
+        """Resolve the current prompt at selection, without executing its Action."""
+        action = next((action for action in self.actions if action.id == action_id), None)
+        if action is None or action.type != "ai_prompt" or action.state != ACTIVE_STATE:
+            raise ActionError("This prompt is no longer available. Open Prompts again.")
+        expanded = expanded_action(action, clipboard_getter=self.root.clipboard_get)
+        return action.title, expanded.value
+
     def _tooltip(self, widget: tk.Widget, text: str | Callable[[], str]) -> None:
         self.widget_tooltips.append(WidgetTooltip(widget, text))
 
@@ -1801,6 +1891,10 @@ class LauncherApp:
         self.root.withdraw()
 
     def quit_app(self) -> None:
+        chat = getattr(self, "chatgpt_window", None)
+        if chat is not None and not chat.close():
+            self.status_var.set("ChatGPT is stopping. Choose Quit again after the request finishes.")
+            return
         send = getattr(self, "onenote_send_window", None)
         if send is not None and not send.close():
             self.status_var.set("Review the OneNote Send result before quitting. Pending cleanup must finish first.")
@@ -1894,6 +1988,9 @@ class LauncherApp:
         return ()
 
     def _active_excel_automation_operations(self) -> tuple[str, ...]:
+        probe = getattr(self, "native_excel_availability", None)
+        if probe is not None and probe.busy:
+            return ("checking Excel capabilities",)
         workflow = getattr(self, "excel_automation_window", None)
         if workflow is not None and workflow.busy:
             return ("an Excel automation",)
@@ -2734,7 +2831,7 @@ class LauncherApp:
         for target in targets:
             if target.action_id:
                 action = actions_by_id.get(target.action_id)
-                if action is None:
+                if action is None or not self._action_is_offered(action):
                     continue
                 menu.add_command(
                     label=action.compact_display_text,
@@ -3047,7 +3144,7 @@ class LauncherApp:
             )
             return
         self._show_flat_results()
-        self.filtered_actions = search_actions(self.actions, self.search_var.get())
+        self.filtered_actions = search_actions(self._offered_actions(), self.search_var.get())
         selected_context = self.item_context_filter
         if selected_context is not None:
             self.filtered_actions = [
@@ -3245,7 +3342,7 @@ class LauncherApp:
         self._show_mixed_results("all")
         self.actions_heading_var.set("All items")
         query = self.search_var.get()
-        actions = search_actions(self.actions, query)
+        actions = search_actions(self._offered_actions(), query)
         selected_context = self.item_context_filter
         if selected_context is not None:
             actions = [
@@ -3960,6 +4057,9 @@ class LauncherApp:
     def _execute_action(
         self, action: Action, *, input_snapshot: str | None = None,
     ) -> bool:
+        if not self._action_is_offered(action):
+            self.status_var.set("The exact native Text to Columns capability is unavailable. Update Python Excel and restart Palette.")
+            return False
         if getattr(self, "sequence_run_plan", None) is not None:
             self.status_var.set("A sequence is running; stop it before another Action.")
             return False
@@ -4067,6 +4167,7 @@ class LauncherApp:
         return existing
 
     def _start_excel_workflow(self, request: ExcelWorkflowRequest) -> str:
+        native_offered_at_gesture = self._native_text_available()
         existing = self._available_excel_workflow(request.invocation)
         if existing is not None:
             existing.close()
@@ -4087,6 +4188,19 @@ class LauncherApp:
             )
             self.excel_automation_window = workflow
             return "Opened the attended live Excel format workflow."
+
+        if action.value == LIVE_NATIVE_TEXT_AUTOMATION_ID:
+            if not native_offered_at_gesture:
+                raise ActionError("The exact native Text to Columns 1.0 capability is unavailable.")
+            workflow = ExcelLiveTextToColumnsWindow(
+                self.root, settings_path=self.excel_automation_settings_path,
+                status_setter=self.status_var.set, source_window_handle=source_window_handle,
+                source_process_id=window_process_id(source_window_handle or 0),
+                source_window_title=window_title(source_window_handle or 0),
+                on_close=self._excel_automation_closed,
+            )
+            self.excel_automation_window = workflow
+            return "Opened native Text to Columns → Text (fast). No backup is created."
 
         if action.value == LIVE_TEXT_CONVERSION_AUTOMATION_ID:
             source_process_id = window_process_id(source_window_handle or 0)
@@ -4130,6 +4244,7 @@ class LauncherApp:
 
     def _excel_automation_closed(self) -> None:
         self.excel_automation_window = None
+        self._refresh_native_catalogue()
         self._quit_for_restore_recovery_when_safe()
 
     def _open_excel_output_folder(self, path: Path) -> None:
@@ -4751,6 +4866,7 @@ class LauncherApp:
             command=self._send_text_to_onenote,
             state=tk.NORMAL if workspace_text.strip() else tk.DISABLED,
         )
+        menu.add_command(label="ChatGPT…", command=self._chat_with_chatgpt)
         menu.add_separator()
         if workspace_text.strip().lower().startswith(("http:", "https:")):
             menu.add_command(
@@ -5559,8 +5675,9 @@ class LauncherApp:
             initial_action_suggestion=initial_action_suggestion,
             start_action_edit=start_action_edit,
             data_paths=self.data_paths,
-            on_restore_complete=self._reload,
+            on_restore_complete=self._configuration_restored,
             on_restore_recovery_required=self._require_restore_recovery_restart,
+            native_excel_available=self._native_text_available,
         )
 
     def _require_restore_recovery_restart(self) -> None:
@@ -6065,5 +6182,6 @@ def run(
         instance_port,
         initial_request,
         data_paths=data_paths,
+        start_native_catalogue=True,
     )
     root.mainloop()

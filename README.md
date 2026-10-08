@@ -13,6 +13,8 @@ Action and its internal placements without changing its external target. See
 
 ## What it does today
 
+- Offers an optional [ChatGPT text-chat trial](docs/HELP.md#chat-with-chatgpt): explicit sign-in and messages, follow-ups, and manual completed-answer placement. Live reply/placement acceptance remains pending.
+
 - Opens instantly from a resident process with `F9` or `Ctrl+Alt+P`.
 - Searches Actions and Work Items together by text, with one transient Context
   choice in the unified **Filter** menu controlling both visible membership and
@@ -99,6 +101,11 @@ Action and its internal placements without changing its external target. See
   mutation. Use the corrected Python Excel engine at `c081510` or later and
   install its optional Excel dependencies on each PC. No special startup flag
   is needed; precision warnings and workbook/backup checks still apply.
+- Offers a separate **Text to Columns → Text (fast)** Action when Python Excel
+  advertises the exact native capability. Choose ordered physical columns and
+  Convert once; no backup is created and Excel Undo may be affected. Displayed
+  scientific notation may remain unchanged. [Host integration](docs/EXCEL_NATIVE_TEXT_TO_COLUMNS.md)
+  is implemented and synthetically tested; fresh live host acceptance is pending.
 - Turns one clear website or absolute file, folder, or application path in
   Input / Output into a prefilled, review-before-save Action without probing a
   mapped drive or changing the general Action type chooser.

@@ -20,6 +20,7 @@ from .actions import (
     EXCEL_AUTOMATION_ID,
     LIVE_FORMAT_PROFILE_AUTOMATION_ID,
     LIVE_TEXT_CONVERSION_AUTOMATION_ID,
+    LIVE_NATIVE_TEXT_AUTOMATION_ID,
     load_combined_actions,
     load_combined_stored_actions,
     validate_context_memberships,
@@ -655,8 +656,10 @@ class ConfigurationWindow:
         data_paths: AppDataPaths | None = None,
         on_restore_complete: Callable[[], None] | None = None,
         on_restore_recovery_required: Callable[[], None] | None = None,
+        native_excel_available: Callable[[], bool] | None = None,
     ) -> None:
         self.actions = actions
+        self.native_excel_available = native_excel_available or (lambda: False)
         self.stored_actions = list(actions)
         self.local_action_ids = local_action_ids
         self.shared_actions_path = shared_actions_path
@@ -2106,6 +2109,7 @@ class ConfigurationWindow:
             initial_title=suggestion.title if suggestion is not None else "",
             initial_value=suggestion.value if suggestion is not None else "",
             suggested_from_workspace=suggestion is not None,
+            native_excel_available=getattr(self, "native_excel_available", lambda: False)(),
             initial_quick_action_path=initial_quick_action_path,
             configured_placement_inventories=configured_placement_inventories,
         )
@@ -3085,6 +3089,7 @@ class ConfigurationWindow:
             getattr(self, "stored_actions", self.actions),
             save_callback,
             action=action,
+            native_excel_available=getattr(self, "native_excel_available", lambda: False)(),
             context_names=[context.name for context in self.contexts],
             initial_destination=destination,
             configured_placement_inventories=configured_placement_inventories,
@@ -4465,6 +4470,7 @@ class ActionDialog:
         suggested_from_workspace: bool = False,
         initial_quick_action_path: tuple[str, ...] = (),
         initial_destination: str = LOCAL_DESTINATION,
+        native_excel_available: bool = False,
         configured_placement_inventories: dict[
             str, ConfiguredActionPlacementInventory
         ] | None = None,
@@ -4773,6 +4779,8 @@ class ActionDialog:
                     LIVE_TEXT_CONVERSION_AUTOMATION_ID
                 ),
             }
+            if native_excel_available or (action is not None and action.value == LIVE_NATIVE_TEXT_AUTOMATION_ID):
+                self.excel_automation_choices["Text to Columns → Text (fast)"] = LIVE_NATIVE_TEXT_AUTOMATION_ID
             selected_label = next(
                 (
                     choice

@@ -335,7 +335,8 @@ class WorkspacePanel:
             (
                 "Send to — Copy the file paths in Input / Output to a saved "
                 "folder, Work Item, or one-off destination, or open one path's "
-                "folder in VS Code. Sources stay unchanged."
+                "folder in VS Code. ChatGPT stages selected text for an explicit send. "
+                "Sources stay unchanged."
             ),
         )
 
@@ -551,6 +552,7 @@ class WorkspacePanel:
     def apply_reviewed_text(
         self, value: str, *, expected_text: str,
         is_current: Callable[[], bool], parent: tk.Misc,
+        source_label: str = "OneNote",
     ) -> str | None:
         """Always review placement and reject changes during the modal choice."""
         if not is_current():
@@ -560,10 +562,10 @@ class WorkspacePanel:
                    if current != expected_text else "")
         placement = TextPlacementDialog(
             parent,
-            "Place the OneNote text you just reviewed?" + changed +
+            f"Place the {source_label} text you just reviewed?" + changed +
             "\n\nReplace discards the current Input / Output text. Append keeps "
-            "it and adds the reviewed text below. OneNote and the clipboard stay unchanged.",
-            title="Use reviewed OneNote text",
+            f"it and adds the reviewed text below. {source_label} and the clipboard stay unchanged.",
+            title=f"Use reviewed {source_label} text",
         ).show()
         if placement not in {"replace", "append"} or not is_current():
             return None

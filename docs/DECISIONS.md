@@ -3833,3 +3833,80 @@ end of an existing OneNote page, preserving content. The current engine has no
 such public operation; prepare the engine-owner contract handover and do not
 expose unsupported execution. Engine edits/live UAT need separately scoped
 work. No generic workflow or lifecycle gates are introduced.
+
+## 2026-10-06 - Separate native Text to Columns from checked conversion
+
+**Decision:** Request a fast native TextToColumns-as-Text operation without a
+backup, retaining Context Palette multi-column selection through one ordered
+batch of single-column native calls. The owner explicitly accepts no-backup
+risk. Keep the existing checked conversion and its row bound/recovery behavior
+available and unchanged; do not delete it yet or silently replace its semantics.
+
+**Reason:** The dominant manual use case is Excel Text to Columns with Text
+chosen at the final step, not number-format-only styling. Native execution
+should match that routine with fewer interactions and no Python value rewrite.
+
+**Consequences:** A separate additive engine contract and host Action are needed.
+Preserve in-place/one-column boundaries, exact selected columns, blanks, text
+and neighbouring cells; define formula/native parsing behavior through tests.
+No automatic save/close/retry, generic workflow, recurring backup gate or live
+file access is authorized. Existing checked conversion promises remain intact.
+The prepared engine-owner brief precedes implementation and attended UAT.
+
+## 2026-10-07 - Optional attended ChatGPT text-chat trial
+
+**Decision:** Add a small optional chat window using documented Sign in with
+ChatGPT plan usage and public Responses inference. Start with text, one local
+account and memory-only conversation history. Reuse saved prompt text and
+existing explicit undoable placement; leave the main interface compact.
+
+**Reason:** The owner wants questions and follow-ups from Palette with a quick
+way to use readable answers. Eligible Plus/Pro plan authorization avoids a
+separate API-key setup. Availability remains an account-specific live check.
+
+**Consequences:** Explicit Continue/Load models/Send commands grant their shown
+network effects; open/type does not. Windows DPAPI/CNG and standard-library
+HTTPS avoid a new runtime dependency. Private tokens stay outside Git/backups;
+responses are untrusted text and are usable only after complete inference.
+No existing ChatGPT history, automatic Context/file read, agent/tool execution,
+voice, automatic retry or new engine repository is introduced. Local Forget is
+separate from server-grant revocation. Synthetic/native/Tk checks precede attended
+sign-in and model-request acceptance. No live check is inferred from fake tests.
+
+## 2026-10-07 - Reuse prompt Actions directly in the chat composer
+
+**Decision:** Add the existing Prompts hierarchy beside Your message in the
+ChatGPT window. Reuse current Action records and their menu paths; choosing a
+prompt stages an undoable cursor insertion while preserving draft/selection text.
+Keep Send explicit and keep ordinary main-menu prompt execution unchanged.
+
+**Reason:** The owner wants saved prompts and their associated submenus available
+where the conversation is composed, without returning to Input / Output.
+
+**Consequences:** One source of menu organization remains in the saved Actions.
+The menu refreshes on opening and stale callbacks recheck type/state/identity.
+Template variables keep ordinary prompt expansion, with clipboard reads only on
+explicit selection of a clipboard-bearing prompt. No clipboard/workspace write,
+external request, Action execution or persistence follows prompt insertion.
+Busy/closing callbacks are refused; Configure remains the single management path.
+
+## 2026-10-07 - Integrate native Excel storage conversion as a separate Action
+
+**Decision:** Add apply_live_text_to_columns_as_text 1.0 through the shared Python
+Excel client, selectors and live-window components. Offer Run/new creation only
+from exact available capability metadata. Keep the checked scientific-notation
+converter and its existing plan/recovery/precision/row-bound behavior intact.
+
+**Reason:** The owner prefers Excel's fast native Text to Columns routine with
+multi-column choice and no backup. Native storage conversion preserves literal
+scientific text; it is a different contract from canonical decimal expansion.
+
+**Consequences:** Header-only preflight populates physical columns without data
+scanning or authority. One explicit Convert sends one ordered native batch.
+Partial/unknown receipts retain their distinctions; lost output means every
+requested column may have changed. No backup/save/close/reopen/automatic replay
+is added, and native timeout does not kill a potentially mutating engine call.
+Production startup uses asynchronous static metadata, outside F9; restore and
+engine reselection refresh it. Existing persisted records remain editable.
+Engine HEAD c081510 with dirty native work is recorded, not treated as a pushed
+feature. Synthetic verification precedes separately approved fresh host UAT.

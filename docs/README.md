@@ -79,6 +79,11 @@ This directory separates current behavior, durable direction, historical rationa
 
 ### Integration status and handovers
 
+- [Native Excel Text to Columns host integration](EXCEL_NATIVE_TEXT_TO_COLUMNS.md) — no-backup storage conversion; engine feature remains uncommitted and fresh host UAT needs separate approval.
+
+- [ChatGPT text-chat trial](HELP.md#chat-with-chatgpt) — protected per-PC sign-in and explicit text chat; [live acceptance pending](TESTING.md#chatgpt-text-chat-trial-2026-10-07).
+
+- [Fast native Excel Text to Columns](EXCEL_TEXT_TO_COLUMNS_ENGINE_HANDOVER.md) — requested no-backup multi-column operation; existing checked conversion stays available.
 - [Append to an existing OneNote page](ONENOTE_APPEND_ENGINE_HANDOVER.md) — pending engine contract; the owner chose append and content preservation.
 - [OneNote search and preview](HELP.md#find-onenote-notes) and
   [Send text to OneNote](HELP.md#send-text-to-onenote) — current user flows.

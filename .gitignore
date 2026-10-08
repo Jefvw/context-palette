@@ -17,6 +17,7 @@ __pycache__/
 /data/local_edge_score_pdf_settings.json
 /data/local_onenote_settings.json
 /data/local_onenote_send_settings.json
+/data/local_chatgpt_connection.json
 /data/local_text_action_source.txt
 /data/palette.json
 /data/restore-journal.json

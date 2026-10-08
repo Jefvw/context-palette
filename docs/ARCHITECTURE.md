@@ -1580,6 +1580,68 @@ receipts. Engine choice is shared with search; `local_onenote_send_settings.json
 independently stores only the exact destination path and labels, excluded from Git
 and configuration backups.
 
+### ChatGPT text-chat trial
+
+`chatgpt_window.py` owns one optional Tk chat window reached through Input /
+Output **Send to… → ChatGPT…**. Opening, showing and typing stage selected/full
+text only and perform no external request. Explicit Continue signs in and lists
+models; a remembered connection uses explicit Load models. Send snapshots the
+visible composer plus completed session history. Prompt Actions retain their
+local load/copy behavior. The composer **Prompts** menu consumes the shared
+`action_bound_quick_group` hierarchy from a live Actions provider on each opening;
+icons, root membership, path/case grouping and order use the same source as the
+main menu. A chat-owned renderer stores only Action-ID callbacks; the launcher
+re-resolves and validates the current Active ai_prompt at selection before
+normal template expansion. Only an explicitly selected clipboard-bearing prompt
+reads the clipboard. Insertion is one undoable composer edit at the cursor,
+preserving draft/selection text; it executes no Action, writes no clipboard/
+workspace data, sends nothing and changes no chat history. Busy/closing states
+disable the menu and callbacks recheck. The main layout and Office engines are unchanged.
+
+`chatgpt_auth.py` implements the documented public-client Sign in with ChatGPT:
+loopback 127.0.0.1 `/auth/callback`, dynamic issued client ID, stable installation
+host ID, PKCE/state/nonce, exact issuer/audience/subject and native RS256 signature
+validation against the official JWKS. Token permission, expiry and atomic refresh
+rotation are separate from identity. Uncertain refresh is never replayed; the
+next explicit Continue reauthorizes. One remembered account is supported.
+`chatgpt_http.py` restricts TLS requests to the official auth/API hosts, refuses
+redirects and bounds reads/errors; raw diagnostic bodies and credentials never
+reach UI messages. `chatgpt_windows.py` uses Windows CNG and current-user DPAPI,
+with no new dependency. The private connection file is encrypted binary despite
+its `.json` suffix; atomic writes preserve no token backup. It is ignored by Git
+and excluded from configuration backup/restore. Forget removes local tokens,
+retaining registration/host identity; it does not revoke the server-side grant.
+
+`chatgpt_client.py` lists the signed-in account's advertised models and streams
+public Responses requests with `store=false`, `stream=true` and full local input
+history. No existing ChatGPT history, hidden Context content, tools, file reads,
+voice, API-key fallback or automatic retries are added. Only a consistent complete
+text terminal response enters history or enables Copy/Use answer. Observed OAuth
+streams can finish with an empty `response.completed.output` summary. Only then,
+contiguous validated `response.output_item.done` snapshots supply the output;
+all observed added items must be finalized, and IDs, role/status and exact
+delta text must agree. Intermediate done events never authorize acceptance.
+Nonempty terminal output remains authoritative and must agree with snapshots.
+Duplicate/sparse/unfinished items and late deltas are rejected. Input/output,
+stream event/count/byte and transport/deadline limits are explicit. The model
+catalogue accepts at most 2 MiB and 256 entries; large non-UI metadata is ignored
+and never supplies inference instructions. The initial 256 KiB bound rejected
+an observed valid 362,156-byte catalogue; size/count errors are now distinct
+from malformed data. Incomplete or
+interrupted streams remain labelled provisional and cannot be placed by controls.
+
+One worker, generation-tagged queue and Tk polling keep UI work on its own thread;
+Tk uses an immutable account snapshot while auth is busy. Close/Stop waits for
+bounded local cleanup, without claiming server cancellation or zero usage.
+Completed answers use text-only headings/bold/code styling, never HTML execution.
+Use answer delegates to the existing undoable Replace/Append/Cancel placement
+with current-answer and current-workspace rechecks, preserving the clipboard.
+History is memory-only and clears on New chat or window close. Actual account
+eligibility depends on the account. Owner-observed sign-in and a metadata-only
+client discovery check succeeded on this PC. Disposable production-client reply
+and exact-context follow-up also passed with GPT-6-Astra; updated GUI
+Copy/Use placement and other-account/PC acceptance remain attended UAT.
+
 ### OneNote read-only host boundary
 
 `onenote_integration.py` owns separate Python OneNote launcher settings and strict
@@ -1656,6 +1718,43 @@ owner evidence confirms the first search/preview/Replace journey. The remembered
 scope flow and placement have partial live evidence; see Testing for the later
 closed-notebook failure and correction. Broader host acceptance and representative
 performance remain unverified.
+
+### Native live Text to Columns integration
+
+`excel_automation.py` adds the separate apply_live_text_to_columns_as_text 1.0
+request/result/phase to the existing process client and coordinator. Header-only
+preflight is additive; default checked-converter requests/shapes remain intact.
+The parser validates exact target/order, scope/receipt/state consistency and
+false lifecycle flags, preserving legitimate empty/prefix/changed-range failures.
+Native timeout returns unknown without terminating/killing/retrying mutation;
+bounded readers drain until process completion. Generic outer internal errors
+have no zero-effect guarantee; only audited exact pre-effect codes classify safe
+failed startup. Unknown transport results retain no fabricated completed data.
+
+`excel_live_column_selector.py` is the shared physical listbox: the checked
+converter retains original list order, and native mode tracks selected order.
+`excel_live_text_to_columns_window.py` inherits only the existing setup, live
+workbook/sheet choice, polling, standard result/unknown components and Return to
+Excel scaffolding. Native overrides use headers_only=true, no data-value plan,
+one explicit Convert batch and no recovery/precision/representation controls.
+Unexamined data rows are neither blockers nor authority. Only selected column
+pages are needed. Structured unknown preserves earlier receipts/current/pending;
+untrusted execution output marks all requested columns possibly changed.
+
+`excel_native_availability.py` probes static describe_capabilities using the
+shared coordinator after normal production startup. It never inventories Excel.
+The Launcher constructor defaults this probe off for isolated tests; launch()
+explicitly enables it. F9 uses cached metadata; exact operation/version and
+availability gate Run/search/menus and new Configure choices. Persisted existing
+records remain editable. Workflow closure/launcher reselection and configuration
+restore invalidate and refresh metadata; stale replies cannot reenable an older
+engine. No shared engine framework or process client is introduced.
+
+The fast Action changes storage type, not canonical scientific rendering. The
+checked converter's planning/fingerprint/recovery/10,000-row behavior remains
+separate. Observed engine c0815104079e8db48a2fc2b98c96f89149746c85 has uncommitted
+native work; no pushed/deployable feature is inferred. Full contract, engine UAT
+provenance and pending host approval are in EXCEL_NATIVE_TEXT_TO_COLUMNS.md.
 
 ### `excel_automation.py`
 
@@ -2414,14 +2513,15 @@ Detailed help is stored once in `docs/HELP.md` and displayed by the in-app searc
   fallback, so a real filename containing `%20` is never silently redirected.
 - Do not invent or parse a compound shell command language; keep Windows target
   execution as one explicit target plus structured arguments.
-- Keep API keys out of version-controlled files.
+- Keep API keys and OAuth tokens out of version-controlled files, backups and diagnostics.
 - Never enumerate or write Windows credentials. Credential actions store only
   exact target names and are unavailable to AI proposal and external execution paths.
 - Require explicit user action for launches and other external effects.
-- Treat captured text and AI responses as untrusted data. AI requests are
-  previewed and copied manually; responses must remain within the bounded size
-  limit and pass the versioned proposal schema and existing action validation
-  before selected proposals become local Active actions.
+- Treat captured text and AI responses as untrusted data. Saved prompt Actions
+  load/copy text locally without submission. The attended ChatGPT trial sends
+  only an explicit message and completed local history, accepts bounded complete
+  text responses and requires manual reviewed placement. It executes no tools
+  and does not turn answers into Actions or revive retired Inbox proposals.
 
 ## Testing strategy
 

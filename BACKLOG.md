@@ -16,6 +16,14 @@ broader unreported UAT remains optional. See [Testing](docs/TESTING.md).
 
 ## Now
 
+- Qualify the optional [ChatGPT text-chat trial](docs/TESTING.md#chatgpt-text-chat-trial-2026-10-07) with attended account sign-in, one disposable question/follow-up and Copy/Replace/Append/Cancel. Synthetic tests establish local boundaries; sign-in/model discovery and disposable client reply/context follow-up have evidence on the tested PC, while updated GUI follow-up and Copy/Use placement remain unverified. Keep text-only scope and existing prompt Actions.
+
+- Qualify the [native Text to Columns host integration](docs/EXCEL_NATIVE_TEXT_TO_COLUMNS.md)
+  using a separately approved fresh disposable workbook/ranges. Host code is
+  implemented; observed engine feature remains uncommitted at c081510. Coordinate
+  a deployable engine revision with its owner before claiming another-PC readiness.
+  Keep no-backup native storage conversion distinct from the checked converter.
+
 - Deliver the owner-requested **append to an existing OneNote page**, preserving
   existing content. The current engine only creates new pages; use the
   [engine-owner handover](docs/ONENOTE_APPEND_ENGINE_HANDOVER.md) before host

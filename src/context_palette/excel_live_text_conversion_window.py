@@ -42,6 +42,7 @@ from .excel_live_target_selector import (
     inventory_process_ids,
     visible_inventory_workbooks,
 )
+from .excel_live_column_selector import LiveExcelColumnSelector
 from .hotkeys import focus_window
 from .window_geometry import configure_standard_window
 
@@ -71,6 +72,10 @@ _PRE_EFFECT_CODES = frozenset(
 
 class ExcelLiveTextConversionWindow:
     """Review and execute one recovery-backed live column conversion."""
+
+    WINDOW_TITLE = "Convert Excel values to text"
+    INTRO_TEXT = ("Choose columns, then Convert. Review is optional. "
+                  "Excel stays open; you decide when to save.")
 
     def __init__(
         self,
@@ -128,7 +133,7 @@ class ExcelLiveTextConversionWindow:
         self.view_state = "starting"
 
         self.window = tk.Toplevel(parent)
-        self.window.title("Convert Excel values to text")
+        self.window.title(self.WINDOW_TITLE)
         configure_standard_window(self.window, parent)
         self.window.protocol("WM_DELETE_WINDOW", self.close)
         self.window.bind("<Escape>", lambda _event: self.close())
@@ -138,15 +143,12 @@ class ExcelLiveTextConversionWindow:
         outer.pack(fill=tk.BOTH, expand=True)
         ttk.Label(
             outer,
-            text="Convert Excel values to text",
+            text=self.WINDOW_TITLE,
             style="Title.TLabel",
         ).pack(anchor=tk.W)
         ttk.Label(
             outer,
-            text=(
-                "Choose columns, then Convert. Review is optional. "
-                "Excel stays open; you decide when to save."
-            ),
+            text=self.INTRO_TEXT,
             style="Muted.TLabel",
             wraplength=720,
             justify=tk.LEFT,
@@ -555,27 +557,13 @@ class ExcelLiveTextConversionWindow:
             wraplength=700,
             justify=tk.LEFT,
         ).pack(anchor=tk.W, pady=(4, 7))
-        frame = ttk.Frame(self.content)
-        frame.pack(fill=tk.BOTH, expand=True)
-        self.columns_listbox = tk.Listbox(
-            frame,
-            selectmode=tk.MULTIPLE,
-            exportselection=False,
-            height=10,
-            activestyle="dotbox",
+        self.column_selector = LiveExcelColumnSelector(
+            self.content, columns=self._preflight_columns,
+            selected_columns=tuple(self._selected_preflight_column_indexes),
+            selection_changed=self._column_selection_changed,
         )
-        scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=self.columns_listbox.yview)
-        self.columns_listbox.configure(yscrollcommand=scrollbar.set)
-        self.columns_listbox.grid(row=0, column=0, sticky=tk.NSEW)
-        scrollbar.grid(row=0, column=1, sticky=tk.NS)
-        frame.rowconfigure(0, weight=1)
-        frame.columnconfigure(0, weight=1)
-        for column in self._preflight_columns:
-            self.columns_listbox.insert(tk.END, _column_label(column))
-        for index, column in enumerate(self._preflight_columns):
-            if column.column_index in self._selected_preflight_column_indexes:
-                self.columns_listbox.selection_set(index)
-        self.columns_listbox.bind("<<ListboxSelect>>", self._column_selection_changed)
+        self.column_selector.pack(fill=tk.BOTH, expand=True)
+        self.columns_listbox = self.column_selector.listbox
         if self._next_column_offset is not None:
             ttk.Label(
                 self.content,
@@ -1169,7 +1157,7 @@ class ExcelLiveTextConversionWindow:
         self._return_button()
         self._set_status("The reviewed target is stale or blocked; refresh before any new plan.", error=True)
 
-    def _show_unknown(self, reason: str) -> None:
+    def _show_unknown(self, reason: str, *, trusted_partial_receipts: bool = False) -> None:
         self.view_state = "unknown"
         self._clear_content()
         ttk.Label(
@@ -1180,6 +1168,9 @@ class ExcelLiveTextConversionWindow:
         ttk.Label(
             self.content,
             text=(
+                "The current native call has an uncertain result. Earlier completion receipts "
+                "remain valid. Inspect the current column before any manual retry."
+                if trusted_partial_receipts else
                 "Context Palette did not receive a trustworthy final receipt. The workbook "
                 "may have changed. Do not retry automatically; inspect Excel first."
             ),

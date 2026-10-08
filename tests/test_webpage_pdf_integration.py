@@ -32,7 +32,8 @@ class WebpagePdfIntegrationTests(unittest.TestCase):
         menu.add_command.assert_any_call(
             label="Save webpage as PDF…", command=app._save_workspace_webpage_as_pdf
         )
-        self.assertEqual(menu.add_command.call_count, 2)
+        self.assertEqual(menu.add_command.call_count, 3)
+        menu.add_command.assert_any_call(label="ChatGPT…", command=app._chat_with_chatgpt)
         menu.add_command.assert_any_call(label="OneNote — new text page…",
             command=app._send_text_to_onenote, state="normal")
         app._save_workspace_webpage_as_pdf.assert_not_called()

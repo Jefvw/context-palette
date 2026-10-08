@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
+from copy import deepcopy
 import gc
 import json
 import os
@@ -39,12 +40,17 @@ from context_palette.excel_automation import (
     LiveColumnPreflightResult,
     LiveFormatProfileInvocation,
     LiveFormatProfileResult,
+    LIVE_NATIVE_TEXT_OPERATION,
+    LIVE_NATIVE_TEXT_AUTOMATION_ID,
+    LiveTextToColumnsInvocation,
+    LiveTextToColumnsResult,
     PlanAutomationResult,
     PythonExcelProcessClient,
     build_describe_automations_request,
     build_describe_capabilities_request,
     build_execute_automation_request,
     build_apply_live_format_profile_request,
+    build_apply_live_text_to_columns_as_text_request,
     build_plan_automation_request,
     build_inventory_live_excel_request,
     build_preflight_live_columns_request,
@@ -622,6 +628,368 @@ def _live_conversion_execution_result(
             }
         ),
     }
+
+
+def _live_native_text_result(*, state: str = "succeeded") -> dict[str, object]:
+    scopes = [
+        {
+            "column_index": column,
+            "column_letter": letter,
+            "data_first_row": None if column == 5 else 2,
+            "data_last_row": None if column == 5 else 15_001,
+            "data_range": None if column == 5 else f"${letter}$2:${letter}$15001",
+            "empty": column == 5,
+        }
+        for column, letter in ((3, "C"), (5, "E"), (7, "G"))
+    ]
+    succeeded = state == "succeeded"
+    failed = state == "failed"
+    unknown = state == "unknown"
+    receipts = [
+        {
+            "column_index": scope["column_index"],
+            "column_letter": scope["column_letter"],
+            "data_range": scope["data_range"],
+            "state": "skipped_empty" if scope["empty"] else "completed",
+            "mutation_started": not scope["empty"],
+        }
+        for scope in (scopes if succeeded else [] if failed else scopes[:2])
+    ]
+    current = None if succeeded or failed else 7
+    current_range = None if current is None else "$G$2:$G$15001"
+    return {
+        "state": state,
+        "target": {
+            "process_id": 7812,
+            "workbook_token": "live-workbook-v1.classeur-é",
+            "workbook_name": "Classeur été.xlsx",
+            "full_path": "C:/Users/Élodie/Classeur été.xlsx",
+            "worksheet": "Données",
+            "header_row": 1,
+            "physical_columns": [3, 5, 7],
+        },
+        "column_scopes": [] if failed else scopes,
+        "column_receipts": receipts,
+        "columns_completed": [3, 7] if succeeded else [] if failed else [3],
+        "columns_skipped_empty": [] if failed else [5],
+        "current_column": current,
+        "current_range": current_range,
+        "pending_columns": [3, 5, 7] if failed else [],
+        "mutation_started": not failed,
+        "workbook_dirty_before": True,
+        "workbook_dirty": None if unknown else not failed,
+        "recovery_created": False,
+        "save_invoked": False,
+        "workbook_saved": False,
+        "workbook_closed": False,
+        "application_closed": False,
+        "failure": None if succeeded else {
+            "code": (
+                "operation.live_text_to_columns_outcome_unknown" if unknown
+                else "conflict.live_excel_busy"
+            ),
+            "message": "The requested operation could not continue.",
+            "stage": "preflight" if failed else "text_to_columns" if unknown else "revalidate",
+            "retryable": not unknown,
+            "mutation_started": unknown,
+            "outcome_uncertain": unknown,
+            "column_index": current,
+            "data_range": current_range,
+            "exception_type": "com_error" if unknown else None,
+            "com_hresult": -2147352567 if unknown else None,
+            "com_scode": -2147467259 if unknown else None,
+        },
+    }
+
+
+def _headers_only_preflight_result() -> dict[str, object]:
+    result = _live_preflight_result()
+    result["headers_only"] = True
+    result["data_rows"].update({"examined": 0, "truncated": True})
+    for column in result["columns"]:
+        column["cells_examined"] = 0
+        column["classifications"] = dict.fromkeys(column["classifications"], 0)
+        column["formulas"] = {"count": 0, "samples": [], "samples_truncated": False}
+        column["precision_risks"] = {"cells": 0, "samples": [], "samples_truncated": False}
+    return result
+
+
+class ExcelNativeTextProtocolTests(unittest.TestCase):
+    def parse(self, document: dict[str, object]) -> AutomationCallResult:
+        return parse_automation_response(
+            phase="native_text", request_id="native-1", return_code=0,
+            stdout=_envelope(
+                LIVE_NATIVE_TEXT_OPERATION, "native-1", document,
+                warnings=[{
+                    "code": "live.no_backup_undo_may_be_affected",
+                    "message": "No backup is created; Excel Undo may be affected.",
+                    "details": {},
+                }],
+            ),
+        )
+
+    def test_request_is_exact_native_schema_and_preserves_column_order(self) -> None:
+        invocation = LiveTextToColumnsInvocation("opaque.é", "Données", (3, 5, 7))
+        self.assertEqual(build_apply_live_text_to_columns_as_text_request("native", invocation), {
+            "schema_version": "1.0", "request_id": "native",
+            "operation": "apply_live_text_to_columns_as_text", "operation_version": "1.0",
+            "arguments": {
+                "workbook_token": "opaque.é", "worksheet": "Données",
+                "columns": [3, 5, 7], "header_row": 1,
+            },
+        })
+        ordered = build_apply_live_text_to_columns_as_text_request(
+            "ordered", LiveTextToColumnsInvocation("opaque", "Data", (7, 3, 5), 2)
+        )
+        self.assertEqual(ordered["arguments"]["columns"], [7, 3, 5])
+        self.assertEqual(ordered["arguments"]["header_row"], 2)
+        self.assertEqual(LIVE_NATIVE_TEXT_AUTOMATION_ID, "excel.apply_live_text_to_columns_as_text")
+        with self.assertRaises(FrozenInstanceError):
+            invocation.columns = (1,)
+
+    def test_native_request_enforces_its_separate_engine_limits(self) -> None:
+        self.assertEqual(len(LiveTextToColumnsInvocation("opaque", "Data", tuple(range(1, 257))).columns), 256)
+        LiveTextToColumnsInvocation("opaque", "Data", (16_384,), 1_048_575)
+        for columns in ((), (3, 3), (True,), (0,), (16_385,), list(range(1, 3)), tuple(range(1, 258))):
+            with self.subTest(columns=columns), self.assertRaises(ExcelAutomationInputError):
+                LiveTextToColumnsInvocation("opaque", "Data", columns)
+        for header in (0, True, 1_048_576, "1"):
+            with self.subTest(header=header), self.assertRaises(ExcelAutomationInputError):
+                LiveTextToColumnsInvocation("opaque", "Data", (3,), header)
+
+    def test_authoritative_success_envelope_states_and_immutable_receipts(self) -> None:
+        for state in ("succeeded", "failed", "partial_failure", "unknown"):
+            with self.subTest(state=state):
+                call = self.parse(_live_native_text_result(state=state))
+                self.assertEqual(call.classification, f"native_text_{state}")
+                self.assertIsInstance(call.result, LiveTextToColumnsResult)
+                self.assertEqual(call.result.state, state)
+                self.assertEqual(call.result.target.physical_columns, (3, 5, 7))
+                self.assertEqual(call.unknown_outcome, state == "unknown")
+                self.assertFalse(call.result.save_invoked)
+                self.assertFalse(call.result.recovery_created)
+                with self.assertRaises(FrozenInstanceError):
+                    call.result.target.header_row = 2
+        success = self.parse(_live_native_text_result()).result
+        self.assertEqual(tuple(r.column_index for r in success.column_receipts), (3, 5, 7))
+        self.assertEqual(success.columns_completed, (3, 7))
+        self.assertEqual(success.columns_skipped_empty, (5,))
+        self.assertEqual(success.column_scopes[0].data_last_row, 15_001)
+        self.assertEqual(success.warnings[0].code, "live.no_backup_undo_may_be_affected")
+
+    def test_successful_all_empty_columns_do_not_claim_mutation(self) -> None:
+        document = _live_native_text_result()
+        for scope, receipt in zip(document["column_scopes"], document["column_receipts"]):
+            scope.update(data_first_row=None, data_last_row=None, data_range=None, empty=True)
+            receipt.update(data_range=None, state="skipped_empty", mutation_started=False)
+        document.update(columns_completed=[], columns_skipped_empty=[3, 5, 7], mutation_started=False, workbook_dirty=False)
+        call = self.parse(document)
+        self.assertEqual(call.classification, "native_text_succeeded")
+        self.assertFalse(call.result.mutation_started)
+
+    def test_preflight_prefix_scopes_keep_all_unattempted_columns_pending(self) -> None:
+        for include_current in (False, True):
+            document = _live_native_text_result(state="failed")
+            current = 7 if include_current else 5
+            current_range = "$G$2:$G$15001" if include_current else None
+            pending = [3, 5] if include_current else [3, 7]
+            document["column_scopes"] = _live_native_text_result()["column_scopes"][:3 if include_current else 1]
+            document.update(current_column=current, current_range=current_range, pending_columns=pending)
+            document["failure"].update(column_index=current, data_range=current_range)
+            call = self.parse(document)
+            self.assertEqual(call.classification, "native_text_failed")
+            self.assertEqual(call.result.pending_columns, tuple(pending))
+        document = _live_native_text_result(state="failed")
+        document["column_scopes"] = _live_native_text_result()["column_scopes"][:1]
+        document.update(current_column=3, current_range="$C$2:$C$9", pending_columns=[5, 7])
+        document["failure"].update(column_index=3, data_range="$C$2:$C$9")
+        self.assertIsNone(self.parse(document).result)
+        document = _live_native_text_result(state="failed")
+        document["column_scopes"] = _live_native_text_result()["column_scopes"][:2]
+        document.update(current_column=5, current_range=None, pending_columns=[3, 7])
+        document["failure"].update(column_index=5, data_range=None)
+        self.assertIsNone(self.parse(document).result)
+
+    def test_revalidation_failure_allows_skipped_receipts_and_changed_range(self) -> None:
+        for changed_range in (None, "$G$2:$G$20000"):
+            document = _live_native_text_result(state="partial_failure")
+            document["current_range"] = changed_range
+            document["failure"]["data_range"] = changed_range
+            self.assertEqual(self.parse(document).classification, "native_text_partial_failure")
+        document = _live_native_text_result(state="partial_failure")
+        document["column_scopes"][0].update(data_first_row=None, data_last_row=None, data_range=None, empty=True)
+        document["column_receipts"][0].update(data_range=None, state="skipped_empty", mutation_started=False)
+        document.update(state="failed", columns_completed=[], columns_skipped_empty=[3, 5], mutation_started=False)
+        self.assertEqual(self.parse(document).classification, "native_text_failed")
+
+    def test_initially_empty_current_scope_cannot_report_an_execution_stop(self) -> None:
+        for state in ("partial_failure", "failed"):
+            document = _live_native_text_result(state="partial_failure")
+            document["column_scopes"][2].update(data_first_row=None, data_last_row=None, data_range=None, empty=True)
+            document["failure"]["data_range"] = None
+            document["current_range"] = None
+            if state == "failed":
+                document["column_scopes"][0].update(data_first_row=None, data_last_row=None, data_range=None, empty=True)
+                document["column_receipts"][0].update(data_range=None, state="skipped_empty", mutation_started=False)
+                document.update(state="failed", columns_completed=[], columns_skipped_empty=[3, 5], mutation_started=False)
+            with self.subTest(state=state):
+                call = self.parse(document)
+                self.assertEqual(call.classification, "native_text_unknown")
+                self.assertIsNone(call.result)
+
+    def test_scope_receipt_partition_range_state_and_lifecycle_contradictions_are_unknown(self) -> None:
+        changes = {
+            "receipt_order": lambda d: d["column_receipts"].reverse(),
+            "scope_order": lambda d: d["column_scopes"].reverse(),
+            "duplicate_receipt": lambda d: d["column_receipts"].append(d["column_receipts"][0]),
+            "unrequested_scope": lambda d: d["column_scopes"][0].update(column_index=2, column_letter="B"),
+            "column_letter": lambda d: d["column_scopes"][0].update(column_letter="G"),
+            "receipt_range": lambda d: d["column_receipts"][0].update(data_range="$C$2:$C$9"),
+            "multi_column_range": lambda d: d["column_scopes"][0].update(data_range="$C$2:$G$15001"),
+            "header_included": lambda d: d["column_scopes"][0].update(data_first_row=1, data_range="$C$1:$C$15001"),
+            "past_excel_rows": lambda d: d["column_scopes"][0].update(data_last_row=1_048_577, data_range="$C$2:$C$1048577"),
+            "empty_range": lambda d: d["column_scopes"][1].update(data_range="$E$2:$E$3"),
+            "completed_total": lambda d: d.update(columns_completed=[7, 3]),
+            "skipped_total": lambda d: d.update(columns_skipped_empty=[3]),
+            "pending_overlap": lambda d: d.update(pending_columns=[7]),
+            "current_overlap": lambda d: d.update(current_column=3, current_range="$C$2:$C$15001"),
+            "mutation_flag": lambda d: d.update(mutation_started=False),
+            "receipt_mutation": lambda d: d["column_receipts"][0].update(mutation_started=False),
+            "missing_nullable_field": lambda d: d.pop("current_range"),
+            "wrong_state": lambda d: d.update(state="failed"),
+        }
+        for field in ("recovery_created", "save_invoked", "workbook_saved", "workbook_closed", "application_closed"):
+            changes[field] = lambda d, key=field: d.update({key: True})
+        for name, change in changes.items():
+            with self.subTest(name=name):
+                document = _live_native_text_result()
+                change(document)
+                call = self.parse(document)
+                self.assertEqual(call.classification, "native_text_unknown")
+                self.assertIsNone(call.result)
+                self.assertTrue(call.unknown_outcome)
+
+    def test_unknown_current_range_and_failure_facts_must_reconcile(self) -> None:
+        clean_unknown = _live_native_text_result(state="unknown")
+        clean_unknown["workbook_dirty"] = False
+        clean_call = self.parse(clean_unknown)
+        self.assertIsInstance(clean_call.result, LiveTextToColumnsResult)
+        self.assertTrue(clean_call.unknown_outcome)
+        changes = (
+            lambda d: d.update(current_column=None, current_range=None, pending_columns=[7]),
+            lambda d: d.update(current_range="$G$2:$G$9"),
+            lambda d: d["failure"].update(column_index=3),
+            lambda d: d["failure"].update(retryable=True),
+            lambda d: d["failure"].update(mutation_started=False),
+            lambda d: d["failure"].update(outcome_uncertain=False),
+            lambda d: d["failure"].update(stage="revalidate"),
+            lambda d: d["failure"].pop("com_scode"),
+        )
+        for index, change in enumerate(changes):
+            with self.subTest(index=index):
+                document = _live_native_text_result(state="unknown")
+                change(document)
+                call = self.parse(document)
+                self.assertEqual(call.classification, "native_text_unknown")
+                self.assertIsNone(call.result)
+
+    def test_missing_malformed_mismatched_and_nonzero_success_are_unknown(self) -> None:
+        valid = _envelope(LIVE_NATIVE_TEXT_OPERATION, "native-1", _live_native_text_result())
+        cases = [
+            (b"", 0), (b"not json", 70), (b"\xff", 0), (valid + b"{}", 0), (valid, 5),
+            (_envelope(LIVE_NATIVE_TEXT_OPERATION, "wrong-id", _live_native_text_result()), 0),
+            (_envelope("convert_live_column_representation", "native-1", _live_native_text_result()), 0),
+        ]
+        for key, value in (
+            ("schema_version", "2.0"), ("operation_version", "2.0"),
+            ("duration_ms", -1), ("paths", {"input": "C:/book.xlsx", "output": None, "backup": None}),
+            ("warnings", None), ("result", None), ("status", "unknown"),
+        ):
+            envelope = json.loads(valid)
+            envelope[key] = value
+            cases.append((json.dumps(envelope).encode(), 0))
+        for key in ("operation", "request_id", "schema_version", "operation_version", "result", "warnings", "duration_ms"):
+            envelope = json.loads(valid)
+            del envelope[key]
+            cases.append((json.dumps(envelope).encode(), 0))
+        for stdout, code in cases:
+            with self.subTest(stdout=stdout[:20], code=code):
+                call = parse_automation_response(phase="native_text", request_id="native-1", return_code=code, stdout=stdout)
+                self.assertEqual(call.classification, "native_text_unknown")
+                self.assertIsNone(call.result)
+
+    def test_only_exact_documented_outer_preparation_errors_prove_no_mutation(self) -> None:
+        for code, category, exit_code, expected in (
+            ("request.invalid_workbook_token", "invalid_request", 2, "native_text_failed"),
+            ("conflict.live_workbook_stale", "conflict", 4, "native_text_failed"),
+            ("operation.live_text_to_columns_prepare_failed", "operation_failed", 5, "native_text_failed"),
+            ("internal.unexpected", "internal_error", 70, "native_text_unknown"),
+            ("operation.live_text_to_columns_prepare_failed", "conflict", 4, "native_text_unknown"),
+            ("conflict.live_workbook_stale", "conflict", 5, "native_text_unknown"),
+        ):
+            with self.subTest(code=code, category=category, exit_code=exit_code):
+                call = parse_automation_response(
+                    phase="native_text", request_id="native-1", return_code=exit_code,
+                    stdout=_envelope(LIVE_NATIVE_TEXT_OPERATION, "native-1", None, status="error", error={
+                        "code": code, "category": category, "message": "Preparation failed.", "retryable": True, "details": {},
+                    }),
+                )
+                self.assertEqual(call.classification, expected)
+                self.assertEqual(call.error.code, code)
+                self.assertIsNone(call.result)
+
+    def test_capability_property_requires_exact_native_operation_version(self) -> None:
+        for version in ("1.0", "2.0"):
+            document = _capabilities_result(operation_version=version)
+            native = deepcopy(document["capabilities"][0])
+            native.update(operation=LIVE_NATIVE_TEXT_OPERATION, plan_operation=None, plan_operation_version=None)
+            native["supports"]["planning"] = False
+            document["capabilities"].append(native)
+            call = parse_automation_response(phase="capabilities", request_id="caps", return_code=0, stdout=_envelope("describe_capabilities", "caps", document))
+            self.assertEqual(call.result.live_native_text is not None, version == "1.0")
+            self.assertEqual(call.result.live_text_conversion is not None, version == "1.0")
+
+    def test_headers_only_request_has_no_diagnostic_options_and_default_stays_unchanged(self) -> None:
+        header_request = build_preflight_live_columns_request("header", LiveColumnPreflightInvocation("opaque", "Data", column_offset=100, headers_only=True))
+        self.assertEqual(header_request["arguments"], {
+            "workbook_token": "opaque", "worksheet": "Data", "columns": None,
+            "header_row": 1, "column_offset": 100, "maximum_columns": 100, "headers_only": True,
+        })
+        default = build_preflight_live_columns_request("default", LiveColumnPreflightInvocation("opaque", "Data"))
+        self.assertEqual(default["arguments"], {
+            "workbook_token": "opaque", "worksheet": "Data", "columns": None,
+            "header_row": 1, "column_offset": 0, "maximum_columns": 100,
+            "maximum_data_rows": 10_000, "maximum_samples_per_column": 10, "text_limit": 200,
+        })
+        with self.assertRaises(ExcelAutomationInputError):
+            LiveColumnPreflightInvocation("opaque", "Data", headers_only=1)
+
+    def test_headers_only_zero_diagnostics_and_truncation_are_valid(self) -> None:
+        for document, headers_only in ((_live_preflight_result(), False), (_headers_only_preflight_result(), True)):
+            call = parse_automation_response(phase="preflight", request_id="header", return_code=0, stdout=_envelope("preflight_live_columns", "header", document))
+            self.assertEqual(call.classification, "preflight_succeeded")
+            self.assertEqual(call.result.headers_only, headers_only)
+            if headers_only:
+                self.assertTrue(call.result.data_rows.truncated)
+                self.assertEqual(call.result.data_rows.examined, 0)
+
+    def test_headers_only_cannot_claim_examined_data_or_samples(self) -> None:
+        changes = (
+            lambda d: d["data_rows"].update(examined=1),
+            lambda d: d["columns"][0].update(cells_examined=1),
+            lambda d: d["columns"][0]["classifications"].update(text=1),
+            lambda d: d["columns"][0]["formulas"].update(count=1),
+            lambda d: d["columns"][0]["precision_risks"].update(cells=1),
+            lambda d: d["columns"][0]["precision_risks"].update(samples=[{"row": 2, "code": "risk", "value_preview": 1}]),
+            lambda d: d["columns"][0]["precision_risks"].update(samples_truncated=True),
+            lambda d: d.update(headers_only="true"),
+        )
+        for index, change in enumerate(changes):
+            document = _headers_only_preflight_result()
+            change(document)
+            with self.subTest(index=index):
+                call = parse_automation_response(phase="preflight", request_id="header", return_code=0, stdout=_envelope("preflight_live_columns", "header", document))
+                self.assertEqual(call.classification, "preflight_failed")
 
 
 class ExcelAutomationSettingsAndInputTests(unittest.TestCase):
@@ -1893,6 +2261,114 @@ class LiveScientificConversionProtocolTests(unittest.TestCase):
 
 
 class ExcelAutomationProcessClientTests(unittest.TestCase):
+    def test_native_timeout_process_loss_and_malformed_output_never_retry(self) -> None:
+        from io import BytesIO
+
+        for mode in ("timeout", "process_loss", "malformed"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                class FakeProcess:
+                    def __init__(self):
+                        self.stdin = BytesIO()
+                        self.stdout = BytesIO(b"invalid" if mode == "malformed" else b"")
+                        self.stderr = BytesIO()
+                        self.waits = 0
+
+                    def wait(self, timeout=None):
+                        self.waits += 1
+                        if mode == "timeout" and self.waits == 1:
+                            raise subprocess.TimeoutExpired("fake engine", timeout)
+                        return 70
+
+                    def kill(self):
+                        raise AssertionError("A native mutation owner must not be killed.")
+
+                process = FakeProcess()
+                starts = []
+                terminated = []
+
+                def start(*args, **kwargs):
+                    starts.append((args, kwargs))
+                    return process
+
+                launcher = Path(directory) / "python-excel.bat"
+                launcher.write_text("@echo off\n", encoding="utf-8")
+                client = PythonExcelProcessClient(
+                    popen_factory=start, terminate_process=terminated.append,
+                )
+                call = client.call(
+                    launcher,
+                    build_apply_live_text_to_columns_as_text_request(
+                        "native-loss", LiveTextToColumnsInvocation("opaque", "Data", (3, 5, 7))
+                    ),
+                    phase="native_text", timeout_seconds=0.01,
+                )
+                self.assertEqual(call.classification, "native_text_unknown")
+                self.assertTrue(call.process_started)
+                self.assertTrue(call.unknown_outcome)
+                self.assertIsNone(call.result)
+                self.assertEqual(len(starts), 1)
+                self.assertEqual(len(terminated), 0)
+
+    def test_native_client_correlates_opaque_target_sheet_columns_and_header(self) -> None:
+        from io import BytesIO
+
+        for token, sheet, columns, header, expected in (
+            ("live-workbook-v1.classeur-é", "Données", (3, 5, 7), 1, "native_text_succeeded"),
+            ("other opaque token", "Données", (3, 5, 7), 1, "native_text_unknown"),
+            ("live-workbook-v1.classeur-é", "Other", (3, 5, 7), 1, "native_text_unknown"),
+            ("live-workbook-v1.classeur-é", "Données", (7, 3, 5), 1, "native_text_unknown"),
+            ("live-workbook-v1.classeur-é", "Données", (3, 5, 7), 2, "native_text_unknown"),
+        ):
+            with self.subTest(token=token, sheet=sheet, columns=columns, header=header), tempfile.TemporaryDirectory() as directory:
+                class FakeProcess:
+                    stdin = BytesIO()
+                    stdout = BytesIO(_envelope(LIVE_NATIVE_TEXT_OPERATION, "correlation", _live_native_text_result()))
+                    stderr = BytesIO()
+
+                    def wait(self, timeout=None):
+                        return 0
+
+                launcher = Path(directory) / "python-excel.bat"
+                launcher.write_text("@echo off\n", encoding="utf-8")
+                client = PythonExcelProcessClient(popen_factory=lambda *_args, **_kwargs: FakeProcess())
+                call = client.call(
+                    launcher,
+                    build_apply_live_text_to_columns_as_text_request("correlation", LiveTextToColumnsInvocation(token, sheet, columns, header)),
+                    phase="native_text", timeout_seconds=1,
+                )
+                self.assertEqual(call.classification, expected)
+                if expected == "native_text_unknown":
+                    self.assertIsNone(call.result)
+                    self.assertIn("target did not match", call.reason)
+
+    def test_headers_only_client_requires_matching_echo(self) -> None:
+        from io import BytesIO
+
+        for requested, response, expected in (
+            (True, _headers_only_preflight_result(), "preflight_succeeded"),
+            (True, _live_preflight_result(), "preflight_failed"),
+            (False, _headers_only_preflight_result(), "preflight_failed"),
+            (False, _live_preflight_result(), "preflight_succeeded"),
+        ):
+            with self.subTest(requested=requested, response=response.get("headers_only")), tempfile.TemporaryDirectory() as directory:
+                class FakeProcess:
+                    stdin = BytesIO()
+                    stdout = BytesIO(_envelope("preflight_live_columns", "header-echo", response))
+                    stderr = BytesIO()
+
+                    def wait(self, timeout=None):
+                        return 0
+
+                launcher = Path(directory) / "python-excel.bat"
+                launcher.write_text("@echo off\n", encoding="utf-8")
+                client = PythonExcelProcessClient(popen_factory=lambda *_args, **_kwargs: FakeProcess())
+                call = client.call(
+                    launcher,
+                    build_preflight_live_columns_request("header-echo", LiveColumnPreflightInvocation("opaque", "Data", headers_only=requested)),
+                    phase="preflight", timeout_seconds=1,
+                )
+                self.assertEqual(call.classification, expected)
+
     def test_missing_launcher_is_a_known_start_failure(self) -> None:
         client = PythonExcelProcessClient()
         inventory = client.call(

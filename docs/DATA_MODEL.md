@@ -246,6 +246,7 @@ not a new JSON field and does not itself change any stored format.
 | `data/local_excel_automation_settings.json` | `excel-automation-settings` | Machine-local | Optional | Private paths | Core configuration | 1 |
 | `data/local_onenote_settings.json` | `onenote-settings` | Machine-local | Optional | Private paths and notebook identity/name | Excluded; reselect engine and notebook per PC | 1 |
 | `data/local_onenote_send_settings.json` | `onenote-send-settings` | Machine-local | Optional | Exact notebook/group/section identities and labels | Excluded; reselect Send destination per PC | 1 |
+| `data/local_chatgpt_connection.json` | `chatgpt-connection` | Machine-local | Optional | Protected account/registration/tokens; encrypted binary despite suffix | Excluded; authenticate per Windows user/PC | 1 |
 | `data/local_edge_score_pdf_settings.json` | `edge-score-pdf-settings` | Machine-local legacy | Optional | Private paths | Retained ignored legacy data; saved `save_edge_score_pdf` Action value is authoritative | 1 |
 | `data/inbox.json` | `inbox` | Captured content | Optional | Captured content | Complete-configuration addition; explicit privacy notice and exclusion choice required | 1 |
 | `data/local_text_action_source.txt` | `managed-text-action-source` | Captured content | Optional | Captured content | Optional managed content | None |

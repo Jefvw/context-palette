@@ -238,6 +238,15 @@
       "description": "Choose an already-open Excel workbook and one worksheet or all visible worksheets, then apply Standard data directly. Excel is not saved or closed."
     },
     {
+      "id": "excel-native-text-to-columns",
+      "title": "Text to Columns → Text (fast)",
+      "type": "excel_automation",
+      "value": "excel.apply_live_text_to_columns_as_text",
+      "state": "Active",
+      "tags": ["excel", "native text", "open workbook"],
+      "description": "Changes selected Excel columns to text using Excel's native Text to Columns operation. Displayed scientific notation may remain unchanged. No backup is created; Excel Undo may be affected. Excel is never saved or closed."
+    },
+    {
       "id": "excel-convert-scientific-notation",
       "title": "Convert Excel values to text",
       "type": "excel_automation",

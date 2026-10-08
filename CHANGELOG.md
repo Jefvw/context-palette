@@ -18,6 +18,16 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Integrated a separate **Text to Columns → Text (fast)** Action using Python Excel apply_live_text_to_columns_as_text 1.0. Exact-capability-gated discovery, shared ordered column selection and one no-backup native batch preserve the old checked converter. Scientific text may remain unchanged; partial/unknown results require inspection with no retry/save/close. Engine feature is still uncommitted and host live UAT remains pending.
+
+- Added the existing nested Prompts menu beside the chat message box. Selecting a current prompt inserts editable text at the cursor, preserves the draft, supports Undo and keeps Send explicit. Menu organization and template expansion reuse the existing Actions; Input / Output and clipboard are unchanged.
+
+- Fixed valid ChatGPT replies being rejected when the final completion event summarizes output with an empty list. Validated finalized items now supply text only after matching terminal completion; failed/incomplete/contradictory streams remain blocked. A disposable live reply and follow-up passed; GUI placement still needs acceptance.
+
+- Fixed ChatGPT model discovery rejecting a valid metadata-rich catalogue. The 2 MiB bounded parser loads the four visible choices observed on this PC and keeps size/count failures distinct from malformed responses. Sign-in is preserved; later disposable client inference passed, while GUI placement still needs acceptance.
+
+- Added an optional ChatGPT text-chat trial under Input / Output → Send to: protected per-PC sign-in, account models, explicit questions/follow-ups, brief formatted answers and completed-only Copy/Replace/Append placement. Opening or typing sends nothing. History is session-only; live replies and placement still need attended acceptance.
+
 - Simplified OneNote Search, Excel CSV/bulk Action review and Context editing:
   compact instructions, fixed effect controls, optional full fields/shortcuts,
   and unchanged execution checks. Unavailable Context preferences survive an
