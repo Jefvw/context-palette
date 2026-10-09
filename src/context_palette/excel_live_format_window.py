@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from .excel_automation import (
     AutomationCallResult,
+    DescribeCapabilitiesResult,
     ExcelAutomationCoordinator,
     ExcelAutomationSettings,
     ExcelAutomationSettingsError,
@@ -19,6 +20,7 @@ from .excel_automation import (
     LiveFormatProfileResult,
     PythonExcelProcessClient,
     build_apply_live_format_profile_request,
+    build_describe_capabilities_request,
     build_inventory_live_excel_request,
     discover_direct_sibling_python_excel_launcher,
     load_excel_automation_settings,
@@ -38,6 +40,7 @@ from .window_geometry import configure_standard_window
 _POLL_MILLISECONDS = 50
 _INVENTORY_TIMEOUT_SECONDS = 30.0
 _APPLY_TIMEOUT_SECONDS = 120.0
+_AUTOSAVE_WARNING = "AutoSave may save these changes automatically; Excel Undo may be affected."
 _STALE_CODES = frozenset(
     {"conflict.live_workbook_stale", "conflict.live_worksheet_stale"}
 )
@@ -91,6 +94,7 @@ class ExcelLiveFormatWindow:
         self._selected_workbook: LiveExcelWorkbook | None = None
         self._selected_worksheet: str | None = None
         self._selected_scope = "worksheet"
+        self._autosave_opt_in_supported = False
         self.target_selector: LiveExcelTargetSelector | None = None
         self.view_state = "starting"
 
@@ -196,7 +200,7 @@ class ExcelLiveFormatWindow:
             )
             return
         self._launcher_path = launcher
-        self._start_inventory()
+        self._start_capabilities()
 
     def _show_setup(self, message: str) -> None:
         self.view_state = "setup"
@@ -248,9 +252,38 @@ class ExcelLiveFormatWindow:
             return
         self._launcher_path = launcher
         self.status_setter("Python Excel setup saved for this computer.")
+        self._start_capabilities()
+
+    def _start_capabilities(self) -> None:
+        if self._closed or self.busy or self.coordinator.completion_pending:
+            return
+        self._autosave_opt_in_supported = False
+        self.view_state = "capabilities"
+        self._clear_content()
+        self._show_working("Checking Python Excel formatting support…")
+        self._start_call(
+            build_describe_capabilities_request(_request_id()),
+            phase="capabilities", timeout_seconds=15.0,
+            callback=self._capabilities_completed,
+        )
+
+    def _capabilities_completed(self, call: AutomationCallResult) -> None:
+        result = call.result
+        if call.classification != "capabilities_succeeded" or not isinstance(result, DescribeCapabilitiesResult):
+            self._show_setup("Python Excel formatting support could not be checked. Repair the launcher or engine setup.")
+            return
+        format_capability = result.find("apply_live_format_profile", "1.0")
+        inventory_capability = result.find("inventory_live_excel", "1.0")
+        if any(capability is None or not capability.availability.available
+               for capability in (format_capability, inventory_capability)):
+            self._show_setup("Python Excel must advertise available live inventory and formatting version 1.0. Update or repair the engine.")
+            return
+        self._autosave_opt_in_supported = format_capability.supports.autosave_opt_in
         self._start_inventory()
 
     def _start_inventory(self) -> None:
+        if self._closed or self.busy or self.coordinator.completion_pending:
+            return
         self.view_state = "inventory"
         self._clear_content()
         self._show_working("Looking for already-open Excel workbooks…")
@@ -339,8 +372,9 @@ class ExcelLiveFormatWindow:
         self.limitation_label = ttk.Label(
             self.content,
             text=(
-                "Changes the open workbook now. Excel Undo may be cleared. There is no backup "
-                "or rollback. Enabled AutoSave is rejected; Context Palette never saves or closes Excel."
+                "Changes the open workbook now. No backup or rollback. " +
+                (_AUTOSAVE_WARNING if self._autosave_opt_in_supported else
+                 "Excel Undo may be affected. This engine requires AutoSave off.")
             ),
             style="Muted.TLabel",
             wraplength=700,
@@ -354,7 +388,7 @@ class ExcelLiveFormatWindow:
             style="Accent.TButton",
         )
         self.primary_button.pack(anchor=tk.W, pady=(12, 0))
-        self._set_status("Choose the target, then Apply template. The workbook will not be saved or closed.")
+        self._set_status("Choose the target, then Apply template.")
         self._render_warnings(inventory.warnings)
         self._update_apply_state()
 
@@ -392,20 +426,23 @@ class ExcelLiveFormatWindow:
             self._selected_scope == "workbook"
             or self._selected_worksheet is not None
         )
-        autosave_blocked = workbook.autosave_enabled is True
+        autosave_blocked = workbook.autosave_enabled is True and not self._autosave_opt_in_supported
         allowed = has_visible_sheet and worksheet_ok and not autosave_blocked
         button.configure(state=tk.NORMAL if allowed else tk.DISABLED)
         if autosave_blocked:
-            self._set_status("AutoSave is enabled for this workbook. Turn it off in Excel, then Refresh.", error=True)
+            self._set_status("This engine cannot format with AutoSave on. Update Python Excel, or turn AutoSave off and Refresh.", error=True)
         elif not has_visible_sheet:
             self._set_status("This workbook has no visible worksheet to format.", error=True)
         else:
             self._set_status(
-                "Choose the target, then Apply template. The workbook will not "
-                "be saved or closed."
+                "Choose the target, then Apply template."
             )
 
     def _apply(self) -> None:
+        if self._closed or self.busy or self.coordinator.completion_pending or self.view_state != "select":
+            return
+        if self.primary_button is None or self.primary_button.instate(["disabled"]):
+            return
         workbook = self._selected_workbook
         if workbook is None:
             self._set_status("Choose an open workbook first.", error=True)
@@ -416,6 +453,7 @@ class ExcelLiveFormatWindow:
                 workbook.token,
                 scope=self._selected_scope,  # type: ignore[arg-type]
                 worksheet=worksheet,
+                allow_autosave_enabled=self._autosave_opt_in_supported,
             )
         except ValueError as exc:
             self._set_status(str(exc), error=True)
@@ -438,21 +476,15 @@ class ExcelLiveFormatWindow:
         if call.classification == "apply_unknown":
             self._show_unknown(call)
             return
-        if call.classification == "outer_error" and call.error is not None:
-            if call.error.code in _STALE_CODES:
-                self._show_stale(call.error.message)
-            elif call.error.code == "conflict.live_autosave_enabled":
-                self._show_autosave_blocked(call.error.message)
-            elif call.error.code in _KNOWN_PRE_EFFECT_CODES:
-                self._show_reselect(call.error.message)
-            else:
-                self._show_unknown(call)
+        if call.classification == "start_failed" and not call.process_started:
+            self._show_setup("Python Excel could not start. No formatting was started.")
             return
         if not isinstance(call.result, LiveFormatProfileResult):
             self._show_unknown(call)
             return
         result = call.result
-        if not self._result_matches_invocation(result, invocation):
+        if (call.phase != "apply" or call.classification != f"apply_{result.state}"
+                or not self._result_matches_invocation(result, invocation)):
             self._show_unknown(call)
             return
         self._show_result(result)
@@ -470,6 +502,11 @@ class ExcelLiveFormatWindow:
             and not result.workbook_saved
             and not result.workbook_closed
             and not result.application_closed
+            and (
+                (result.autosave is None and not invocation.allow_autosave_enabled)
+                or (result.autosave is not None and
+                    result.autosave.opt_in_requested == invocation.allow_autosave_enabled)
+            )
         )
 
     def _show_result(self, result: LiveFormatProfileResult) -> None:
@@ -492,6 +529,7 @@ class ExcelLiveFormatWindow:
         ).pack(anchor=tk.W, pady=(3, 8))
         result_lines: list[str] = []
         self._append_result_lines(result_lines, "Formatted", result.formatted_sheets)
+        self._append_result_lines(result_lines, "Partly formatted — inspect", result.partially_modified_sheets)
         self._append_result_lines(
             result_lines,
             "Hidden sheets skipped",
@@ -522,11 +560,17 @@ class ExcelLiveFormatWindow:
                 "Warnings",
                 tuple(item.message for item in result.warnings),
             )
+        if result.autosave is not None:
+            autosave_state = result.autosave.enabled_at_execution
+            result_lines.append("AutoSave at execution: " +
+                                ("Unknown" if autosave_state is None else "On" if autosave_state else "Off"))
+            if autosave_state is not False:
+                result_lines.append("Changes may already have been saved automatically, including partial changes.")
+        result_lines.append("The engine did not call Save or close Excel.")
         self._show_result_text(result_lines)
         if result.state == "succeeded":
             self._set_status(
-                "Template applied. Context Palette did not save or close Excel; "
-                "review the workbook and save it yourself if wanted."
+                "Template applied. Review the changes in Excel; the engine did not call Save or close Excel."
             )
         else:
             self._set_status(
@@ -602,7 +646,8 @@ class ExcelLiveFormatWindow:
             self.content,
             text=(
                 "Context Palette did not receive a trustworthy final result. The workbook may have "
-                "changed. Do not apply the template again automatically; inspect Excel first."
+                "changed and changes may already have been saved automatically. Inspect Excel before "
+                "any retry; closing without saving does not guarantee reversal."
             ),
             wraplength=700,
             justify=tk.LEFT,

@@ -1813,8 +1813,8 @@ back to Excel's active visible worksheet, and renders the common workbook,
 worksheet, and inline **Refresh** controls. It also owns the common rule that a
 **Return to Excel** command is offered only when the captured handle's process
 appeared in the latest inventory. The component does not decide mutation
-policy: direct formatting adds its all-visible scope and blocks AutoSave at
-selection time, while conversion may perform read-only inspection and lets its
+policy: direct formatting adds its all-visible scope and enables AutoSave only
+with an advertised formatting opt-in, while conversion may perform read-only inspection and lets its
 authoritative plan block unsafe mutation.
 
 ### `excel_live_text_conversion_window.py`
@@ -1909,8 +1909,9 @@ still creates a new page and never updates an existing one.
 
 ### `excel_live_format_window.py`
 
-Owns the centered attended **Apply Excel format template** workflow against
-the Python Excel engine at commit `e405e14`. It reuses the same optional,
+Owns the centered attended **Apply Excel format template** workflow whose
+original tested engine baseline is `e405e14`; AutoSave support is discovered
+from the current engine as described below. It reuses the same optional,
 machine-local launcher resolution as CSV export, inventories only already-open
 Excel workbooks, and uses the shared target selector before offering a selected
 visible worksheet or all visible worksheets. It has one fixed **Standard data** profile: Aptos 11 in the used
@@ -1919,10 +1920,21 @@ exists. Its **Apply** button is the one confirmation.
 
 This is deliberately not a planner: it neither consumes Input / Output nor
 creates a fingerprint, backup, recovery point, progress/cancellation channel,
-or automatic retry. The engine requires AutoSave to be off; direct formatting
-may clear Excel Undo. Context Palette never saves, closes, or launches Excel.
-A stale inventory requires Refresh and reselection; partial or unknown process
-outcomes tell the user to inspect Excel before deciding whether to run again.
+or automatic retry. Opening the Action checks exact live inventory/format
+capabilities asynchronously before inventory. Only
+`apply_live_format_profile@1.0` with `supports.autosave_opt_in=true` enables
+`allow_autosave_enabled=true` at one Apply gesture. Missing/false support retains
+the legacy AutoSave-on block and sends the original request shape. The visible
+warning covers execution-time state changing since inventory. Engine repair or
+reselection invalidates support before reprobe; F9 alone starts no format probe.
+Direct formatting may clear Undo; Context Palette never calls Save, closes or
+launches Excel. The strict optional `result.autosave` object is correlated with
+the captured request. `workbook_saved=false` records no engine Save call, not
+proof of unsaved changes. Partly formatted sheets and their filter effects remain
+distinct from completed sheets. Every result-null error after Apply, missing or
+contradictory metadata, timeout or protocol loss is unknown with inspection
+guidance and no retry/lifecycle claim. Valid partial or unknown effects may have
+auto-persisted; closing without saving is not promised to reverse them.
 When the main action captured an F9 destination handle, **Return to Excel** is
 a best-effort focus request only. The workflow's coordinator keeps engine work
 off the Tk thread. A disposable real-Excel one-worksheet smoke confirmed the

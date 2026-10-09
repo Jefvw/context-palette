@@ -94,7 +94,8 @@ Action and its internal placements without changing its external target. See
   already-open Excel workbook. The attended Action inventories the live Excel
   session, lets you choose one worksheet or all visible worksheets, and uses
   one **Apply** click as confirmation. It does not use Input / Output and never
-  saves or closes Excel; AutoSave must be off.
+  calls Save or closes Excel. Compatible engines allow AutoSave with one visible
+  warning; older engines still require it off. AutoSave may save changes automatically.
 - Provides **Convert Excel values to text** for selected physical columns in
   an already-open workbook, with optional Review during normal startup. Python Excel owns the
   paged preflight, exact plan fingerprint, verified recovery workbook, and

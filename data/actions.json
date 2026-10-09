@@ -235,7 +235,7 @@
         "formatting",
         "open workbook"
       ],
-      "description": "Choose an already-open Excel workbook and one worksheet or all visible worksheets, then apply Standard data directly. Excel is not saved or closed."
+      "description": "Choose an already-open Excel workbook and one worksheet or all visible worksheets, then apply Standard data directly. The engine does not call Save or close Excel. Compatible engines allow AutoSave; it may save changes automatically and Excel Undo may be affected."
     },
     {
       "id": "excel-native-text-to-columns",

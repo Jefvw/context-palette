@@ -29,6 +29,7 @@ from context_palette.excel_automation import (
     ExcelAutomationInputError,
     ExcelAutomationSettings,
     ExcelAutomationSettingsError,
+    ExcelCapabilitySupports,
     ExecuteAutomationResult,
     LiveExcelInventoryLimits,
     LiveExcelInventoryResult,
@@ -40,6 +41,8 @@ from context_palette.excel_automation import (
     LiveColumnPreflightResult,
     LiveFormatProfileInvocation,
     LiveFormatProfileResult,
+    LiveFormatAutoSave,
+    LiveFormatFailure,
     LIVE_NATIVE_TEXT_OPERATION,
     LIVE_NATIVE_TEXT_AUTOMATION_ID,
     LiveTextToColumnsInvocation,
@@ -1089,6 +1092,28 @@ class ExcelAutomationSettingsAndInputTests(unittest.TestCase):
 
 
 class ExcelAutomationRequestTests(unittest.TestCase):
+    def test_live_format_autosave_opt_in_is_additive_explicit_and_boolean(self) -> None:
+        legacy = LiveFormatProfileInvocation("opaque", "worksheet", "Data")
+        self.assertFalse(legacy.allow_autosave_enabled)
+        for requested in (False, True):
+            with self.subTest(requested=requested):
+                request = build_apply_live_format_profile_request(
+                    "format-opt-in",
+                    LiveFormatProfileInvocation(
+                        "opaque", worksheet="Data", allow_autosave_enabled=requested
+                    ),
+                )
+                self.assertEqual(request["operation_version"], "1.0")
+                if requested:
+                    self.assertIs(request["arguments"]["allow_autosave_enabled"], True)
+                else:
+                    self.assertNotIn("allow_autosave_enabled", request["arguments"])
+        for invalid in (None, 0, 1, "true", [], {}):
+            with self.subTest(invalid=invalid), self.assertRaises(ExcelAutomationInputError):
+                LiveFormatProfileInvocation(
+                    "opaque", worksheet="Data", allow_autosave_enabled=invalid
+                )
+
     def test_live_request_builders_preserve_opaque_unicode_tokens_and_scope(self) -> None:
         limits = LiveExcelInventoryLimits(2, 3, 4)
         inventory = build_inventory_live_excel_request("inventory-é", limits)
@@ -1267,6 +1292,204 @@ class ExcelAutomationRequestTests(unittest.TestCase):
 
 
 class ExcelAutomationResponseTests(unittest.TestCase):
+    def test_live_format_capability_opt_in_defaults_to_unsupported_and_is_strict(self) -> None:
+        self.assertFalse(ExcelCapabilitySupports(True, False, False, False).autosave_opt_in)
+        for marker in ("missing", False, True, None, 0, 1, "true"):
+            with self.subTest(marker=marker):
+                document = _capabilities_result()
+                capability = document["capabilities"][0]
+                capability.update(
+                    operation="apply_live_format_profile",
+                    plan_operation=None,
+                    plan_operation_version=None,
+                )
+                capability["supports"].update(column_selection=False, planning=False)
+                if marker != "missing":
+                    capability["supports"]["autosave_opt_in"] = marker
+                call = parse_automation_response(
+                    phase="capabilities", request_id="format-capability", return_code=0,
+                    stdout=_envelope("describe_capabilities", "format-capability", document),
+                )
+                if marker == "missing" or isinstance(marker, bool):
+                    self.assertEqual(call.classification, "capabilities_succeeded", call.reason)
+                    self.assertIsInstance(call.result, DescribeCapabilitiesResult)
+                    capability_result = call.result.find("apply_live_format_profile", "1.0")
+                    self.assertIsNotNone(capability_result)
+                    self.assertIs(capability_result.supports.autosave_opt_in, marker is True)
+                    self.assertIsNone(call.result.find("apply_live_format_profile", "2.0"))
+                else:
+                    self.assertEqual(call.classification, "capabilities_failed")
+                    self.assertIn("autosave_opt_in", call.reason)
+
+    def test_live_format_autosave_metadata_preserves_execution_state_and_warnings(self) -> None:
+        for enabled, opted_in in ((True, True), (False, True), (None, True), (False, False), (None, False)):
+            with self.subTest(enabled=enabled, opted_in=opted_in):
+                document = _live_format_result()
+                document["autosave"] = {
+                    "enabled_at_execution": enabled, "opt_in_requested": opted_in
+                }
+                code = (
+                    "live.autosave_enabled" if enabled is True
+                    else "live.autosave_state_unknown" if enabled is None else None
+                )
+                warnings = [] if code is None else [{
+                    "code": code,
+                    "message": "AutoSave may save these changes automatically; Excel Undo may be affected.",
+                    "details": {},
+                }]
+                call = parse_automation_response(
+                    phase="apply", request_id="format-autosave", return_code=0,
+                    stdout=_envelope("apply_live_format_profile", "format-autosave", document, warnings=warnings),
+                )
+                self.assertEqual(call.classification, "apply_succeeded", call.reason)
+                self.assertEqual(call.result.autosave, LiveFormatAutoSave(enabled, opted_in))
+                self.assertFalse(call.result.workbook_saved)
+                self.assertEqual(tuple(item.code for item in call.result.warnings), () if code is None else (code,))
+                with self.assertRaises(FrozenInstanceError):
+                    call.result.autosave.opt_in_requested = False
+
+    def test_live_format_legacy_results_and_positional_constructors_remain_compatible(self) -> None:
+        call = parse_automation_response(
+            phase="apply", request_id="format-legacy", return_code=0,
+            stdout=_envelope("apply_live_format_profile", "format-legacy", _live_format_result()),
+        )
+        self.assertEqual(call.classification, "apply_succeeded", call.reason)
+        self.assertIsNone(call.result.autosave)
+        self.assertEqual(call.result.partially_modified_sheets, ())
+        legacy = LiveFormatProfileResult(
+            "succeeded", "opaque", "Book.xlsx", "worksheet", "standard_data", "1.0",
+            ("Data",), (), (), (), (), False, False, False, (),
+        )
+        self.assertIsNone(legacy.autosave)
+        self.assertEqual(legacy.partially_modified_sheets, ())
+        legacy_failure = LiveFormatFailure("Data", "operation.live_format_failed", "Failed.")
+        self.assertIsNone(legacy_failure.mutation_started)
+        self.assertEqual(legacy_failure.completed_stages, ())
+        self.assertIsNone(legacy_failure.stage)
+
+    def test_live_format_rejects_malformed_or_contradictory_autosave_metadata(self) -> None:
+        for metadata in (
+            None, [], {}, {"opt_in_requested": True},
+            {"enabled_at_execution": False},
+            {"enabled_at_execution": 1, "opt_in_requested": True},
+            {"enabled_at_execution": "unknown", "opt_in_requested": True},
+            {"enabled_at_execution": False, "opt_in_requested": 1},
+            {"enabled_at_execution": True, "opt_in_requested": False},
+        ):
+            with self.subTest(metadata=metadata):
+                document = _live_format_result()
+                document["autosave"] = metadata
+                call = parse_automation_response(
+                    phase="apply", request_id="format-bad-autosave", return_code=0,
+                    stdout=_envelope("apply_live_format_profile", "format-bad-autosave", document),
+                )
+                self.assertEqual(call.classification, "apply_unknown")
+                self.assertIsNone(call.result)
+
+    def test_live_format_accepts_partial_only_sheet_and_its_filter_effect(self) -> None:
+        document = _live_format_result(state="partial_failure")
+        document.update(
+            formatted_sheets=[], partially_modified_sheets=["Résumé"],
+            filter_added_sheets=["Résumé"],
+            autosave={"enabled_at_execution": True, "opt_in_requested": True},
+        )
+        document["failures"][0].update(
+            stage="freeze_panes", exception_type="com_error", com_hresult=-2147352567,
+            mutation_started=True, completed_stages=["body_font", "header", "filter", "activate"],
+        )
+        for filter_field in ("filter_added_sheets", "existing_filter_sheets"):
+            with self.subTest(filter_field=filter_field):
+                candidate = deepcopy(document)
+                candidate["filter_added_sheets"] = []
+                candidate[filter_field] = ["Résumé"]
+                call = parse_automation_response(
+                    phase="apply", request_id="format-partial-only", return_code=0,
+                    stdout=_envelope("apply_live_format_profile", "format-partial-only", candidate),
+                )
+                self.assertEqual(call.classification, "apply_partial_failure", call.reason)
+                self.assertEqual(call.result.formatted_sheets, ())
+                self.assertEqual(call.result.partially_modified_sheets, ("Résumé",))
+                self.assertEqual(getattr(call.result, filter_field), ("Résumé",))
+                failure = call.result.failures[0]
+                self.assertTrue(failure.mutation_started)
+                self.assertEqual(failure.completed_stages, ("body_font", "header", "filter", "activate"))
+                self.assertEqual(failure.stage, "freeze_panes")
+
+    def test_live_format_accepts_clean_failure_and_failure_before_first_stage_completes(self) -> None:
+        for mutated, expected in ((False, "apply_failed"), (True, "apply_partial_failure")):
+            with self.subTest(mutated=mutated):
+                document = _live_format_result(state="failed")
+                document.update(
+                    state="partial_failure" if mutated else "failed",
+                    partially_modified_sheets=["Résumé"] if mutated else [],
+                )
+                document["failures"][0].update(
+                    mutation_started=mutated, completed_stages=[], stage="body_font",
+                )
+                call = parse_automation_response(
+                    phase="apply", request_id="format-first-stage", return_code=0,
+                    stdout=_envelope("apply_live_format_profile", "format-first-stage", document),
+                )
+                self.assertEqual(call.classification, expected, call.reason)
+                self.assertIs(call.result.failures[0].mutation_started, mutated)
+                self.assertEqual(call.result.failures[0].completed_stages, ())
+
+    def test_live_format_rejects_failure_mutation_metadata_contradictions(self) -> None:
+        for partial, failure_metadata in (
+            ([], {"mutation_started": True, "completed_stages": []}),
+            (None, {"mutation_started": True, "completed_stages": []}),
+            (["Résumé"], {"mutation_started": False, "completed_stages": []}),
+            ([], {"mutation_started": False, "completed_stages": ["body_font"]}),
+            ([], {"completed_stages": ["body_font"]}),
+        ):
+            with self.subTest(partial=partial, failure_metadata=failure_metadata):
+                document = _live_format_result(state="failed")
+                if partial is not None:
+                    document["partially_modified_sheets"] = partial
+                if partial:
+                    document["state"] = "partial_failure"
+                document["failures"][0].update(failure_metadata)
+                call = parse_automation_response(
+                    phase="apply", request_id="format-mutation-contradiction", return_code=0,
+                    stdout=_envelope("apply_live_format_profile", "format-mutation-contradiction", document),
+                )
+                self.assertEqual(call.classification, "apply_unknown")
+                self.assertIsNone(call.result)
+                self.assertIn("mutation metadata", call.reason)
+
+    def test_live_format_rejects_malformed_failure_mutation_flags_and_stages(self) -> None:
+        malformed_fields = (
+            *(dict(mutation_started=value) for value in (None, 0, 1, "true", [], {})),
+            *(dict(completed_stages=value) for value in (None, "body_font", [1], [False], ["unknown"], {})),
+            *(dict(stage=value) for value in (1, False, "", "unknown")),
+        )
+        for failure_metadata in malformed_fields:
+            with self.subTest(failure_metadata=failure_metadata):
+                document = _live_format_result(state="failed")
+                document["failures"][0].update(failure_metadata)
+                call = parse_automation_response(
+                    phase="apply", request_id="format-malformed-failure", return_code=0,
+                    stdout=_envelope("apply_live_format_profile", "format-malformed-failure", document),
+                )
+                self.assertEqual(call.classification, "apply_unknown")
+                self.assertIsNone(call.result)
+
+    def test_live_format_rejects_contradictory_partial_sheet_metadata(self) -> None:
+        for partial, state in (
+            (["Données"], "partial_failure"), (["Caché"], "partial_failure"),
+            (["Other"], "partial_failure"), (["Résumé", "Résumé"], "partial_failure"),
+            (["Résumé"], "failed"), (["Résumé"], "succeeded"),
+        ):
+            with self.subTest(partial=partial, state=state):
+                document = _live_format_result(state="partial_failure")
+                document.update(state=state, partially_modified_sheets=partial)
+                call = parse_automation_response(
+                    phase="apply", request_id="format-bad-partial", return_code=0,
+                    stdout=_envelope("apply_live_format_profile", "format-bad-partial", document),
+                )
+                self.assertEqual(call.classification, "apply_unknown")
+                self.assertIsNone(call.result)
+
     def test_live_inventory_is_immutable_bounded_and_preserves_unicode(self) -> None:
         result = parse_automation_response(
             phase="inventory",
@@ -2261,6 +2484,117 @@ class LiveScientificConversionProtocolTests(unittest.TestCase):
 
 
 class ExcelAutomationProcessClientTests(unittest.TestCase):
+    def test_format_client_requires_request_correlated_autosave_metadata(self) -> None:
+        from io import BytesIO
+
+        for requested, metadata, expected in (
+            (False, None, "apply_succeeded"),
+            (False, {"enabled_at_execution": False, "opt_in_requested": False}, "apply_succeeded"),
+            (False, {"enabled_at_execution": False, "opt_in_requested": True}, "apply_unknown"),
+            (True, None, "apply_unknown"),
+            (True, {"enabled_at_execution": False, "opt_in_requested": False}, "apply_unknown"),
+            (True, {"enabled_at_execution": False, "opt_in_requested": True}, "apply_succeeded"),
+            (True, {"enabled_at_execution": True, "opt_in_requested": True}, "apply_succeeded"),
+            (True, {"enabled_at_execution": None, "opt_in_requested": True}, "apply_succeeded"),
+        ):
+            with self.subTest(requested=requested, metadata=metadata), tempfile.TemporaryDirectory() as directory:
+                document = _live_format_result()
+                if metadata is not None:
+                    document["autosave"] = metadata
+
+                class FakeProcess:
+                    stdin = BytesIO()
+                    stdout = BytesIO(_envelope("apply_live_format_profile", "format-echo", document))
+                    stderr = BytesIO()
+
+                    def wait(self, timeout=None):
+                        return 0
+
+                starts = []
+
+                def start(*args, **kwargs):
+                    starts.append((args, kwargs))
+                    return FakeProcess()
+
+                launcher = Path(directory) / "python-excel.bat"
+                launcher.write_text("@echo off\n", encoding="utf-8")
+                call = PythonExcelProcessClient(popen_factory=start).call(
+                    launcher,
+                    build_apply_live_format_profile_request("format-echo", LiveFormatProfileInvocation(
+                        "live-workbook-v1.classeur-é", worksheet="Données", allow_autosave_enabled=requested
+                    )),
+                    phase="apply", timeout_seconds=1,
+                )
+                self.assertEqual(call.classification, expected, call.reason)
+                self.assertEqual(len(starts), 1)
+                if expected == "apply_unknown":
+                    self.assertTrue(call.unknown_outcome)
+                    self.assertIsNone(call.result)
+
+    def test_format_opt_in_client_keeps_correlation_and_result_null_errors_unknown(self) -> None:
+        from io import BytesIO
+
+        for mode in ("wrong_request_id", "wrong_operation", "wrong_version", "outer_conflict", "outer_internal"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                document = _live_format_result()
+                document["autosave"] = {"enabled_at_execution": True, "opt_in_requested": True}
+                envelope = json.loads(_envelope("apply_live_format_profile", "format-correlation", document))
+                return_code = 0
+                if mode == "wrong_request_id":
+                    envelope["request_id"] = "other"
+                elif mode == "wrong_operation":
+                    envelope["operation"] = "inventory_live_excel"
+                elif mode == "wrong_version":
+                    envelope["operation_version"] = "2.0"
+                else:
+                    return_code = 2 if mode == "outer_conflict" else 70
+                    envelope.update(status="error", result=None, error={
+                        "code": "conflict.live_autosave_enabled" if mode == "outer_conflict" else "internal.unexpected_error",
+                        "category": "conflict" if mode == "outer_conflict" else "internal",
+                        "message": "The engine could not complete formatting.", "retryable": False, "details": {},
+                    })
+
+                class FakeProcess:
+                    stdin = BytesIO()
+                    stdout = BytesIO(json.dumps(envelope).encode("utf-8"))
+                    stderr = BytesIO()
+
+                    def wait(self, timeout=None):
+                        return return_code
+
+                launcher = Path(directory) / "python-excel.bat"
+                launcher.write_text("@echo off\n", encoding="utf-8")
+                call = PythonExcelProcessClient(popen_factory=lambda *_args, **_kwargs: FakeProcess()).call(
+                    launcher,
+                    build_apply_live_format_profile_request("format-correlation", LiveFormatProfileInvocation(
+                        "live-workbook-v1.classeur-é", worksheet="Données", allow_autosave_enabled=True
+                    )),
+                    phase="apply", timeout_seconds=1,
+                )
+                self.assertEqual(call.classification, "apply_unknown", call.reason)
+                self.assertIsNone(call.result)
+                if mode.startswith("wrong_"):
+                    self.assertIn("did not match", call.reason)
+
+    def test_format_client_rejects_non_boolean_opt_in_before_starting(self) -> None:
+        for invalid in (None, 0, 1, "true"):
+            with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as directory:
+                launcher = Path(directory) / "python-excel.bat"
+                launcher.write_text("@echo off\n", encoding="utf-8")
+                request = build_apply_live_format_profile_request(
+                    "format-invalid-opt-in", LiveFormatProfileInvocation("opaque", worksheet="Data")
+                )
+                request["arguments"]["allow_autosave_enabled"] = invalid
+
+                def start(*args, **kwargs):
+                    self.fail("Invalid opt-in must not launch the engine.")
+
+                call = PythonExcelProcessClient(popen_factory=start).call(
+                    launcher, request, phase="apply", timeout_seconds=1,
+                )
+                self.assertEqual(call.classification, "start_failed")
+                self.assertFalse(call.process_started)
+
     def test_native_timeout_process_loss_and_malformed_output_never_retry(self) -> None:
         from io import BytesIO
 

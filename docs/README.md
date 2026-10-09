@@ -79,6 +79,7 @@ This directory separates current behavior, durable direction, historical rationa
 
 ### Integration status and handovers
 
+- [Live Excel formatting AutoSave](EXCEL_FORMAT_AUTOSAVE.md) — capability-gated one-click opt-in, honest persistence reporting and pending fresh live UAT.
 - [Native Excel Text to Columns host integration](EXCEL_NATIVE_TEXT_TO_COLUMNS.md) — no-backup storage conversion; engine feature remains uncommitted and fresh host UAT needs separate approval.
 
 - [ChatGPT text-chat trial](HELP.md#chat-with-chatgpt) — protected per-PC sign-in and explicit text chat; [live acceptance pending](TESTING.md#chatgpt-text-chat-trial-2026-10-07).

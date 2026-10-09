@@ -535,12 +535,13 @@ def build_action_preview(
         if action.value == LIVE_FORMAT_PROFILE_AUTOMATION_ID:
             return ActionPreview(
                 "open Excel workbooks, then one worksheet or all visible worksheets you choose",
-                "apply Standard data formatting directly; Excel is not saved or closed",
+                "apply Standard data formatting directly; the engine does not call Save or close Excel",
                 details,
                 (
                     "Changes the open workbook directly, may clear Excel Undo, "
-                    "has no recovery or rollback. AutoSave must be off. Context "
-                    "Palette never saves or closes Excel."
+                    "has no recovery or rollback. A compatible engine allows AutoSave on; "
+                    "older engines require it off. AutoSave may save changes automatically. "
+                    "Context Palette does not call Save or close Excel."
                 ),
             )
         if action.value == LIVE_TEXT_CONVERSION_AUTOMATION_ID:

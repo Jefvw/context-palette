@@ -31,6 +31,9 @@ PLAN_OPERATION = "plan_automation"
 EXECUTE_OPERATION = "execute_automation"
 LIVE_INVENTORY_OPERATION = "inventory_live_excel"
 LIVE_FORMAT_PROFILE_OPERATION = "apply_live_format_profile"
+_LIVE_FORMAT_STAGES = frozenset(
+    {"body_font", "header", "filter", "activate", "freeze_panes"}
+)
 DESCRIBE_CAPABILITIES_OPERATION = "describe_capabilities"
 LIVE_PREFLIGHT_OPERATION = "preflight_live_columns"
 LIVE_CONVERSION_PLAN_OPERATION = "plan_live_column_conversion"
@@ -487,6 +490,7 @@ class LiveFormatProfileInvocation:
     worksheet: str | None = None
     profile_id: str = "standard_data"
     profile_version: str = "1.0"
+    allow_autosave_enabled: bool = False
 
     def __post_init__(self) -> None:
         if (
@@ -511,6 +515,10 @@ class LiveFormatProfileInvocation:
         if (self.profile_id, self.profile_version) != ("standard_data", "1.0"):
             raise ExcelAutomationInputError(
                 "The selected live format profile is unsupported."
+            )
+        if not isinstance(self.allow_autosave_enabled, bool):
+            raise ExcelAutomationInputError(
+                "The live format AutoSave opt-in must be boolean."
             )
 
 
@@ -641,17 +649,16 @@ def build_apply_live_format_profile_request(
 ) -> dict[str, object]:
     """Build one direct profile application request without a retry protocol."""
 
-    return _request(
-        request_id,
-        LIVE_FORMAT_PROFILE_OPERATION,
-        {
-            "workbook_token": invocation.workbook_token,
-            "scope": invocation.scope,
-            "worksheet": invocation.worksheet,
-            "profile_id": invocation.profile_id,
-            "profile_version": invocation.profile_version,
-        },
-    )
+    arguments: dict[str, object] = {
+        "workbook_token": invocation.workbook_token,
+        "scope": invocation.scope,
+        "worksheet": invocation.worksheet,
+        "profile_id": invocation.profile_id,
+        "profile_version": invocation.profile_version,
+    }
+    if invocation.allow_autosave_enabled:
+        arguments["allow_autosave_enabled"] = True
+    return _request(request_id, LIVE_FORMAT_PROFILE_OPERATION, arguments)
 
 
 def _request(
@@ -926,6 +933,7 @@ class ExcelCapabilitySupports:
     column_selection: bool
     in_place: bool
     planning: bool
+    autosave_opt_in: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -1290,6 +1298,15 @@ class LiveFormatFailure:
     worksheet: str
     code: str
     message: str
+    mutation_started: bool | None = None
+    completed_stages: tuple[str, ...] = ()
+    stage: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LiveFormatAutoSave:
+    enabled_at_execution: bool | None
+    opt_in_requested: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -1309,6 +1326,8 @@ class LiveFormatProfileResult:
     workbook_closed: bool
     application_closed: bool
     warnings: tuple[LiveExcelWarning, ...]
+    autosave: LiveFormatAutoSave | None = None
+    partially_modified_sheets: tuple[str, ...] = ()
 
 
 AutomationResult = (
@@ -1604,6 +1623,9 @@ def _parse_capability(value: object, index: int) -> ExcelCapability:
         ),
         _boolean(support_document.get("in_place"), "supports.in_place"),
         _boolean(support_document.get("planning"), "supports.planning"),
+        _boolean(
+            support_document.get("autosave_opt_in", False), "supports.autosave_opt_in"
+        ),
     )
     plan_operation = _optional_text(
         item.get("plan_operation"), f"{label}.plan_operation"
@@ -2642,6 +2664,9 @@ def _parse_live_format_profile_result(
     ):
         raise _ProtocolError("The live format profile is unsupported.")
     formatted = _text_tuple(document.get("formatted_sheets"), "formatted_sheets")
+    partially_modified = _text_tuple(
+        document.get("partially_modified_sheets", []), "partially_modified_sheets"
+    )
     hidden = _text_tuple(document.get("skipped_hidden_sheets"), "skipped_hidden_sheets")
     filters_added = _text_tuple(document.get("filter_added_sheets"), "filter_added_sheets")
     existing_filters = _text_tuple(
@@ -2651,17 +2676,30 @@ def _parse_live_format_profile_result(
         _parse_live_format_failure(value, index)
         for index, value in enumerate(_array(document.get("failures"), "failures"))
     )
+    affected_sheets = set(formatted) | set(partially_modified)
+    partial_sheets = set(partially_modified)
+    for failure in failures:
+        if (
+            (failure.mutation_started is True or failure.completed_stages)
+            and failure.worksheet not in partial_sheets
+            or failure.mutation_started is False
+            and (failure.worksheet in partial_sheets or failure.completed_stages)
+        ):
+            raise _ProtocolError("The live format failure mutation metadata is contradictory.")
     if (
-        not set(filters_added).issubset(formatted)
-        or not set(existing_filters).issubset(formatted)
+        not set(filters_added).issubset(affected_sheets)
+        or not set(existing_filters).issubset(affected_sheets)
         or set(formatted) & set(hidden)
         or set(formatted) & {item.worksheet for item in failures}
+        or set(partially_modified) & (set(formatted) | set(hidden))
+        or not set(partially_modified).issubset(item.worksheet for item in failures)
+        or len(set(partially_modified)) != len(partially_modified)
     ):
         raise _ProtocolError("The live format worksheet effects are contradictory.")
     if (
-        state == "succeeded" and failures
-        or state == "failed" and (not failures or formatted)
-        or state == "partial_failure" and (not failures or not formatted)
+        state == "succeeded" and (failures or partially_modified)
+        or state == "failed" and (not failures or affected_sheets)
+        or state == "partial_failure" and (not failures or not affected_sheets)
     ):
         raise _ProtocolError("The live format result state contradicts its effects.")
     lifecycle = (
@@ -2671,6 +2709,11 @@ def _parse_live_format_profile_result(
     )
     if any(lifecycle):
         raise _ProtocolError("The live format response contradicted its lifecycle contract.")
+    autosave = (
+        _parse_live_format_autosave(document["autosave"])
+        if "autosave" in document
+        else None
+    )
     return LiveFormatProfileResult(
         state,  # type: ignore[arg-type]
         _text(target.get("workbook_token"), "target.workbook_token"),
@@ -2685,15 +2728,47 @@ def _parse_live_format_profile_result(
         failures,
         *lifecycle,
         _parse_live_warnings(warnings),
+        autosave,
+        partially_modified,
     )
+
+
+def _parse_live_format_autosave(value: object) -> LiveFormatAutoSave:
+    document = _object(value, "autosave")
+    if "enabled_at_execution" not in document:
+        raise _ProtocolError("autosave.enabled_at_execution is required.")
+    enabled = _optional_boolean(
+        document.get("enabled_at_execution"), "autosave.enabled_at_execution"
+    )
+    requested = _boolean(document.get("opt_in_requested"), "autosave.opt_in_requested")
+    if enabled is True and not requested:
+        raise _ProtocolError("The live format AutoSave metadata is contradictory.")
+    return LiveFormatAutoSave(enabled, requested)
 
 
 def _parse_live_format_failure(value: object, index: int) -> LiveFormatFailure:
     item = _object(value, f"failures[{index}]")
+    mutation_started = (
+        _boolean(item["mutation_started"], "failure.mutation_started")
+        if "mutation_started" in item
+        else None
+    )
+    completed_stages = _text_tuple(
+        item.get("completed_stages", []), "failure.completed_stages"
+    )
+    stage = _optional_text(item.get("stage"), "failure.stage")
+    if (
+        not set(completed_stages).issubset(_LIVE_FORMAT_STAGES)
+        or stage is not None and stage not in _LIVE_FORMAT_STAGES
+    ):
+        raise _ProtocolError("The live format failure stage is unsupported.")
     return LiveFormatFailure(
         _text(item.get("worksheet"), "failure.worksheet"),
         _text(item.get("code"), "failure.code"),
         _text(item.get("message"), "failure.message"),
+        mutation_started,
+        completed_stages,
+        stage,
     )
 
 
@@ -3401,6 +3476,13 @@ class PythonExcelProcessClient:
             request_id = _text(request.get("request_id"), "request_id")
             if request.get("operation") != _operation_for_phase(phase):
                 raise _ProtocolError("The request operation does not match its phase.")
+            arguments = request.get("arguments")
+            autosave_opt_in = False
+            if phase == "apply" and isinstance(arguments, dict):
+                autosave_opt_in = _boolean(
+                    arguments.get("allow_autosave_enabled", False),
+                    "allow_autosave_enabled",
+                )
             payload = (
                 json.dumps(
                     dict(request),
@@ -3514,6 +3596,20 @@ class PythonExcelProcessClient:
             stderr=bytes(stderr_buffer.content),
         )
         arguments = request.get("arguments")
+        if phase == "apply" and autosave_opt_in and result.classification == "outer_error":
+            return _failed_protocol_result(
+                phase, return_code, diagnostic_present,
+                "The opted-in live format error response provided no AutoSave metadata.",
+            )
+        if isinstance(result.result, LiveFormatProfileResult):
+            autosave = result.result.autosave
+            if (autosave is None and autosave_opt_in) or (
+                autosave is not None and autosave.opt_in_requested != autosave_opt_in
+            ):
+                return _failed_protocol_result(
+                    phase, return_code, diagnostic_present,
+                    "The live format AutoSave opt-in metadata did not match its request.",
+                )
         if isinstance(result.result, LiveTextToColumnsResult):
             target = result.result.target
             if not isinstance(arguments, dict) or (

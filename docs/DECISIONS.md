@@ -3910,3 +3910,22 @@ Production startup uses asynchronous static metadata, outside F9; restore and
 engine reselection refresh it. Existing persisted records remain editable.
 Engine HEAD c081510 with dirty native work is recorded, not treated as a pushed
 feature. Synthetic verification precedes separately approved fresh host UAT.
+
+## 2026-10-08 - Let compatible live formatting use AutoSave with one warning
+
+**Decision:** Consume the engine's additive `apply_live_format_profile@1.0`
+`supports.autosave_opt_in` capability and `allow_autosave_enabled` argument.
+One visible persistence/Undo warning and explicit Apply authorize the opted-in
+request. Older engines keep their AutoSave-on block and unchanged request shape.
+The checked converter and native Text to Columns keep their existing policies.
+
+**Reason:** The owner wants routine formatting to remain quick without turning
+AutoSave off. Explicit capability discovery preserves old engine compatibility
+and covers AutoSave changing after inventory without another confirmation.
+
+**Consequences:** Correlate execution-time AutoSave metadata with the gesture.
+No engine Save call is separate from possible Excel automatic persistence.
+Partial sheets/filter effects remain visible; every result-null Apply error or
+untrusted reply is unknown without automatic retry or a reversal promise.
+Python Excel remains read-only; its observed dirty opt-in working tree is not
+treated as a published revision. Fake verification precedes new attended UAT.

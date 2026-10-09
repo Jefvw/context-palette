@@ -1288,11 +1288,17 @@ The bottom communication line always stays one row high. Hover over it for the c
   worksheet or **All visible worksheets** and choose **Apply**. The
   fixed Standard data template applies Aptos 11 to the used range, treats row
   1 as a header, freezes its top row, and adds a filter only where none exists.
-  Turn AutoSave off first. Apply is the confirmation, and Context Palette never
-  saves or closes the workbook. Direct formatting may clear Excel Undo and has
+  When Python Excel advertises AutoSave support, leave AutoSave on if wanted.
+  One visible warning says **AutoSave may save these changes automatically; Excel
+  Undo may be affected.** Apply is the only confirmation; there is no extra
+  acknowledgement, Review or backup. Older engines still require AutoSave off.
+  Context Palette never calls Save or closes the workbook. Direct formatting has
   no backup, rollback, progress, cancellation, or automatic retry. If Excel
   changes before Apply, Refresh and select it again. For partial or unknown
-  results, inspect the workbook before retrying. **Return to Excel** only tries
+  results, inspect the workbook before retrying; changes may already have been
+  saved automatically and closing without saving cannot guarantee reversal.
+  Results show execution-time AutoSave and any partly formatted worksheets.
+  **Return to Excel** only tries
   to return focus to the window captured when you opened the Action.
 - To convert columns to text, run **Convert Excel values to text**.
   It does not read Input / Output. It begins

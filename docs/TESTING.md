@@ -28,6 +28,36 @@ recorded on 2026-09-09. Its checklist remains available for optional follow-up.
 Keep that decision separate from per-check results, automated output and
 simulated DPI; unreported manual checks remain unverified.
 
+## Excel formatting with AutoSave (2026-10-08)
+
+The host consumes additive formatting version `1.0` only when its exact
+capability advertises `supports.autosave_opt_in=true`. One Apply sends the
+explicit opt-in; legacy requests remain unchanged and old engines still block
+AutoSave on. Protocol fakes cover strict marker/argument/metadata types, execution
+on/off/unknown, request correlation, missing metadata and result-null errors.
+New engine partial-only worksheet effects and their filters retain valid
+partial_failure classification. Real Tk with a fake coordinator covers one
+gesture, all-visible scope, no extra review, stale inventory versus execution
+state, repair/reprobe invalidation, unknown/no-retry guidance and simulated
+100/125/150% scaling; tests restore Tk scaling and forbid process startup.
+
+The final focused protocol/UI/Preview/documentation batch passed **131 tests in
+10.322 seconds**. The earlier UI/selector/converter regression batch passed
+**90 tests in 27.796 seconds**. The complete required check passed configuration
+validation, compilation and **1,827 tests in 210.237 seconds, with 2 skipped**.
+Independent static review and whitespace checks passed. Review corrections
+removed the Ready message's unsaved promise and reject inconsistent returned
+mutation/partial-sheet metadata. Private complete-check output is at
+outputs/format-autosave-host-20261008/complete-check.txt.
+No engine process, live Office, personal workbook or credential was accessed.
+
+Observed read-only engine HEAD: a2ce7d33ce4f2825ebcf401a9b1cd13d4571e200,
+with 13 tracked modifications and no untracked files. The opt-in is present in
+that working tree; this does not establish a pushed revision. Neither the old
+off-state host smoke nor the engine's separate conversion UAT verifies the new
+formatting opt-in. Fresh exact disposable scope must be approved before real
+Excel testing. See [contract, ownership and bounded follow-up](EXCEL_FORMAT_AUTOSAVE.md).
+
 ## Native Excel Text to Columns integration (2026-10-07)
 
 Synthetic checks cover exact version/availability offering, static-only
@@ -1867,13 +1897,19 @@ Perform only when relevant:
   cancellation/progress claim, sequence route, Context Palette filename
   allocation, or desktop Excel launch.
 
-- With a separately bootstrapped Python Excel engine at commit `e405e14`, use
+- With a separately bootstrapped Python Excel engine advertising available
+  `apply_live_format_profile@1.0` and inventory, use
   a disposable already-open workbook to run **Apply Excel format template**.
   Confirm missing/invalid launcher setup disables only Excel Actions; inventory
   finds the active workbook; the workbook/worksheet labels, captured-F9
   preselection, active-sheet fallback, inline Refresh, and Return eligibility
   match the conversion Action; one-worksheet and all-visible choices act only on
-  the displayed target; AutoSave is rejected; and Standard data applies Aptos
+  the displayed target. With an explicitly advertised `autosave_opt_in`, confirm
+  the visible persistence/Undo warning, no additional confirmation and one
+  opted-in Apply with AutoSave on. Without it, AutoSave on remains blocked and no
+  new argument is sent. Separately approve the exact fresh disposable scope
+  before any live opt-in test. Verify execution AutoSave reporting and engine
+  Save-call ownership without claiming the workbook remained unsaved. Standard data applies Aptos
   11 to the used range, row-1 header treatment, freeze top row, and a filter
   only when absent. Verify hidden sheets are skipped, stale inventory requires
   Refresh, and exact partial/unknown results require inspection rather than an

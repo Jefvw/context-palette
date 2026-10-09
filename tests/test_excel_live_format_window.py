@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 import tempfile
 import tkinter as tk
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from context_palette.excel_automation import (
     AutomationCallError,
     AutomationCallResult,
+    DescribeCapabilitiesResult,
     LiveExcelApplication,
     LiveExcelInventoryResult,
     LiveExcelSheet,
@@ -17,9 +19,20 @@ from context_palette.excel_automation import (
     LiveExcelWorkbook,
     LiveFormatFailure,
     LiveFormatProfileResult,
+    LiveFormatAutoSave,
 )
 from context_palette.excel_live_format_window import ExcelLiveFormatWindow
 from context_palette.excel_live_target_selector import LiveExcelTargetSelector
+from tests.test_excel_live_text_conversion_window import capability
+
+
+def format_capabilities(*, autosave_supported=False) -> AutomationCallResult:
+    format_capability = capability("apply_live_format_profile")
+    format_capability = replace(format_capability, supports=replace(
+        format_capability.supports, autosave_opt_in=autosave_supported,
+    ))
+    return AutomationCallResult("capabilities", "capabilities_succeeded", True, 0,
+                                result=DescribeCapabilitiesResult((capability("inventory_live_excel"), format_capability)))
 
 
 class FakeCoordinator:
@@ -105,7 +118,9 @@ def inventory(*books: LiveExcelWorkbook) -> AutomationCallResult:
 
 
 def format_result(
-    state: str = "succeeded", *, token: str = "live-one"
+    state: str = "succeeded", *, token: str = "live-one",
+    autosave: LiveFormatAutoSave | None = None,
+    partial_sheets: tuple[str, ...] = (),
 ) -> AutomationCallResult:
     failures = ()
     formatted = ("Data",)
@@ -135,6 +150,8 @@ def format_result(
             False,
             False,
             (),
+            autosave=autosave,
+            partially_modified_sheets=partial_sheets,
         ),
     )
 
@@ -158,8 +175,12 @@ class ExcelLiveFormatWindowTests(unittest.TestCase):
         self.coordinator = FakeCoordinator()
         self.status = Mock()
         self.return_to_source = Mock(return_value=True)
+        process_guard = patch("context_palette.excel_automation.subprocess.Popen",
+                              side_effect=AssertionError("Window tests must not start an engine or Excel."))
+        process_guard.start()
+        self.addCleanup(process_guard.stop)
 
-    def _window(self, **kwargs) -> ExcelLiveFormatWindow:
+    def _window(self, *, autosave_supported=False, capability_call=None, **kwargs) -> ExcelLiveFormatWindow:
         window = ExcelLiveFormatWindow(
             self.root,
             settings_path=self.settings,
@@ -170,6 +191,8 @@ class ExcelLiveFormatWindowTests(unittest.TestCase):
         )
         self.addCleanup(self._close, window)
         self.root.update()
+        self.assertEqual(self.coordinator.calls[-1]["phase"], "capabilities")
+        self._complete(window, capability_call or format_capabilities(autosave_supported=autosave_supported))
         return window
 
     def _close(self, window: ExcelLiveFormatWindow) -> None:
@@ -260,7 +283,7 @@ class ExcelLiveFormatWindowTests(unittest.TestCase):
         window._return_to_excel()
         self.return_to_source.assert_called_once_with(4321)
 
-    def test_stale_token_requires_inventory_refresh(self) -> None:
+    def test_result_null_stale_error_requires_inspection_without_retry(self) -> None:
         window = self._window()
         self._selection(window, workbook())
         window._apply()
@@ -277,9 +300,10 @@ class ExcelLiveFormatWindowTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(window.view_state, "stale")
-        window.primary_button.invoke()
-        self.assertEqual(self.coordinator.calls[-1]["phase"], "inventory")
+        self.assertEqual(window.view_state, "unknown")
+        self.assertEqual(len(self.coordinator.calls), 3)
+        self.assertNotIn("Refresh open workbooks", self._texts(window.content))
+        self.assertIn("closing without saving does not guarantee reversal", self._texts(window.content))
 
     def test_unknown_apply_never_offers_an_automatic_retry(self) -> None:
         window = self._window(source_window_handle=77, source_process_id=42)
@@ -336,6 +360,156 @@ class ExcelLiveFormatWindowTests(unittest.TestCase):
         self._selection(window, book1, book10)
 
         self.assertEqual(window._selected_workbook, book10)
+
+    def test_supported_autosave_on_off_unknown_use_one_explicit_opted_in_apply(self) -> None:
+        for state in (True, False, None):
+            with self.subTest(autosave=state):
+                window = self._window(autosave_supported=True)
+                self._selection(window, workbook(autosave_enabled=state))
+                self.assertFalse(window.primary_button.instate(["disabled"]))
+                self.assertNotIn("not be saved", window.status_var.get())
+                self.assertIn("AutoSave may save these changes automatically", window.limitation_label.cget("text"))
+                self.assertEqual([call["phase"] for call in self.coordinator.calls], ["capabilities", "inventory"])
+                window.primary_button.invoke()
+                self.assertEqual([call["phase"] for call in self.coordinator.calls], ["capabilities", "inventory", "apply"])
+                self.assertIs(self.coordinator.calls[-1]["request"]["arguments"]["allow_autosave_enabled"], True)
+                self._complete(window, format_result(autosave=LiveFormatAutoSave(state, True)))
+                self.assertEqual(window.view_state, "succeeded")
+                self.assertNotIn("save it yourself", window.status_var.get())
+                self.assertNotIn("unsaved", self._texts(window.content).lower())
+                self._close(window)
+                self.coordinator.calls.clear()
+
+    def test_legacy_engine_does_not_receive_new_argument_or_bypass_autosave_block(self) -> None:
+        window = self._window()
+        self._selection(window, workbook(autosave_enabled=True))
+        window._apply()
+        self.assertEqual(len(self.coordinator.calls), 2)
+        self.assertTrue(window.primary_button.instate(["disabled"]))
+        self._complete_selection_refresh(window, workbook(autosave_enabled=False))
+        window._apply()
+        self.assertNotIn("allow_autosave_enabled", self.coordinator.calls[-1]["request"]["arguments"])
+
+    def _complete_selection_refresh(self, window, book):
+        window.refresh_button.invoke()
+        self._complete(window, inventory(book))
+
+    def test_execution_autosave_on_can_differ_from_inventory_off(self) -> None:
+        window = self._window(autosave_supported=True)
+        self._selection(window, workbook(autosave_enabled=False))
+        window._apply()
+        self._complete(window, format_result(autosave=LiveFormatAutoSave(True, True)))
+        text = window.result_text.get("1.0", "end-1c")
+        self.assertIn("AutoSave at execution: On", text)
+        self.assertIn("saved automatically", text)
+        self.assertIn("engine did not call Save", text)
+
+    def test_opted_in_result_missing_or_contradicting_metadata_is_unknown(self) -> None:
+        for metadata in (None, LiveFormatAutoSave(False, False)):
+            with self.subTest(metadata=metadata):
+                window = self._window(autosave_supported=True)
+                self._selection(window, workbook())
+                window._apply()
+                self._complete(window, format_result(autosave=metadata))
+                self.assertEqual(window.view_state, "unknown")
+                self.assertNotIn("Apply template", self._texts(window.content))
+                self._close(window)
+                self.coordinator.calls.clear()
+
+    def test_partial_sheets_and_auto_persistence_are_rendered(self) -> None:
+        window = self._window(autosave_supported=True)
+        self._selection(window, workbook(autosave_enabled=True))
+        window._apply()
+        self._complete(window, format_result("partial_failure", autosave=LiveFormatAutoSave(True, True), partial_sheets=("Summary",)))
+        text = window.result_text.get("1.0", "end-1c")
+        self.assertIn("Partly formatted — inspect", text)
+        self.assertIn("Summary", text)
+        self.assertIn("including partial changes", text)
+        self.assertNotIn("unsaved", text.lower())
+
+    def test_opted_in_result_null_autosave_error_has_no_zero_effect_or_save_claim(self) -> None:
+        window = self._window(autosave_supported=True)
+        self._selection(window, workbook())
+        window._apply()
+        self._complete(window, AutomationCallResult("apply", "outer_error", True, 4,
+            error=AutomationCallError("conflict.live_autosave_enabled", "conflict", "Blocked", False, {})))
+        self.assertEqual(window.view_state, "unknown")
+        text = self._texts(window.content)
+        self.assertIn("saved automatically", text)
+        self.assertNotIn("No format was started", text)
+        self.assertNotIn("engine did not call Save", text)
+
+    def test_capability_failure_does_not_inventory_or_enable_opt_in(self) -> None:
+        window = self._window(capability_call=AutomationCallResult("capabilities", "capabilities_failed", True, 1))
+        self.assertEqual(window.view_state, "setup")
+        self.assertFalse(window._autosave_opt_in_supported)
+        self.assertEqual(len(self.coordinator.calls), 1)
+
+    def test_opt_in_support_is_invalidated_before_engine_reprobe(self) -> None:
+        window = self._window(autosave_supported=True)
+        self._selection(window, workbook())
+        window._start_capabilities()
+        self.assertFalse(window._autosave_opt_in_supported)
+        self._complete(window, format_capabilities())
+        self._selection(window, workbook(autosave_enabled=True))
+        self.assertTrue(window.primary_button.instate(["disabled"]))
+
+    def test_opted_in_all_visible_scope_and_rapid_repeat_still_send_one_apply(self) -> None:
+        window = self._window(autosave_supported=True)
+        self._selection(window, workbook(autosave_enabled=True))
+        window.scope_var.set("workbook")
+        window._scope_changed()
+        window._apply()
+        window._apply()
+        request = self.coordinator.calls[-1]["request"]
+        self.assertEqual(request["arguments"]["scope"], "workbook")
+        self.assertIsNone(request["arguments"]["worksheet"])
+        self.assertIs(request["arguments"]["allow_autosave_enabled"], True)
+        self.assertEqual(len(self.coordinator.calls), 3)
+
+    def test_opted_in_controls_remain_visible_at_simulated_scaling(self) -> None:
+        original_scale = float(self.root.tk.call("tk", "scaling"))
+        try:
+            for factor in (1.0, 1.25, 1.5):
+                with self.subTest(factor=factor):
+                    self.root.tk.call("tk", "scaling", original_scale * factor)
+                    window = self._window(autosave_supported=True)
+                    self._selection(window, workbook(autosave_enabled=True))
+                    window.window.geometry("850x670")
+                    self.root.update()
+                    bottom = window.window.winfo_rooty() + window.window.winfo_height()
+                    for control in (window.primary_button, window.close_button, window.status_label):
+                        self.assertLessEqual(control.winfo_rooty() + control.winfo_height(), bottom)
+                    self.assertFalse(window.primary_button.instate(["disabled"]))
+                    self._close(window)
+                    self.coordinator.calls.clear()
+        finally:
+            self.root.tk.call("tk", "scaling", original_scale)
+
+    def test_unavailable_or_wrong_version_format_capability_does_not_inventory(self) -> None:
+        for format_capability in (capability("apply_live_format_profile", version="2.0"),
+                                  capability("apply_live_format_profile", available=False)):
+            with self.subTest(capability=format_capability):
+                call = AutomationCallResult("capabilities", "capabilities_succeeded", True, 0,
+                    result=DescribeCapabilitiesResult((capability("inventory_live_excel"), format_capability)))
+                window = self._window(capability_call=call)
+                self.assertEqual(window.view_state, "setup")
+                self.assertFalse(window._autosave_opt_in_supported)
+                self.assertEqual(len(self.coordinator.calls), 1)
+                self._close(window)
+                self.coordinator.calls.clear()
+
+    def test_unexpected_phase_or_classification_cannot_accept_a_format_receipt(self) -> None:
+        valid = format_result(autosave=LiveFormatAutoSave(True, True))
+        for call in (replace(valid, phase="inventory"), replace(valid, classification="apply_failed")):
+            with self.subTest(call=call.classification):
+                window = self._window(autosave_supported=True)
+                self._selection(window, workbook())
+                window._apply()
+                self._complete(window, call)
+                self.assertEqual(window.view_state, "unknown")
+                self._close(window)
+                self.coordinator.calls.clear()
 
     @staticmethod
     def _texts(widget: tk.Misc) -> str:

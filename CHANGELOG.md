@@ -18,6 +18,8 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Allow live Excel formatting with AutoSave on when the engine explicitly advertises support. One visible warning and Apply click opt in; older engines retain their AutoSave block. Results distinguish engine Save calls from automatic persistence and show partly formatted sheets. Missing/error receipts require inspection, with no retry or promise of reversal. Both conversion actions keep their existing policies; fresh live opt-in testing is pending.
+
 - Integrated a separate **Text to Columns → Text (fast)** Action using Python Excel apply_live_text_to_columns_as_text 1.0. Exact-capability-gated discovery, shared ordered column selection and one no-backup native batch preserve the old checked converter. Scientific text may remain unchanged; partial/unknown results require inspection with no retry/save/close. Engine feature is still uncommitted and host live UAT remains pending.
 
 - Added the existing nested Prompts menu beside the chat message box. Selecting a current prompt inserts editable text at the cursor, preserves the draft, supports Undo and keeps Send explicit. Menu organization and template expansion reuse the existing Actions; Input / Output and clipboard are unchanged.

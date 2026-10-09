@@ -158,11 +158,13 @@ broader unreported UAT remains optional. See [Testing](docs/TESTING.md).
   selection, and 100%, 125%, and 150% scaling. Confirm every external target
   remains untouched.
 
-- Manually validate the live **Apply Excel format template** Action with a
-  disposable workbook against Python Excel commit `e405e14`. The one-sheet
+- Manually validate the live **Apply Excel format template** AutoSave opt-in
+  with a separately approved fresh disposable workbook and compatible engine.
+  The original off-state one-sheet
   happy path and preservation of an existing filter passed on 2026-08-25.
   Confirm its shared workbook/worksheet chooser matches the conversion Action,
-  then complete the remaining setup/missing-engine, all-visible, AutoSave rejection,
+  then complete setup/missing-engine, all-visible, AutoSave on/off/unknown metadata,
+  legacy-engine rejection, execution-time state changes, automatic persistence,
   added-filter, hidden-sheet, stale, partial/unknown, no-retry, Return-to-Excel,
   no-save/no-close, and 100%/125%/150% display-scaling matrix.
 - Complete disposable real-Excel UAT for **Convert Excel values to text**

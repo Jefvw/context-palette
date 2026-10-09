@@ -102,10 +102,12 @@ class ActionPreviewTests(unittest.TestCase):
         self.assertIn("open Excel workbooks", preview.input_text)
         self.assertIn("all visible worksheets", preview.input_text)
         self.assertIn("directly", preview.effect_text)
-        self.assertIn("not saved or closed", preview.effect_text)
+        self.assertIn("engine does not call Save or close Excel", preview.effect_text)
         self.assertIn("may clear Excel Undo", preview.limitations)
         self.assertIn("no recovery", preview.limitations)
-        self.assertIn("AutoSave must be off", preview.limitations)
+        self.assertIn("compatible engine allows AutoSave on", preview.limitations)
+        self.assertIn("older engines require it off", preview.limitations)
+        self.assertIn("AutoSave may save changes automatically", preview.limitations)
 
     def test_csv_preview_keeps_closed_file_limitations(self):
         preview = build_action_preview(
