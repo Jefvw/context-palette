@@ -37,6 +37,7 @@ from context_palette.configuration_window import (
 from context_palette.contexts import ContextDefinition
 from context_palette.data_catalog import AppDataPaths
 from context_palette.palette_items import PaletteItemReference
+from context_palette.style import configure_theme
 from context_palette.workspace_transforms import WORKSPACE_TRANSFORM_GROUPS
 from context_palette.workspace_panel import (
     OcrPlacementDialog,
@@ -53,20 +54,26 @@ class LauncherSmokeTests(unittest.TestCase):
         # across these intentionally large Windows smoke scenarios.
         gc.collect()
 
-    def test_workspace_send_to_control_fits_at_100_125_and_150_percent(self):
+    def test_workspace_split_send_menus_fit_and_refresh_independently(self):
         # Tk scaling is pixels per typographic point: 96 DPI starts at 4/3.
         for percentage, scaling in ((100, 4 / 3), (125, 5 / 3), (150, 2.0)):
             with self.subTest(percentage=percentage):
                 root = tk.Tk()
                 root.withdraw()
+                original_scaling = float(root.tk.call("tk", "scaling"))
                 root.tk.call("tk", "scaling", scaling)
+                configure_theme(root)
                 host = ttk.Frame(root)
                 host.pack(fill=tk.BOTH, expand=True)
                 tooltips: dict[tk.Widget, str] = {}
-                populated: list[tk.Menu] = []
+                populated: list[tuple[str, tk.Menu]] = []
 
-                def populate(menu: tk.Menu) -> None:
-                    populated.append(menu)
+                def populate_text(menu: tk.Menu) -> None:
+                    populated.append(("text", menu))
+                    menu.add_command(label="OneNote — new text page…")
+
+                def populate_files(menu: tk.Menu) -> None:
+                    populated.append(("files", menu))
                     menu.add_command(label="Choose another folder…")
 
                 panel = WorkspacePanel(
@@ -78,7 +85,8 @@ class LauncherSmokeTests(unittest.TestCase):
                         widget,
                         text,
                     ),
-                    populate_send_to_menu=populate,
+                    populate_send_text_menu=populate_text,
+                    populate_send_files_menu=populate_files,
                 )
                 try:
                     root.update_idletasks()
@@ -88,26 +96,85 @@ class LauncherSmokeTests(unittest.TestCase):
                         MINIMUM_WORKSPACE_WIDTH,
                         f"Input / Output header exceeds its minimum width at {percentage}%",
                     )
-                    self.assertEqual(panel.send_to_button.cget("text"), "Send to…")
-                    self.assertTrue(bool(panel.send_to_button.cget("takefocus")))
-                    self.assertIn("Sources stay unchanged", tooltips[panel.send_to_button])
-                    self.assertIn("VS Code", tooltips[panel.send_to_button])
+                    for button, label in (
+                        (panel.send_text_button, "Send text to…"),
+                        (panel.send_files_button, "Send files to…"),
+                    ):
+                        self.assertEqual(button.cget("text"), label)
+                        self.assertTrue(bool(button.cget("takefocus")))
+                        self.assertIn("Input / Output stays unchanged", tooltips[button])
+                    self.assertIn("saves the chosen workbook", tooltips[panel.send_text_button])
+                    self.assertIn("VS Code", tooltips[panel.send_files_button])
+                    self.assertNotIn("VS Code", tooltips[panel.send_text_button])
+                    self.assertNotIn("OneNote", tooltips[panel.send_files_button])
 
                     context_labels = [
                         panel.context_menu.entrycget(index, "label")
                         for index in range(panel.context_menu.index(tk.END) + 1)
                         if panel.context_menu.type(index) == "cascade"
                     ]
-                    self.assertIn("Send to…", context_labels)
-                    panel._refresh_send_to_menu(panel.send_to_menu)
-                    panel._refresh_send_to_menu(panel.send_to_context_menu)
-                    self.assertEqual(
-                        panel.send_to_menu.entrycget(0, "label"),
-                        "Choose another folder…",
-                    )
-                    self.assertEqual(populated, [panel.send_to_menu, panel.send_to_context_menu])
+                    self.assertIn("Send text to…", context_labels)
+                    self.assertIn("Send files to…", context_labels)
+                    self.assertNotIn("Send to…", context_labels)
+                    # Invoke the native postcommands used by both header and
+                    # context menus. Every refresh discards stale entries and
+                    # delegates only to the matching destination owner.
+                    for kind, menu, expected in (
+                        ("text", panel.send_text_menu, "OneNote — new text page…"),
+                        ("files", panel.send_files_menu, "Choose another folder…"),
+                        ("text", panel.send_text_context_menu, "OneNote — new text page…"),
+                        ("files", panel.send_files_context_menu, "Choose another folder…"),
+                    ):
+                        menu.add_command(label="stale destination")
+                        root.tk.call(menu.cget("postcommand"))
+                        self.assertEqual(menu.index(tk.END), 0)
+                        self.assertEqual(menu.entrycget(0, "label"), expected)
+                        self.assertEqual(populated[-1], (kind, menu))
+                    self.assertEqual(len(populated), 4)
                 finally:
+                    root.tk.call("tk", "scaling", original_scaling)
                     root.destroy()
+
+    def test_workspace_split_send_fallback_is_local_and_preserves_editor(self):
+        root = tk.Tk()
+        root.withdraw()
+        host = ttk.Frame(root)
+        host.pack(fill=tk.BOTH, expand=True)
+        clipboard_getter = Mock(side_effect=AssertionError("clipboard must not be read"))
+        clipboard_setter = Mock(side_effect=AssertionError("clipboard must not be written"))
+        panel = WorkspacePanel(
+            host,
+            clipboard_getter=clipboard_getter,
+            clipboard_setter=clipboard_setter,
+            status_setter=lambda _value: None,
+            tooltip_adder=lambda _widget, _text: None,
+        )
+        try:
+            panel.set_text("First text\nSecond text")
+            panel.text.tag_add(tk.SEL, "2.0", "2.end")
+            original_history = list(panel._content_history)
+            for menu in (
+                panel.send_text_menu, panel.send_files_menu,
+                panel.send_text_context_menu, panel.send_files_context_menu,
+            ):
+                root.tk.call(menu.cget("postcommand"))
+                self.assertEqual(menu.index(tk.END), 0)
+                self.assertEqual(menu.entrycget(0, "state"), tk.DISABLED)
+            # Replacing one owner affects both of its current menu surfaces,
+            # without implicitly changing the other destination family.
+            panel.populate_send_text_menu = lambda menu: menu.add_command(label="ChatGPT…")
+            for menu in (panel.send_text_menu, panel.send_text_context_menu):
+                root.tk.call(menu.cget("postcommand"))
+                self.assertEqual(menu.entrycget(0, "label"), "ChatGPT…")
+                self.assertEqual(menu.entrycget(0, "state"), tk.NORMAL)
+            self.assertEqual(panel.send_files_menu.entrycget(0, "state"), tk.DISABLED)
+            self.assertEqual(panel.raw_text(), "First text\nSecond text")
+            self.assertEqual(panel.text.get(tk.SEL_FIRST, tk.SEL_LAST), "Second text")
+            self.assertEqual(panel._content_history, original_history)
+            clipboard_getter.assert_not_called()
+            clipboard_setter.assert_not_called()
+        finally:
+            root.destroy()
 
     def test_workspace_create_action_uses_selection_then_full_text_without_clipboard(self):
         root = tk.Tk()
@@ -211,13 +278,14 @@ class LauncherSmokeTests(unittest.TestCase):
         finally:
             root.destroy()
 
-    def test_workspace_send_to_label_stays_visible_at_supported_scaling(self):
-        for multiplier in (1.0, 1.25, 1.5):
-            with self.subTest(multiplier=multiplier):
+    def test_workspace_split_send_and_all_toolbar_controls_stay_visible_at_minimum_width(self):
+        for percentage, scaling in ((100, 4 / 3), (125, 5 / 3), (150, 2.0)):
+            with self.subTest(percentage=percentage):
                 root = tk.Tk()
                 root.withdraw()
                 original_scaling = float(root.tk.call("tk", "scaling"))
-                root.tk.call("tk", "scaling", original_scaling * multiplier)
+                root.tk.call("tk", "scaling", scaling)
+                configure_theme(root)
                 root.geometry(f"{MINIMUM_WORKSPACE_WIDTH}x300+-32000+-32000")
                 host = ttk.Frame(root)
                 host.pack(fill=tk.BOTH, expand=True)
@@ -227,24 +295,44 @@ class LauncherSmokeTests(unittest.TestCase):
                     clipboard_setter=lambda _value: None,
                     status_setter=lambda _value: None,
                     tooltip_adder=lambda _widget, _text: None,
-                    populate_send_to_menu=lambda _menu: None,
+                    populate_send_text_menu=lambda _menu: None,
+                    populate_send_files_menu=lambda _menu: None,
                 )
                 try:
                     root.deiconify()
                     root.update()
                     header = panel.frame.winfo_children()[0]
-                    self.assertEqual(panel.send_to_button.cget("text"), "Send to…")
-                    self.assertTrue(panel.send_to_button.winfo_ismapped())
-                    self.assertGreaterEqual(
-                        panel.send_to_button.winfo_width() + 1,
-                        panel.send_to_button.winfo_reqwidth(),
+                    controls = (
+                        panel.send_text_button, panel.send_files_button,
+                        panel.content_back_button, panel.content_forward_button,
+                        panel.create_action_button, panel.ocr_button,
+                        panel.text_tools_button,
                     )
-                    self.assertLessEqual(
-                        panel.send_to_button.winfo_rootx()
-                        + panel.send_to_button.winfo_width(),
-                        header.winfo_rootx() + header.winfo_width(),
+                    for control in controls:
+                        self.assertTrue(control.winfo_ismapped())
+                        self.assertGreaterEqual(
+                            control.winfo_width() + 1, control.winfo_reqwidth()
+                        )
+                        self.assertGreaterEqual(control.winfo_rootx(), header.winfo_rootx())
+                        self.assertLessEqual(
+                            control.winfo_rootx() + control.winfo_width(),
+                            header.winfo_rootx() + header.winfo_width(),
+                        )
+                        self.assertLessEqual(
+                            control.winfo_rooty() + control.winfo_height(),
+                            header.winfo_rooty() + header.winfo_height(),
+                        )
+                    self.assertEqual(panel.send_text_button.cget("text"), "Send text to…")
+                    self.assertEqual(panel.send_files_button.cget("text"), "Send files to…")
+                    self.assertLess(
+                        panel.send_text_button.winfo_rootx(), panel.send_files_button.winfo_rootx()
+                    )
+                    self.assertEqual(
+                        str(root.tk.call("tk_focusNext", panel.send_text_button)),
+                        str(panel.send_files_button),
                     )
                 finally:
+                    root.tk.call("tk", "scaling", original_scaling)
                     root.destroy()
 
     def test_workspace_semantic_history_is_bounded_and_keeps_native_undo(self):

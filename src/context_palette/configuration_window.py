@@ -107,6 +107,7 @@ from .context_deletion import (
     rename_context_and_references,
 )
 from .diagnostics import render_safe_diagnostics, summarize_diagnostics
+from .dialog_scrolling import ScrollableDialogBody as _ScrollableDialogBody
 from .palette_state import (
     CONTEXT_SLOT_NUMBERS,
     MAX_CONTEXT_SLOT_ACTIONS,
@@ -4530,33 +4531,11 @@ class ActionDialog:
             command=self.window.destroy,
         ).pack(side=tk.RIGHT)
 
-        form_host = ttk.Frame(outer)
-        form_host.pack(fill=tk.BOTH, expand=True)
-        self.form_canvas = tk.Canvas(
-            form_host,
-            borderwidth=0,
-            highlightthickness=0,
-            background=self.window.cget("background"),
-            takefocus=False,
-        )
-        self.form_scrollbar = ttk.Scrollbar(
-            form_host,
-            orient=tk.VERTICAL,
-            command=self.form_canvas.yview,
-        )
-        self.form_canvas.configure(yscrollcommand=self.form_scrollbar.set)
-        self.form_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.form_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.form_frame = ttk.Frame(self.form_canvas)
-        self.form_window_id = self.form_canvas.create_window(
-            (0, 0),
-            window=self.form_frame,
-            anchor=tk.NW,
-        )
-        self.form_frame.bind("<Configure>", self._update_form_scrollregion)
-        self.form_canvas.bind("<Configure>", self._resize_form_width)
-        self.window.bind("<MouseWheel>", self._scroll_form, add="+")
-        self.window.bind("<FocusIn>", self._keep_focused_field_visible, add="+")
+        self.form_view = _ScrollableDialogBody(self.window, outer, action_editor=True)
+        self.form_canvas = self.form_view.canvas
+        self.form_scrollbar = self.form_view.scrollbar
+        self.form_frame = self.form_view.content
+        self.form_window_id = self.form_view.content_window_id
         form = self.form_frame
         header = ttk.Frame(form)
         header.pack(fill=tk.X, pady=(0, 3))
@@ -5211,77 +5190,11 @@ class ActionDialog:
             self.sequence_list.selection_set(select)
             self.sequence_list.see(select)
 
-    def _update_form_scrollregion(self, _event: tk.Event | None = None) -> None:
-        bounds = self.form_canvas.bbox("all")
-        if bounds is not None:
-            self.form_canvas.configure(scrollregion=bounds)
-
-    def _resize_form_width(self, event: tk.Event) -> None:
-        self.form_canvas.itemconfigure(
-            self.form_window_id,
-            width=max(1, int(event.width)),
-        )
-
     def _scroll_form(self, event: tk.Event) -> str | None:
-        if isinstance(event.widget, (tk.Text, tk.Listbox, ttk.Combobox)):
-            return None
-        first, last = self.form_canvas.yview()
-        if first <= 0.0 and last >= 1.0:
-            return None
-        direction = -1 if int(event.delta) > 0 else 1
-        visible_fraction = max(0.0, last - first)
-        maximum_start = max(0.0, 1.0 - visible_fraction)
-        self.form_canvas.yview_moveto(
-            max(0.0, min(first + direction * 0.08, maximum_start))
-        )
-        return "break"
-
-    def _keep_focused_field_visible(self, event: tk.Event) -> None:
-        widget = event.widget
-        if not self._is_form_widget(widget):
-            return
-        self.window.after_idle(
-            lambda focused=widget: self._show_form_widget(focused)
-        )
-
-    def _is_form_widget(self, widget: tk.Misc) -> bool:
-        current: tk.Misc | None = widget
-        while current is not None:
-            if current is self.form_frame:
-                return True
-            if current is self.window:
-                return False
-            current = getattr(current, "master", None)
-        return False
+        return self.form_view._on_mousewheel(event)
 
     def _show_form_widget(self, widget: tk.Misc) -> None:
-        try:
-            if not widget.winfo_exists() or not self._is_form_widget(widget):
-                return
-            self.form_canvas.update_idletasks()
-            viewport_height = self.form_canvas.winfo_height()
-            content_bounds = self.form_canvas.bbox("all")
-            if viewport_height <= 1 or content_bounds is None:
-                return
-            content_height = max(1, content_bounds[3] - content_bounds[1])
-            widget_top = widget.winfo_rooty() - self.form_frame.winfo_rooty()
-            widget_bottom = widget_top + widget.winfo_height()
-            viewport_top = self.form_canvas.canvasy(0)
-            viewport_bottom = viewport_top + viewport_height
-            padding = 8
-            target_top: float | None = None
-            if widget_top < viewport_top + padding:
-                target_top = widget_top - padding
-            elif widget_bottom > viewport_bottom - padding:
-                target_top = widget_bottom - viewport_height + padding
-            if target_top is not None:
-                maximum_top = max(0, content_height - viewport_height)
-                self.form_canvas.yview_moveto(
-                    max(0.0, min(float(target_top), maximum_top))
-                    / content_height
-                )
-        except tk.TclError:
-            return
+        self.form_view.ensure_visible(widget)
 
     def _build_transform_fields(
         self,
@@ -6942,101 +6855,6 @@ def _action_picker_options(
             )
         )
     return tuple(options)
-
-
-class _ScrollableDialogBody:
-    """A monitor-safe dialog body with a fixed footer outside its viewport."""
-
-    def __init__(self, window: tk.Toplevel, parent: ttk.Frame) -> None:
-        self.window = window
-        self.host = ttk.Frame(parent)
-        self.host.pack(fill=tk.BOTH, expand=True)
-        self.canvas = tk.Canvas(
-            self.host,
-            borderwidth=0,
-            highlightthickness=0,
-            background=window.cget("background"),
-            takefocus=False,
-        )
-        self.scrollbar = ttk.Scrollbar(
-            self.host,
-            orient=tk.VERTICAL,
-            command=self.canvas.yview,
-        )
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
-        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.content = ttk.Frame(self.canvas)
-        self.content_window_id = self.canvas.create_window(
-            (0, 0),
-            window=self.content,
-            anchor=tk.NW,
-        )
-        self.content.bind("<Configure>", self._update_scrollregion, add="+")
-        self.canvas.bind("<Configure>", self._resize_content, add="+")
-        window.bind("<MouseWheel>", self._on_mousewheel, add="+")
-        window.bind("<FocusIn>", self._on_focus_in, add="+")
-
-    def _update_scrollregion(self, _event: tk.Event | None = None) -> None:
-        bounds = self.canvas.bbox("all")
-        self.canvas.configure(scrollregion=bounds or (0, 0, 0, 0))
-
-    def _resize_content(self, event: tk.Event) -> None:
-        self.canvas.itemconfigure(
-            self.content_window_id,
-            width=max(1, int(event.width)),
-        )
-
-    def _pointer_is_over_canvas(self) -> bool:
-        x, y = self.window.winfo_pointerxy()
-        left = self.canvas.winfo_rootx()
-        top = self.canvas.winfo_rooty()
-        return (
-            left <= x < left + self.canvas.winfo_width()
-            and top <= y < top + self.canvas.winfo_height()
-        )
-
-    def _on_mousewheel(self, event: tk.Event) -> str | None:
-        if isinstance(event.widget, (tk.Text, tk.Listbox, ttk.Combobox)):
-            return None
-        if not self._pointer_is_over_canvas():
-            return None
-        delta = int(getattr(event, "delta", 0) or 0)
-        if delta:
-            self.canvas.yview_scroll(-1 if delta > 0 else 1, "units")
-            return "break"
-        return None
-
-    def _on_focus_in(self, event: tk.Event) -> None:
-        self.ensure_visible(event.widget)
-
-    def ensure_visible(self, widget: tk.Misc) -> None:
-        current: tk.Misc | None = widget
-        while current is not None and current is not self.content:
-            parent_name = current.winfo_parent()
-            if not parent_name:
-                current = None
-                break
-            current = current.nametowidget(parent_name)
-        if current is not self.content:
-            return
-        self.window.update_idletasks()
-        content_height = max(1, self.content.winfo_reqheight())
-        viewport_top = float(self.canvas.canvasy(0))
-        viewport_bottom = viewport_top + self.canvas.winfo_height()
-        widget_top = widget.winfo_rooty() - self.content.winfo_rooty()
-        widget_bottom = widget_top + widget.winfo_height()
-        margin = 6
-        if widget_top < viewport_top:
-            self.canvas.yview_moveto(max(0.0, (widget_top - margin) / content_height))
-        elif widget_bottom > viewport_bottom:
-            self.canvas.yview_moveto(
-                min(
-                    1.0,
-                    (widget_bottom + margin - self.canvas.winfo_height())
-                    / content_height,
-                )
-            )
 
 
 def _dialog_buttons(

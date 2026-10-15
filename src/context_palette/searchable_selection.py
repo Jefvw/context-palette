@@ -27,13 +27,21 @@ class SearchableSelectionPopup:
         empty_label: str | None = None,
         search_label: str = "Find tag",
         item_name: str = "tag",
+        selection_detail: Callable[[str], str] | None = None,
     ) -> None:
+        if multiple and selection_detail is not None:
+            raise ValueError("Selection details require a single-value chooser.")
         self.owner = owner
         self.values = tuple(values)
         self.multiple = multiple
         self.on_select = on_select
         self.empty_label = empty_label
         self.item_name = item_name
+        # Detail callbacks describe the captured choice, without fetching
+        # external state or choosing it.
+        self.selection_detail = selection_detail
+        self.selection_detail_label: ttk.Label | None = None
+        self._initial_placement_complete = False
         self._selected_keys = {value.casefold() for value in selected}
         self.previous_grab = owner.grab_current()
         self.closed = False
@@ -77,6 +85,15 @@ class SearchableSelectionPopup:
         scrollbar.configure(command=self.listbox.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        if selection_detail is not None:
+            self.selection_detail_var = tk.StringVar(master=owner)
+            self.selection_detail_label = ttk.Label(
+                outer,
+                textvariable=self.selection_detail_var,
+                wraplength=350,
+                justify=tk.LEFT,
+            )
+            self.selection_detail_label.pack(fill=tk.X, pady=(6, 0))
         controls = ttk.Frame(outer)
         controls.pack(fill=tk.X, pady=(8, 0))
         ttk.Button(controls, text="Cancel", command=self.close).pack(side=tk.RIGHT)
@@ -98,6 +115,7 @@ class SearchableSelectionPopup:
         self.listbox.bind("<<ListboxSelect>>", self._selection_changed)
         self._render()
         self._place_near_owner()
+        self._initial_placement_complete = True
         self.window.grab_set()
         self.window.after_idle(self.search_entry.focus_set)
 
@@ -138,6 +156,7 @@ class SearchableSelectionPopup:
             state=tk.NORMAL if self.visible_values else tk.DISABLED
         )
         if not self.visible_values:
+            self._refresh_selection_detail()
             return
         selection = self.listbox.curselection()
         if not self.multiple and not selection:
@@ -146,6 +165,32 @@ class SearchableSelectionPopup:
         active_index = selection[0] if selection else 0
         self.listbox.activate(active_index)
         self.listbox.see(active_index)
+        self._refresh_selection_detail()
+
+    def _refresh_selection_detail(self) -> None:
+        if self.selection_detail is None:
+            return
+        selection = self.listbox.curselection()
+        value = self.visible_values[selection[0]] if selection else None
+        detail = (
+            "" if value is None or value == self.empty_label
+            else self.selection_detail(value)
+        )
+        if detail == self.selection_detail_var.get():
+            return
+        self.selection_detail_var.set(detail)
+        if self._initial_placement_complete:
+            try:
+                self.window.update_idletasks()
+                if self.closed or not self.window.winfo_exists():
+                    return
+                if self.window.winfo_reqheight() > self.window.winfo_height():
+                    # A longer destination must remain readable after browsing;
+                    # reuse the existing monitor-aware placement and height cap.
+                    self._place_near_owner()
+            except tk.TclError:
+                # Idle layout may destroy the popup or its Tk interpreter.
+                return
 
     def selected_values(self) -> tuple[str, ...]:
         return tuple(
@@ -165,6 +210,7 @@ class SearchableSelectionPopup:
             self._selected_keys.update(selected_keys)
         else:
             self._selected_keys = selected_keys
+        self._refresh_selection_detail()
 
     def apply(self) -> None:
         if not self.visible_values:

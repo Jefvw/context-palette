@@ -11,7 +11,7 @@ from context_palette.actions import Action
 from context_palette.style import COLORS
 from context_palette.work_item_refresh import SourceRefreshResult, WorkItemIndex
 from context_palette.work_items import DiscoveredWorkItem, WorkItemSource
-import tests.test_launcher_enhancements_ui as fixtures
+from tests.support.launcher_ui import disposable_launcher
 
 
 def populate_results(app):
@@ -48,7 +48,7 @@ def populate_results(app):
 @unittest.skipUnless(sys.platform == "win32", "Requires Windows Tk.")
 class ResultRowStylingTests(unittest.TestCase):
     def test_action_bands_preserve_labels_shortcuts_separator_and_search(self):
-        with fixtures.LauncherEnhancementsUiTests().launcher() as (app, *_):
+        with disposable_launcher() as (app, *_):
             populate_results(app)
             app.discovery_scope = "actions"
             app._refresh_results()
@@ -74,7 +74,7 @@ class ResultRowStylingTests(unittest.TestCase):
             self.assertEqual(app.results.itemcget(1, "background"), COLORS["result_alternate"])
 
     def test_mixed_tree_uses_one_paint_tag_and_preserves_shortcut_identity(self):
-        with fixtures.LauncherEnhancementsUiTests().launcher() as (app, *_):
+        with disposable_launcher() as (app, *_):
             populate_results(app)
             tree = app.focus_tree
             rows = tree.get_children()
@@ -102,7 +102,7 @@ class ResultRowStylingTests(unittest.TestCase):
                 self.assertNotIn(FOCUS_SLOT_ROW_TAG, tree.item(row, "tags"))
 
     def test_work_item_bands_and_empty_state_do_not_retain_shortcut_paint(self):
-        with fixtures.LauncherEnhancementsUiTests().launcher() as (app, *_):
+        with disposable_launcher() as (app, *_):
             populate_results(app)
             app.discovery_scope = "actions"
             app._refresh_results()

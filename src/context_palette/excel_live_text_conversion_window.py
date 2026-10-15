@@ -31,8 +31,7 @@ from .excel_automation import (
     build_inventory_live_excel_request,
     build_plan_live_column_conversion_request,
     build_preflight_live_columns_request,
-    discover_direct_sibling_python_excel_launcher,
-    load_excel_automation_settings,
+    resolve_python_excel_launcher,
     save_excel_automation_settings,
 )
 from .excel_live_target_selector import (
@@ -238,24 +237,16 @@ class ExcelLiveTextConversionWindow:
 
     def _load_settings(self) -> None:
         try:
-            settings = load_excel_automation_settings(self.settings_path)
+            launcher = resolve_python_excel_launcher(
+                self.settings_path, self.settings_path.parent.parent
+            )
         except ExcelAutomationSettingsError as exc:
             self._show_setup(str(exc))
             return
-        launcher = settings.launcher_path
-        if launcher is None:
-            launcher = discover_direct_sibling_python_excel_launcher(
-                self.settings_path.parent.parent
-            )
         if launcher is None:
             self._show_setup(
                 "Choose the Python Excel machine launcher on this computer. "
                 "Excel features remain optional."
-            )
-            return
-        if not launcher.is_file():
-            self._show_setup(
-                "The configured Python Excel launcher is unavailable on this computer."
             )
             return
         self._launcher_path = launcher

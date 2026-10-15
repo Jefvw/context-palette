@@ -5,7 +5,7 @@ from uuid import uuid4
 from .excel_automation import (
     DescribeCapabilitiesResult, ExcelAutomationCoordinator, ExcelAutomationSettingsError,
     LIVE_NATIVE_TEXT_OPERATION, build_describe_capabilities_request,
-    discover_direct_sibling_python_excel_launcher, load_excel_automation_settings,
+    resolve_python_excel_launcher,
 )
 
 
@@ -31,12 +31,9 @@ class NativeExcelAvailability:
         self.available = False
         self._launcher = None
         try:
-            settings = load_excel_automation_settings(self.settings_path)
-            launcher = settings.launcher_path
-            if launcher is None:
-                launcher = discover_direct_sibling_python_excel_launcher(self.installation_root)
-            if launcher is not None and launcher.is_file():
-                self._launcher = launcher
+            self._launcher = resolve_python_excel_launcher(
+                self.settings_path, self.installation_root
+            )
         except (ExcelAutomationSettingsError, OSError):
             pass
         self.on_changed()

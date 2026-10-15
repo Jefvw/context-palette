@@ -55,6 +55,8 @@ class DocumentationNavigationTests(unittest.TestCase):
         ):
             self.assertIn(owner, change_guide)
         self.assertIn(r".\develop-context-palette.bat", change_guide)
+        self.assertIn("| Setup or repair plus complete check |", change_guide)
+        self.assertIn("| Complete automated check with current setup | `.\\check-context-palette.bat`", change_guide)
         self.assertIn("git diff --check", change_guide)
 
     def test_shortcut_page_is_linked_and_covers_primary_scopes(self):

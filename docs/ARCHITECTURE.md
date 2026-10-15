@@ -395,6 +395,14 @@ Action counts, represents the root explicitly, and permits a proposed submenu
 only within the existing three-level bound. It returns a normalized tuple and
 does not persist an empty branch independently.
 
+The same class also owns the combined **Menu locations** chooser during Folder,
+Password, and AI-prompt Action creation/editing. Combined mode stages one
+automatic path plus zero or more stable configured-location keys in a
+`QuickMenuPlacementSelection`; automatic-only organizer mode returns the path
+tuple. Ownership-disabled locations remain visible. Neither mode writes data;
+the final Action save delegates the combined staged selection to
+`action_configured_placement.py`.
+
 ### `action_quick_menu_organization.py`
 
 Plans and commits automatic-menu placement changes without changing the
@@ -451,14 +459,6 @@ information, provides a searchable configured root/branch checklist, and
 renders one exact add/remove review before the effect-labelled apply command.
 It never edits the Action's type or `quick_action_path` and delegates all
 persistence and recovery decisions to `action_configured_placement.py`.
-
-### `quick_menu_path_dialog.py`
-
-Owns the combined **Menu locations** chooser used during Folder, Password, and
-AI-prompt Action creation/editing. It stages one automatic path plus zero or
-more stable configured-location keys and performs no writes. Ownership-disabled
-locations remain visible; the final Action save delegates the staged selection
-to `action_configured_placement.py`.
 
 ### `palette_items.py`
 
@@ -525,7 +525,7 @@ Pure transformation algorithms and validation remain in `actions.py`.
 ### `workspace_panel.py`
 
 Owns the complete Input / Output UI component: text widget, edit menu, visible
-Back, Forward, literal **Send to…**, **Create from Input**,
+Back, Forward, separate **Send text to…** and **Send files to…**, **Create from Input**,
 **Extract text**, and **Text tools** controls; selection-first source choice and replacement;
 undo boundaries; prompting;
 clipboard copy and replacement, transformation feedback, and file-transform
@@ -789,11 +789,16 @@ may be the catalogued managed text source. Work Item workbooks and external
 file-copy operations remain outside this gate.
 
 `persistence.py` owns JSON replacement for application-written data and exact-
-byte replacement for restore. Both use a temporary sibling, flush and `fsync`,
-and atomic replacement. An ordinary JSON write serializes to a temporary
-sibling file, flushes it to disk, preserves the
-previous destination as `<name>.bak`, and uses `os.replace` so readers see
-either the previous complete file or the new complete file. Temporary and
+byte replacement for restore. Both public functions hold the existing mutation
+gate and write through one private `_atomic_output_unlocked` lifecycle: temporary
+sibling, streamed write, flush, `fsync`, close, optional backup and `os.replace`.
+JSON still uses UTF-8 text with `json.dump(indent=2)`, default Unicode escaping,
+insertion order and one final LF; it is not materialized in a new full-memory
+buffer. Binary writes preserve exact bytes and validate their payload before
+entering the gate. JSON defaults to preserving `<name>.bak`; binary replacement
+defaults to no backup. Failures propagate and remove the scratch file. A failed
+backup copy may leave a partial sidecar, as before; the primary is not replaced
+in that case. No new backup-rollback guarantee is introduced. Temporary and
 backup files are ignored by Git because they can contain private runtime data.
 Restore byte replacement disables adjacent `.bak` creation because its
 independent recovery archive owns aggregate rollback.
@@ -1004,6 +1009,16 @@ tracks the canvas width, recomputes its scroll region when operation-specific
 fields change, handles mouse-wheel input without stealing scrolling from
 multiline text widgets or comboboxes, and brings a newly focused field into
 view for keyboard traversal.
+
+`dialog_scrolling.py` owns the canvas, embedded form, width/scroll-region
+updates, wheel/focus bindings and deferred-focus cleanup for all five Configure
+form dialogs. `ActionDialog` keeps its existing widget aliases and uses the
+helper's Action-editor mode: 8% wheel steps without a pointer gate and deferred
+focus reveal with 8px padding. The other dialogs retain pointer-gated unit
+scrolling and immediate reveal with their existing 6px positioning. Both modes
+leave text/list/combobox wheel handling native. Destruction removes only the
+body's own window bindings and pending reveals; unrelated timers and bindings
+are preserved. A field/body destroyed during idle layout is safely ignored.
 
 Configure uses a persistent left-hand task navigator and an internal
 `ConfigurationPageStack` content host. The stack preserves the existing stable
@@ -1422,6 +1437,19 @@ workbooks opened by the integration are saved and closed. A workbook locked in
 another Excel instance fails safely as locked rather than opening a read-only
 copy. No third-party Python package or direct OOXML rewrite is introduced.
 
+Both workspace-header and editor-context **Send text to…** menus expose this
+append boundary for the selected Work Item and through a direct searchable
+Work Item-only chooser. The chooser uses cached index items, never scans or
+probes workbooks on open, and leaves main search/view/filters unchanged. Labels
+and optional wrapped details identify the exact source and Inbox workbook.
+**Append text** consumes the chooser once and restores its native grab before
+the existing handler runs. Cancel/destruction clears only the owned reference.
+Text, revision, cached source identity, stable Work Item reference and exact
+folder/workbook paths are rechecked; changes, removal, busy state and stale
+callbacks stop without fallback or retry. The callback retains full-field
+trimmed payload, template creation and single-flight checks. The script saves
+the entire workbook even when it was already open, unlike live conversion.
+
 ### `work_item_file_copy.py`
 
 Owns the UI-independent Work Item file-copy boundary. It accepts one exact
@@ -1439,7 +1467,7 @@ single-flight coordinator returns completion to Tk through main-thread polling.
 
 ### `file_transfer.py`
 
-Owns the UI-independent outbound **Send to…** boundary. It accepts 1–100
+Owns the UI-independent outbound **Send files to…** boundary. It accepts 1–100
 nonblank Input / Output lines, each one matching-quote-tolerant absolute
 existing regular file, and rejects folders, prose/relative paths, URLs,
 duplicates, and unavailable sources before writing. Planning validates one
@@ -1476,7 +1504,7 @@ includes scheduled startup, preventing Quit during a pending or running job.
 The launcher snapshots the whole Input / Output field before its save picker,
 then dispatches a manual `WebpagePdfRequest`. It preserves Input / Output and
 clipboard, rejects overlapping PDF jobs, and clears window references by
-identity. For HTTP(S) input, Send to shows PDF creation instead of file-copy
+identity. For HTTP(S) input, Send files to shows PDF creation instead of file-copy
 destinations. This is a workspace function, not a workflow engine or Drop route.
 
 ### `file_transfer_window.py`
@@ -1494,7 +1522,7 @@ list.
 ### `vscode_integration.py`
 
 Owns the UI-independent, non-copying VS Code receiver exposed under the
-Input / Output **Send to…** menu. It accepts at most one bounded nonblank line,
+Input / Output **Send files to…** menu. It accepts at most one bounded nonblank line,
 allows matching outer quotes, requires one existing absolute regular folder or
 file, and resolves the path without interpreting command text. A folder remains
 the target; a file is reduced to its existing containing folder.
@@ -1517,6 +1545,19 @@ synchronized through the clipboard. Folder Actions that require clipboard
 template expansion are excluded with visible guidance; Send to never resolves
 those tokens with an empty clipboard. Fixed relative paths and `file:` URIs use
 the same local-folder resolver as ordinary Action execution.
+
+`WorkspacePanel` injects two separate builders for header and editor-context
+menus. **Send text to…** offers OneNote new-page, ChatGPT, a selected Inbox
+shortcut and the Work Item-only Inbox chooser. **Send files to…** offers file
+copy destinations plus existing webpage-PDF and VS Code resource operations.
+The five icon controls and both full menu labels occupy two compact header
+rows, preserving the 350px workspace minimum at 100–150% Windows scaling.
+`SearchableSelectionPopup` accepts an optional single-choice detail callback;
+only the Inbox chooser adds a wrapped read-only source/workbook description.
+Other pickers keep their default layout. Receiver-specific payload scope,
+review, saving, close and retry behavior remain with their owners;
+the detailed review and proposed follow-ups are in
+[the send-route review](TECHNICAL_REVIEW.md#input--output-send-routes-2026-10-14).
 
 `LauncherApp.quit_app()` checks both Work Item write coordinators and the
 active Send-to workflow before
@@ -1583,7 +1624,7 @@ and configuration backups.
 ### ChatGPT text-chat trial
 
 `chatgpt_window.py` owns one optional Tk chat window reached through Input /
-Output **Send to… → ChatGPT…**. Opening, showing and typing stage selected/full
+Output **Send text to… → ChatGPT…**. Opening, showing and typing stage selected/full
 text only and perform no external request. Explicit Continue signs in and lists
 models; a remembered connection uses explicit Load models. Send snapshots the
 visible composer plus completed session history. Prompt Actions retain their
@@ -1769,6 +1810,15 @@ version-1.0 operations; live token and sample data remain session-only.
 Standard input carries structured requests; stdout and stderr are drained
 concurrently with bounded capture, so a verbose child cannot block the Palette
 process.
+
+`resolve_python_excel_launcher` owns configured-path precedence and the exact
+direct-sibling fallback for CSV, formatting, checked/native conversion and the
+native availability cache. Callers provide their installation root and keep
+their own setup messages, capability probes, callbacks and close authority.
+An invalid/unavailable explicit launcher requires repair and never substitutes
+a sibling. Discovery writes no settings. `load_excel_automation_settings` stays
+unprobed for snapshot/configuration validation; choosing an engine does not
+start it or authorize workbook access.
 
 `excel_automation` is an ordinary constrained Action type for discovery,
 Contexts, tags, and Quick-action menus, but it is not eligible for sequences
@@ -1969,6 +2019,13 @@ Resident-process coordination through a localhost socket.
 ### Windows integration boundary
 
 `main.py` accepts optional `--context` and `--search` arguments. `integrations/Invoke-ContextPalette.ps1` provides the parameterized wrapper for Power Automate Desktop; the ordinary batch launcher remains argumentless.
+
+In a direct IPC show request, an omitted `search` field retains the resident
+query. A present search field replaces it, including an empty/whitespace value
+clearing it; the resulting text is selected through the normal delayed focus
+callback. The CLI request builder omits empty `--search`/environment values;
+they do not request clearing. Delete/Backspace and F5 remain the ordinary reset
+controls.
 
 The bridge is attended by design: it may reveal and filter the palette but
 cannot run an action by ID. Any future unattended execution API requires its
@@ -2175,6 +2232,13 @@ state; local loading is intentionally not animated.
 Ordinary widget tooltips respond to both pointer hover and keyboard focus,
 except Find: its automatic startup/reopen focus must not cover the results.
 Find retains delayed hover help and dismisses it when typing; `F1` opens Help.
+
+Normal and show-only reveals retain Find text in the resident process and use
+the existing full-selection focus behavior when Find is requested. Delete or
+Backspace clears the recalled query; typing replaces it without resetting the
+current view or filters. Explicit `F5` reset still clears query and transient
+view state. Search text is not persisted or logged; a fresh process starts empty.
+
 The default focus behaviour on other controls is unchanged. This
 keeps the full names and explanations of compact symbol controls available
 without expanding the fixed-size main-window layout. They prefer the space
@@ -2273,7 +2337,7 @@ credential targets, usernames, passwords, or window titles. Successful and
 clipboard-only outcomes use informational logging, unavailable destinations use
 warning logging, and dispatch failures retain their exception at error level.
 
-Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown normally and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. Show-only drops use a separate reveal path that skips clipboard synchronization and places the normalized result. Configured drop Actions instead receive the snapshot directly, without editor staging; both routes invalidate stale captured selection/destination state. The outbound **Send to…** route snapshots exact path lines without changing Input / Output or the clipboard: copy destinations delegate reviewed background publication to `file_transfer.py`, while the one-path VS Code receiver delegates only registered-protocol opening to `vscode_integration.py`. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `workspace_panel.py` owns selection ranges, one-step Undo grouping, clipboard updates, menus, and a last-ten session history of meaningful complete states. Back/Forward navigation clears file-preview provenance rather than reconnecting historical text to a stale source hash. The launcher injects clipboard, status, and content-change callbacks and retains orchestration delegates. A selected item places its current-state **Input → Effect** summary in the slim bottom communication line; progress, success, and errors temporarily replace it. Hovering or clicking that line exposes the full structured explanation and current operational message.
+Input / Output is a permanent editable working text box, not action documentation. It synchronizes from the clipboard when shown normally and can be explicitly copied, pasted, cleared, transformed, or replaced by actions. Show-only drops use a separate reveal path that skips clipboard synchronization and places the normalized result. Configured drop Actions instead receive the snapshot directly, without editor staging; both routes invalidate stale captured selection/destination state. The outbound **Send files to…** route snapshots exact path lines without changing Input / Output or the clipboard: copy destinations delegate reviewed background publication to `file_transfer.py`, while the one-path VS Code receiver delegates only registered-protocol opening to `vscode_integration.py`. Inline transformations apply to the selection, or the complete field when there is no selection, and copy their result to the clipboard. Pure transformation logic lives in `actions.py`; `workspace_panel.py` owns selection ranges, one-step Undo grouping, clipboard updates, menus, and a last-ten session history of meaningful complete states. Back/Forward navigation clears file-preview provenance rather than reconnecting historical text to a stale source hash. The launcher injects clipboard, status, and content-change callbacks and retains orchestration delegates. A selected item places its current-state **Input → Effect** summary in the slim bottom communication line; progress, success, and errors temporarily replace it. Hovering or clicking that line exposes the full structured explanation and current operational message.
 
 The legacy generic `transform_text` action persists one catalogue operation key
 and only that operation's ordered parameters. It remains loadable and editable
@@ -2538,6 +2602,15 @@ Detailed help is stored once in `docs/HELP.md` and displayed by the in-app searc
 ## Testing strategy
 
 Tests use `unittest` and focus on pure or callback-injected behavior.
+
+Shared test doubles/builders live in `tests/support/excel.py`; the disposable
+real-Tk launcher fixture and layout assertions live in
+`tests/support/launcher_ui.py`. Support imports are inert and contain no
+TestCase classes. Domain defaults remain local when they differ. The launcher
+fixture owns synthetic data and effect guards through teardown, cancels owned
+callbacks, restores global Tk scaling, and destroys its root before releasing
+patches, including setup/constructor/body failures. These helpers do not become
+production dependencies or a generic integration sandbox.
 
 - Action parsing, search, execution dispatch, transformations, and URL building.
 - Searchable action-picker filtering and Tk selection behavior.

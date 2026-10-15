@@ -302,6 +302,11 @@ Find, **Context**, and **Tag** apply to both Actions and Work Items. A selected
 Context filter uses canonical membership for both kinds; a shared Context or
 tag can therefore return both kinds in one result list.
 
+Reopening the running palette keeps the last Find text and selects it. Press
+Delete or Backspace to clear it, or type to replace it. Clearing Find restores
+the results for your current view and filters. `F5` still resets the whole main
+view. The search is remembered only until you quit; restarting begins empty.
+
 - Type in **Find item** to filter both kinds by their searchable names and
   metadata.
 - Open the filter icon and choose **Filter by context…** or **Filter by tag…**
@@ -450,8 +455,19 @@ only output newly created by that attempt is cleaned up.
 
 ### Send Input / Output to a Work Item Inbox
 
-Choose **Work Items**, select a Work Item, place the material in **Input / Output**,
-and choose **To inbox**. Existing matching workbooks are updated immediately
+Place the material in **Input / Output**, then choose **Send text to… →
+Choose Work Item Excel Inbox…** above the editor or in its right-click menu.
+Find the Work Item, check the full workbook path below the list, and choose
+**Append text**. You can choose any already loaded Work Item without changing
+the main view, search or filters. Opening/browsing the chooser does not read
+or change a workbook. If the text or destination changes while choosing,
+Palette stops and asks you to choose again.
+
+An already selected Work Item also appears as a direct **Work Item Excel
+Inbox — [item name]** command. Existing **To inbox** and Work Item right-click
+commands remain. Empty text or an active Inbox update disables sending; the
+chooser also requires loaded Work Items. Configure or refresh Work Items if
+the list is empty. Existing matching workbooks are updated immediately
 without confirmation. Context Palette creates an `Inbox` sheet when necessary
 and appends one row:
 
@@ -464,6 +480,10 @@ and appends one row:
 
 Additional links remain in the complete text, and duplicate links are allowed.
 Text is stored literally rather than evaluated as an Excel formula.
+The complete field is used, with outer whitespace removed; highlighting part
+of the text does not limit this send. Input / Output and the clipboard stay
+unchanged. This Inbox operation saves the workbook, including other unsaved
+edits. It leaves an already-open workbook open and closes only one it opened.
 
 When the exact `<work-item-name>.xlsx` is missing, Context Palette offers to
 copy the configured generic template into the existing Work Item folder and
@@ -496,7 +516,7 @@ For safety:
 ### Send files to a folder
 
 Put one or more exact absolute file paths in **Input / Output**, one per
-nonblank line, then choose the clearly labelled **Send to…** menu above the
+nonblank line, then choose the clearly labelled **Send files to…** menu above the
 editor or in its right-click menu. Matching outer quotes from Explorer's
 **Copy as path** are accepted. The first slice accepts files only, with a
 maximum of 100; folders, relative paths, URLs, prose, missing files, and a
@@ -513,7 +533,7 @@ The destination menu can contain:
 - **Choose another folder…** for a one-off copy; and
 - **Manage Folder Actions…** for editing the reusable destinations.
 
-A Folder Action is reused only as a destination record inside **Send to…**.
+A Folder Action is reused only as a destination record inside **Send files to…**.
 Running that same **Open a folder** Action from Find or a Quick menu still opens
 its folder; it does not copy anything. Recent destinations are never written
 to configuration or backups, and source paths are never added to that state.
@@ -563,7 +583,7 @@ window says **Nothing to copy** and offers neither overwrite nor a copy button.
 
 #### Open one path's folder in VS Code
 
-When Input / Output has exactly one nonblank line, the **Send to…** menu also
+When Input / Output has exactly one nonblank line, the **Send files to…** menu also
 shows **Open with → Open folder in VS Code**. Use it with one existing absolute
 folder or file path. Matching outer quotation marks from Explorer are accepted.
 A folder opens as that VS Code workspace; a file opens its containing folder,
@@ -649,7 +669,7 @@ save location in Edge.
 ## Save a webpage as PDF
 
 1. Paste one complete `https://` or `http://` webpage address into **Input / Output**.
-2. Choose **Send to… → Save webpage as PDF…**.
+2. Choose **Send files to… → Save webpage as PDF…**.
 3. Choose a folder and a **new PDF filename**. Existing files are never replaced.
 4. Wait for **PDF saved**, then choose **Open PDF** to check the content.
 
@@ -1006,7 +1026,7 @@ shared Built-in change also explains its Git and multi-computer impact.
 
 ## Send text to OneNote
 
-Use **Input / Output → Send to → OneNote — new text page…** to create one page in
+Use **Input / Output → Send text to… → OneNote — new text page…** to create one page in
 an existing section. Open OneNote and the intended notebook yourself first.
 
 1. Put the complete text in Input / Output and open the Send command. It captures
@@ -1192,8 +1212,10 @@ neither side can be accidentally collapsed. A fresh
 application start leaves the workspace empty. Reopening the resident palette
 can show the current clipboard or captured selection. Actions can read or
   replace it. Its compact heading includes Back and Forward, the literal
-  **Send to…** destination menu, and bitmap controls for
+  **Send text to…** and **Send files to…** menus, and bitmap controls for
   **Create from Input**, **Extract text**, and **Text tools**.
+  The two destination menus use a compact second toolbar row so their labels
+  remain readable at the minimum width and higher Windows scaling.
 
 Use the single **Input / Output** checkbox beside the application controls to
 hide or show this panel. It is shown by default each session. Hiding preserves
@@ -1227,7 +1249,7 @@ The bottom communication line always stays one row high. Hover over it for the c
   is not persisted, and is separate from native Undo/Redo.
 - The right-click command `Clear` empties it.
 - The right-click menu also provides Undo, Redo, Cut, Copy, Paste, Select all, and Copy all.
-- Choose **Send to…** in the header or right-click menu to copy exact file
+- Choose **Send files to…** in the header or right-click menu to copy exact file
   paths to a reviewed folder destination without changing the workspace, or
   use its separate **Open with → Open folder in VS Code** command for one
   existing folder/file path without copying it.
@@ -1546,7 +1568,7 @@ permanent Active action. They no longer occupy a primary Quick-action position.
 
 ### Chat with ChatGPT
 
-Choose **Input / Output → Send to… → ChatGPT…**. Selected text, or the full field,
+Choose **Input / Output → Send text to… → ChatGPT…**. Selected text, or the full field,
 is placed in an editable message; nothing is sent when the window opens. You can
 also open it with empty Input / Output and type a question. Reopening keeps the
 current chat and unsent message; it does not replace them with new workspace content.

@@ -23,7 +23,7 @@ from context_palette.excel_automation import (
 )
 from context_palette.excel_live_format_window import ExcelLiveFormatWindow
 from context_palette.excel_live_target_selector import LiveExcelTargetSelector
-from tests.test_excel_live_text_conversion_window import capability
+from tests.support.excel import FakeCoordinator, capability
 
 
 def format_capabilities(*, autosave_supported=False) -> AutomationCallResult:
@@ -33,46 +33,6 @@ def format_capabilities(*, autosave_supported=False) -> AutomationCallResult:
     ))
     return AutomationCallResult("capabilities", "capabilities_succeeded", True, 0,
                                 result=DescribeCapabilitiesResult((capability("inventory_live_excel"), format_capability)))
-
-
-class FakeCoordinator:
-    def __init__(self) -> None:
-        self.running = False
-        self.completion_pending = False
-        self.calls: list[dict[str, object]] = []
-        self._callback = None
-        self._result = None
-
-    def start(self, launcher_path, request, *, phase, timeout_seconds, on_complete):
-        if self.running:
-            return False
-        self.running = True
-        self.calls.append(
-            {
-                "launcher_path": launcher_path,
-                "request": request,
-                "phase": phase,
-                "timeout_seconds": timeout_seconds,
-            }
-        )
-        self._callback = on_complete
-        return True
-
-    def complete(self, result: AutomationCallResult) -> None:
-        self._result = result
-        self.completion_pending = True
-
-    def drain(self) -> bool:
-        if not self.completion_pending:
-            return False
-        callback = self._callback
-        result = self._result
-        self.running = False
-        self.completion_pending = False
-        self._callback = None
-        self._result = None
-        callback(result)
-        return True
 
 
 def workbook(

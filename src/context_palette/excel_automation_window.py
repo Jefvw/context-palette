@@ -25,8 +25,7 @@ from .excel_automation import (
     build_execute_automation_request,
     build_plan_automation_request,
     csv_invocation,
-    discover_direct_sibling_python_excel_launcher,
-    load_excel_automation_settings,
+    resolve_python_excel_launcher,
     save_excel_automation_settings,
 )
 from .window_geometry import configure_standard_window
@@ -173,26 +172,16 @@ class ExcelAutomationWindow:
 
     def _load_settings(self) -> None:
         try:
-            settings = load_excel_automation_settings(self.settings_path)
+            launcher = resolve_python_excel_launcher(
+                self.settings_path, self.settings_path.parent.parent
+            )
         except ExcelAutomationSettingsError as exc:
             self._show_setup(str(exc))
             return
-        launcher = settings.launcher_path
         if launcher is None:
-            application_root = self.settings_path.parent.parent
-            launcher = discover_direct_sibling_python_excel_launcher(
-                application_root
-            )
-            if launcher is None:
-                self._show_setup(
-                    "Choose the Python Excel machine launcher on this computer. "
-                    "Excel features remain optional."
-                )
-                return
-        elif not launcher.is_file():
             self._show_setup(
-                "The configured Python Excel launcher is unavailable on this "
-                "computer. Choose its current machine-local launcher."
+                "Choose the Python Excel machine launcher on this computer. "
+                "Excel features remain optional."
             )
             return
         self._launcher_path = launcher

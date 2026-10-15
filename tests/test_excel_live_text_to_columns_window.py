@@ -27,14 +27,14 @@ from context_palette.excel_live_target_selector import LiveExcelTargetSelector
 from context_palette.excel_live_text_conversion_window import ExcelLiveTextConversionWindow
 from context_palette.excel_live_text_to_columns_window import ExcelLiveTextToColumnsWindow
 from context_palette.style import configure_theme
-from tests.test_excel_automation import _envelope
-from tests.test_excel_live_text_conversion_window import (
+from tests.support.excel import (
     FakeCoordinator,
+    automation_response_envelope as _envelope,
     capability,
+    conversion_workbook as workbook,
     inventory_result,
     preflight_column,
     preflight_result,
-    workbook,
 )
 
 

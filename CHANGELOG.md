@@ -18,6 +18,22 @@ This project has not published a versioned release. Changes are recorded under *
 
 ## Unreleased
 
+- Split Input / Output destinations into **Send text to…** and **Send files
+  to…**, in both the toolbar and right-click menu. A compact second toolbar
+  row keeps full labels visible at the minimum width and higher scaling.
+  Add a direct Work Item Excel Inbox chooser with full destination details and
+  one **Append text** gesture; cached items, cancellation and source/destination
+  rechecks preserve the existing full-text append/save boundary.
+
+- Remember Find text while the palette is running and select it on reopen.
+  Delete/Backspace clears the query; typing replaces it. View/filter choices
+  remain, F5 still resets the whole view, and quitting forgets the search.
+  External requests can explicitly clear or replace it.
+- Add the selected **Work Item Excel Inbox** to both Input / Output Send to
+  menus, reusing the existing full-text append/save behavior and busy guard.
+  Existing Inbox controls remain. Clarify text-send effects and replace the
+  misleading file-path count heading with **Copy files to:**.
+
 - Allow live Excel formatting with AutoSave on when the engine explicitly advertises support. One visible warning and Apply click opt in; older engines retain their AutoSave block. Results distinguish engine Save calls from automatic persistence and show partly formatted sheets. Missing/error receipts require inspection, with no retry or promise of reversal. Both conversion actions keep their existing policies; fresh live opt-in testing is pending.
 
 - Integrated a separate **Text to Columns → Text (fast)** Action using Python Excel apply_live_text_to_columns_as_text 1.0. Exact-capability-gated discovery, shared ordered column selection and one no-backup native batch preserve the old checked converter. Scientific text may remain unchanged; partial/unknown results require inspection with no retry/save/close. Engine feature is still uncommitted and host live UAT remains pending.

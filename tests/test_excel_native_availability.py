@@ -15,7 +15,7 @@ from context_palette.excel_automation import AutomationCallResult, DescribeCapab
 from context_palette.excel_native_availability import NativeExcelAvailability
 from context_palette.launcher import LauncherApp
 from context_palette.resource_operations import ExcelWorkflowRequest
-from tests.test_excel_live_text_conversion_window import FakeCoordinator, capability
+from tests.support.excel import FakeCoordinator, capability
 
 
 OPERATIONS = ("inventory_live_excel", "preflight_live_columns", "apply_live_text_to_columns_as_text")

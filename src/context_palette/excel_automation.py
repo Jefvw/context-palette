@@ -200,6 +200,34 @@ def discover_direct_sibling_python_excel_launcher(
         return None
 
 
+def resolve_python_excel_launcher(
+    settings_path: Path,
+    installation_root: Path,
+) -> Path | None:
+    """Resolve optional setup without starting Excel or persisting discovery.
+
+    An explicit launcher always takes precedence. Invalid or unavailable
+    configuration requires repair rather than falling back to a sibling.
+    With no explicit setting, discovery checks only the supported direct
+    sibling of ``installation_root``.
+    """
+
+    launcher = load_excel_automation_settings(settings_path).launcher_path
+    if launcher is None:
+        return discover_direct_sibling_python_excel_launcher(installation_root)
+    try:
+        available = launcher.is_file()
+    except OSError as exc:
+        raise ExcelAutomationSettingsError(
+            "The configured Python Excel launcher is unavailable on this computer."
+        ) from exc
+    if not available:
+        raise ExcelAutomationSettingsError(
+            "The configured Python Excel launcher is unavailable on this computer."
+        )
+    return launcher
+
+
 def _validate_launcher_path(path: Path) -> None:
     if not path.is_absolute():
         raise ExcelAutomationSettingsError(

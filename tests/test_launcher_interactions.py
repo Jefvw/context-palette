@@ -2596,18 +2596,23 @@ class LauncherInteractionTests(unittest.TestCase):
         app = LauncherApp.__new__(LauncherApp)
         app.workspace_component = Mock()
         app.workspace_component.raw_text.return_value = " \n\t"
-        menu = RecordingMenu()
+        app._selected_work_item = Mock(return_value=None)
+        text_menu = RecordingMenu()
+        files_menu = RecordingMenu()
 
-        app._populate_send_to_menu(menu)
+        app._populate_send_text_menu(text_menu)
+        app._populate_send_files_menu(files_menu)
 
         self.assertEqual(
-            menu.labels,
-            ["OneNote — new text page…", "ChatGPT…", "Paste a webpage URL or file paths first", "Save webpage as PDF…"],
+            text_menu.labels,
+            ["OneNote — new text page…", "ChatGPT…", "Choose Work Item Excel Inbox…", "No Work Items available"],
         )
         self.assertEqual(
-            menu.options_for(menu.labels[0])["state"],
-            "disabled",
+            files_menu.labels,
+            ["Paste a webpage URL or file paths first", "Save webpage as PDF…"],
         )
+        self.assertEqual(text_menu.options_for(text_menu.labels[0])["state"], "disabled")
+        self.assertEqual(text_menu.options_for("Choose Work Item Excel Inbox…")["state"], "disabled")
 
     def test_send_to_menu_prioritizes_selected_work_item_and_context_folders(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -2683,9 +2688,13 @@ class LauncherInteractionTests(unittest.TestCase):
                 "context_palette.launcher.tk.Menu",
                 side_effect=lambda *_args, **_kwargs: RecordingMenu(),
             ):
-                app._populate_send_to_menu(menu)
+                app._populate_send_files_menu(menu)
 
-            self.assertEqual(menu.labels[:3], ["OneNote — new text page…", "ChatGPT…", "Copy 2 file paths to:"])
+            self.assertEqual(menu.labels[0], "Copy files to:")
+            self.assertNotIn("OneNote — new text page…", menu.labels)
+            self.assertNotIn("ChatGPT…", menu.labels)
+            self.assertFalse(any(label.startswith("Work Item Excel Inbox") for label in menu.labels))
+            self.assertNotIn("Choose Work Item Excel Inbox…", menu.labels)
             self.assertIn(
                 f"Selected Work Item — {selected_item.display_name}",
                 menu.labels,
@@ -2771,7 +2780,7 @@ class LauncherInteractionTests(unittest.TestCase):
         app.recent_send_destinations = []
         app.work_item_index = Mock(items=())
         app.send_to_destination_picker = None
-        app.send_to_button = Mock()
+        app.send_files_button = Mock()
         app.status_var = FakeVariable()
         app._selected_work_item = Mock(return_value=None)
         app._open_send_destination = Mock()
@@ -2787,7 +2796,7 @@ class LauncherInteractionTests(unittest.TestCase):
                 "context_palette.launcher.SearchableSelectionPopup"
             ) as destination_picker,
         ):
-            app._populate_send_to_menu(menu)
+            app._populate_send_files_menu(menu)
             menu.options_for("Find destination…")["command"]()
 
         self.assertNotIn("Current customer", menu.labels)
@@ -2816,7 +2825,7 @@ class LauncherInteractionTests(unittest.TestCase):
         app._open_workspace_folder_in_vscode = Mock()
         menu = RecordingMenu()
 
-        app._populate_send_to_menu(menu)
+        app._populate_send_files_menu(menu)
 
         for label in (
             "Find destination…",
@@ -2883,7 +2892,7 @@ class LauncherInteractionTests(unittest.TestCase):
         app = LauncherApp.__new__(LauncherApp)
         app.root = Mock()
         app.send_to_destination_picker = None
-        app.send_to_button = Mock()
+        app.send_files_button = Mock()
         app.status_var = FakeVariable()
         app._open_send_destination = Mock()
         destination = _SendDestination(
@@ -2901,6 +2910,7 @@ class LauncherInteractionTests(unittest.TestCase):
         self.assertEqual(len(labels), 1)
         self.assertIn("Finance monthly", labels[0])
         self.assertEqual(popup.call_args.kwargs["title"], "Find copy destination")
+        self.assertIs(popup.call_args.args[0], app.send_files_button)
         popup.call_args.kwargs["on_select"]((labels[0],))
         app._open_send_destination.assert_called_once_with(destination)
 

@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-from contextlib import contextmanager, ExitStack
 from dataclasses import replace
 import gc
-import json
 from pathlib import Path
 import sys
-import tempfile
 import tkinter as tk
 from tkinter import ttk
 import unittest
@@ -18,9 +15,9 @@ from context_palette.drop_action import DropActionSettings, approve_drop_action
 from context_palette.drop_adapter import DropItem, DropResult
 from context_palette.drop_configuration_window import DropConfigurationWindow
 from context_palette.drop_target_window import DropTargetWindow
-from context_palette.launcher import LauncherApp
 from context_palette.work_item_refresh import SourceRefreshResult, WorkItemIndex
 from context_palette.work_items import DiscoveredWorkItem, WorkItemSource
+from tests.support.launcher_ui import assert_control_fits, descendants, disposable_launcher
 
 
 @unittest.skipUnless(sys.platform == "win32", "Requires Windows Tk.")
@@ -31,7 +28,7 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
         gc.collect()
 
     def test_capture_and_harvest_retirement_preserves_legacy_data_and_active_tools(self):
-        with self.launcher() as (app, *_):
+        with disposable_launcher() as (app, *_):
             legacy_path = app.data_paths.inbox_file
             legacy = b'{"items": [{"id": "legacy", "title": "Synthetic capture", "content": "Keep", "source": "clipboard", "created_at": "2026-01-01"}]}'
             legacy_path.write_bytes(legacy)
@@ -47,11 +44,12 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
             self.assertEqual([action.id for action in app.actions], ["sample"])
             self.assertTrue(app.create_action_button.winfo_exists())
             self.assertTrue(app.new_action_button.winfo_exists())
-            self.assertTrue(app.send_to_button.winfo_exists())
+            self.assertTrue(app.send_text_button.winfo_exists())
+            self.assertTrue(app.send_files_button.winfo_exists())
             self.assertTrue(app.send_work_item_inbox_button.winfo_exists())
 
     def test_find_focus_and_reopening_do_not_cover_results_with_help(self):
-        with self.launcher() as (app, *_):
+        with disposable_launcher() as (app, *_):
             tooltip = next(
                 tooltip for tooltip in app.widget_tooltips
                 if tooltip.widget is app.search_entry
@@ -87,7 +85,7 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
     def test_onenote_placement_reveals_hidden_workspace_without_clipboard_sync(self):
         for placement, expected in (("replace", "Reviewed note"),
                                     ("append", "Original fixture\n\nReviewed note")):
-            with self.subTest(placement=placement), self.launcher() as fixture:
+            with self.subTest(placement=placement), disposable_launcher() as fixture:
                 app, clipboard_get, clipboard_clear, clipboard_append = fixture
                 app.workspace_component.set_text("Original fixture")
                 app._set_workspace_visible(False)
@@ -117,7 +115,7 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
                 self.assertEqual(app.workspace_component.raw_text(), "Original fixture")
 
     def test_cancelled_onenote_placement_does_not_reveal_or_change_workspace(self):
-        with self.launcher() as fixture:
+        with disposable_launcher() as fixture:
             app, clipboard_get, clipboard_clear, clipboard_append = fixture
             app.workspace_component.set_text("Keep this text")
             app.root.withdraw()
@@ -135,89 +133,8 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
             for clipboard_mock in (clipboard_get, clipboard_clear, clipboard_append):
                 clipboard_mock.assert_not_called()
 
-    @contextmanager
-    def launcher(self, *, scaling: float = 4 / 3, size: str = "780x600"):
-        with tempfile.TemporaryDirectory() as temporary_directory, ExitStack() as stack:
-            data = Path(temporary_directory)
-            payloads = {
-                "actions.json": {"actions": [
-                    {"id": "sample", "title": "Sample text", "context": "",
-                     "type": "copy_text", "value": "Sample result"},
-                ]},
-                "contexts.json": {"contexts": []},
-                "command_surface.json": {"groups": []},
-            }
-            for filename, payload in payloads.items():
-                (data / filename).write_text(json.dumps(payload), encoding="utf-8")
-            (data / "cheatsheets").mkdir()
-            root = tk.Tk()
-            root.withdraw()
-            # Show now follows the pointer; keep disposable test windows
-            # invisible even when placement moves them back onto a monitor.
-            root.attributes("-alpha", 0)
-            original_scaling = float(root.tk.call("tk", "scaling"))
-            root.tk.call("tk", "scaling", scaling)
-            clipboard_get = stack.enter_context(patch.object(root, "clipboard_get", return_value="Clipboard fixture"))
-            clipboard_clear = stack.enter_context(patch.object(root, "clipboard_clear"))
-            clipboard_append = stack.enter_context(patch.object(root, "clipboard_append"))
-            for target, options in (
-                ("SingleInstanceServer.start", {"return_value": True}),
-                ("SingleInstanceServer.stop", {}),
-                ("GlobalHotkey.start", {"return_value": False}),
-                ("GlobalHotkey.stop", {}),
-                ("DropTargetWindow.start", {"return_value": True}),
-                ("LauncherApp._start_work_item_refresh", {}),
-                ("open_action_target", {"side_effect": AssertionError("UI smoke must not open targets")}),
-                ("execute_action", {"side_effect": AssertionError("UI smoke must not execute Actions")}),
-            ):
-                stack.enter_context(patch(f"context_palette.launcher.{target}", **options))
-            try:
-                app = LauncherApp(
-                    root, data / "actions.json", data / "local_actions.json",
-                    data / "contexts.json", data / "local_contexts.json",
-                    data / "command_surface.json", data / "local_command_surface.json",
-                    data / "palette.json", data / "inbox.json", data / "cheatsheets",
-                    instance_port=0,
-                )
-                root.geometry(f"{size}+-32000+-32000")
-                root.deiconify()
-                root.update()
-                app._set_initial_main_split()
-                root.update_idletasks()
-                yield app, clipboard_get, clipboard_clear, clipboard_append
-            finally:
-                # Polling and tooltip timers are intentionally owned by this
-                # interpreter only, never by the user's resident application.
-                for callback in root.tk.splitlist(root.tk.call("after", "info")):
-                    root.tk.call("after", "cancel", callback)
-                # Scaling is shared between Tk interpreters in this process.
-                # A synthetic 150% check must not resize later test fixtures.
-                root.tk.call("tk", "scaling", original_scaling)
-                root.destroy()
-
-    @staticmethod
-    def descendants(widget):
-        for child in widget.winfo_children():
-            yield child
-            yield from LauncherEnhancementsUiTests.descendants(child)
-
-    def assert_control_fits(self, control, container) -> None:
-        self.assertTrue(control.winfo_ismapped(), str(control))
-        self.assertGreaterEqual(control.winfo_width() + 1, control.winfo_reqwidth(), str(control))
-        self.assertGreaterEqual(control.winfo_height() + 1, control.winfo_reqheight(), str(control))
-        self.assertGreaterEqual(control.winfo_rootx(), container.winfo_rootx(), str(control))
-        self.assertGreaterEqual(control.winfo_rooty(), container.winfo_rooty(), str(control))
-        self.assertLessEqual(
-            control.winfo_rootx() + control.winfo_width(),
-            container.winfo_rootx() + container.winfo_width(), str(control),
-        )
-        self.assertLessEqual(
-            control.winfo_rooty() + control.winfo_height(),
-            container.winfo_rooty() + container.winfo_height(), str(control),
-        )
-
     def test_create_action_toolbar_control_keeps_its_callback_and_accessible_name(self):
-        with self.launcher() as (app, *_):
+        with disposable_launcher() as (app, *_):
             button = app.new_action_button
             expected_call = Mock()
             app._show_configuration = expected_call
@@ -245,7 +162,7 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
             )
 
     def test_direct_copy_drop_leaves_hidden_editor_selection_and_undo_untouched(self):
-        with self.launcher(size="1100x700") as (app, _get, clear, append):
+        with disposable_launcher(size="1100x700") as (app, _get, clear, append):
             panel = app.workspace_component
             panel.set_text("first state")
             panel.set_text("second state")
@@ -280,7 +197,7 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
             self.assertEqual(panel.raw_text(), "first state")
 
     def test_hide_show_keeps_text_selection_history_undo_and_custom_sash(self):
-        with self.launcher(size="1100x700") as (app, _get, clear, append):
+        with disposable_launcher(size="1100x700") as (app, _get, clear, append):
             root = app.root
             panel = app.workspace_component
             editor = panel.text
@@ -328,7 +245,7 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
             append.assert_not_called()
 
     def test_hidden_workspace_keeps_clipboard_sync_and_default_drop_reveals_it(self):
-        with self.launcher() as (app, get, clear, append):
+        with disposable_launcher() as (app, get, clear, append):
             app.workspace_visibility_button.invoke()
             app.show_window()
             app.root.update()
@@ -354,7 +271,7 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
             append.assert_not_called()
 
     def test_preview_button_selection_states_and_dialog_do_not_run(self):
-        with self.launcher() as (app, _get, clear, append):
+        with disposable_launcher() as (app, _get, clear, append):
             root = app.root
             panel = app.workspace_component
             panel.set_text("Preserved input")
@@ -366,12 +283,12 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
                 window = app.execution_preview_window
                 window.geometry("700x480+-32000+-32000")
                 root.update()
-                text = next(widget for widget in self.descendants(window) if isinstance(widget, tk.Text))
+                text = next(widget for widget in descendants(window) if isinstance(widget, tk.Text))
                 self.assertIn("Sample result", text.get("1.0", "end-1c"))
                 self.assertEqual(str(text.cget("state")), "disabled")
-                close = next(widget for widget in self.descendants(window) if isinstance(widget, ttk.Button) and widget.cget("text") == "Close")
-                self.assert_control_fits(close, window)
-                self.assertFalse(any(isinstance(widget, ttk.Button) and widget.cget("text") in {"Run", "Open"} for widget in self.descendants(window)))
+                close = next(widget for widget in descendants(window) if isinstance(widget, ttk.Button) and widget.cget("text") == "Close")
+                assert_control_fits(self, close, window)
+                self.assertFalse(any(isinstance(widget, ttk.Button) and widget.cget("text") in {"Run", "Open"} for widget in descendants(window)))
                 close.invoke()
                 self.assertFalse(window.winfo_exists())
                 execute.assert_not_called()
@@ -391,7 +308,7 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
                 app.preview_button.invoke()
                 root.update()
                 window = app.execution_preview_window
-                text = next(widget for widget in self.descendants(window) if isinstance(widget, tk.Text))
+                text = next(widget for widget in descendants(window) if isinstance(widget, tk.Text))
                 self.assertIn(str(item.default_open_path), text.get("1.0", "end-1c"))
                 execute.assert_not_called()
                 open_item.assert_not_called()
@@ -402,13 +319,13 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
     def test_preview_readability_at_supported_scaling_preserves_literal_prompt(self):
         prompt = "When you run this Action\n\n1. Explain the code.\n2. Keep its meaning.\n" + "More detail.\n" * 60
         for percentage, scaling in ((100, 4 / 3), (125, 5 / 3), (150, 2.0)):
-            with self.subTest(percentage=percentage), self.launcher(scaling=scaling) as (app, _get, clear, append):
+            with self.subTest(percentage=percentage), disposable_launcher(scaling=scaling) as (app, _get, clear, append):
                 preview = build_execution_preview(Action("prompt", "Example prompt", "", "ai_prompt", prompt))
                 app._show_execution_preview("Preview: Example prompt", preview)
                 window = app.execution_preview_window
                 window.geometry("700x480+-32000+-32000")
                 app.root.update()
-                text = next(widget for widget in self.descendants(window) if isinstance(widget, tk.Text))
+                text = next(widget for widget in descendants(window) if isinstance(widget, tk.Text))
                 content_range = text.tag_ranges("content")
                 self.assertEqual(len(content_range), 2)
                 self.assertEqual(text.get(*content_range), prompt + "\n")
@@ -416,8 +333,8 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
                 self.assertNotEqual(text.tag_cget("content", "background"), text.cget("background"))
                 self.assertNotEqual(text.tag_cget("heading", "font"), text.cget("font"))
                 self.assertEqual(str(text.cget("state")), "disabled")
-                close = next(widget for widget in self.descendants(window) if isinstance(widget, ttk.Button) and widget.cget("text") == "Close")
-                self.assert_control_fits(close, window)
+                close = next(widget for widget in descendants(window) if isinstance(widget, ttk.Button) and widget.cget("text") == "Close")
+                assert_control_fits(self, close, window)
                 text.yview_moveto(1)
                 app.root.update()
                 self.assertGreater(float(text.yview()[0]), 0)
@@ -427,14 +344,14 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
 
     def test_text_preview_empty_state_and_details_keep_the_same_snapshot(self):
         for percentage, scaling in ((100, 4 / 3), (125, 5 / 3), (150, 2.0)):
-            with self.subTest(percentage=percentage), self.launcher(scaling=scaling) as (app, _get, clear, append):
+            with self.subTest(percentage=percentage), disposable_launcher(scaling=scaling) as (app, _get, clear, append):
                 action = Action("slashes", "Convert / to \\", "", "transform_slashes", "forward_to_back")
                 for original in ("", "C:/Work/report.txt"):
                     app._show_execution_preview("Preview", build_execution_preview(action, workspace_text=original))
                     window = app.execution_preview_window
                     window.geometry("700x480+-32000+-32000")
                     app.root.update()
-                    text = next(widget for widget in self.descendants(window) if isinstance(widget, tk.Text))
+                    text = next(widget for widget in descendants(window) if isinstance(widget, tk.Text))
                     report = text.get("1.0", "end-1c")
                     if original:
                         self.assertIn("Before · your text\nC:/Work/report.txt", report)
@@ -445,8 +362,8 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
                         self.assertIn("Example only — not your text", report)
                         self.assertNotIn("(empty)", report)
                     self.assertNotIn("Undo and clipboard", report)
-                    toggle = next(widget for widget in self.descendants(window) if isinstance(widget, ttk.Checkbutton) and widget.cget("text") == "Show details")
-                    self.assert_control_fits(toggle, window)
+                    toggle = next(widget for widget in descendants(window) if isinstance(widget, ttk.Checkbutton) and widget.cget("text") == "Show details")
+                    assert_control_fits(self, toggle, window)
                     app.workspace_component.set_text("New input after preview")
                     toggle.invoke()
                     app.root.update()
@@ -461,18 +378,18 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
 
     def test_new_controls_fit_small_window_at_supported_scaling(self):
         for percentage, scaling in ((100, 4 / 3), (125, 5 / 3), (150, 2.0)):
-            with self.subTest(percentage=percentage), self.launcher(scaling=scaling, size="700x480") as (app, *_):
+            with self.subTest(percentage=percentage), disposable_launcher(scaling=scaling, size="700x480") as (app, *_):
                 for control in (app.preview_button, app.run_button, app.workspace_visibility_button):
-                    self.assert_control_fits(control, app.command_console)
+                    assert_control_fits(self, control, app.command_console)
                 app.workspace_component.set_text("Hidden input")
                 app.workspace_visibility_button.invoke()
                 app.root.update()
-                self.assert_control_fits(app.workspace_visibility_button, app.command_console)
-                self.assert_control_fits(app.collapsed_workspace_status, app.command_console)
+                assert_control_fits(self, app.workspace_visibility_button, app.command_console)
+                assert_control_fits(self, app.collapsed_workspace_status, app.command_console)
 
     def test_drop_settings_controls_fit_and_selection_explains_effect(self):
         for percentage, scaling in ((100, 4 / 3), (125, 5 / 3), (150, 2.0)):
-            with self.subTest(percentage=percentage), self.launcher(scaling=scaling) as (app, *_):
+            with self.subTest(percentage=percentage), disposable_launcher(scaling=scaling) as (app, *_):
                 save = Mock()
                 action = Action("upper", "Uppercase dropped text", "", "transform_text", "uppercase")
                 unsupported = Action("password", "Protected credential", "", "paste_credential", "Fixture")
@@ -488,9 +405,9 @@ class LauncherEnhancementsUiTests(unittest.TestCase):
                 self.assertEqual(str(dialog.save_button.cget("state")), "normal")
                 self.assertTrue(dialog.effect_var.get())
                 for control in (dialog.show_radio, dialog.action_radio, dialog.action_picker.choose_button, dialog.save_button):
-                    self.assert_control_fits(control, dialog.window)
-                cancel = next(widget for widget in self.descendants(dialog.window) if isinstance(widget, ttk.Button) and widget.cget("text") == "Cancel")
-                self.assert_control_fits(cancel, dialog.window)
+                    assert_control_fits(self, control, dialog.window)
+                cancel = next(widget for widget in descendants(dialog.window) if isinstance(widget, ttk.Button) and widget.cget("text") == "Cancel")
+                assert_control_fits(self, cancel, dialog.window)
                 self.assertEqual(len(dialog.unavailable.get_children()), 1)
                 cancel.invoke()
                 save.assert_not_called()

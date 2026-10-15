@@ -75,7 +75,8 @@ This directory separates current behavior, durable direction, historical rationa
   model and remaining manual verification.
 - [Decisions](DECISIONS.md) — append-only rationale.
 - [Changelog](../CHANGELOG.md) — user-visible history.
-- [Technical review](TECHNICAL_REVIEW.md) and [performance audit](PERFORMANCE_AUDIT.md) — dated audits, including completed findings.
+- [Technical review](TECHNICAL_REVIEW.md#maintenance-review-2026-10-11) — latest code/documentation maintenance priorities, followed by earlier dated findings.
+- [Performance audit](PERFORMANCE_AUDIT.md) — dated measurements and completed findings.
 
 ### Integration status and handovers
 

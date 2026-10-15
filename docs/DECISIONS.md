@@ -3929,3 +3929,107 @@ Partial sheets/filter effects remain visible; every result-null Apply error or
 untrusted reply is unknown without automatic retry or a reversal promise.
 Python Excel remains read-only; its observed dirty opt-in working tree is not
 treated as a published revision. Fake verification precedes new attended UAT.
+
+## 2026-10-11 - Consolidate repeated policy before splitting large modules
+
+**Decision:** Give Excel launcher resolution one owner while keeping settings
+loading unprobed, caller roots, capability/version checks and workflow state
+machines intact. Consolidate current check guidance and duplicated architecture
+ownership, and place current test commands before historical evidence.
+
+**Reason:** Four repeated engine-selection implementations and conflicting
+contributor instructions create demonstrable drift risk. Broad UI or engine
+framework changes have less certain value and different effect/close semantics.
+
+**Consequences:** Explicit invalid/unavailable launchers never fall back;
+discovery remains one direct sibling and writes no settings. Public interfaces,
+personal data and retired compatibility stay intact. Historical observations
+and existing heading anchors are retained; dated tests do not become live UAT.
+Prioritized follow-ups remain in the existing technical-review record.
+
+## 2026-10-11 - Share atomic publication without changing serialization
+
+**Decision:** Let JSON and exact-byte writers use one private streamed
+temporary-file context manager. Public entry points retain their signatures,
+backup defaults, input validation and reentrant configuration gate.
+
+**Reason:** Two copies of flush/sync/close/backup/replace/cleanup could drift.
+Pre-serializing JSON into a complete string/byte buffer would change memory use
+and failure timing, so serialization remains inside the existing text stream.
+
+**Consequences:** Exact JSON/binary bytes and write → flush → sync → close →
+backup → replacement order are protected by characterization and transaction
+tests. Failed backup copy may still leave a partial sidecar; this extraction
+preserves that behavior instead of inventing backup rollback. Earlier maintenance
+changes and private/runtime data remain intact; no dependency or UI change.
+
+## 2026-10-11 - Give shared test fixtures their own inert owners
+
+**Decision:** Move only shared Excel doubles/builders and disposable launcher
+helpers into `tests/support`, removing imports between test modules and
+instantiated TestCase fixture owners. Keep domain-specific defaults local and
+all existing cases/assertions unchanged.
+
+**Reason:** Fixture ownership should not depend on another suite's test class
+or discovery. Separate helper owners prevent drift while keeping tests explicit
+and avoiding a generic test/engine framework.
+
+**Consequences:** Excel completion remains drain-driven and reentrant. Launcher
+guards span construction through cleanup; timer cancellation, scaling restore
+and root destruction are verified on failures. A guard at the actual Excel call
+boundary covers captured process factories. Helper imports remain inert;
+four explicit safety cases are the only intended discovery-count increase.
+Earlier maintenance, production code and private/runtime data are preserved.
+
+## 2026-10-11 - Share Configure scrolling without changing dialog behavior
+
+**Decision:** Extract the Configure viewport into `dialog_scrolling.py` and
+reuse it for Action, General-shortcut, Context, Quick-action menu and item
+forms. Keep two narrow modes matching the existing forms rather than redesigning
+scrolling or introducing a general UI framework.
+
+**Reason:** ActionDialog duplicated canvas layout and scrolling but had
+different wheel steps, pointer rules, focus timing and padding. Consolidating
+ownership must preserve those differences rather than silently changing UX.
+
+**Consequences:** Fixed footers and native text/list/combobox scrolling remain.
+The owner tracks its deferred focus callbacks and removes only its own timers
+and window bindings on destruction; destroyed fields and idle-layout teardown
+are harmless. Earlier maintenance work remains intact. No schema, dependency,
+engine, data migration or broader Configure/launcher split is involved.
+
+## 2026-10-14 - Recall resident searches and unify access to text destinations
+
+**Decision:** Keep the current Find value through palette reveals and select
+it using the existing focus callback. The owner chose memory-only recall:
+no saved search, history or new setting. Explicit F5 reset remains, and an
+external request's present search field may clear or replace the query.
+
+**Reason:** Re-entering the same search interrupts repeated use. Native
+Delete/Backspace and replacement typing provide a quick return to the current
+filtered view without another control or custom key behavior.
+
+**Consequences:** Add selected Work Item Excel Inbox to the already shared
+header/context Send to builder, preserving its exact destination, complete
+trimmed text and append/save boundary. Existing Inbox controls remain. Keep
+OneNote, ChatGPT, file-copy, PDF and VS Code payload/effect policies separate;
+document proposed source-policy and chooser unification before changing them.
+No engine edit, new dependency, data migration or private search persistence.
+
+## 2026-10-14 - Separate text/file menus and choose an Inbox directly
+
+**Decision:** Replace the mixed workspace menu with separate text and file
+menus on both toolbar/context surfaces. Keep full labels on a compact second
+toolbar row. Add a Work Item-only searchable Inbox chooser using loaded index
+items, with optional wrapped selected-destination details and Append text.
+
+**Reason:** File-copy destinations obscured text sends, and requiring a main
+Work Item selection interrupted the workflow. Long list labels can hide the
+distinguishing target path, so a read-only full path is needed before appending.
+
+**Consequences:** Reuse the existing append/save handler and template rules;
+preserve whole-field Inbox/OneNote and selection-first chat scopes. Source,
+revision, exact destination and callback ownership are rechecked, while native
+grab restoration precedes dispatch. Default pickers and search recall remain.
+No new engine logic, dependency, external read on chooser open or extra Review
+gate. Existing Inbox shortcuts, file-copy/PDF/VS Code routes stay available.

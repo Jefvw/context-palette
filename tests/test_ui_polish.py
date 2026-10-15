@@ -8,17 +8,16 @@ from tkinter import font as tkfont, ttk
 import unittest
 
 from context_palette.style import COLORS
-import tests.test_launcher_enhancements_ui as fixtures
+from tests.support.launcher_ui import assert_control_fits, disposable_launcher
 
 
 @unittest.skipUnless(sys.platform == "win32", "Requires Windows Tk.")
 class UiPolishTests(unittest.TestCase):
     def setUp(self) -> None:
         gc.collect()
-        self.fixture = fixtures.LauncherEnhancementsUiTests()
 
     def test_scope_transitions_and_combined_states_keep_their_visual_meaning(self):
-        with self.fixture.launcher() as (app, *_):
+        with disposable_launcher() as (app, *_):
             style = ttk.Style(app.root)
             panel = app.action_discovery_panel
             for selected in ("all", "actions", "work_items", "all"):
@@ -47,7 +46,7 @@ class UiPolishTests(unittest.TestCase):
     def test_production_tools_and_scope_labels_fit_normal_minimum_scaling_matrix(self):
         for scale in (100, 125, 150):
             for size in ("780x600", "700x480"):
-                with self.subTest(scale=scale, size=size), self.fixture.launcher(
+                with self.subTest(scale=scale, size=size), disposable_launcher(
                     scaling=4 / 3 * scale / 100, size=size,
                 ) as (app, *_):
                     panel = app.workspace_component
@@ -55,7 +54,7 @@ class UiPolishTests(unittest.TestCase):
                     discovery.render_control_state(work_item=True, has_selection=True)
                     app.root.update()
                     controls = (
-                        panel.send_to_button, panel.content_back_button,
+                        panel.send_text_button, panel.send_files_button, panel.content_back_button,
                         panel.content_forward_button, panel.create_action_button,
                         panel.ocr_button, panel.text_tools_button,
                         app.preview_button, discovery.new_action_button, discovery.edit_button,
@@ -63,8 +62,8 @@ class UiPolishTests(unittest.TestCase):
                     )
                     self.assertEqual(len({control.winfo_height() for control in controls}), 1)
                     for control in (*controls, app.run_button):
-                        self.fixture.assert_control_fits(control, app.root)
-                    self.fixture.assert_control_fits(app.scope_options_button, app.root)
+                        assert_control_fits(self, control, app.root)
+                    assert_control_fits(self, app.scope_options_button, app.root)
                     style = ttk.Style(app.root)
                     for button in discovery.scope_buttons.values():
                         font = tkfont.Font(root=app.root, font=style.lookup(button.cget("style"), "font"))
@@ -78,7 +77,7 @@ class UiPolishTests(unittest.TestCase):
                     self.assertEqual(panel.text.cget("selectforeground"), COLORS["white"])
 
     def test_compact_execution_controls_remain_above_their_container_after_resize(self):
-        with self.fixture.launcher(scaling=2, size="700x480") as (app, *_):
+        with disposable_launcher(scaling=2, size="700x480") as (app, *_):
             panel = app.action_discovery_panel
             panel.render_control_state(sequence_running=True, has_selection=True)
             for size in ("700x480", "1400x800", "700x480"):
@@ -93,12 +92,12 @@ class UiPolishTests(unittest.TestCase):
                         self.assertLess(siblings.index(row), siblings.index(control))
                 else:
                     self.assertFalse(app.compact_execution_row.winfo_manager())
-                self.fixture.assert_control_fits(app.preview_button, app.root)
-                self.fixture.assert_control_fits(app.run_button, app.root)
+                assert_control_fits(self, app.preview_button, app.root)
+                assert_control_fits(self, app.run_button, app.root)
                 self.assertEqual(app.run_button.cget("text"), "Stop remaining")
 
     def test_quick_menu_keeps_one_visible_right_arrow_and_existing_bindings(self):
-        with self.fixture.launcher(size="1100x700") as (app, *_):
+        with disposable_launcher(size="1100x700") as (app, *_):
             for area in app.command_tiles_frame.winfo_children():
                 for control in area.winfo_children():
                     self.assertIsInstance(control, ttk.Label)

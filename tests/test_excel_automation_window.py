@@ -24,57 +24,10 @@ from context_palette.excel_automation import (
     PlanRequirement,
 )
 from context_palette.excel_automation_window import ExcelAutomationWindow
+from tests.support.excel import FakeCoordinator
 
 
 FINGERPRINT = "a" * 64
-
-
-class FakeCoordinator:
-    def __init__(self) -> None:
-        self.running = False
-        self.completion_pending = False
-        self.calls: list[dict[str, object]] = []
-        self._callback = None
-        self._result = None
-
-    def start(
-        self,
-        launcher_path: Path,
-        request: dict[str, object],
-        *,
-        phase: str,
-        timeout_seconds: float,
-        on_complete,
-    ) -> bool:
-        if self.running:
-            return False
-        self.running = True
-        self.calls.append(
-            {
-                "launcher_path": launcher_path,
-                "request": request,
-                "phase": phase,
-                "timeout_seconds": timeout_seconds,
-            }
-        )
-        self._callback = on_complete
-        return True
-
-    def complete(self, result: AutomationCallResult) -> None:
-        self._result = result
-        self.completion_pending = True
-
-    def drain(self) -> bool:
-        if not self.completion_pending:
-            return False
-        result = self._result
-        callback = self._callback
-        self.completion_pending = False
-        self.running = False
-        self._result = None
-        self._callback = None
-        callback(result)
-        return True
 
 
 def describe_success() -> AutomationCallResult:

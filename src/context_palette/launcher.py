@@ -476,6 +476,7 @@ class LauncherApp:
         ) = None
         self.file_transfer_window: object | None = None
         self.send_to_destination_picker: SearchableSelectionPopup | None = None
+        self.work_item_inbox_picker: SearchableSelectionPopup | None = None
         self.recent_send_destinations: list[_SendDestination] = []
         self.action_info_full = (
             "Select an Action or Work Item to see what it will do."
@@ -1194,7 +1195,8 @@ class LauncherApp:
             tooltip_adder=self._tooltip,
             create_action=self._create_action_from_workspace,
             extract_text=self._extract_text_from_image,
-            populate_send_to_menu=self._populate_send_to_menu,
+            populate_send_text_menu=self._populate_send_text_menu,
+            populate_send_files_menu=self._populate_send_files_menu,
             text_change_callback=self._workspace_text_changed,
             find_onenote=self._find_onenote_notes,
         )
@@ -1208,7 +1210,8 @@ class LauncherApp:
         self.text_tools_button = self.workspace_component.text_tools_button
         self.create_action_button = self.workspace_component.create_action_button
         self.ocr_button = self.workspace_component.ocr_button
-        self.send_to_button = self.workspace_component.send_to_button
+        self.send_text_button = self.workspace_component.send_text_button
+        self.send_files_button = self.workspace_component.send_files_button
         self.footer_action_buttons = [
             self.action_discovery_panel.edit_button,
         ]
@@ -1683,7 +1686,6 @@ class LauncherApp:
         else:
             self.root.attributes("-topmost", False)
         self.root.focus_force()
-        self.search_var.set("")
         self._reload_if_changed()
         if sync_workspace:
             self._sync_workspace_from_clipboard_if_safe()
@@ -2081,7 +2083,7 @@ class LauncherApp:
             else:
                 self.status_var.set(f"Unknown integration context: {requested_context}")
         search = request.get("search", "").strip()
-        if search:
+        if "search" in request:
             self.search_var.set(search)
             self.root.after(80, self.focus_search)
 
@@ -4857,8 +4859,8 @@ class LauncherApp:
     def _workspace_text(self) -> str:
         return self.workspace_component.get_text()
 
-    def _populate_send_to_menu(self, menu: tk.Menu) -> None:
-        """Offer webpage printing or the current outbound file destinations."""
+    def _populate_send_text_menu(self, menu: tk.Menu) -> None:
+        """Offer text receivers without interpreting editor text as file paths."""
 
         workspace_text = self.workspace_component.raw_text()
         menu.add_command(
@@ -4867,7 +4869,35 @@ class LauncherApp:
             state=tk.NORMAL if workspace_text.strip() else tk.DISABLED,
         )
         menu.add_command(label="ChatGPT…", command=self._chat_with_chatgpt)
-        menu.add_separator()
+        inbox_item = self._selected_work_item()
+        inbox_coordinator = getattr(self, "work_item_inbox", None)
+        inbox_busy = inbox_coordinator is not None and inbox_coordinator.running
+        if inbox_item is not None:
+            menu.add_command(
+                label=f"Work Item Excel Inbox — {inbox_item.display_name}",
+                command=lambda item=inbox_item: self._send_workspace_to_work_item_inbox(item),
+                state=tk.NORMAL if workspace_text.strip() and not inbox_busy else tk.DISABLED,
+            )
+        index = getattr(self, "work_item_index", None)
+        has_work_items = bool(index is not None and index.items)
+        menu.add_command(
+            label="Choose Work Item Excel Inbox…",
+            command=self._choose_work_item_inbox,
+            state=(
+                tk.NORMAL
+                if workspace_text.strip()
+                and has_work_items
+                and not inbox_busy
+                else tk.DISABLED
+            ),
+        )
+        if not has_work_items:
+            menu.add_command(label="No Work Items available", state=tk.DISABLED)
+
+    def _populate_send_files_menu(self, menu: tk.Menu) -> None:
+        """Offer file destinations and the existing PDF/VS Code resource actions."""
+
+        workspace_text = self.workspace_component.raw_text()
         if workspace_text.strip().lower().startswith(("http:", "https:")):
             menu.add_command(
                 label="Save webpage as PDF…",
@@ -4891,10 +4921,7 @@ class LauncherApp:
             return
 
         menu.add_command(
-            label=(
-                f"Copy {path_line_count} file path"
-                f"{'s' if path_line_count != 1 else ''} to:"
-            ),
+            label="Copy files to:",
             state=tk.DISABLED,
         )
         menu.add_separator()
@@ -5287,7 +5314,7 @@ class LauncherApp:
                 self._open_send_destination(destination)
 
         self.send_to_destination_picker = SearchableSelectionPopup(
-            self.send_to_button,
+            self.send_files_button,
             labels,
             multiple=False,
             on_select=selected,
@@ -5720,6 +5747,114 @@ class LauncherApp:
             initial_tab="actions",
             initial_action_suggestion=suggestion,
         )
+
+    def _choose_work_item_inbox(self) -> None:
+        """Choose from cached Work Items, then append the unchanged full field."""
+        if self.work_item_inbox.running:
+            self.status_var.set("An Inbox update is already running.")
+            return
+        component = self.workspace_component
+        text = component.raw_text()
+        if not text.strip():
+            self.status_var.set("Input / Output is empty. Add text before choosing an Inbox.")
+            return
+        items = tuple(self.work_item_index.items)
+        if not items:
+            self.status_var.set("No Work Items are available. Configure or refresh Work Items first.")
+            return
+        existing = getattr(self, "work_item_inbox_picker", None)
+        if existing is not None and not existing.closed:
+            existing.close()
+        revision = getattr(component, "text_revision", 0)
+        source_state = (
+            getattr(self, "captured_selection", None),
+            getattr(self, "source_foreground_handle", None),
+        )
+        selected_item = self._selected_work_item()
+        labels: list[str] = []
+        by_label: dict[str, DiscoveredWorkItem] = {}
+        initial_selection: list[str] = []
+        for item in items:
+            base_label = f"{item.display_name} — {item.source_name} — {item.folder_path}"
+            label = base_label
+            suffix = 2
+            while label.casefold() in by_label:
+                label = f"{base_label} ({suffix})"
+                suffix += 1
+            labels.append(label)
+            by_label[label.casefold()] = item
+            if selected_item is not None and (
+                item.source_id == selected_item.source_id
+                and item.relative_folder.casefold() == selected_item.relative_folder.casefold()
+            ):
+                initial_selection.append(label)
+
+        def selected(values: tuple[str, ...]) -> None:
+            if self.work_item_inbox_picker is not picker or picker.closed:
+                return
+            self.work_item_inbox_picker = None
+            picker.close()
+            if not values:
+                return
+            if self.work_item_inbox.running:
+                self.status_var.set("An Inbox update is already running.")
+                return
+            current_source = (
+                getattr(self, "captured_selection", None),
+                getattr(self, "source_foreground_handle", None),
+            )
+            if (
+                component.raw_text() != text
+                or getattr(component, "text_revision", 0) != revision
+                or current_source != source_state
+            ):
+                self.status_var.set("Input / Output changed. Choose the Inbox destination again.")
+                return
+            chosen = by_label.get(values[0].casefold())
+            if chosen is None:
+                return
+            current = self._work_item_for_reference(
+                WorkItemReference(chosen.source_id, chosen.relative_folder)
+            )
+            if current is None or (
+                current.folder_path != chosen.folder_path
+                or current.matching_workbook_path != chosen.matching_workbook_path
+            ):
+                self.status_var.set("The Work Item destination changed or is unavailable. Choose again.")
+                return
+            self._send_workspace_to_work_item_inbox(current)
+
+        def selection_detail(label: str) -> str:
+            item = by_label[label.casefold()]
+            workbook = item.matching_workbook_path or (
+                item.folder_path / f"{item.folder_path.name}.xlsx"
+            )
+            return f"Source: {item.source_name} ({item.source_id})\nExcel Inbox: {workbook}"
+
+        picker = SearchableSelectionPopup(
+            self.send_text_button,
+            labels,
+            selected=initial_selection,
+            multiple=False,
+            on_select=selected,
+            title="Choose Work Item Excel Inbox",
+            search_label="Find Work Item",
+            item_name="Work Item",
+            selection_detail=selection_detail,
+        )
+        picker.apply_button.configure(text="Append text")
+        self.work_item_inbox_picker = picker
+        picker.window.bind(
+            "<Destroy>",
+            lambda event: self._clear_work_item_inbox_picker(event, picker),
+            add="+",
+        )
+
+    def _clear_work_item_inbox_picker(
+        self, event: tk.Event, picker: SearchableSelectionPopup,
+    ) -> None:
+        if event.widget is picker.window and self.work_item_inbox_picker is picker:
+            self.work_item_inbox_picker = None
 
     def _send_workspace_to_work_item_inbox(
         self,

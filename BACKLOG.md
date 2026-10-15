@@ -16,6 +16,14 @@ broader unreported UAT remains optional. See [Testing](docs/TESTING.md).
 
 ## Now
 
+- Streamline Input / Output text destinations using the
+  [send-route review](docs/TECHNICAL_REVIEW.md#input--output-send-routes-2026-10-14).
+  Separate text/file menus and a Work Item-only Inbox chooser are implemented.
+  The remaining candidate is one visible selected-text versus whole-field
+  policy across text receivers. Preserve distinct workbook
+  saving, OneNote approval, chat staging and partial-outcome behavior; do not
+  revive retired Capture Inbox or build a generic engine workflow.
+
 - Qualify the optional [ChatGPT text-chat trial](docs/TESTING.md#chatgpt-text-chat-trial-2026-10-07) with attended account sign-in, one disposable question/follow-up and Copy/Replace/Append/Cancel. Synthetic tests establish local boundaries; sign-in/model discovery and disposable client reply/context follow-up have evidence on the tested PC, while updated GUI follow-up and Copy/Use placement remain unverified. Keep text-only scope and existing prompt Actions.
 
 - Qualify the [native Text to Columns host integration](docs/EXCEL_NATIVE_TEXT_TO_COLUMNS.md)

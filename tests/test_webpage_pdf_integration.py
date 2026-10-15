@@ -21,6 +21,7 @@ class WebpagePdfIntegrationTests(unittest.TestCase):
         app.status_var = Mock()
         app.workspace_component = Mock()
         app.workspace_component.raw_text.return_value = text
+        app._selected_work_item = Mock(return_value=None)
         app.webpage_pdf_window = None
         return app
 
@@ -28,14 +29,12 @@ class WebpagePdfIntegrationTests(unittest.TestCase):
         app = self.app("  HTTPS://example.com/article  ")
         menu = Mock()
         app._save_workspace_webpage_as_pdf = Mock()
-        app._populate_send_to_menu(menu)
+        app._populate_send_files_menu(menu)
         menu.add_command.assert_any_call(
             label="Save webpage as PDF…", command=app._save_workspace_webpage_as_pdf
         )
-        self.assertEqual(menu.add_command.call_count, 3)
-        menu.add_command.assert_any_call(label="ChatGPT…", command=app._chat_with_chatgpt)
-        menu.add_command.assert_any_call(label="OneNote — new text page…",
-            command=app._send_text_to_onenote, state="normal")
+        self.assertEqual(menu.add_command.call_count, 1)
+        self.assertEqual(menu.add_command.call_args.kwargs["label"], "Save webpage as PDF…")
         app._save_workspace_webpage_as_pdf.assert_not_called()
         app.root.clipboard_get.assert_not_called()
 

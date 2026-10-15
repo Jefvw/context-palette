@@ -12,6 +12,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,41 +64,14 @@ from context_palette.excel_automation import (
     discover_direct_sibling_python_excel_launcher,
     load_excel_automation_settings,
     parse_automation_response,
+    resolve_python_excel_launcher,
     save_excel_automation_settings,
     workbook_paths_from_workspace,
 )
+from tests.support.excel import automation_response_envelope as _envelope
 
 
 FINGERPRINT = "a" * 64
-
-
-def _envelope(
-    operation: str,
-    request_id: str,
-    result: dict[str, object] | None,
-    *,
-    status: str = "success",
-    error: dict[str, object] | None = None,
-    warnings: list[dict[str, object]] | None = None,
-) -> bytes:
-    return (
-        json.dumps(
-            {
-                "schema_version": "1.0",
-                "request_id": request_id,
-                "operation": operation,
-                "operation_version": "1.0",
-                "status": status,
-                "duration_ms": 3,
-                "paths": {"input": None, "output": None, "backup": None},
-                "result": result,
-                "warnings": warnings or [],
-                "error": error,
-            },
-            ensure_ascii=False,
-        ).encode("utf-8")
-        + b"\n"
-    )
 
 
 def _describe_result(*, available: bool = True) -> dict[str, object]:
@@ -993,6 +967,137 @@ class ExcelNativeTextProtocolTests(unittest.TestCase):
             with self.subTest(index=index):
                 call = parse_automation_response(phase="preflight", request_id="header", return_code=0, stdout=_envelope("preflight_live_columns", "header", document))
                 self.assertEqual(call.classification, "preflight_failed")
+
+
+class ExcelLauncherResolutionTests(unittest.TestCase):
+    def test_explicit_launcher_precedes_sibling_and_preserves_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            installation = root / "Context Palette ü"
+            installation.mkdir()
+            sibling = root / "python-excel" / "python-excel.bat"
+            sibling.parent.mkdir()
+            sibling.write_text("Never executed", encoding="utf-8")
+            explicit = root / "Chosen engine ü" / "python excel.bat"
+            explicit.parent.mkdir()
+            explicit.write_text("Never executed", encoding="utf-8")
+            settings_path = root / "settings.json"
+            save_excel_automation_settings(
+                settings_path, ExcelAutomationSettings(explicit)
+            )
+            original_settings = settings_path.read_bytes()
+
+            self.assertEqual(
+                resolve_python_excel_launcher(settings_path, installation),
+                explicit,
+            )
+            self.assertEqual(settings_path.read_bytes(), original_settings)
+            self.assertFalse(settings_path.with_name("settings.json.bak").exists())
+
+    def test_empty_configuration_uses_installation_root_from_foreign_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            installation = root / "Installed applications ü" / "Context Palette"
+            installation.mkdir(parents=True)
+            sibling = installation.parent / "python-excel" / "python-excel.bat"
+            sibling.parent.mkdir()
+            sibling.write_text("Never executed", encoding="utf-8")
+            settings_path = root / "Separate settings" / "settings.json"
+            settings_path.parent.mkdir()
+            foreign_directory = root / "Foreign current directory"
+            foreign_directory.mkdir()
+            original_directory = Path.cwd()
+            try:
+                os.chdir(foreign_directory)
+                for content in (None, '{"launcher_path": ""}', '{"launcher_path": "  "}'):
+                    with self.subTest(content=content):
+                        if content is not None:
+                            settings_path.write_text(content, encoding="utf-8")
+                        self.assertEqual(
+                            resolve_python_excel_launcher(settings_path, installation),
+                            sibling,
+                        )
+                        if content is None:
+                            self.assertFalse(settings_path.exists())
+                        else:
+                            self.assertEqual(settings_path.read_text(encoding="utf-8"), content)
+                        self.assertFalse(settings_path.with_name("settings.json.bak").exists())
+            finally:
+                os.chdir(original_directory)
+
+    def test_absent_sibling_does_not_scan_other_locations_or_create_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            installation = root / "context-palette"
+            installation.mkdir()
+            foreign_directory = root / "foreign"
+            foreign_directory.mkdir()
+            for candidate in (
+                installation / "python-excel" / "python-excel.bat",
+                root / "nested" / "python-excel" / "python-excel.bat",
+                root / "other-engine" / "python-excel.bat",
+                foreign_directory / "python-excel" / "python-excel.bat",
+            ):
+                candidate.parent.mkdir(parents=True)
+                candidate.write_text("Never executed", encoding="utf-8")
+            settings_path = root / "missing settings" / "settings.json"
+            original_directory = Path.cwd()
+            try:
+                os.chdir(foreign_directory)
+                self.assertIsNone(
+                    resolve_python_excel_launcher(settings_path, installation)
+                )
+            finally:
+                os.chdir(original_directory)
+            self.assertFalse(settings_path.parent.exists())
+
+    def test_invalid_or_unavailable_explicit_configuration_never_uses_valid_sibling(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            installation = root / "context-palette"
+            installation.mkdir()
+            sibling = root / "python-excel" / "python-excel.bat"
+            sibling.parent.mkdir()
+            sibling.write_text("Never executed", encoding="utf-8")
+            directory_launcher = root / "directory.bat"
+            directory_launcher.mkdir()
+            settings_path = root / "settings.json"
+            contents = (
+                json.dumps({"launcher_path": str(root / "missing.bat")}),
+                json.dumps({"launcher_path": str(directory_launcher)}),
+                json.dumps({"launcher_path": "relative/python-excel.bat"}),
+                json.dumps({"launcher_path": str(root / "python-excel.exe")}),
+                json.dumps({"launcher_path": 1}),
+                json.dumps({"launcher_path": "", "extra": True}),
+                "{}",
+                "{",
+            )
+            for content in contents:
+                with self.subTest(content=content):
+                    settings_path.write_text(content, encoding="utf-8")
+                    with self.assertRaises(ExcelAutomationSettingsError):
+                        resolve_python_excel_launcher(settings_path, installation)
+                    self.assertEqual(settings_path.read_text(encoding="utf-8"), content)
+
+    def test_unreadable_explicit_launcher_is_a_settings_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            settings_path = root / "settings.json"
+            save_excel_automation_settings(
+                settings_path, ExcelAutomationSettings(root / "python-excel.bat")
+            )
+            with patch.object(Path, "is_file", side_effect=OSError("Unreadable file")):
+                with self.assertRaisesRegex(ExcelAutomationSettingsError, "unavailable"):
+                    resolve_python_excel_launcher(settings_path, root / "context-palette")
+
+    def test_settings_loading_does_not_probe_unavailable_configured_launcher(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            settings_path = root / "settings.json"
+            settings = ExcelAutomationSettings(root / "missing.bat")
+            save_excel_automation_settings(settings_path, settings)
+            with patch.object(Path, "is_file", side_effect=AssertionError("Unexpected probe")):
+                self.assertEqual(load_excel_automation_settings(settings_path), settings)
 
 
 class ExcelAutomationSettingsAndInputTests(unittest.TestCase):

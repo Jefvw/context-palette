@@ -156,7 +156,8 @@ class WorkspacePanel:
         tooltip_adder: Callable[[tk.Widget, str], None],
         create_action: Callable[[str], None] | None = None,
         extract_text: Callable[[str], None] | None = None,
-        populate_send_to_menu: Callable[[tk.Menu], None] | None = None,
+        populate_send_text_menu: Callable[[tk.Menu], None] | None = None,
+        populate_send_files_menu: Callable[[tk.Menu], None] | None = None,
         text_change_callback: Callable[[], None] | None = None,
         find_onenote: Callable[[], None] | None = None,
     ) -> None:
@@ -165,7 +166,8 @@ class WorkspacePanel:
         self.status_setter = status_setter
         self.create_action = create_action
         self.extract_text = extract_text
-        self.populate_send_to_menu = populate_send_to_menu
+        self.populate_send_text_menu = populate_send_text_menu
+        self.populate_send_files_menu = populate_send_files_menu
         self.text_change_callback = text_change_callback
         self.find_onenote = find_onenote
         self._content_history: list[str] = [""]
@@ -190,8 +192,10 @@ class WorkspacePanel:
         )
         header = ttk.Frame(self.frame)
         header.pack(fill=tk.X, pady=(0, 4))
+        tools_header = ttk.Frame(header)
+        tools_header.pack(fill=tk.X)
         self.content_back_button = ttk.Button(
-            header,
+            tools_header,
             image=self.ui_icons["back"],
             command=self.show_previous_content,
             state=tk.DISABLED,
@@ -199,7 +203,7 @@ class WorkspacePanel:
         )
         self.content_back_button.pack(side=tk.LEFT)
         self.content_forward_button = ttk.Button(
-            header,
+            tools_header,
             image=self.ui_icons["forward"],
             command=self.show_next_content,
             state=tk.DISABLED,
@@ -207,14 +211,14 @@ class WorkspacePanel:
         )
         self.content_forward_button.pack(side=tk.LEFT, padx=(4, 0))
         self.text_tools_button = ttk.Menubutton(
-            header,
+            tools_header,
             image=self.ui_icons["text_tools"],
             style="ToolbarIcon.TMenubutton",
             takefocus=True,
         )
         self.text_tools_button.pack(side=tk.RIGHT)
         self.ocr_button = ttk.Button(
-            header,
+            tools_header,
             image=self.ui_icons["ocr"],
             command=self._extract_text,
             state=tk.NORMAL if extract_text is not None else tk.DISABLED,
@@ -222,26 +226,47 @@ class WorkspacePanel:
         )
         self.ocr_button.pack(side=tk.RIGHT, padx=(0, 4))
         self.create_action_button = ttk.Button(
-            header,
+            tools_header,
             image=self.ui_icons["create_from_input"],
             command=self._create_action,
             state=tk.DISABLED,
             style="ToolbarIcon.TButton",
         )
         self.create_action_button.pack(side=tk.RIGHT, padx=(0, 4))
-        self.send_to_button = ttk.Menubutton(
-            header,
-            text="Send to…",
+        # Keep both named destination controls readable at the workspace's
+        # minimum width, including Windows text scaling.
+        send_header = ttk.Frame(header)
+        send_header.pack(fill=tk.X, pady=(4, 0))
+        self.send_text_button = ttk.Menubutton(
+            send_header,
+            text="Send text to…",
             style="Toolbar.TMenubutton",
             takefocus=True,
         )
-        self.send_to_menu = tk.Menu(
-            self.send_to_button,
+        self.send_text_menu = tk.Menu(
+            self.send_text_button,
             tearoff=False,
-            postcommand=lambda: self._refresh_send_to_menu(self.send_to_menu),
+            postcommand=lambda: self._refresh_send_menu(
+                self.send_text_menu, self.populate_send_text_menu
+            ),
         )
-        self.send_to_button.configure(menu=self.send_to_menu)
-        self.send_to_button.pack(side=tk.RIGHT, padx=(0, 8))
+        self.send_text_button.configure(menu=self.send_text_menu)
+        self.send_files_button = ttk.Menubutton(
+            send_header,
+            text="Send files to…",
+            style="Toolbar.TMenubutton",
+            takefocus=True,
+        )
+        self.send_files_menu = tk.Menu(
+            self.send_files_button,
+            tearoff=False,
+            postcommand=lambda: self._refresh_send_menu(
+                self.send_files_menu, self.populate_send_files_menu
+            ),
+        )
+        self.send_files_button.configure(menu=self.send_files_menu)
+        self.send_files_button.pack(side=tk.RIGHT)
+        self.send_text_button.pack(side=tk.RIGHT, padx=(0, 6))
 
         self.file_preview: TextFileTransformPreview | None = None
         self.file_preview_frame = ttk.Frame(self.frame)
@@ -331,12 +356,19 @@ class WorkspacePanel:
             ),
         )
         tooltip_adder(
-            self.send_to_button,
+            self.send_text_button,
             (
-                "Send to — Copy the file paths in Input / Output to a saved "
-                "folder, Work Item, or one-off destination, or open one path's "
-                "folder in VS Code. ChatGPT stages selected text for an explicit send. "
-                "Sources stay unchanged."
+                "Send text to — OneNote stages all text; ChatGPT stages the selection "
+                "or all text. Work Item Excel Inbox appends all text and saves "
+                "the chosen workbook. Input / Output stays unchanged."
+            ),
+        )
+        tooltip_adder(
+            self.send_files_button,
+            (
+                "Send files to — File destinations copy exact paths; a webpage "
+                "URL can be saved as PDF. VS Code opens one path's folder. "
+                "Input / Output stays unchanged."
             ),
         )
 
@@ -625,16 +657,27 @@ class WorkspacePanel:
         )
         self.context_menu.add_command(label="Clear", command=lambda: self.set_text(""))
         self.context_menu.add_separator()
-        self.send_to_context_menu = tk.Menu(
+        self.send_text_context_menu = tk.Menu(
             self.context_menu,
             tearoff=False,
-            postcommand=lambda: self._refresh_send_to_menu(
-                self.send_to_context_menu
+            postcommand=lambda: self._refresh_send_menu(
+                self.send_text_context_menu, self.populate_send_text_menu
             ),
         )
         self.context_menu.add_cascade(
-            label="Send to…",
-            menu=self.send_to_context_menu,
+            label="Send text to…",
+            menu=self.send_text_context_menu,
+        )
+        self.send_files_context_menu = tk.Menu(
+            self.context_menu,
+            tearoff=False,
+            postcommand=lambda: self._refresh_send_menu(
+                self.send_files_context_menu, self.populate_send_files_menu
+            ),
+        )
+        self.context_menu.add_cascade(
+            label="Send files to…",
+            menu=self.send_files_context_menu,
         )
 
         self.transform_menu = tk.Menu(self.context_menu, tearoff=False)
@@ -653,12 +696,16 @@ class WorkspacePanel:
             self.transform_menu.add_separator()
             self.transform_menu.add_command(label="Find OneNote notes…", command=self.find_onenote)
 
-    def _refresh_send_to_menu(self, menu: tk.Menu) -> None:
+    def _refresh_send_menu(
+        self,
+        menu: tk.Menu,
+        populate: Callable[[tk.Menu], None] | None,
+    ) -> None:
         menu.delete(0, tk.END)
-        if self.populate_send_to_menu is None:
-            menu.add_command(label="Send to is unavailable", state=tk.DISABLED)
+        if populate is None:
+            menu.add_command(label="Destinations are unavailable", state=tk.DISABLED)
             return
-        self.populate_send_to_menu(menu)
+        populate(menu)
 
     def _transform_command(
         self,
